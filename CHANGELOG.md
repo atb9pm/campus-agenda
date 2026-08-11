@@ -2,6 +2,15 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [0.3.0] - 2026-08-11
+
+### Modifié
+
+- Réalignement complet sur la charte graphique automobile validée.
+- Palette blanc, bleu marine et bleu électrique.
+- Calendrier technique, fonds quadrillés et identité mécanique piston/pignon/freinage.
+- Mise en page rapprochée de la maquette de référence sur ordinateur et mobile.
+
 ## [0.2.0] - 2026-08-11
 
 ### Ajouté

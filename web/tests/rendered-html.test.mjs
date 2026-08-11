@@ -21,10 +21,10 @@ test("server-renders the Campus Agenda prototype", async () => {
 
   const html = await response.text();
   assert.match(html, /Campus Agenda — Agenda scolaire partagé/);
-  assert.match(html, /Bonjour François/);
+  assert.match(html, /Agenda partagé/);
   assert.match(html, /Mes éléments/);
   assert.match(html, /Toute la classe/);
-  assert.match(html, /Données de démonstration/);
+  assert.match(html, /Données fictives/);
   assert.match(html, /Aucun élève réel/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
@@ -40,7 +40,7 @@ test("keeps the validated publication menu and social preview", async () => {
   assert.match(page, /HOMEWORK: "Devoir"/);
   assert.match(page, /TEST: "Contrôle"/);
   assert.match(page, /INFORMATION: "Information"/);
-  assert.match(layout, /\/og\.png/);
+  assert.match(layout, /\/og-v3\.png/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
-  await access(new URL("../public/og.png", import.meta.url));
+  await access(new URL("../public/og-v3.png", import.meta.url));
 });

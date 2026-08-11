@@ -8,13 +8,13 @@ type ViewMode = "mine" | "class";
 type AgendaItem = {
   id: number;
   day: number;
+  hour: number;
   type: ItemType;
   subject: string;
   title: string;
   detail: string;
   teacher: string;
   mine: boolean;
-  time?: string;
 };
 
 const TYPE_LABELS: Record<ItemType, string> = {
@@ -23,70 +23,15 @@ const TYPE_LABELS: Record<ItemType, string> = {
   INFORMATION: "Information",
 };
 
-const SUBJECTS = ["Toutes les branches", "Français", "Mathématiques", "Sciences", "Atelier"];
+const SUBJECTS = ["Toutes les branches", "Moteur", "Électricité", "Châssis", "Mathématiques"];
+const HOURS = Array.from({ length: 10 }, (_, index) => index + 8);
 
 const INITIAL_ITEMS: AgendaItem[] = [
-  {
-    id: 1,
-    day: 0,
-    type: "HOMEWORK",
-    subject: "Mathématiques",
-    title: "Exercices sur les fractions",
-    detail: "Exercices 12 à 18, page 46",
-    teacher: "Mme Dupont · démo",
-    mine: false,
-  },
-  {
-    id: 2,
-    day: 0,
-    type: "INFORMATION",
-    subject: "Atelier",
-    title: "Tenue de travail complète",
-    detail: "Apporter les lunettes de protection",
-    teacher: "M. Martin · démo",
-    mine: false,
-  },
-  {
-    id: 3,
-    day: 1,
-    type: "HOMEWORK",
-    subject: "Français",
-    title: "Lecture du chapitre 4",
-    detail: "Préparer trois questions pour le cours",
-    teacher: "Vous · compte démo",
-    mine: true,
-  },
-  {
-    id: 4,
-    day: 2,
-    type: "TEST",
-    subject: "Sciences",
-    title: "Circuits électriques",
-    detail: "Réviser les fiches 2 et 3",
-    teacher: "Mme Dupont · démo",
-    mine: false,
-    time: "08:15",
-  },
-  {
-    id: 5,
-    day: 3,
-    type: "HOMEWORK",
-    subject: "Atelier",
-    title: "Système d’injection",
-    detail: "Compléter le schéma fonctionnel",
-    teacher: "M. Martin · démo",
-    mine: false,
-  },
-  {
-    id: 6,
-    day: 4,
-    type: "INFORMATION",
-    subject: "Français",
-    title: "Dossier d’orientation",
-    detail: "Document disponible dans l’espace classe",
-    teacher: "Vous · compte démo",
-    mine: true,
-  },
+  { id: 1, day: 0, hour: 9, type: "HOMEWORK", subject: "Châssis", title: "Système de freinage", detail: "Exercices 12 à 18", teacher: "Mme Dupont · démo", mine: false },
+  { id: 2, day: 1, hour: 11, type: "INFORMATION", subject: "Atelier", title: "Tenue de travail", detail: "Lunettes de protection", teacher: "M. Martin · démo", mine: false },
+  { id: 3, day: 2, hour: 13, type: "TEST", subject: "Électricité", title: "Injection électronique", detail: "Capteurs et actionneurs", teacher: "Vous · compte démo", mine: true },
+  { id: 4, day: 3, hour: 10, type: "HOMEWORK", subject: "Moteur", title: "Distribution", detail: "Compléter le schéma", teacher: "M. Martin · démo", mine: false },
+  { id: 5, day: 4, hour: 14, type: "INFORMATION", subject: "Moteur", title: "Dossier technique", detail: "Document disponible", teacher: "Vous · compte démo", mine: true },
 ];
 
 function mondayForOffset(offset: number) {
@@ -96,14 +41,21 @@ function mondayForOffset(offset: number) {
 }
 
 function shortDate(date: Date) {
-  return new Intl.DateTimeFormat("fr-CH", { day: "numeric", month: "short" })
-    .format(date)
-    .replace(".", "");
+  return new Intl.DateTimeFormat("fr-CH", { day: "numeric", month: "short" }).format(date).replace(".", "");
 }
 
 function dayName(date: Date) {
-  const value = new Intl.DateTimeFormat("fr-CH", { weekday: "long" }).format(date);
-  return value.charAt(0).toUpperCase() + value.slice(1);
+  return new Intl.DateTimeFormat("fr-CH", { weekday: "short" }).format(date).replace(".", "").toUpperCase();
+}
+
+function MechanicalEmblem() {
+  return (
+    <span className="mechanical-emblem" aria-hidden="true">
+      <span className="gear-glyph">⚙</span>
+      <span className="piston-glyph"><i /><b /></span>
+      <span className="disc-dots">•••</span>
+    </span>
+  );
 }
 
 export default function Home() {
@@ -127,213 +79,188 @@ export default function Home() {
   }, [weekOffset]);
 
   const visibleItems = items.filter((item) => {
-    if (weekOffset !== 0 && item.id <= 6) return false;
+    if (weekOffset !== 0 && item.id <= 5) return false;
     if (!studentPreview && view === "mine" && !item.mine) return false;
     if (typeFilter !== "ALL" && item.type !== typeFilter) return false;
     if (subjectFilter !== SUBJECTS[0] && item.subject !== subjectFilter) return false;
     return true;
   });
 
-  const totalClassItems = weekOffset === 0 ? items.filter((item) => item.id <= 6).length : 0;
-  const testsCount = weekOffset === 0 ? items.filter((item) => item.type === "TEST" && item.id <= 6).length : 0;
-  const busyDay = weekOffset === 0 ? "Lundi" : "Aucune surcharge";
-
   function submitItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!modalType) return;
     const form = new FormData(event.currentTarget);
     const title = String(form.get("title") || "").trim();
-    const detail = String(form.get("detail") || "").trim();
-    const subject = String(form.get("subject") || "Français");
-    const day = Number(form.get("day") || 0);
     if (!title) return;
-
-    setItems((current) => [
-      ...current,
-      {
-        id: Date.now(),
-        day,
-        type: modalType,
-        subject,
-        title,
-        detail: detail || "Aucune précision supplémentaire",
-        teacher: "Vous · compte démo",
-        mine: true,
-      },
-    ]);
+    setItems((current) => [...current, {
+      id: Date.now(),
+      day: Number(form.get("day") || 0),
+      hour: Number(form.get("hour") || 8),
+      type: modalType,
+      subject: String(form.get("subject") || "Moteur"),
+      title,
+      detail: String(form.get("detail") || "").trim() || "Aucune précision",
+      teacher: "Vous · compte démo",
+      mine: true,
+    }]);
+    setWeekOffset(0);
     setView("mine");
     setStudentPreview(false);
-    setWeekOffset(0);
     setModalType(null);
-    setNotice(`${TYPE_LABELS[modalType]} ajouté à l’agenda de démonstration.`);
-    window.setTimeout(() => setNotice(""), 3500);
+    setNotice(`${TYPE_LABELS[modalType]} ajouté à la démonstration.`);
+    window.setTimeout(() => setNotice(""), 3200);
   }
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark">CA</span>
-          <span>
-            <strong>Campus</strong>
-            <small>Agenda</small>
-          </span>
+    <div className="mechanical-app">
+      <aside className="technical-sidebar">
+        <div className="brand-lockup">
+          <MechanicalEmblem />
+          <span><strong>CAMPUS</strong><small>AGENDA</small></span>
         </div>
 
-        <nav className="main-nav" aria-label="Navigation principale">
-          <button className="nav-item active"><span>▦</span> Agenda</button>
-          <button className="nav-item"><span>◇</span> Mes classes</button>
-          <button className="nav-item"><span>◉</span> Branches</button>
-          <button className="nav-item"><span>⌁</span> Équipe pédagogique</button>
+        <nav aria-label="Navigation principale">
+          <button><span>⌂</span> Tableau de bord</button>
+          <button><span>♙</span> Mes classes</button>
+          <button className="active"><span>▣</span> Agenda partagé</button>
+          <button><span>□</span> Documents</button>
+          <button><span>⚙</span> Paramètres</button>
         </nav>
 
-        <div className="sidebar-bottom">
-          <div className="privacy-note">
-            <span className="privacy-icon">✓</span>
-            <div>
-              <strong>Données de démonstration</strong>
-              <small>Aucun élève réel</small>
-            </div>
-          </div>
-          <button className="profile-card">
-            <span className="avatar">FC</span>
-            <span><strong>François</strong><small>Enseignant</small></span>
-            <span className="more">•••</span>
-          </button>
+        <div className="technical-note">
+          <span>CODE CLASSE</span>
+          <strong>TMA 2A78</strong>
+          <small>Démonstration uniquement</small>
         </div>
+        <button className="signout"><span>↪</span> Déconnexion</button>
       </aside>
 
-      <main className="main-content">
-        <header className="topbar">
-          <button className="mobile-brand" aria-label="Ouvrir le menu">CA</button>
-          <div className="class-switcher">
-            <span className="eyebrow">Classe active</span>
-            <button>2e TMA <span>⌄</span></button>
-          </div>
-          <div className="top-actions">
-            <button className="student-toggle" onClick={() => setStudentPreview((value) => !value)}>
-              <span>◌</span> {studentPreview ? "Quitter l’aperçu élève" : "Aperçu élève"}
-            </button>
-            <button className="notification" aria-label="Notifications">●<span /></button>
-          </div>
-        </header>
+      <main className="technical-main">
+        <div className="blueprint-watermark" />
 
-        <section className="workspace">
-          <div className="page-heading">
-            <div>
-              <p className="eyebrow">Agenda partagé · 2e TMA</p>
-              <h1>{studentPreview ? "Agenda de ma classe" : "Bonjour François"}</h1>
-              <p>{studentPreview ? "Tous les devoirs et informations de la semaine." : "Voici la charge de travail prévue pour votre classe."}</p>
-            </div>
+        <header className="technical-header">
+          <div className="mobile-lockup"><MechanicalEmblem /><strong>CAMPUS AGENDA</strong></div>
+          <div className="class-identity">
+            <span className="eyebrow">Technique Mécanique Automobile</span>
+            <h1>{studentPreview ? "Mon agenda" : "Agenda partagé"}</h1>
+            <p>{studentPreview ? "Tous les éléments publiés pour la classe 2e TMA." : "Planifiez la semaine et visualisez la charge globale de la classe."}</p>
+          </div>
+          <div className="header-actions">
+            <button className="student-preview" onClick={() => setStudentPreview((current) => !current)}>
+              {studentPreview ? "Quitter l’aperçu" : "Aperçu élève"}
+            </button>
             {!studentPreview && (
-              <div className="add-wrap">
-                <button className="primary-add" onClick={() => setAddMenuOpen((value) => !value)} aria-expanded={addMenuOpen}>
-                  <span>＋</span> Ajouter
-                </button>
+              <div className="add-anchor">
+                <button className="navy-add" onClick={() => setAddMenuOpen((current) => !current)} aria-expanded={addMenuOpen}>＋ <span>Ajouter</span>⌄</button>
                 {addMenuOpen && (
-                  <div className="add-menu">
+                  <div className="technical-add-menu">
                     {(["HOMEWORK", "TEST", "INFORMATION"] as ItemType[]).map((type) => (
                       <button key={type} onClick={() => { setModalType(type); setAddMenuOpen(false); }}>
-                        <span className={`menu-dot ${type.toLowerCase()}`} />
+                        <span className={`type-icon ${type.toLowerCase()}`}>{type === "HOMEWORK" ? "D" : type === "TEST" ? "C" : "i"}</span>
                         <span><strong>{TYPE_LABELS[type]}</strong><small>{type === "HOMEWORK" ? "Travail à réaliser" : type === "TEST" ? "Évaluation planifiée" : "Message pour la classe"}</small></span>
-                        <span>›</span>
                       </button>
                     ))}
                   </div>
                 )}
               </div>
             )}
+            <button className="round-action" aria-label="Notifications">♧<i /></button>
+            <span className="profile-disc">FC</span>
           </div>
+        </header>
 
-          {!studentPreview && (
-            <div className="view-tabs" role="tablist" aria-label="Choisir la vue">
-              <button className={view === "mine" ? "active" : ""} onClick={() => setView("mine")}>Mes éléments <span>{items.filter((item) => item.mine).length}</span></button>
-              <button className={view === "class" ? "active" : ""} onClick={() => setView("class")}>Toute la classe <span>{items.length}</span></button>
-            </div>
-          )}
+        <div className="class-tabs">
+          <button className="active">Calendrier</button>
+          <button>Devoirs</button>
+          <button>Élèves</button>
+          <button>Documents</button>
+        </div>
 
-          <section className="summary-grid" aria-label="Résumé de la semaine">
-            <article><span className="summary-icon teal">▦</span><div><small>Éléments prévus</small><strong>{totalClassItems}</strong></div><em>Cette semaine</em></article>
-            <article><span className="summary-icon coral">!</span><div><small>Contrôles</small><strong>{testsCount}</strong></div><em>{testsCount ? "À anticiper" : "Aucun"}</em></article>
-            <article><span className="summary-icon blue">≈</span><div><small>Jour le plus chargé</small><strong className="word-value">{busyDay}</strong></div><em>{totalClassItems ? "2 éléments" : "—"}</em></article>
-          </section>
-
-          <section className="calendar-panel">
-            <div className="calendar-toolbar">
-              <div className="week-navigation">
-                <button onClick={() => setWeekOffset((value) => value - 1)} aria-label="Semaine précédente">‹</button>
-                <button className="today" onClick={() => setWeekOffset(0)}>Aujourd’hui</button>
-                <button onClick={() => setWeekOffset((value) => value + 1)} aria-label="Semaine suivante">›</button>
-                <h2>{shortDate(days[0])} — {shortDate(days[4])} 2026</h2>
+        <section className="calendar-workbench">
+          <aside className="calendar-tools">
+            {!studentPreview && (
+              <div className="view-selector" aria-label="Choisir la vue">
+                <button className={view === "mine" ? "active" : ""} onClick={() => setView("mine")}>Mes éléments <span>{items.filter((item) => item.mine).length}</span></button>
+                <button className={view === "class" ? "active" : ""} onClick={() => setView("class")}>Toute la classe <span>{items.length}</span></button>
               </div>
-              <div className="filters">
-                <select value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)} aria-label="Filtrer par branche">
-                  {SUBJECTS.map((subject) => <option key={subject}>{subject}</option>)}
-                </select>
-                <div className="type-filters" aria-label="Filtrer par type">
-                  <button className={typeFilter === "ALL" ? "active" : ""} onClick={() => setTypeFilter("ALL")}>Tout</button>
-                  <button className={typeFilter === "HOMEWORK" ? "active" : ""} onClick={() => setTypeFilter("HOMEWORK")}>Devoirs</button>
-                  <button className={typeFilter === "TEST" ? "active" : ""} onClick={() => setTypeFilter("TEST")}>Contrôles</button>
-                  <button className={typeFilter === "INFORMATION" ? "active" : ""} onClick={() => setTypeFilter("INFORMATION")}>Infos</button>
+            )}
+
+            <section className="mini-calendar">
+              <header><strong>AOÛT 2026</strong><span>‹　›</span></header>
+              <div className="mini-week"><b>L</b><b>M</b><b>M</b><b>J</b><b>V</b><b>S</b><b>D</b></div>
+              <div className="mini-days">
+                {[27,28,29,30,31,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30].map((day, index) => (
+                  <span className={day === 11 && index > 10 ? "selected" : index < 5 ? "muted" : ""} key={`${day}-${index}`}>{day}</span>
+                ))}
+              </div>
+            </section>
+
+            <section className="filter-panel">
+              <h2>FILTRES</h2>
+              <select value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)} aria-label="Filtrer par branche">
+                {SUBJECTS.map((subject) => <option key={subject}>{subject}</option>)}
+              </select>
+              <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "HOMEWORK"} onChange={() => setTypeFilter(typeFilter === "HOMEWORK" ? "ALL" : "HOMEWORK")} /> <span className="check blue" /> Devoirs</label>
+              <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "TEST"} onChange={() => setTypeFilter(typeFilter === "TEST" ? "ALL" : "TEST")} /> <span className="check navy" /> Contrôles</label>
+              <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "INFORMATION"} onChange={() => setTypeFilter(typeFilter === "INFORMATION" ? "ALL" : "INFORMATION")} /> <span className="check pale" /> Informations</label>
+            </section>
+
+            <div className="legend-note"><span>✓</span><p><strong>Données fictives</strong>Aucun élève réel n’est affiché.</p></div>
+          </aside>
+
+          <section className="week-calendar">
+            <header className="week-toolbar">
+              <div><button onClick={() => setWeekOffset((current) => current - 1)}>‹</button><button onClick={() => setWeekOffset(0)}>Aujourd’hui</button><button onClick={() => setWeekOffset((current) => current + 1)}>›</button></div>
+              <h2>{shortDate(days[0])} — {shortDate(days[4])} 2026</h2>
+              <span>2e TMA　⌄</span>
+            </header>
+
+            <div className="schedule-grid">
+              <div className="corner-cell" />
+              {days.map((date, index) => <div className={`day-head ${index === 1 && weekOffset === 0 ? "today" : ""}`} key={date.toISOString()}><span>{dayName(date)}</span><strong>{date.getDate()}</strong></div>)}
+              {HOURS.map((hour) => (
+                <div className="schedule-row" key={hour}>
+                  <time>{String(hour).padStart(2, "0")}:00</time>
+                  {days.map((date, dayIndex) => {
+                    const slotItems = visibleItems.filter((item) => item.day === dayIndex && item.hour === hour);
+                    return (
+                      <div className="time-slot" key={`${date.toISOString()}-${hour}`}>
+                        {slotItems.map((item) => (
+                          <article className={`schedule-event ${item.type.toLowerCase()}`} key={item.id}>
+                            <small>{TYPE_LABELS[item.type]} · {item.subject}</small>
+                            <strong>{item.title}</strong>
+                            <span>{item.detail}</span>
+                            <em>{item.mine ? "Vous" : item.teacher.split(" · ")[0]}</em>
+                          </article>
+                        ))}
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
+              ))}
             </div>
 
-            <div className="week-grid">
-              {days.map((date, dayIndex) => {
-                const dayItems = visibleItems.filter((item) => item.day === dayIndex);
-                const isToday = weekOffset === 0 && dayIndex === 1;
-                return (
-                  <section className={`day-column ${isToday ? "today-column" : ""}`} key={date.toISOString()}>
-                    <header>
-                      <span>{dayName(date)}</span>
-                      <strong className={isToday ? "today-number" : ""}>{date.getDate()}</strong>
-                      <small>{dayItems.length ? `${dayItems.length} élément${dayItems.length > 1 ? "s" : ""}` : "Libre"}</small>
-                    </header>
-                    <div className="day-items">
-                      {dayItems.map((item) => (
-                        <article className={`agenda-card ${item.type.toLowerCase()}`} key={item.id}>
-                          <div className="card-meta">
-                            <span>{TYPE_LABELS[item.type]}</span>
-                            {item.time && <time>{item.time}</time>}
-                          </div>
-                          <small className="subject">{item.subject}</small>
-                          <h3>{item.title}</h3>
-                          <p>{item.detail}</p>
-                          <footer><span className="mini-avatar">{item.mine ? "VO" : item.teacher.charAt(0)}</span>{item.teacher}</footer>
-                        </article>
-                      ))}
-                      {!dayItems.length && (
-                        <div className="empty-day"><span>＋</span><p>Aucun élément</p></div>
-                      )}
-                    </div>
-                  </section>
-                );
-              })}
-            </div>
+            {!visibleItems.length && <div className="empty-week"><span>▱</span><strong>Semaine libre</strong><small>Aucun élément ne correspond aux filtres.</small></div>}
           </section>
-
-          <p className="demo-caption">Prototype interactif · Les changements ajoutés ici restent uniquement dans cette démonstration.</p>
         </section>
+        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 0.3</p>
       </main>
 
-      {notice && <div className="toast" role="status"><span>✓</span>{notice}</div>}
+      {notice && <div className="technical-toast" role="status">✓　{notice}</div>}
 
       {modalType && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setModalType(null)}>
-          <section className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="modal-heading">
-              <div><p className="eyebrow">Nouvel élément</p><h2 id="modal-title">Ajouter un {TYPE_LABELS[modalType].toLowerCase()}</h2></div>
-              <button onClick={() => setModalType(null)} aria-label="Fermer">×</button>
-            </div>
+        <div className="technical-modal-backdrop" onMouseDown={() => setModalType(null)}>
+          <section className="technical-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={(event) => event.stopPropagation()}>
+            <header><div><span className="eyebrow">NOUVEL ÉLÉMENT</span><h2 id="modal-title">Ajouter un {TYPE_LABELS[modalType].toLowerCase()}</h2></div><button onClick={() => setModalType(null)}>×</button></header>
             <form onSubmit={submitItem}>
-              <label>Titre<input name="title" placeholder={modalType === "TEST" ? "Sujet du contrôle" : "Titre visible par la classe"} autoFocus required /></label>
-              <div className="form-row">
-                <label>Branche<select name="subject" defaultValue="Français">{SUBJECTS.slice(1).map((subject) => <option key={subject}>{subject}</option>)}</select></label>
-                <label>Jour<select name="day" defaultValue="1">{days.map((date, index) => <option value={index} key={date.toISOString()}>{dayName(date)} {date.getDate()}</option>)}</select></label>
+              <label>Titre<input name="title" placeholder="Titre visible par la classe" required autoFocus /></label>
+              <div className="modal-row">
+                <label>Branche<select name="subject" defaultValue="Moteur">{SUBJECTS.slice(1).map((subject) => <option key={subject}>{subject}</option>)}</select></label>
+                <label>Jour<select name="day" defaultValue="1">{days.map((date, index) => <option key={date.toISOString()} value={index}>{dayName(date)} {date.getDate()}</option>)}</select></label>
+                <label>Heure<select name="hour" defaultValue="8">{HOURS.map((hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}:00</option>)}</select></label>
               </div>
-              <label>Consigne ou précision<textarea name="detail" placeholder="Ajoutez une indication utile…" rows={3} /></label>
-              <div className="modal-actions"><button type="button" onClick={() => setModalType(null)}>Annuler</button><button type="submit">Publier dans l’agenda</button></div>
+              <label>Consigne<textarea name="detail" rows={3} placeholder="Ajoutez une indication utile…" /></label>
+              <footer><button type="button" onClick={() => setModalType(null)}>Annuler</button><button type="submit">Publier dans l’agenda</button></footer>
             </form>
           </section>
         </div>
