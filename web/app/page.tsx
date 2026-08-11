@@ -48,14 +48,8 @@ function dayName(date: Date) {
   return new Intl.DateTimeFormat("fr-CH", { weekday: "short" }).format(date).replace(".", "").toUpperCase();
 }
 
-function MechanicalEmblem() {
-  return (
-    <span className="mechanical-emblem" aria-hidden="true">
-      <span className="gear-glyph">⚙</span>
-      <span className="piston-glyph"><i /><b /></span>
-      <span className="disc-dots">•••</span>
-    </span>
-  );
+function BrandEmblem() {
+  return <span className="brand-emblem-image" aria-hidden="true" />;
 }
 
 export default function Home() {
@@ -115,7 +109,7 @@ export default function Home() {
     <div className="mechanical-app">
       <aside className="technical-sidebar">
         <div className="brand-lockup">
-          <MechanicalEmblem />
+          <BrandEmblem />
           <span><strong>CAMPUS</strong><small>AGENDA</small></span>
         </div>
 
@@ -136,10 +130,8 @@ export default function Home() {
       </aside>
 
       <main className="technical-main">
-        <div className="blueprint-watermark" />
-
         <header className="technical-header">
-          <div className="mobile-lockup"><MechanicalEmblem /><strong>CAMPUS AGENDA</strong></div>
+          <div className="mobile-lockup"><BrandEmblem /><strong>CAMPUS AGENDA</strong></div>
           <div className="class-identity">
             <span className="eyebrow">Technique Mécanique Automobile</span>
             <h1>{studentPreview ? "Mon agenda" : "Agenda partagé"}</h1>
@@ -169,6 +161,24 @@ export default function Home() {
           </div>
         </header>
 
+        <section className="brand-showcase" aria-label="Identité visuelle Campus Agenda">
+          <div className="showcase-copy">
+            <div className="showcase-brand"><BrandEmblem /><span><strong>CAMPUS</strong><small>AGENDA</small></span></div>
+            <p className="showcase-overline">TECHNIQUE MÉCANIQUE AUTOMOBILE</p>
+            <h2>L’agenda scolaire<br />des passionnés<br />de mécanique</h2>
+            <p className="showcase-text">Un calendrier commun, alimenté par toute l’équipe pédagogique et lisible d’un seul regard par les élèves.</p>
+            <div className="showcase-specs">
+              <span><strong>2e TMA</strong>Classe active</span>
+              <span><strong>5</strong>Enseignants</span>
+              <span><strong>3</strong>Types d’ajout</span>
+            </div>
+          </div>
+          <figure className="showcase-visual">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/og-v3.png" alt="Esquisses techniques d’un piston, de soupapes, d’un arbre à cames, d’un moteur et d’un véhicule électrifié" />
+          </figure>
+        </section>
+
         <div className="class-tabs">
           <button className="active">Calendrier</button>
           <button>Devoirs</button>
@@ -186,7 +196,7 @@ export default function Home() {
             )}
 
             <section className="mini-calendar">
-              <header><strong>AOÛT 2026</strong><span>‹　›</span></header>
+              <header><strong>AOÛT 2026</strong><span>‹ &nbsp; ›</span></header>
               <div className="mini-week"><b>L</b><b>M</b><b>M</b><b>J</b><b>V</b><b>S</b><b>D</b></div>
               <div className="mini-days">
                 {[27,28,29,30,31,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30].map((day, index) => (
@@ -212,7 +222,7 @@ export default function Home() {
             <header className="week-toolbar">
               <div><button onClick={() => setWeekOffset((current) => current - 1)}>‹</button><button onClick={() => setWeekOffset(0)}>Aujourd’hui</button><button onClick={() => setWeekOffset((current) => current + 1)}>›</button></div>
               <h2>{shortDate(days[0])} — {shortDate(days[4])} 2026</h2>
-              <span>2e TMA　⌄</span>
+              <span>2e TMA &nbsp;⌄</span>
             </header>
 
             <div className="schedule-grid">
@@ -243,17 +253,17 @@ export default function Home() {
             {!visibleItems.length && <div className="empty-week"><span>▱</span><strong>Semaine libre</strong><small>Aucun élément ne correspond aux filtres.</small></div>}
           </section>
         </section>
-        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 0.3</p>
+        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 0.4</p>
       </main>
 
-      {notice && <div className="technical-toast" role="status">✓　{notice}</div>}
+      {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
 
       {modalType && (
-        <div className="technical-modal-backdrop" onMouseDown={() => setModalType(null)}>
-          <section className="technical-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="technical-modal-backdrop">
+          <section className="technical-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
             <header><div><span className="eyebrow">NOUVEL ÉLÉMENT</span><h2 id="modal-title">Ajouter un {TYPE_LABELS[modalType].toLowerCase()}</h2></div><button onClick={() => setModalType(null)}>×</button></header>
             <form onSubmit={submitItem}>
-              <label>Titre<input name="title" placeholder="Titre visible par la classe" required autoFocus /></label>
+              <label>Titre<input name="title" placeholder="Titre visible par la classe" required /></label>
               <div className="modal-row">
                 <label>Branche<select name="subject" defaultValue="Moteur">{SUBJECTS.slice(1).map((subject) => <option key={subject}>{subject}</option>)}</select></label>
                 <label>Jour<select name="day" defaultValue="1">{days.map((date, index) => <option key={date.toISOString()} value={index}>{dayName(date)} {date.getDate()}</option>)}</select></label>

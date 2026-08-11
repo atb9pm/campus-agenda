@@ -2,6 +2,15 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [0.4.0] - 2026-08-11
+
+### Modifié
+
+- L’illustration mécanique validée est maintenant affichée en pleine lumière dans un espace dédié.
+- Le véritable emblème piston, engrenage et disque de frein remplace le symbole approximatif.
+- Le calendrier est séparé de l’illustration afin que les dessins techniques restent entièrement visibles.
+- La composition s’adapte aux écrans d’ordinateur et de téléphone sans masquer l’identité graphique.
+
 ## [0.3.0] - 2026-08-11
 
 ### Modifié

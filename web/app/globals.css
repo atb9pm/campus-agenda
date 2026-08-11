@@ -27,15 +27,7 @@ button { color: inherit; }
 .brand-lockup > span:last-child strong, .brand-lockup > span:last-child small { display: block; color: var(--navy); font-size: 13px; font-weight: 900; letter-spacing: .22em; line-height: 1.35; }
 .brand-lockup > span:last-child small { font-size: 9px; letter-spacing: .38em; }
 
-.mechanical-emblem { position: relative; width: 49px; height: 49px; flex: 0 0 49px; display: block; overflow: hidden; border: 2px solid var(--navy); border-radius: 50%; background: #fff; transform: rotate(-8deg); }
-.mechanical-emblem::before { content: ""; position: absolute; inset: 5px; border: 1px solid var(--navy); border-radius: 50%; }
-.mechanical-emblem::after { content: ""; position: absolute; left: 7px; bottom: 7px; width: 15px; height: 15px; border: 3px solid var(--navy); border-radius: 50%; box-shadow: inset 0 0 0 3px #fff; }
-.gear-glyph { position: absolute; right: -4px; bottom: -9px; color: var(--navy); font-family: "Segoe UI Symbol", sans-serif; font-size: 39px; line-height: 1; }
-.piston-glyph { position: absolute; z-index: 3; left: 20px; top: 4px; width: 13px; height: 25px; transform: rotate(38deg); }
-.piston-glyph i { position: absolute; inset: 0 0 auto; height: 10px; border: 2px solid var(--navy); border-radius: 2px; background: #fff; }
-.piston-glyph i::after { content: ""; position: absolute; left: 2px; right: 2px; bottom: -5px; height: 4px; border: 1px solid var(--navy); background: #fff; }
-.piston-glyph b { position: absolute; left: 5px; top: 13px; width: 4px; height: 13px; background: var(--navy); }
-.disc-dots { position: absolute; z-index: 4; left: 7px; bottom: 7px; width: 15px; color: var(--navy); font-size: 7px; letter-spacing: -1px; text-align: center; transform: rotate(45deg); }
+.brand-emblem-image { width: 56px; height: 56px; flex: 0 0 56px; display: block; border-radius: 50%; background-color: #fff; background-image: url('/og-v3.png'); background-repeat: no-repeat; background-size: 260px auto; background-position: -33px -31px; }
 
 .technical-sidebar nav { display: grid; gap: 7px; }
 .technical-sidebar nav button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 13px; border: 0; border-radius: 8px; color: #32466b; background: transparent; font-size: 11px; font-weight: 700; text-align: left; cursor: pointer; }
@@ -51,7 +43,6 @@ button { color: inherit; }
 .signout span { color: var(--blue); font-size: 16px; }
 
 .technical-main { position: relative; width: calc(100% - 222px); min-height: 100vh; margin-left: 222px; overflow: hidden; background-color: #fff; background-image: linear-gradient(rgba(20,59,111,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(20,59,111,.025) 1px, transparent 1px); background-size: 20px 20px; }
-.blueprint-watermark { position: absolute; z-index: 0; top: 94px; right: -160px; width: 690px; height: 390px; background: url('/og-v3.png') right center / auto 100% no-repeat; opacity: .045; filter: grayscale(1) contrast(1.55); pointer-events: none; }
 .technical-header { position: relative; z-index: 3; min-height: 124px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 28px 38px 20px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.84); backdrop-filter: blur(7px); }
 .mobile-lockup { display: none; }
 .eyebrow { display: block; margin: 0 0 6px; color: #687b9b; font-size: 8px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
@@ -73,6 +64,22 @@ button { color: inherit; }
 .technical-add-menu strong { color: var(--navy); font-size: 10px; }.technical-add-menu small { margin-top: 3px; color: #8794a8; font-size: 8px; }
 .type-icon { width: 29px; height: 29px; display: grid; place-items: center; border: 1px solid #8ab0ff; border-radius: 6px; color: var(--blue); background: #f5f8ff; font-size: 9px; font-weight: 900; }
 .type-icon.test { border-color: var(--navy); color: #fff; background: var(--navy); }.type-icon.information { border-color: #bbc8da; color: #456082; background: #eef2f7; }
+
+.brand-showcase { position: relative; z-index: 2; display: grid; grid-template-columns: minmax(290px, .78fr) minmax(500px, 1.32fr); align-items: stretch; margin: 24px 38px 28px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 16px 45px rgba(6,24,61,.055); }
+.showcase-copy { position: relative; z-index: 2; display: flex; flex-direction: column; justify-content: center; padding: 34px 32px; background-color: #fff; background-image: linear-gradient(rgba(20,59,111,.032) 1px, transparent 1px), linear-gradient(90deg, rgba(20,59,111,.032) 1px, transparent 1px); background-size: 17px 17px; }
+.showcase-copy::after { content: ""; position: absolute; right: -1px; top: 8%; bottom: 8%; width: 1px; background: #dce4ef; }
+.showcase-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 25px; }
+.showcase-brand .brand-emblem-image { width: 68px; height: 68px; flex-basis: 68px; background-size: 320px auto; background-position: -41px -38px; }
+.showcase-brand > span:last-child strong, .showcase-brand > span:last-child small { display: block; color: var(--navy); font-size: 14px; font-weight: 900; letter-spacing: .25em; line-height: 1.4; }
+.showcase-brand > span:last-child small { font-size: 9px; letter-spacing: .44em; }
+.showcase-overline { margin: 0 0 9px; color: #62779a; font-size: 7px; font-weight: 850; letter-spacing: .13em; }
+.showcase-copy h2 { margin: 0; color: var(--navy); font-size: clamp(26px, 3.1vw, 39px); line-height: 1.08; letter-spacing: -.055em; }
+.showcase-text { max-width: 390px; margin: 17px 0 0; color: #61718b; font-size: 10px; line-height: 1.65; }
+.showcase-specs { display: flex; gap: 22px; margin-top: 27px; padding-top: 17px; border-top: 1px solid var(--line); }
+.showcase-specs span { color: #8190a5; font-size: 7px; text-transform: uppercase; letter-spacing: .06em; }
+.showcase-specs strong { display: block; margin-bottom: 3px; color: var(--blue); font-size: 13px; letter-spacing: 0; }
+.showcase-visual { position: relative; margin: 0; aspect-ratio: 3 / 2; overflow: hidden; background: #fff; }
+.showcase-visual img { width: 100%; height: 100%; display: block; object-fit: contain; }
 
 .class-tabs { position: relative; z-index: 2; display: flex; gap: 28px; padding: 0 38px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.86); }
 .class-tabs button { position: relative; padding: 14px 0 12px; border: 0; color: #516582; background: transparent; font-size: 9px; font-weight: 750; cursor: pointer; }
@@ -145,14 +152,16 @@ button { color: inherit; }
   .technical-sidebar { width: 190px; }.technical-main { width: calc(100% - 190px); margin-left: 190px; }
   .calendar-workbench { grid-template-columns: 190px minmax(0, 1fr); margin-right: 20px; margin-left: 20px; }.technical-header { padding-right: 20px; padding-left: 20px; }.class-tabs { padding-right: 20px; padding-left: 20px; }
   .student-preview { display: none; }
+  .brand-showcase { grid-template-columns: minmax(260px, .7fr) minmax(430px, 1.3fr); margin-right: 20px; margin-left: 20px; }.showcase-copy { padding: 27px 24px; }.showcase-brand { margin-bottom: 18px; }.showcase-specs { gap: 13px; }
 }
 
 @media (max-width: 760px) {
   .technical-sidebar { display: none; }.technical-main { width: 100%; margin-left: 0; }
-  .technical-header { min-height: auto; align-items: flex-start; flex-wrap: wrap; padding: 16px; }.mobile-lockup { width: 100%; display: flex; padding: 0 0 15px; border-bottom: 1px solid var(--line); }.mobile-lockup .mechanical-emblem { width: 38px; height: 38px; flex-basis: 38px; }.mobile-lockup > strong { color: var(--navy); font-size: 10px; letter-spacing: .18em; }
+  .technical-header { min-height: auto; align-items: flex-start; flex-wrap: wrap; padding: 16px; }.mobile-lockup { width: 100%; display: flex; padding: 0 0 15px; border-bottom: 1px solid var(--line); }.mobile-lockup .brand-emblem-image { width: 42px; height: 42px; flex-basis: 42px; background-size: 198px auto; background-position: -25px -24px; }.mobile-lockup > strong { color: var(--navy); font-size: 10px; letter-spacing: .18em; }
   .class-identity { flex: 1; min-width: 190px; }.class-identity p { max-width: 260px; }.header-actions { margin-left: auto; }.round-action, .profile-disc { display: none; }.navy-add { width: 38px; padding: 0; justify-content: center; }.navy-add > span, .navy-add > span + * { display: none; }
   .technical-add-menu { position: fixed; top: auto; right: 14px; bottom: 14px; left: 14px; width: auto; }
   .class-tabs { gap: 20px; overflow-x: auto; padding: 0 16px; }.class-tabs button { white-space: nowrap; }
+  .brand-showcase { grid-template-columns: 1fr; margin: 14px 12px 20px; }.showcase-copy { padding: 25px 22px; }.showcase-brand { margin-bottom: 18px; }.showcase-copy h2 { font-size: 29px; }.showcase-specs { justify-content: space-between; gap: 9px; }.showcase-visual { border-top: 1px solid var(--line); }
   .calendar-workbench { grid-template-columns: 1fr; margin: 14px 0 0; border-right: 0; border-left: 0; border-radius: 0; }
   .calendar-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 16px; border-right: 0; border-bottom: 1px solid var(--line); }.mini-calendar, .legend-note { display: none; }.view-selector { margin: 0; }.filter-panel { display: flex; align-items: center; gap: 8px; padding: 0; }.filter-panel h2, .filter-panel label { display: none; }.filter-panel select { margin: 0; }
   .week-toolbar, .schedule-grid { min-width: 760px; }.week-calendar { max-height: 620px; }.prototype-label { margin-right: 16px; }

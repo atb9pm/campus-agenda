@@ -40,6 +40,10 @@ test("keeps the validated publication menu and social preview", async () => {
   assert.match(page, /HOMEWORK: "Devoir"/);
   assert.match(page, /TEST: "Contrôle"/);
   assert.match(page, /INFORMATION: "Information"/);
+  assert.match(page, /className="brand-showcase"/);
+  assert.match(page, /src="\/og-v3\.png"/);
+  assert.match(page, /Esquisses techniques d’un piston/);
+  assert.doesNotMatch(page, /blueprint-watermark|MechanicalEmblem/);
   assert.match(layout, /\/og-v3\.png/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   await access(new URL("../public/og-v3.png", import.meta.url));
