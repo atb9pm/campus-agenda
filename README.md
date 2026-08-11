@@ -41,5 +41,5 @@ data/            Documentation locale uniquement ; contenu ignoré par Git
 - [Architecture fonctionnelle](docs/ARCHITECTURE.md)
 - [Sécurité et données](docs/SECURITY.md)
 - [Feuille de route](docs/ROADMAP.md)
+- [Gestion des versions](docs/VERSIONING.md)
 - [Guide de contribution](CONTRIBUTING.md)
-
