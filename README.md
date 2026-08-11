@@ -13,7 +13,7 @@ Application web d'agenda scolaire pensée pour plusieurs enseignants et plusieur
 
 ## État du projet
 
-Le dépôt contient actuellement le socle documentaire et la structure de développement. Aucun jeu de données réel, aucun compte d'élève et aucun secret ne doivent être enregistrés dans GitHub.
+Le dépôt contient le socle documentaire ainsi qu'un premier prototype web interactif. Aucun jeu de données réel, aucun compte d'élève et aucun secret ne doivent être enregistrés dans GitHub.
 
 ## Structure
 
@@ -27,6 +27,7 @@ src/
   types/         Types du domaine
 tests/           Tests automatisés
 data/            Documentation locale uniquement ; contenu ignoré par Git
+web/             Prototype web interactif et configuration d'hébergement
 ```
 
 ## Démarrage du développement

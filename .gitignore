@@ -19,6 +19,8 @@ uploads/
 node_modules/
 dist/
 build/
+!/web/build/
+!/web/build/**
 coverage/
 .next/
 

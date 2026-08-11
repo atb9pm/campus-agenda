@@ -1,0 +1,46 @@
+import assert from "node:assert/strict";
+import { access, readFile } from "node:fs/promises";
+import test from "node:test";
+
+async function render() {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
+  const { default: worker } = await import(workerUrl.href);
+
+  return worker.fetch(
+    new Request("http://localhost/", { headers: { accept: "text/html" } }),
+    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+}
+
+test("server-renders the Campus Agenda prototype", async () => {
+  const response = await render();
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+
+  const html = await response.text();
+  assert.match(html, /Campus Agenda — Agenda scolaire partagé/);
+  assert.match(html, /Bonjour François/);
+  assert.match(html, /Mes éléments/);
+  assert.match(html, /Toute la classe/);
+  assert.match(html, /Données de démonstration/);
+  assert.match(html, /Aucun élève réel/);
+  assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
+});
+
+test("keeps the validated publication menu and social preview", async () => {
+  const [page, layout, packageJson] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /"HOMEWORK", "TEST", "INFORMATION"/);
+  assert.match(page, /HOMEWORK: "Devoir"/);
+  assert.match(page, /TEST: "Contrôle"/);
+  assert.match(page, /INFORMATION: "Information"/);
+  assert.match(layout, /\/og\.png/);
+  assert.doesNotMatch(packageJson, /react-loading-skeleton/);
+  await access(new URL("../public/og.png", import.meta.url));
+});
