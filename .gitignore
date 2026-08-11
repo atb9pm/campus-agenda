@@ -1,0 +1,37 @@
+# Secrets et configuration locale
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Données locales ou réelles
+data/*
+!data/README.md
+*.sqlite
+*.sqlite3
+*.db
+backups/
+exports/
+uploads/
+
+# Dépendances et sorties de compilation
+node_modules/
+dist/
+build/
+coverage/
+.next/
+
+# Journaux, caches et outils locaux
+*.log
+.cache/
+.turbo/
+.vite/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Contexte local synchronisé par Codex (hors produit)
+/sources/
+/AGENTS.md
