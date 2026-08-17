@@ -371,6 +371,33 @@ export default function Home() {
     setEditingItem(null);
   }
 
+  useEffect(() => {
+    function closeModalOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      if (studentCodeModalOpen) setStudentCodeModalOpen(false);
+      if (modalType) closeModal();
+      if (addMenuOpen) setAddMenuOpen(false);
+      if (classPickerOpen) setClassPickerOpen(false);
+    }
+    window.addEventListener("keydown", closeModalOnEscape);
+    return () => window.removeEventListener("keydown", closeModalOnEscape);
+  }, [studentCodeModalOpen, modalType, addMenuOpen, classPickerOpen]);
+
+  function logoutTeacher() {
+    void (async () => {
+      await logoutApiSession();
+      const teacherSession = await loginTeacherApi(DEMO_CURRENT_TEACHER_ID, DEMO_TEACHER_PASSWORD);
+      setCurrentTeacherId(teacherSession.teacherId);
+      setAppMode("teacher");
+      setStudentSession(null);
+      setStudentEntry(null);
+      const classroomIds = getClassroomsForTeacher(DEMO_CATALOG, teacherSession.teacherId).map((classroom) => classroom.id);
+      const loadedItems = await loadTeacherAgendaItems(classroomIds);
+      setItems(loadedItems);
+      showNotice("Session réinitialisée.");
+    })();
+  }
+
   function submitItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!modalType) return;
@@ -468,7 +495,7 @@ export default function Home() {
           </button>
         </aside>
 
-        <main className="technical-main">
+        <main className="technical-main" id="main-content">
           <header className="technical-header">
             <div className="mobile-lockup"><BrandEmblem /><strong>CAMPUS AGENDA</strong></div>
             <div className="class-identity">
@@ -543,7 +570,7 @@ export default function Home() {
             </section>
           </section>
 
-          <p className="prototype-label">CONSULTATION ÉLÈVE · CAMPUS AGENDA 0.10</p>
+          <p className="prototype-label">CONSULTATION ÉLÈVE · CAMPUS AGENDA 0.11</p>
         </main>
 
         {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
@@ -594,10 +621,10 @@ export default function Home() {
           <small>Démonstration uniquement</small>
         </div>
         <button className="signout" onClick={() => setStudentCodeModalOpen(true)}><span>👤</span> Espace élève</button>
-        <button className="signout"><span>↪</span> Déconnexion</button>
+        <button className="signout" onClick={logoutTeacher}><span>↪</span> Déconnexion</button>
       </aside>
 
-      <main className="technical-main">
+      <main className="technical-main" id="main-content">
         <header className="technical-header">
           <div className="mobile-lockup"><BrandEmblem /><strong>CAMPUS AGENDA</strong></div>
           <div className="class-identity">
@@ -611,11 +638,11 @@ export default function Home() {
             )}
             {showAgendaTools && (
               <div className="add-anchor">
-                <button className="navy-add" onClick={() => setAddMenuOpen((current) => !current)} aria-expanded={addMenuOpen}>＋ <span>Ajouter</span>⌄</button>
+                <button className="navy-add" onClick={() => setAddMenuOpen((current) => !current)} aria-expanded={addMenuOpen} aria-haspopup="menu">＋ <span>Ajouter</span>⌄</button>
                 {addMenuOpen && (
-                  <div className="technical-add-menu">
+                  <div className="technical-add-menu" role="menu" aria-label="Types de publication">
                     {(["HOMEWORK", "TEST", "INFORMATION"] as AgendaItemType[]).map((type) => (
-                      <button key={type} onClick={() => openCreateModal(type)}>
+                      <button key={type} role="menuitem" onClick={() => openCreateModal(type)}>
                         <span className={`type-icon ${type.toLowerCase()}`}>{type === "HOMEWORK" ? "D" : type === "TEST" ? "C" : "i"}</span>
                         <span><strong>{TYPE_LABELS[type]}</strong><small>{type === "HOMEWORK" ? "Travail à réaliser" : type === "TEST" ? "Évaluation planifiée" : "Message pour la classe"}</small></span>
                       </button>
@@ -865,7 +892,7 @@ export default function Home() {
           </>
         )}
 
-        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 0.10</p>
+        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 0.11</p>
       </main>
 
       {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}

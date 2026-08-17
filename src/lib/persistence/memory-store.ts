@@ -87,6 +87,14 @@ export class MemoryAgendaStore implements AgendaStore {
     if (!isDemoTeacherPassword(password)) return false;
     return Boolean(DEMO_CATALOG.teachers.find((teacher) => teacher.id === teacherId));
   }
+
+  exportAllItems(): PrototypeAgendaItem[] {
+    return this.items.map((item) => ({ ...item }));
+  }
+
+  replaceAllItems(items: PrototypeAgendaItem[]): void {
+    this.items = items.map((item) => ({ ...item }));
+  }
 }
 
 let singletonStore: MemoryAgendaStore | null = null;

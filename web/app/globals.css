@@ -21,6 +21,25 @@ body { margin: 0; color: var(--ink); background: var(--canvas); font-family: Int
 button, input, select, textarea { font: inherit; }
 button { color: inherit; }
 
+.skip-to-content {
+  position: absolute;
+  left: 12px;
+  top: -48px;
+  z-index: 100;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: var(--navy);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+  transition: top 0.2s ease;
+}
+.skip-to-content:focus {
+  top: 12px;
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
 .mechanical-app { min-height: 100vh; display: flex; background: #fff; }
 .technical-sidebar { position: fixed; inset: 0 auto 0 0; z-index: 20; width: 222px; display: flex; flex-direction: column; padding: 28px 18px 22px; border-right: 1px solid var(--line); background: rgba(255,255,255,.97); }
 .brand-lockup, .mobile-lockup { display: flex; align-items: center; gap: 12px; padding: 0 8px 34px; }

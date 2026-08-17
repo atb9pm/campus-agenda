@@ -2,6 +2,16 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [0.11.0] - 2026-08-17
+
+### Ajouté
+
+- **Préparation production** : observabilité (journaux JSON, `x-request-id`), endpoint `GET /api/health`.
+- **Sauvegardes de démonstration** : export / restauration de l'agenda en mémoire (`/api/admin/backup`, `/api/admin/restore`).
+- **Tests E2E API** contre le worker compilé (parcours enseignant → élève).
+- **Accessibilité** : lien d'évitement, fermeture des modales avec Échap, rôles ARIA sur le menu d'ajout.
+- Documentation d'exploitation : `docs/OPERATIONS.md`.
+
 ## [0.10.0] - 2026-08-17
 
 ### Ajouté

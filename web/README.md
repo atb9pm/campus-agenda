@@ -11,7 +11,7 @@ Prototype interactif de l'agenda scolaire partagé.
 - ajout local d'un Devoir, d'un Contrôle ou d'une Information ;
 - navigation entre les semaines.
 
-Toutes les données affichées sont fictives. Cette version ne possède encore ni authentification réelle ni base de données persistante.
+Toutes les données affichées sont fictives. L'authentification et la persistance mémoire sont disponibles en démonstration ; voir `docs/OPERATIONS.md` pour l'exploitation.
 
 ## Développement
 

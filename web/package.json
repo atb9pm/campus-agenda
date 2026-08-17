@@ -1,6 +1,6 @@
 {
   "name": "campus-agenda-web",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -9,7 +9,7 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
-    "test": "node --experimental-strip-types --test ../tests/classes.test.ts ../tests/teacher.test.ts ../tests/publications.test.ts ../tests/shared-agenda.test.ts ../tests/student.test.ts ../tests/auth.test.ts ../tests/persistence.test.ts ../tests/api-auth.test.ts && pnpm run build && node --test tests/rendered-html.test.mjs",
+    "test": "node --experimental-strip-types --test ../tests/classes.test.ts ../tests/teacher.test.ts ../tests/publications.test.ts ../tests/shared-agenda.test.ts ../tests/student.test.ts ../tests/auth.test.ts ../tests/persistence.test.ts ../tests/api-auth.test.ts ../tests/backup.test.ts ../tests/observability.test.ts ../tests/accessibility.test.ts && pnpm run build && node --test tests/rendered-html.test.mjs tests/e2e-api.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },
   "dependencies": {

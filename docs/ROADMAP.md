@@ -28,7 +28,13 @@ Consultation anonyme de l'agenda complet de la classe.
 
 Base de données, comptes enseignants, contrôles d'accès et gestion sécurisée des secrets.
 
+## 0.8 — Préparation production
+
+Tests de bout en bout, accessibilité renforcée, sauvegardes de démonstration, observabilité et documentation d'exploitation.
+
 ## 1.0 — Première version utilisable
 
 Tests de bout en bout, accessibilité, sauvegardes, observabilité et documentation d'exploitation.
+
+La phase **0.8** couvre déjà une partie de ces objectifs (health check, E2E API, exports/restaurations mémoire, accessibilité de base). La version **1.0.0** visera la persistance D1 et la mise en service réelle.
 

@@ -14,3 +14,10 @@ export {
   getMemoryAgendaStore,
   resetMemoryAgendaStore,
 } from "./memory-store.ts";
+export {
+  BACKUP_FORMAT_VERSION,
+  exportAgendaSnapshot,
+  restoreAgendaSnapshot,
+  type AgendaBackupSnapshot,
+  type BackupRestoreResult,
+} from "./backup.ts";
