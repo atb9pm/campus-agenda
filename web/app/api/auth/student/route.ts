@@ -3,8 +3,12 @@ import {
   jsonWithSession,
 } from "../../../../lib/server/api.ts";
 import { getStore } from "../../../../lib/server/api.ts";
+import { enforceAuthRateLimit } from "../../../../lib/server/rate-limit.ts";
 
 export async function POST(request: Request) {
+  const limited = await enforceAuthRateLimit(request, "student");
+  if (limited) return limited;
+
   const body = await request.json() as { code?: string };
   const code = String(body.code ?? "").trim();
   const store = await getStore();

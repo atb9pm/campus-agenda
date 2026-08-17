@@ -2,6 +2,14 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [1.0.2] - 2026-08-17
+
+### Sécurité
+
+- **Rate limiting sur l'authentification** : protection des routes `POST /api/auth/teacher` et `POST /api/auth/student`.
+- Limite par défaut : 10 tentatives / minute (enseignant), 20 / minute (élève) en mémoire locale ; binding Cloudflare `AUTH_RATE_LIMITER` en production.
+- Réponse `429` avec en-tête `Retry-After: 60` et message explicite.
+
 ## [1.0.1] - 2026-08-17
 
 ### Sécurité
