@@ -7,6 +7,7 @@ export interface PublicationInput {
   authorTeacherId: string;
   day: number;
   hour: number;
+  weekOffset?: number;
   type: AgendaItemType;
   title: string;
   detail: string;
@@ -51,6 +52,7 @@ export function createPublication(
     authorTeacherId: input.authorTeacherId,
     day: input.day,
     hour: input.hour,
+    weekOffset: input.weekOffset ?? 0,
     type: input.type,
     title,
     detail: input.detail.trim() || "Aucune précision",

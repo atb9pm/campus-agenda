@@ -112,6 +112,27 @@ button { color: inherit; }
 .branch-tags li { padding: 5px 10px; border-radius: 999px; color: #30558f; background: #eef4fd; font-size: 9px; font-weight: 700; }
 .workspace-action { justify-self: start; padding: 10px 14px; border: 0; border-radius: 8px; color: #fff; background: var(--navy); font-size: 10px; font-weight: 700; cursor: pointer; }
 .workspace-action:hover { background: #0a2f73; }
+.workspace-action.secondary { color: var(--navy); background: #eef4fd; }
+.workspace-action.secondary:hover { background: #dfeafb; }
+.workload-panel { margin-bottom: 18px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfe; }
+.workload-panel header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.workload-panel h2 { margin: 0; color: #8793a9; font-size: 7px; font-weight: 800; letter-spacing: .12em; }
+.workload-badge { padding: 4px 8px; border-radius: 999px; font-size: 7px; font-weight: 800; }
+.workload-badge.light { color: #2f6b3f; background: #e8f6ec; }
+.workload-badge.moderate { color: #8a6118; background: #fff4df; }
+.workload-badge.heavy { color: #8b2e2e; background: #fdecec; }
+.workload-totals { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 0 0 10px; }
+.workload-totals div { padding: 8px; border-radius: 6px; background: #fff; }
+.workload-totals dt { margin: 0; color: #8793a9; font-size: 6px; font-weight: 800; text-transform: uppercase; }
+.workload-totals dd { margin: 3px 0 0; color: var(--navy); font-size: 14px; font-weight: 800; }
+.workload-breakdown { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.workload-breakdown li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 8px; color: #516582; }
+.workload-breakdown strong { color: var(--navy); }
+.workload-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; min-width: 790px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.94); }
+.workload-day { display: grid; gap: 4px; padding: 8px; border: 1px solid #e6ebf2; border-radius: 6px; background: #f8fafc; }
+.workload-day span { color: #8793a9; font-size: 6px; font-weight: 800; }
+.workload-day strong { color: var(--navy); font-size: 12px; }
+.workload-day i { display: block; height: 4px; border-radius: 999px; background: var(--blue); }
 
 .calendar-workbench { position: relative; z-index: 2; display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 640px; margin: 21px 38px 0; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.94); box-shadow: 0 13px 35px rgba(12,35,70,.045); }
 .calendar-tools { padding: 18px 16px; border-right: 1px solid var(--line); background: rgba(250,251,253,.92); }

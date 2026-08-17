@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { canModifyPublication, createPublication, deletePublication, DEMO_PROTOTYPE_ITEMS, updatePublication, type PrototypeAgendaItem } from "@campus/features/agenda";
+import { ALL_FILTER, applySharedAgendaFilters, buildClassWorkloadSummary, canModifyPublication, createPublication, deletePublication, DEMO_PROTOTYPE_ITEMS, updatePublication, WORKLOAD_LEVEL_LABELS, type PrototypeAgendaItem } from "@campus/features/agenda";
 import {
   DEMO_CATALOG,
   DEMO_CURRENT_TEACHER_ID,
@@ -13,6 +13,7 @@ import {
   getSubjectsForClassroom,
   getSubjectsForTeacherInClassroom,
   getTeacherById,
+  getTeachersInClassroom,
   teacherTeachesSubject,
 } from "@campus/features/classes";
 import {
@@ -87,6 +88,8 @@ export default function Home() {
   const [studentPreview, setStudentPreview] = useState(false);
   const [typeFilter, setTypeFilter] = useState<AgendaItemType | "ALL">("ALL");
   const [subjectFilter, setSubjectFilter] = useState(ALL_SUBJECTS_FILTER);
+  const [teacherFilter, setTeacherFilter] = useState<string | typeof ALL_FILTER>(ALL_FILTER);
+  const [dayFilter, setDayFilter] = useState<number | typeof ALL_FILTER>(ALL_FILTER);
   const [weekOffset, setWeekOffset] = useState(0);
   const [items, setItems] = useState<PrototypeAgendaItem[]>(DEMO_PROTOTYPE_ITEMS);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -128,16 +131,27 @@ export default function Home() {
     studentPreview ? "class" : agendaView,
   );
   const classroomItems = items.filter((item) => item.classroomId === selectedClassroomId);
+  const classroomTeachers = useMemo(
+    () => getTeachersInClassroom(DEMO_CATALOG, selectedClassroomId),
+    [selectedClassroomId],
+  );
+  const showSharedInsights = agendaView === "class" || studentPreview;
 
-  const visibleItems = agendaBaseItems.filter((item) => {
-    if (weekOffset !== 0 && item.id <= 5) return false;
-    if (typeFilter !== "ALL" && item.type !== typeFilter) return false;
-    if (subjectFilter !== ALL_SUBJECTS_FILTER) {
-      const subject = getSubjectById(DEMO_CATALOG, item.subjectId);
-      if (subject?.name !== subjectFilter) return false;
-    }
-    return true;
-  });
+  const visibleItems = useMemo(
+    () => applySharedAgendaFilters(agendaBaseItems, DEMO_CATALOG, {
+      subjectName: subjectFilter === ALL_SUBJECTS_FILTER ? ALL_FILTER : subjectFilter,
+      type: typeFilter,
+      teacherId: teacherFilter,
+      day: dayFilter,
+      weekOffset,
+    }),
+    [agendaBaseItems, subjectFilter, typeFilter, teacherFilter, dayFilter, weekOffset],
+  );
+
+  const workload = useMemo(
+    () => (showSharedInsights ? buildClassWorkloadSummary(items, DEMO_CATALOG, selectedClassroomId, weekOffset) : null),
+    [showSharedInsights, items, selectedClassroomId, weekOffset],
+  );
 
   function openAgenda(classroomId: string) {
     setSelectedClassroomId(classroomId);
@@ -145,6 +159,20 @@ export default function Home() {
     setAgendaView(DEFAULT_TEACHER_AGENDA_VIEW);
     setClassPickerOpen(false);
     setSubjectFilter(ALL_SUBJECTS_FILTER);
+    setTeacherFilter(ALL_FILTER);
+    setDayFilter(ALL_FILTER);
+    setWeekOffset(0);
+    setStudentPreview(false);
+  }
+
+  function openSharedAgenda(classroomId: string) {
+    setSelectedClassroomId(classroomId);
+    setActiveSection("agenda");
+    setAgendaView("class");
+    setClassPickerOpen(false);
+    setSubjectFilter(ALL_SUBJECTS_FILTER);
+    setTeacherFilter(ALL_FILTER);
+    setDayFilter(ALL_FILTER);
     setWeekOffset(0);
     setStudentPreview(false);
   }
@@ -220,6 +248,7 @@ export default function Home() {
       authorTeacherId: DEMO_CURRENT_TEACHER_ID,
       day,
       hour,
+      weekOffset,
       type: modalType,
       title,
       detail,
@@ -349,6 +378,9 @@ export default function Home() {
                   <button className="workspace-action" onClick={() => openAgenda(summary.classroom.id)}>
                     Voir mes éléments
                   </button>
+                  <button className="workspace-action secondary" onClick={() => openSharedAgenda(summary.classroom.id)}>
+                    Toute la classe
+                  </button>
                 </article>
               ))}
             </div>
@@ -376,6 +408,9 @@ export default function Home() {
                   </ul>
                   <button className="workspace-action" onClick={() => openAgenda(summary.classroom.id)}>
                     Ouvrir l’agenda · Mes éléments
+                  </button>
+                  <button className="workspace-action secondary" onClick={() => openSharedAgenda(summary.classroom.id)}>
+                    Charge globale · Toute la classe
                   </button>
                 </article>
               ))}
@@ -414,9 +449,29 @@ export default function Home() {
               <aside className="calendar-tools">
                 {!studentPreview && (
                   <div className="view-selector" aria-label="Choisir la vue">
-                    <button className={agendaView === "mine" ? "active" : ""} onClick={() => setAgendaView("mine")}>Mes éléments <span>{myItemCount}</span></button>
-                    <button className={agendaView === "class" ? "active" : ""} onClick={() => setAgendaView("class")}>Toute la classe <span>{classroomItems.length}</span></button>
+                    <button className={agendaView === "mine" ? "active" : ""} onClick={() => { setAgendaView("mine"); setTeacherFilter(ALL_FILTER); setDayFilter(ALL_FILTER); }}>Mes éléments <span>{myItemCount}</span></button>
+                    <button className={agendaView === "class" ? "active" : ""} onClick={() => { setAgendaView("class"); setTeacherFilter(ALL_FILTER); setDayFilter(ALL_FILTER); }}>Toute la classe <span>{classroomItems.filter((item) => (item.weekOffset ?? 0) === weekOffset).length}</span></button>
                   </div>
+                )}
+
+                {showSharedInsights && workload && (
+                  <section className="workload-panel" aria-label="Charge globale de la classe">
+                    <header>
+                      <h2>CHARGE GLOBALE</h2>
+                      <span className={`workload-badge ${workload.level}`}>{WORKLOAD_LEVEL_LABELS[workload.level]}</span>
+                    </header>
+                    <dl className="workload-totals">
+                      <div><dt>Total</dt><dd>{workload.total}</dd></div>
+                      <div><dt>Devoirs</dt><dd>{workload.homework}</dd></div>
+                      <div><dt>Contrôles</dt><dd>{workload.test}</dd></div>
+                      <div><dt>Infos</dt><dd>{workload.information}</dd></div>
+                    </dl>
+                    <ul className="workload-breakdown">
+                      {workload.bySubject.slice(0, 4).map((entry) => (
+                        <li key={entry.subjectId}><span>{entry.subjectName}</span><strong>{entry.count}</strong></li>
+                      ))}
+                    </ul>
+                  </section>
                 )}
 
                 <section className="mini-calendar">
@@ -434,6 +489,18 @@ export default function Home() {
                   <select value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)} aria-label="Filtrer par branche">
                     {subjectFilterOptions.map((subject) => <option key={subject}>{subject}</option>)}
                   </select>
+                  {showSharedInsights && (
+                    <>
+                      <select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} aria-label="Filtrer par enseignant">
+                        <option value={ALL_FILTER}>Tous les enseignants</option>
+                        {classroomTeachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.displayName}</option>)}
+                      </select>
+                      <select value={dayFilter} onChange={(event) => setDayFilter(event.target.value === ALL_FILTER ? ALL_FILTER : Number(event.target.value))} aria-label="Filtrer par jour">
+                        <option value={ALL_FILTER}>Toute la semaine</option>
+                        {days.map((date, index) => <option key={date.toISOString()} value={index}>{dayName(date)} {date.getDate()}</option>)}
+                      </select>
+                    </>
+                  )}
                   <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "HOMEWORK"} onChange={() => setTypeFilter(typeFilter === "HOMEWORK" ? "ALL" : "HOMEWORK")} /> <span className="check blue" /> Devoirs</label>
                   <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "TEST"} onChange={() => setTypeFilter(typeFilter === "TEST" ? "ALL" : "TEST")} /> <span className="check navy" /> Contrôles</label>
                   <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "INFORMATION"} onChange={() => setTypeFilter(typeFilter === "INFORMATION" ? "ALL" : "INFORMATION")} /> <span className="check pale" /> Informations</label>
@@ -468,6 +535,18 @@ export default function Home() {
                     )}
                   </div>
                 </header>
+
+                {showSharedInsights && workload && (
+                  <div className="workload-strip" aria-label="Répartition hebdomadaire">
+                    {workload.byDay.map((entry, index) => (
+                      <div className="workload-day" key={entry.day}>
+                        <span>{dayName(days[index] ?? days[0])}</span>
+                        <strong>{entry.total}</strong>
+                        <i style={{ width: `${Math.min(100, entry.total * 20)}%` }} />
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 <div className="schedule-grid">
                   <div className="corner-cell" />
@@ -512,7 +591,7 @@ export default function Home() {
           </>
         )}
 
-        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 0.7</p>
+        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 0.8</p>
       </main>
 
       {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}

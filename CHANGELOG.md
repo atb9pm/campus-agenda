@@ -2,6 +2,16 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [0.8.0] - 2026-08-17
+
+### Ajouté
+
+- **Agenda mutualisé** : vue « Toute la classe » enrichie avec synthèse de charge hebdomadaire.
+- Filtres avancés : branche, type, enseignant, jour et semaine affichée.
+- Panneau « Charge globale » et barre de répartition par jour.
+- Accès direct à la vue mutualisée depuis le tableau de bord et Mes classes.
+- Tests automatisés des filtres et de la charge de travail.
+
 ## [0.7.0] - 2026-08-17
 
 ### Ajouté
