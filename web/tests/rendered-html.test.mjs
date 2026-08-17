@@ -26,6 +26,9 @@ test("server-renders the Campus Agenda prototype", async () => {
   assert.match(html, /Toute la classe/);
   assert.match(html, /Données fictives/);
   assert.match(html, /Aucun élève réel/);
+  assert.match(html, /Mes classes/);
+  assert.match(html, /1re TMA/);
+  assert.match(html, /2e TMA/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 
@@ -40,6 +43,8 @@ test("keeps the validated publication menu and social preview", async () => {
   assert.match(page, /HOMEWORK: "Devoir"/);
   assert.match(page, /TEST: "Contrôle"/);
   assert.match(page, /INFORMATION: "Information"/);
+  assert.match(page, /DEMO_CATALOG/);
+  assert.match(page, /selectedClassroomId/);
   assert.match(page, /className="brand-showcase"/);
   assert.match(page, /src="\/og-v3\.png"/);
   assert.match(page, /Esquisses techniques d’un piston/);

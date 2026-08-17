@@ -2,6 +2,16 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [0.5.0] - 2026-08-17
+
+### Ajouté
+
+- Modèle de domaine **Classes et branches** : `Classroom`, `Subject`, `Teacher`, `Membership` et `StudentAccess`.
+- Données de démonstration fictives pour deux classes TMA et leurs rattachements enseignants.
+- Requêtes de consultation : classes par enseignant, branches par classe, vérification enseignant ↔ branche.
+- Sélecteur de classe dans le prototype web et filtres de branches issus du modèle.
+- Tests automatisés du modèle classes/branches.
+
 ## [0.4.0] - 2026-08-11
 
 ### Modifié
