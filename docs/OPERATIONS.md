@@ -1,6 +1,6 @@
 # Exploitation — Campus Agenda
 
-Guide opérationnel pour la version **1.0.0**.
+Guide opérationnel pour la version **1.0.2**.
 
 ## Modes de persistance
 
@@ -58,6 +58,30 @@ Journaux JSON sur la sortie standard, sans contenu scolaire :
 | `CAMPUS_STORE` | Backend de persistance |
 | `CAMPUS_SQLITE_PATH` | Fichier SQLite local |
 | `APP_ENV` | Contexte d'exécution |
+| `CAMPUS_DISABLE_RATE_LIMIT` | Désactive le rate limit (tests uniquement) |
+| `CAMPUS_AUTH_RATE_LIMIT_TEACHER` | Limite personnalisée connexion enseignant (défaut : 10/min) |
+| `CAMPUS_AUTH_RATE_LIMIT_STUDENT` | Limite personnalisée connexion élève (défaut : 20/min) |
+
+## Rate limiting
+
+Les tentatives de connexion (`POST /api/auth/teacher`, `POST /api/auth/student`) sont limitées par adresse IP (`cf-connecting-ip`).
+
+| Environnement | Mécanisme | Limite |
+|---|---|---|
+| Production Cloudflare | Binding `AUTH_RATE_LIMITER` (wrangler) | 10 req / 60 s par clé |
+| Dev / tests | Compteur mémoire par processus | 10 enseignant, 20 élève / min |
+
+Réponse en cas de dépassement :
+
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 60
+Content-Type: application/json
+
+{"ok":false,"reason":"Trop de tentatives. Réessayez dans une minute."}
+```
+
+Le binding est déclaré dans `web/wrangler.jsonc`. Aucune configuration dashboard supplémentaire n'est requise.
 
 ## Sauvegardes
 

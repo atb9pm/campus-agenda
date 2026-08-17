@@ -35,6 +35,16 @@ const localBindingConfig = {
         },
       ]
     : [],
+  ratelimits: [
+    {
+      name: "AUTH_RATE_LIMITER",
+      namespace_id: "9156001",
+      simple: {
+        limit: 10,
+        period: 60,
+      },
+    },
+  ],
 };
 
 export default defineConfig(async () => {

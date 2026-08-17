@@ -132,3 +132,42 @@ test("phase 0.8 — E2E restauration de sauvegarde", async () => {
   const restorePayload = await restoreResponse.json();
   assert.equal(restorePayload.ok, true);
 });
+
+test("phase 1.0 — E2E rate limit sur connexion enseignant", async () => {
+  const previous = process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER;
+  process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER = "2";
+  const clientIp = `203.0.113.${Date.now() % 200}`;
+
+  try {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await request("/api/auth/teacher", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "cf-connecting-ip": clientIp,
+        },
+        body: JSON.stringify({ teacherId: "teacher-demo-current", password: "wrong-password" }),
+      });
+      assert.notEqual(response.status, 429);
+    }
+
+    const blocked = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "cf-connecting-ip": clientIp,
+      },
+      body: JSON.stringify({ teacherId: "teacher-demo-current", password: "wrong-password" }),
+    });
+    assert.equal(blocked.status, 429);
+    assert.equal(blocked.headers.get("retry-after"), "60");
+    const payload = await blocked.json();
+    assert.equal(payload.ok, false);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER;
+    } else {
+      process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER = previous;
+    }
+  }
+});
