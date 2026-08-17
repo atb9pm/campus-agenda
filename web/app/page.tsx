@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { DEMO_PROTOTYPE_ITEMS, type PrototypeAgendaItem } from "@campus/features/agenda";
+import { canModifyPublication, createPublication, deletePublication, DEMO_PROTOTYPE_ITEMS, updatePublication, type PrototypeAgendaItem } from "@campus/features/agenda";
 import {
   DEMO_CATALOG,
   DEMO_CURRENT_TEACHER_ID,
@@ -91,6 +91,7 @@ export default function Home() {
   const [items, setItems] = useState<PrototypeAgendaItem[]>(DEMO_PROTOTYPE_ITEMS);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [modalType, setModalType] = useState<AgendaItemType | null>(null);
+  const [editingItem, setEditingItem] = useState<PrototypeAgendaItem | null>(null);
   const [notice, setNotice] = useState("");
 
   const selectedClassroom = getClassroomById(DEMO_CATALOG, selectedClassroomId) ?? DEMO_CATALOG.classrooms[0];
@@ -156,6 +157,27 @@ export default function Home() {
     }
   }
 
+  function showNotice(message: string) {
+    setNotice(message);
+    window.setTimeout(() => setNotice(""), 3200);
+  }
+
+  function openCreateModal(type: AgendaItemType) {
+    setEditingItem(null);
+    setModalType(type);
+    setAddMenuOpen(false);
+  }
+
+  function openEditModal(item: PrototypeAgendaItem) {
+    setEditingItem(item);
+    setModalType(item.type);
+  }
+
+  function closeModal() {
+    setModalType(null);
+    setEditingItem(null);
+  }
+
   function submitItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!modalType) return;
@@ -169,24 +191,55 @@ export default function Home() {
       return;
     }
 
-    setItems((current) => [...current, {
+    const day = Number(form.get("day") || 0);
+    const hour = Number(form.get("hour") || 8);
+    const detail = String(form.get("detail") || "").trim() || "Aucune précision";
+
+    if (editingItem) {
+      const result = updatePublication(items, editingItem.id, DEMO_CURRENT_TEACHER_ID, {
+        title,
+        detail,
+        day,
+        hour,
+        subjectId: subject.id,
+      });
+      if (!result.ok) {
+        showNotice(result.reason);
+        return;
+      }
+      setItems(result.items);
+      closeModal();
+      showNotice(`${TYPE_LABELS[editingItem.type]} modifié.`);
+      return;
+    }
+
+    setItems(createPublication(items, {
       id: Date.now(),
       classroomId: selectedClassroomId,
       subjectId: subject.id,
       authorTeacherId: DEMO_CURRENT_TEACHER_ID,
-      day: Number(form.get("day") || 0),
-      hour: Number(form.get("hour") || 8),
+      day,
+      hour,
       type: modalType,
       title,
-      detail: String(form.get("detail") || "").trim() || "Aucune précision",
-    }]);
+      detail,
+    }));
     setWeekOffset(0);
     setAgendaView(DEFAULT_TEACHER_AGENDA_VIEW);
     setStudentPreview(false);
-    setModalType(null);
+    closeModal();
     setActiveSection("agenda");
-    setNotice(`${TYPE_LABELS[modalType]} ajouté à ${selectedClassroom.name}.`);
-    window.setTimeout(() => setNotice(""), 3200);
+    showNotice(`${TYPE_LABELS[modalType]} ajouté à ${selectedClassroom.name}.`);
+  }
+
+  function removeItem(item: PrototypeAgendaItem) {
+    const result = deletePublication(items, item.id, DEMO_CURRENT_TEACHER_ID);
+    if (!result.ok) {
+      showNotice(result.reason);
+      return;
+    }
+    setItems(result.items);
+    showNotice(`${TYPE_LABELS[item.type]} supprimé.`);
   }
 
   const myItemCount = classroomItems.filter((item) => item.authorTeacherId === DEMO_CURRENT_TEACHER_ID).length;
@@ -257,7 +310,7 @@ export default function Home() {
                 {addMenuOpen && (
                   <div className="technical-add-menu">
                     {(["HOMEWORK", "TEST", "INFORMATION"] as AgendaItemType[]).map((type) => (
-                      <button key={type} onClick={() => { setModalType(type); setAddMenuOpen(false); }}>
+                      <button key={type} onClick={() => openCreateModal(type)}>
                         <span className={`type-icon ${type.toLowerCase()}`}>{type === "HOMEWORK" ? "D" : type === "TEST" ? "C" : "i"}</span>
                         <span><strong>{TYPE_LABELS[type]}</strong><small>{type === "HOMEWORK" ? "Travail à réaliser" : type === "TEST" ? "Évaluation planifiée" : "Message pour la classe"}</small></span>
                       </button>
@@ -430,8 +483,15 @@ export default function Home() {
                               const subjectName = getSubjectById(DEMO_CATALOG, item.subjectId)?.name ?? "Branche";
                               const isMine = item.authorTeacherId === DEMO_CURRENT_TEACHER_ID;
                               const authorLabel = teacherLabel(item.authorTeacherId);
+                              const editable = !studentPreview && canModifyPublication(item, DEMO_CURRENT_TEACHER_ID);
                               return (
-                                <article className={`schedule-event ${item.type.toLowerCase()}`} key={item.id}>
+                                <article className={`schedule-event ${item.type.toLowerCase()}${editable ? " editable" : ""}`} key={item.id}>
+                                  {editable && (
+                                    <div className="event-actions">
+                                      <button type="button" aria-label={`Modifier ${item.title}`} onClick={() => openEditModal(item)}>✎</button>
+                                      <button type="button" aria-label={`Supprimer ${item.title}`} onClick={() => removeItem(item)}>×</button>
+                                    </div>
+                                  )}
                                   <small>{TYPE_LABELS[item.type]} · {subjectName}</small>
                                   <strong>{item.title}</strong>
                                   <span>{item.detail}</span>
@@ -452,7 +512,7 @@ export default function Home() {
           </>
         )}
 
-        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 0.6</p>
+        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 0.7</p>
       </main>
 
       {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
@@ -460,16 +520,16 @@ export default function Home() {
       {modalType && (
         <div className="technical-modal-backdrop">
           <section className="technical-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-            <header><div><span className="eyebrow">NOUVEL ÉLÉMENT</span><h2 id="modal-title">Ajouter un {TYPE_LABELS[modalType].toLowerCase()}</h2></div><button onClick={() => setModalType(null)}>×</button></header>
-            <form onSubmit={submitItem}>
-              <label>Titre<input name="title" placeholder="Titre visible par la classe" required /></label>
+            <header><div><span className="eyebrow">{editingItem ? "MODIFIER" : "NOUVEL ÉLÉMENT"}</span><h2 id="modal-title">{editingItem ? `Modifier le ${TYPE_LABELS[modalType].toLowerCase()}` : `Ajouter un ${TYPE_LABELS[modalType].toLowerCase()}`}</h2></div><button onClick={closeModal}>×</button></header>
+            <form key={editingItem?.id ?? `create-${modalType}`} onSubmit={submitItem}>
+              <label>Titre<input name="title" placeholder="Titre visible par la classe" defaultValue={editingItem?.title ?? ""} required /></label>
               <div className="modal-row">
-                <label>Branche<select name="subject" defaultValue={publishableSubjects[0]?.name ?? "Moteur"}>{publishableSubjects.map((subject) => <option key={subject.id}>{subject.name}</option>)}</select></label>
-                <label>Jour<select name="day" defaultValue="1">{days.map((date, index) => <option key={date.toISOString()} value={index}>{dayName(date)} {date.getDate()}</option>)}</select></label>
-                <label>Heure<select name="hour" defaultValue="8">{HOURS.map((hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}:00</option>)}</select></label>
+                <label>Branche<select name="subject" defaultValue={getSubjectById(DEMO_CATALOG, editingItem?.subjectId ?? publishableSubjects[0]?.id ?? "")?.name ?? publishableSubjects[0]?.name ?? "Moteur"}>{publishableSubjects.map((subject) => <option key={subject.id}>{subject.name}</option>)}</select></label>
+                <label>Jour<select name="day" defaultValue={String(editingItem?.day ?? 1)}>{days.map((date, index) => <option key={date.toISOString()} value={index}>{dayName(date)} {date.getDate()}</option>)}</select></label>
+                <label>Heure<select name="hour" defaultValue={String(editingItem?.hour ?? 8)}>{HOURS.map((hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}:00</option>)}</select></label>
               </div>
-              <label>Consigne<textarea name="detail" rows={3} placeholder="Ajoutez une indication utile…" /></label>
-              <footer><button type="button" onClick={() => setModalType(null)}>Annuler</button><button type="submit">Publier dans l’agenda</button></footer>
+              <label>Consigne<textarea name="detail" rows={3} placeholder="Ajoutez une indication utile…" defaultValue={editingItem?.detail ?? ""} /></label>
+              <footer><button type="button" onClick={closeModal}>Annuler</button><button type="submit">{editingItem ? "Enregistrer" : "Publier dans l’agenda"}</button></footer>
             </form>
           </section>
         </div>

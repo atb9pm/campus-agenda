@@ -2,6 +2,15 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [0.7.0] - 2026-08-17
+
+### Ajouté
+
+- **Publications** : création, modification et suppression des types Devoir, Contrôle et Information.
+- Module `src/features/agenda/publications.ts` avec contrôle « seul l'auteur peut modifier ou supprimer ».
+- Boutons modifier / supprimer sur les événements de l'enseignant connecté dans le calendrier.
+- Tests automatisés des règles de publication.
+
 ## [0.6.0] - 2026-08-17
 
 ### Ajouté

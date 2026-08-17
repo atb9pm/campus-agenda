@@ -163,6 +163,10 @@ button { color: inherit; }
 .schedule-event { position: relative; z-index: 3; min-height: 46px; overflow: hidden; padding: 6px 7px 5px 9px; border-left: 2px solid var(--blue); border-radius: 4px; color: #0648bb; background: #eaf1ff; box-shadow: 0 5px 14px rgba(7,93,255,.09); }
 .schedule-event small, .schedule-event strong, .schedule-event span, .schedule-event em { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .schedule-event small { font-size: 5px; font-weight: 850; letter-spacing: .03em; text-transform: uppercase; }.schedule-event strong { margin-top: 2px; font-size: 7px; }.schedule-event span { margin-top: 2px; color: #5278b9; font-size: 6px; }.schedule-event em { position: absolute; right: 6px; bottom: 4px; color: #7d98c6; font-size: 5px; font-style: normal; }
+.schedule-event.editable { padding-top: 16px; }
+.event-actions { position: absolute; top: 3px; right: 4px; z-index: 4; display: flex; gap: 3px; }
+.event-actions button { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 3px; color: inherit; background: rgba(255,255,255,.72); font-size: 8px; line-height: 1; cursor: pointer; }
+.schedule-event.test .event-actions button { background: rgba(255,255,255,.16); color: #fff; }
 .schedule-event.test { border-color: var(--navy); color: #fff; background: var(--navy); box-shadow: 0 5px 14px rgba(6,24,61,.18); }.schedule-event.test span, .schedule-event.test em { color: #a9bae0; }
 .schedule-event.information { border-color: #6e809e; color: #314866; background: #f0f3f7; box-shadow: none; }.schedule-event.information span, .schedule-event.information em { color: #78879c; }
 .empty-week { position: absolute; z-index: 4; top: 170px; left: 50%; width: 210px; display: grid; place-items: center; padding: 24px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.96); box-shadow: var(--shadow); transform: translateX(-40%); }

@@ -43,7 +43,9 @@ test("keeps the validated publication menu and social preview", async () => {
   assert.match(page, /HOMEWORK: "Devoir"/);
   assert.match(page, /TEST: "Contrôle"/);
   assert.match(page, /INFORMATION: "Information"/);
-  assert.match(page, /activeSection/);
+  assert.match(page, /updatePublication/);
+  assert.match(page, /canModifyPublication/);
+  assert.match(page, /event-actions/);
   assert.match(page, /DEFAULT_TEACHER_AGENDA_VIEW/);
   assert.match(page, /DEMO_CATALOG/);
   assert.match(page, /selectedClassroomId/);
