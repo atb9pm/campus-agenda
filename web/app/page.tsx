@@ -570,7 +570,7 @@ export default function Home() {
             </section>
           </section>
 
-          <p className="prototype-label">CONSULTATION ÉLÈVE · CAMPUS AGENDA 0.11</p>
+          <p className="prototype-label">CONSULTATION ÉLÈVE · CAMPUS AGENDA 1.0</p>
         </main>
 
         {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
@@ -892,7 +892,7 @@ export default function Home() {
           </>
         )}
 
-        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 0.11</p>
+        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 1.0</p>
       </main>
 
       {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}

@@ -1,10 +1,30 @@
 # Exploitation — Campus Agenda
 
-Guide opérationnel pour la phase de démonstration (store mémoire).
+Guide opérationnel pour la version **1.0.0**.
+
+## Modes de persistance
+
+| Mode | Variable | Usage |
+|---|---|---|
+| Mémoire | `CAMPUS_STORE=memory` | Tests, démo éphémère |
+| SQLite local | `CAMPUS_STORE=sqlite` + `CAMPUS_SQLITE_PATH` | Développement hors Cloudflare |
+| D1 Cloudflare | binding `CAMPUS_DB` | Production sur Workers |
+
+Initialiser une base SQLite locale :
+
+```bash
+cd web && pnpm db:local
+CAMPUS_STORE=sqlite pnpm dev
+```
+
+Appliquer le schéma D1 en production :
+
+```bash
+cd web
+npx wrangler d1 migrations apply campus-agenda-db --remote
+```
 
 ## Santé du service
-
-Endpoint public :
 
 ```http
 GET /api/health
@@ -16,63 +36,52 @@ Réponse attendue :
 {
   "ok": true,
   "service": "campus-agenda",
-  "version": "0.11.0",
-  "store": "memory",
+  "version": "1.0.0",
+  "store": "d1",
   "uptimeSeconds": 42
 }
 ```
 
-Chaque réponse API inclut un en-tête `x-request-id` pour corréler les journaux.
+Le champ `store` indique le backend actif : `memory`, `sqlite` ou `d1`.
+
+Chaque réponse API instrumentée inclut un en-tête `x-request-id`.
 
 ## Observabilité
 
-Les événements API sont journalisés en JSON sur la sortie standard, sans contenu scolaire :
+Journaux JSON sur la sortie standard, sans contenu scolaire :
 
 - `requestId`, `route`, `method`, `status`, `durationMs`
 
-Variables d'environnement :
-
 | Variable | Rôle |
 |---|---|
-| `AUTH_SECRET` | Signature des cookies de session (obligatoire en production) |
-| `APP_ENV` | Contexte d'exécution (`development`, `production`) |
+| `AUTH_SECRET` | Signature des cookies (obligatoire en production) |
+| `CAMPUS_STORE` | Backend de persistance |
+| `CAMPUS_SQLITE_PATH` | Fichier SQLite local |
+| `APP_ENV` | Contexte d'exécution |
 
-## Sauvegardes (démonstration)
+## Sauvegardes
 
-Réservées aux enseignants authentifiés.
-
-### Export
+Réservées aux enseignants authentifiés. Fonctionnent avec tous les backends.
 
 ```http
 GET /api/admin/backup
-Cookie: campus_session=…
-```
-
-Retourne un instantané JSON (`version`, `exportedAt`, `itemCount`, `items`).
-
-### Restauration
-
-```http
 POST /api/admin/restore
-Content-Type: application/json
-Cookie: campus_session=…
-
-{ "snapshot": { … } }
 ```
 
-> Les sauvegardes ne doivent jamais être versionnées dans Git. Conserver les exports hors dépôt.
+> Ne jamais versionner les exports dans Git.
 
-## Vérifications avant mise en service
+## Mise en service Cloudflare
 
-1. `pnpm test` — tests unitaires, E2E API et build SSR.
-2. `pnpm lint` — règles d'accessibilité JSX.
-3. `GET /api/health` — statut `ok: true`.
-4. Contrôler l'absence de secrets et de données réelles dans les journaux et exports.
+1. Créer la base D1 `campus-agenda-db` dans le dashboard Cloudflare.
+2. Mettre à jour `database_id` dans `web/wrangler.jsonc`.
+3. Appliquer `migrations/0001_initial.sql` via Wrangler.
+4. Définir `AUTH_SECRET` comme secret Worker.
+5. Déployer : `cd web && pnpm build && npx wrangler deploy`.
+6. Vérifier `GET /api/health` → `ok: true`, `store: "d1"`.
 
-## Limites actuelles
+## Vérifications
 
-- Store **mémoire** : les données sont perdues au redémarrage du worker.
-- La restauration remplace l'intégralité de l'agenda en mémoire.
-- Les sauvegardes couvrent les éléments d'agenda uniquement (pas les comptes).
-
-La migration vers une base D1/SQLite est prévue pour la version `1.0.0`.
+1. `pnpm test`
+2. `pnpm lint`
+3. `GET /api/health`
+4. Aucun secret ni donnée réelle dans les journaux ou exports

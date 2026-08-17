@@ -8,7 +8,7 @@ async function handlePost(request: Request) {
   if ("error" in auth && auth.error) return auth.error;
 
   const body = await request.json() as { snapshot?: unknown };
-  const result = restoreAgendaSnapshot(auth.store!, body.snapshot);
+  const result = await restoreAgendaSnapshot(auth.store!, body.snapshot);
   if (!result.ok) {
     logOperationalWarning("agenda_backup_restore_rejected", { reason: result.reason });
     return jsonResponse({ ok: false, reason: result.reason }, { status: 400 });

@@ -26,12 +26,12 @@ export async function PATCH(request: Request, context: RouteContext) {
     subjectId?: string;
   };
 
-  const existing = auth.store!.findAgendaItem(itemId);
-  if (existing && !auth.store!.teacherCanPublish(auth.session!.teacherId, existing.classroomId, body.subjectId ?? existing.subjectId)) {
+  const existing = await auth.store!.findAgendaItem(itemId);
+  if (existing && !(await auth.store!.teacherCanPublish(auth.session!.teacherId, existing.classroomId, body.subjectId ?? existing.subjectId))) {
     return forbiddenResponse("Branche non autorisée.");
   }
 
-  const result = auth.store!.updateAgendaItem(itemId, auth.session!.teacherId, body);
+  const result = await auth.store!.updateAgendaItem(itemId, auth.session!.teacherId, body);
   if (!result.ok) {
     return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
   }
@@ -49,7 +49,7 @@ export async function DELETE(request: Request, context: RouteContext) {
     return jsonResponse({ ok: false, reason: "Identifiant invalide." }, { status: 400 });
   }
 
-  const result = auth.store!.deleteAgendaItem(itemId, auth.session!.teacherId);
+  const result = await auth.store!.deleteAgendaItem(itemId, auth.session!.teacherId);
   if (!result.ok) {
     return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
   }

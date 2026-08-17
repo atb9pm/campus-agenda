@@ -18,15 +18,15 @@ export class MemoryAgendaStore implements AgendaStore {
     this.items = seedItems.map((item) => ({ ...item }));
   }
 
-  listAgendaItems(classroomId: string): PrototypeAgendaItem[] {
+  async listAgendaItems(classroomId: string): Promise<PrototypeAgendaItem[]> {
     return this.items.filter((item) => item.classroomId === classroomId);
   }
 
-  findAgendaItem(itemId: number): PrototypeAgendaItem | undefined {
+  async findAgendaItem(itemId: number): Promise<PrototypeAgendaItem | undefined> {
     return this.items.find((item) => item.id === itemId);
   }
 
-  createAgendaItem(input: CreateAgendaInput): PrototypeAgendaItem {
+  async createAgendaItem(input: CreateAgendaInput): Promise<PrototypeAgendaItem> {
     const id = Math.max(0, ...this.items.map((item) => item.id)) + 1;
     this.items = createPublication(this.items, {
       id,
@@ -40,59 +40,61 @@ export class MemoryAgendaStore implements AgendaStore {
       title: input.title,
       detail: input.detail,
     });
-    return this.findAgendaItem(id)!;
+    return (await this.findAgendaItem(id))!;
   }
 
-  updateAgendaItem(
+  async updateAgendaItem(
     itemId: number,
     actorTeacherId: string,
     patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId">>,
-  ): AgendaMutationResult {
+  ): Promise<AgendaMutationResult> {
     const result = updatePublication(this.items, itemId, actorTeacherId, patch);
     if (!result.ok) {
       return { ok: false, reason: result.reason, status: result.reason.includes("introuvable") ? 404 : 403 };
     }
     this.items = result.items;
-    const item = this.findAgendaItem(itemId);
+    const item = await this.findAgendaItem(itemId);
     if (!item) return { ok: false, reason: "Publication introuvable.", status: 404 };
     return { ok: true, item };
   }
 
-  deleteAgendaItem(itemId: number, actorTeacherId: string): AgendaMutationResult {
+  async deleteAgendaItem(itemId: number, actorTeacherId: string): Promise<AgendaMutationResult> {
+    const existing = await this.findAgendaItem(itemId);
     const result = deletePublication(this.items, itemId, actorTeacherId);
     if (!result.ok) {
       return { ok: false, reason: result.reason, status: result.reason.includes("introuvable") ? 404 : 403 };
     }
-    const item = this.findAgendaItem(itemId);
     this.items = result.items;
-    if (!item) return { ok: false, reason: "Publication introuvable.", status: 404 };
-    return { ok: true, item };
+    if (!existing) return { ok: false, reason: "Publication introuvable.", status: 404 };
+    return { ok: true, item: existing };
   }
 
-  teacherCanAccessClassroom(teacherId: string, classroomId: string): boolean {
+  async teacherCanAccessClassroom(teacherId: string, classroomId: string): Promise<boolean> {
     return getMembershipsForTeacher(DEMO_CATALOG, teacherId).some(
       (membership) => membership.classroomId === classroomId,
     );
   }
 
-  teacherCanPublish(teacherId: string, classroomId: string, subjectId: string): boolean {
+  async teacherCanPublish(teacherId: string, classroomId: string, subjectId: string): Promise<boolean> {
     return teacherTeachesSubject(DEMO_CATALOG, teacherId, classroomId, subjectId);
   }
 
-  resolveStudentAccess(label: string) {
-    return resolveStudentAccess(DEMO_CATALOG, label);
+  async resolveStudentAccess(label: string) {
+    const access = resolveStudentAccess(DEMO_CATALOG, label);
+    if (!access) return undefined;
+    return { id: access.id, classroomId: access.classroomId, label: access.label };
   }
 
-  verifyTeacherCredentials(teacherId: string, password: string): boolean {
+  async verifyTeacherCredentials(teacherId: string, password: string): Promise<boolean> {
     if (!isDemoTeacherPassword(password)) return false;
     return Boolean(DEMO_CATALOG.teachers.find((teacher) => teacher.id === teacherId));
   }
 
-  exportAllItems(): PrototypeAgendaItem[] {
+  async exportAllItems(): Promise<PrototypeAgendaItem[]> {
     return this.items.map((item) => ({ ...item }));
   }
 
-  replaceAllItems(items: PrototypeAgendaItem[]): void {
+  async replaceAllItems(items: PrototypeAgendaItem[]): Promise<void> {
     this.items = items.map((item) => ({ ...item }));
   }
 }
@@ -108,6 +110,6 @@ export function resetMemoryAgendaStore(seedItems?: PrototypeAgendaItem[]): void 
   singletonStore = new MemoryAgendaStore(seedItems);
 }
 
-export function classroomExists(classroomId: string): boolean {
+export async function classroomExists(classroomId: string): Promise<boolean> {
   return Boolean(getClassroomById(DEMO_CATALOG, classroomId));
 }

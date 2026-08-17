@@ -40,17 +40,21 @@ export interface CreateAgendaInput {
 }
 
 export interface AgendaStore {
-  listAgendaItems(classroomId: string): PrototypeAgendaItem[];
-  findAgendaItem(itemId: number): PrototypeAgendaItem | undefined;
-  createAgendaItem(input: CreateAgendaInput): PrototypeAgendaItem;
+  listAgendaItems(classroomId: string): Promise<PrototypeAgendaItem[]>;
+  findAgendaItem(itemId: number): Promise<PrototypeAgendaItem | undefined>;
+  createAgendaItem(input: CreateAgendaInput): Promise<PrototypeAgendaItem>;
   updateAgendaItem(
     itemId: number,
     actorTeacherId: string,
     patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId">>,
-  ): AgendaMutationResult;
-  deleteAgendaItem(itemId: number, actorTeacherId: string): AgendaMutationResult;
-  teacherCanAccessClassroom(teacherId: string, classroomId: string): boolean;
-  teacherCanPublish(teacherId: string, classroomId: string, subjectId: string): boolean;
-  resolveStudentAccess(label: string): { id: string; classroomId: string; label: string } | undefined;
-  verifyTeacherCredentials(teacherId: string, password: string): boolean;
+  ): Promise<AgendaMutationResult>;
+  deleteAgendaItem(itemId: number, actorTeacherId: string): Promise<AgendaMutationResult>;
+  teacherCanAccessClassroom(teacherId: string, classroomId: string): Promise<boolean>;
+  teacherCanPublish(teacherId: string, classroomId: string, subjectId: string): Promise<boolean>;
+  resolveStudentAccess(label: string): Promise<{ id: string; classroomId: string; label: string } | undefined>;
+  verifyTeacherCredentials(teacherId: string, password: string): Promise<boolean>;
+  exportAllItems(): Promise<PrototypeAgendaItem[]>;
+  replaceAllItems(items: PrototypeAgendaItem[]): Promise<void>;
 }
+
+export type StoreKind = "memory" | "d1" | "sqlite";

@@ -12,7 +12,7 @@ process.env.AUTH_SECRET ??= "test-secret-api-phase-07";
 test("phase 0.7 — flux élève : session signée puis lecture agenda", async () => {
   resetMemoryAgendaStore();
   const store = getMemoryAgendaStore();
-  const access = store.resolveStudentAccess("eleve-test-001");
+  const access = await store.resolveStudentAccess("eleve-test-001");
   assert.ok(access);
 
   const token = await createSessionToken({
@@ -29,16 +29,16 @@ test("phase 0.7 — flux élève : session signée puis lecture agenda", async (
   assert.ok(extracted);
   const session = await parseSessionToken(extracted);
   assert.ok(session);
-  assert.equal(canReadClassroomAgenda(session, access.classroomId, store), true);
+  assert.equal(await canReadClassroomAgenda(session, access.classroomId, store), true);
 
-  const items = store.listAgendaItems(access.classroomId);
+  const items = await store.listAgendaItems(access.classroomId);
   assert.ok(items.length >= 5);
 });
 
 test("phase 0.7 — flux enseignant : création et droits auteur", async () => {
   resetMemoryAgendaStore();
   const store = getMemoryAgendaStore();
-  assert.equal(store.verifyTeacherCredentials(DEMO_CURRENT_TEACHER_ID, DEMO_TEACHER_PASSWORD), true);
+  assert.equal(await store.verifyTeacherCredentials(DEMO_CURRENT_TEACHER_ID, DEMO_TEACHER_PASSWORD), true);
 
   const token = await createSessionToken({
     kind: "teacher",
@@ -48,7 +48,7 @@ test("phase 0.7 — flux enseignant : création et droits auteur", async () => {
   const session = await parseSessionToken(token);
   assert.equal(session?.kind, "teacher");
 
-  const created = store.createAgendaItem({
+  const created = await store.createAgendaItem({
     classroomId: "classe-demo-tma-2a",
     subjectId: "subject-demo-moteur-2a",
     authorTeacherId: DEMO_CURRENT_TEACHER_ID,
@@ -61,13 +61,13 @@ test("phase 0.7 — flux enseignant : création et droits auteur", async () => {
   });
   assert.equal(created.title, "API création");
 
-  const updated = store.updateAgendaItem(created.id, DEMO_CURRENT_TEACHER_ID, { title: "API modifiée" });
+  const updated = await store.updateAgendaItem(created.id, DEMO_CURRENT_TEACHER_ID, { title: "API modifiée" });
   assert.equal(updated.ok, true);
 
-  const denied = store.updateAgendaItem(created.id, "teacher-demo-martin", { title: "Hack" });
+  const denied = await store.updateAgendaItem(created.id, "teacher-demo-martin", { title: "Hack" });
   assert.equal(denied.ok, false);
   if (!denied.ok) assert.equal(denied.status, 403);
 
-  const deleted = store.deleteAgendaItem(created.id, DEMO_CURRENT_TEACHER_ID);
+  const deleted = await store.deleteAgendaItem(created.id, DEMO_CURRENT_TEACHER_ID);
   assert.equal(deleted.ok, true);
 });

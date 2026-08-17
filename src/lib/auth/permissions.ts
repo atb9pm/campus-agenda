@@ -1,7 +1,11 @@
 import type { AppSession } from "../persistence/types.ts";
 import type { AgendaStore } from "../persistence/types.ts";
 
-export function canReadClassroomAgenda(session: AppSession | null, classroomId: string, store: AgendaStore): boolean {
+export async function canReadClassroomAgenda(
+  session: AppSession | null,
+  classroomId: string,
+  store: AgendaStore,
+): Promise<boolean> {
   if (!session) return false;
   if (session.kind === "student") return session.classroomId === classroomId;
   return store.teacherCanAccessClassroom(session.teacherId, classroomId);

@@ -2,6 +2,17 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [1.0.0] - 2026-08-17
+
+### Ajouté
+
+- **Première version utilisable** : persistance SQLite locale et Cloudflare D1 (`CAMPUS_DB`).
+- Factory de store (`memory` / `sqlite` / `d1`) avec migrations et seed automatique.
+- Interface `AgendaStore` entièrement asynchrone.
+- Script `pnpm db:local` pour initialiser une base SQLite de développement.
+- Configuration Wrangler (`web/wrangler.jsonc`) et guide de déploiement mis à jour.
+- Tests SQLite et documentation d'exploitation enrichie.
+
 ## [0.11.0] - 2026-08-17
 
 ### Ajouté

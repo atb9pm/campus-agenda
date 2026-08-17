@@ -11,8 +11,8 @@ export async function POST(request: Request) {
   const teacherId = String(body.teacherId ?? "").trim();
   const password = String(body.password ?? "");
 
-  const store = getStore();
-  if (!store.verifyTeacherCredentials(teacherId, password)) {
+  const store = await getStore();
+  if (!(await store.verifyTeacherCredentials(teacherId, password))) {
     return jsonResponse({ ok: false, reason: "Identifiants de démonstration invalides." }, { status: 401 });
   }
 

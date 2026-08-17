@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   const access = await requireClassroomReadAccess(request, classroomId);
   if ("error" in access && access.error) return access.error;
 
-  const items = access.store!.listAgendaItems(classroomId);
+  const items = await access.store!.listAgendaItems(classroomId);
   return jsonResponse({ ok: true, items });
 }
 
@@ -43,11 +43,11 @@ export async function POST(request: Request) {
     return jsonResponse({ ok: false, reason: "Données de publication invalides." }, { status: 400 });
   }
 
-  if (!auth.store!.teacherCanPublish(auth.session!.teacherId, classroomId, subjectId)) {
+  if (!(await auth.store!.teacherCanPublish(auth.session!.teacherId, classroomId, subjectId))) {
     return forbiddenResponse("Vous ne pouvez pas publier dans cette branche.");
   }
 
-  const item = auth.store!.createAgendaItem({
+  const item = await auth.store!.createAgendaItem({
     classroomId,
     subjectId,
     authorTeacherId: auth.session!.teacherId,

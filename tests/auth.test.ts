@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  buildSessionCookie,
-  createSessionToken,
-  parseSessionToken,
-  readSessionTokenFromRequest,
-} from "../src/lib/auth/session.ts";
+import { canReadClassroomAgenda } from "../src/lib/auth/permissions.ts";
+import { buildSessionCookie, createSessionToken, parseSessionToken, readSessionTokenFromRequest } from "../src/lib/auth/session.ts";
 import { DEMO_TEACHER_PASSWORD, isDemoTeacherPassword } from "../src/lib/auth/config.ts";
 import { getMemoryAgendaStore, resetMemoryAgendaStore } from "../src/lib/persistence/memory-store.ts";
 import { DEMO_CURRENT_TEACHER_ID } from "../src/features/classes/index.ts";
@@ -45,14 +41,14 @@ test("phase 0.7 — mot de passe de démonstration documenté", () => {
   assert.equal(isDemoTeacherPassword("secret-réel"), false);
 });
 
-test("phase 0.7 — store mémoire contrôle l'accès enseignant", () => {
+test("phase 0.7 — store mémoire contrôle l'accès enseignant", async () => {
   resetMemoryAgendaStore();
   const store = getMemoryAgendaStore();
-  assert.equal(store.verifyTeacherCredentials(DEMO_CURRENT_TEACHER_ID, DEMO_TEACHER_PASSWORD), true);
-  assert.equal(store.teacherCanAccessClassroom(DEMO_CURRENT_TEACHER_ID, "classe-demo-tma-2a"), true);
-  assert.equal(store.teacherCanPublish(DEMO_CURRENT_TEACHER_ID, "classe-demo-tma-2a", "subject-demo-moteur-2a"), true);
+  assert.equal(await store.verifyTeacherCredentials(DEMO_CURRENT_TEACHER_ID, DEMO_TEACHER_PASSWORD), true);
+  assert.equal(await store.teacherCanAccessClassroom(DEMO_CURRENT_TEACHER_ID, "classe-demo-tma-2a"), true);
+  assert.equal(await store.teacherCanPublish(DEMO_CURRENT_TEACHER_ID, "classe-demo-tma-2a", "subject-demo-moteur-2a"), true);
 
-  const created = store.createAgendaItem({
+  const created = await store.createAgendaItem({
     classroomId: "classe-demo-tma-2a",
     subjectId: "subject-demo-moteur-2a",
     authorTeacherId: DEMO_CURRENT_TEACHER_ID,
@@ -65,6 +61,21 @@ test("phase 0.7 — store mémoire contrôle l'accès enseignant", () => {
   });
   assert.equal(created.title, "Persistance démo");
 
-  const denied = store.updateAgendaItem(created.id, "teacher-demo-martin", { title: "Usurpé" });
+  const denied = await store.updateAgendaItem(created.id, "teacher-demo-martin", { title: "Usurpé" });
   assert.equal(denied.ok, false);
+});
+
+test("phase 1.0 — permissions de lecture classe asynchrones", async () => {
+  resetMemoryAgendaStore();
+  const store = getMemoryAgendaStore();
+  const session = await createSessionToken({
+    kind: "student",
+    accessId: "student-access-demo-2a",
+    classroomId: "classe-demo-tma-2a",
+    label: "eleve-test-001",
+    issuedAt: Date.now(),
+  });
+  const parsed = await parseSessionToken(session);
+  assert.equal(await canReadClassroomAgenda(parsed, "classe-demo-tma-2a", store), true);
+  assert.equal(await canReadClassroomAgenda(parsed, "classe-demo-tma-1a", store), false);
 });

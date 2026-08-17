@@ -7,7 +7,7 @@ async function handleGet(request: Request) {
   const auth = await requireTeacherSession(request);
   if ("error" in auth && auth.error) return auth.error;
 
-  const snapshot = exportAgendaSnapshot(auth.store!);
+  const snapshot = await exportAgendaSnapshot(auth.store!);
   logOperationalEvent("agenda_backup_export", {
     itemCount: snapshot.itemCount,
     teacherId: auth.session!.teacherId,

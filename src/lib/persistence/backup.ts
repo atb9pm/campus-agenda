@@ -1,6 +1,6 @@
 import type { PrototypeAgendaItem } from "../../features/agenda/demo-items.ts";
 import { AGENDA_ITEM_TYPES } from "../../types/agenda.ts";
-import type { MemoryAgendaStore } from "./memory-store.ts";
+import type { AgendaStore } from "./types.ts";
 
 export const BACKUP_FORMAT_VERSION = 1 as const;
 
@@ -32,8 +32,8 @@ function isValidAgendaItem(value: unknown): value is PrototypeAgendaItem {
   );
 }
 
-export function exportAgendaSnapshot(store: MemoryAgendaStore): AgendaBackupSnapshot {
-  const items = store.exportAllItems();
+export async function exportAgendaSnapshot(store: AgendaStore): Promise<AgendaBackupSnapshot> {
+  const items = await store.exportAllItems();
   return {
     version: BACKUP_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
@@ -42,7 +42,7 @@ export function exportAgendaSnapshot(store: MemoryAgendaStore): AgendaBackupSnap
   };
 }
 
-export function restoreAgendaSnapshot(store: MemoryAgendaStore, payload: unknown): BackupRestoreResult {
+export async function restoreAgendaSnapshot(store: AgendaStore, payload: unknown): Promise<BackupRestoreResult> {
   if (!payload || typeof payload !== "object") {
     return { ok: false, reason: "Sauvegarde invalide." };
   }
@@ -55,6 +55,6 @@ export function restoreAgendaSnapshot(store: MemoryAgendaStore, payload: unknown
     return { ok: false, reason: "Contenu de sauvegarde invalide." };
   }
 
-  store.replaceAllItems(snapshot.items.map((item) => ({ ...item })));
+  await store.replaceAllItems(snapshot.items.map((item) => ({ ...item })));
   return { ok: true, itemCount: snapshot.items.length };
 }

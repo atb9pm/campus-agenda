@@ -7,8 +7,8 @@ import { getStore } from "../../../../lib/server/api.ts";
 export async function POST(request: Request) {
   const body = await request.json() as { code?: string };
   const code = String(body.code ?? "").trim();
-  const store = getStore();
-  const access = store.resolveStudentAccess(code);
+  const store = await getStore();
+  const access = await store.resolveStudentAccess(code);
 
   if (!access) {
     return jsonResponse({ ok: false, reason: "Code d'accès invalide." }, { status: 401 });

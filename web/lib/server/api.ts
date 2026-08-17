@@ -9,7 +9,7 @@ import {
   readSessionTokenFromRequest,
   unauthorizedResponse,
 } from "@campus/lib/auth/index.ts";
-import { classroomExists, getMemoryAgendaStore } from "@campus/lib/persistence/index.ts";
+import { checkClassroomExists, getAgendaStore } from "@campus/lib/persistence/store-factory.ts";
 import type { AppSession } from "@campus/lib/persistence/types.ts";
 
 export async function getRequestSession(request: Request): Promise<AppSession | null> {
@@ -36,17 +36,17 @@ export function logoutResponse(): Response {
   return new Response(JSON.stringify({ ok: true }), { headers });
 }
 
-export function getStore() {
-  return getMemoryAgendaStore();
+export async function getStore() {
+  return getAgendaStore();
 }
 
 export async function requireClassroomReadAccess(request: Request, classroomId: string) {
   const session = await getRequestSession(request);
-  const store = getStore();
-  if (!classroomExists(classroomId)) {
+  const store = await getStore();
+  if (!(await checkClassroomExists(classroomId))) {
     return { error: jsonResponse({ ok: false, reason: "Classe introuvable." }, { status: 404 }) };
   }
-  if (!canReadClassroomAgenda(session, classroomId, store)) {
+  if (!(await canReadClassroomAgenda(session, classroomId, store))) {
     return { error: unauthorizedResponse("Accès à cette classe non autorisé.") };
   }
   return { session, store };
@@ -57,7 +57,7 @@ export async function requireTeacherSession(request: Request) {
   if (!canMutateAgenda(session)) {
     return { error: unauthorizedResponse() };
   }
-  return { session, store: getStore() };
+  return { session, store: await getStore() };
 }
 
 export { forbiddenResponse, unauthorizedResponse };

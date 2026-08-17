@@ -6,15 +6,15 @@ import { resetMemoryAgendaStore, getMemoryAgendaStore } from "../src/lib/persist
 import { DEMO_PROTOTYPE_ITEMS } from "../src/features/agenda/demo-items.ts";
 import { DEMO_CURRENT_TEACHER_ID } from "../src/features/classes/index.ts";
 
-test("phase 0.8 — export puis restauration d'une sauvegarde", () => {
+test("phase 0.8 — export puis restauration d'une sauvegarde", async () => {
   resetMemoryAgendaStore([...DEMO_PROTOTYPE_ITEMS]);
   const store = getMemoryAgendaStore();
 
-  const snapshot = exportAgendaSnapshot(store);
+  const snapshot = await exportAgendaSnapshot(store);
   assert.equal(snapshot.version, 1);
   assert.equal(snapshot.itemCount, DEMO_PROTOTYPE_ITEMS.length);
 
-  store.createAgendaItem({
+  await store.createAgendaItem({
     classroomId: "classe-demo-tma-2a",
     subjectId: "subject-demo-moteur-2a",
     authorTeacherId: DEMO_CURRENT_TEACHER_ID,
@@ -25,17 +25,17 @@ test("phase 0.8 — export puis restauration d'une sauvegarde", () => {
     title: "Temporaire",
     detail: "Sera effacé",
   });
-  assert.ok(store.exportAllItems().length > snapshot.itemCount);
+  assert.ok((await store.exportAllItems()).length > snapshot.itemCount);
 
-  const restored = restoreAgendaSnapshot(store, snapshot);
+  const restored = await restoreAgendaSnapshot(store, snapshot);
   assert.equal(restored.ok, true);
   if (restored.ok) assert.equal(restored.itemCount, snapshot.itemCount);
-  assert.equal(store.exportAllItems().length, snapshot.itemCount);
+  assert.equal((await store.exportAllItems()).length, snapshot.itemCount);
 });
 
-test("phase 0.8 — rejette une sauvegarde invalide", () => {
+test("phase 0.8 — rejette une sauvegarde invalide", async () => {
   resetMemoryAgendaStore();
   const store = getMemoryAgendaStore();
-  const result = restoreAgendaSnapshot(store, { version: 99, items: [] });
+  const result = await restoreAgendaSnapshot(store, { version: 99, items: [] });
   assert.equal(result.ok, false);
 });

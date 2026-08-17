@@ -5,12 +5,12 @@ import { resetMemoryAgendaStore, getMemoryAgendaStore } from "../src/lib/persist
 import { DEMO_PROTOTYPE_ITEMS } from "../src/features/agenda/demo-items.ts";
 import { DEMO_CURRENT_TEACHER_ID } from "../src/features/classes/index.ts";
 
-test("phase 0.7 — le store persiste les modifications en mémoire", () => {
+test("phase 0.7 — le store persiste les modifications en mémoire", async () => {
   resetMemoryAgendaStore([...DEMO_PROTOTYPE_ITEMS]);
   const store = getMemoryAgendaStore();
-  const initialCount = store.listAgendaItems("classe-demo-tma-2a").length;
+  const initialCount = (await store.listAgendaItems("classe-demo-tma-2a")).length;
 
-  const item = store.createAgendaItem({
+  const item = await store.createAgendaItem({
     classroomId: "classe-demo-tma-2a",
     subjectId: "subject-demo-electricite-2a",
     authorTeacherId: DEMO_CURRENT_TEACHER_ID,
@@ -22,21 +22,21 @@ test("phase 0.7 — le store persiste les modifications en mémoire", () => {
     detail: "Test",
   });
 
-  assert.equal(store.listAgendaItems("classe-demo-tma-2a").length, initialCount + 1);
+  assert.equal((await store.listAgendaItems("classe-demo-tma-2a")).length, initialCount + 1);
 
-  const updated = store.updateAgendaItem(item.id, DEMO_CURRENT_TEACHER_ID, { title: "Consigne modifiée" });
+  const updated = await store.updateAgendaItem(item.id, DEMO_CURRENT_TEACHER_ID, { title: "Consigne modifiée" });
   assert.equal(updated.ok, true);
   if (updated.ok) assert.equal(updated.item.title, "Consigne modifiée");
 
-  const deleted = store.deleteAgendaItem(item.id, DEMO_CURRENT_TEACHER_ID);
+  const deleted = await store.deleteAgendaItem(item.id, DEMO_CURRENT_TEACHER_ID);
   assert.equal(deleted.ok, true);
-  assert.equal(store.listAgendaItems("classe-demo-tma-2a").length, initialCount);
+  assert.equal((await store.listAgendaItems("classe-demo-tma-2a")).length, initialCount);
 });
 
-test("phase 0.7 — accès élève résolu côté store", () => {
+test("phase 0.7 — accès élève résolu côté store", async () => {
   resetMemoryAgendaStore();
   const store = getMemoryAgendaStore();
-  const access = store.resolveStudentAccess("eleve-test-002");
+  const access = await store.resolveStudentAccess("eleve-test-002");
   assert.ok(access);
   assert.equal(access.classroomId, "classe-demo-tma-1a");
 });
