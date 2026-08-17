@@ -2,6 +2,15 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [0.6.0] - 2026-08-17
+
+### Ajouté
+
+- **Espace enseignant** : tableau de bord, navigation par section et vue par défaut « Mes éléments ».
+- Module `src/features/teacher/` : navigation, état de workspace et requêtes de synthèse par classe.
+- Cartes de classes avec statistiques (mes publications, total, branches enseignées).
+- Tests automatisés de l'espace enseignant.
+
 ## [0.5.0] - 2026-08-17
 
 ### Ajouté

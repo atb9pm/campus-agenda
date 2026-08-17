@@ -21,14 +21,14 @@ test("server-renders the Campus Agenda prototype", async () => {
 
   const html = await response.text();
   assert.match(html, /Campus Agenda — Agenda scolaire partagé/);
-  assert.match(html, /Agenda partagé/);
-  assert.match(html, /Mes éléments/);
-  assert.match(html, /Toute la classe/);
-  assert.match(html, /Données fictives/);
-  assert.match(html, /Aucun élève réel/);
+  assert.match(html, /Tableau de bord/);
   assert.match(html, /Mes classes/);
-  assert.match(html, /1re TMA/);
+  assert.match(html, /Mes éléments/);
+  assert.match(html, /ESPACE ENSEIGNANT/);
+  assert.match(html, /Voir mes éléments/);
   assert.match(html, /2e TMA/);
+  assert.match(html, /1re TMA/);
+  assert.match(html, /Démonstration uniquement/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 
@@ -43,6 +43,8 @@ test("keeps the validated publication menu and social preview", async () => {
   assert.match(page, /HOMEWORK: "Devoir"/);
   assert.match(page, /TEST: "Contrôle"/);
   assert.match(page, /INFORMATION: "Information"/);
+  assert.match(page, /activeSection/);
+  assert.match(page, /DEFAULT_TEACHER_AGENDA_VIEW/);
   assert.match(page, /DEMO_CATALOG/);
   assert.match(page, /selectedClassroomId/);
   assert.match(page, /className="brand-showcase"/);

@@ -15,9 +15,19 @@ import {
   getTeacherById,
   teacherTeachesSubject,
 } from "@campus/features/classes";
+import {
+  DEFAULT_TEACHER_AGENDA_VIEW,
+  TEACHER_NAV_ICONS,
+  TEACHER_NAV_LABELS,
+  TEACHER_NAV_SECTIONS,
+  filterItemsForAgendaView,
+  getAgendaSectionDescription,
+  getAgendaSectionTitle,
+  getTeacherClassSummaries,
+  type TeacherAgendaView,
+  type TeacherNavSection,
+} from "@campus/features/teacher";
 import type { AgendaItemType } from "@campus/types/agenda";
-
-type ViewMode = "mine" | "class";
 
 const TYPE_LABELS: Record<AgendaItemType, string> = {
   HOMEWORK: "Devoir",
@@ -30,6 +40,7 @@ const HOURS = Array.from({ length: 10 }, (_, index) => index + 8);
 
 const TEACHER_CLASSROOMS = getClassroomsForTeacher(DEMO_CATALOG, DEMO_CURRENT_TEACHER_ID);
 const DEFAULT_CLASSROOM_ID = TEACHER_CLASSROOMS[0]?.id ?? DEMO_CATALOG.classrooms[0].id;
+const CURRENT_TEACHER = getTeacherById(DEMO_CATALOG, DEMO_CURRENT_TEACHER_ID);
 
 function mondayForOffset(offset: number) {
   const date = new Date(2026, 7, 10, 12);
@@ -54,10 +65,25 @@ function teacherLabel(teacherId: string) {
   return getTeacherById(DEMO_CATALOG, teacherId)?.displayName ?? "Enseignant · démo";
 }
 
+function sectionTitle(activeSection: TeacherNavSection, agendaView: TeacherAgendaView, classroomName: string, studentPreview: boolean) {
+  if (studentPreview) return "Mon agenda";
+  if (activeSection === "dashboard") return "Tableau de bord";
+  if (activeSection === "classes") return "Mes classes";
+  return getAgendaSectionTitle(agendaView, classroomName);
+}
+
+function sectionDescription(activeSection: TeacherNavSection, agendaView: TeacherAgendaView, classroomName: string, studentPreview: boolean) {
+  if (studentPreview) return `Tous les éléments publiés pour la classe ${classroomName}.`;
+  if (activeSection === "dashboard") return "Vue d’ensemble de vos classes et de vos publications.";
+  if (activeSection === "classes") return "Classes auxquelles vous êtes rattaché et branches enseignées.";
+  return getAgendaSectionDescription(agendaView, classroomName);
+}
+
 export default function Home() {
+  const [activeSection, setActiveSection] = useState<TeacherNavSection>("dashboard");
   const [selectedClassroomId, setSelectedClassroomId] = useState(DEFAULT_CLASSROOM_ID);
   const [classPickerOpen, setClassPickerOpen] = useState(false);
-  const [view, setView] = useState<ViewMode>("mine");
+  const [agendaView, setAgendaView] = useState<TeacherAgendaView>(DEFAULT_TEACHER_AGENDA_VIEW);
   const [studentPreview, setStudentPreview] = useState(false);
   const [typeFilter, setTypeFilter] = useState<AgendaItemType | "ALL">("ALL");
   const [subjectFilter, setSubjectFilter] = useState(ALL_SUBJECTS_FILTER);
@@ -68,6 +94,10 @@ export default function Home() {
   const [notice, setNotice] = useState("");
 
   const selectedClassroom = getClassroomById(DEMO_CATALOG, selectedClassroomId) ?? DEMO_CATALOG.classrooms[0];
+  const classSummaries = useMemo(
+    () => getTeacherClassSummaries(DEMO_CATALOG, DEMO_CURRENT_TEACHER_ID, items),
+    [items],
+  );
   const classroomSubjects = useMemo(
     () => getSubjectsForClassroom(DEMO_CATALOG, selectedClassroomId),
     [selectedClassroomId],
@@ -90,11 +120,16 @@ export default function Home() {
     });
   }, [weekOffset]);
 
+  const agendaBaseItems = filterItemsForAgendaView(
+    items,
+    selectedClassroomId,
+    DEMO_CURRENT_TEACHER_ID,
+    studentPreview ? "class" : agendaView,
+  );
   const classroomItems = items.filter((item) => item.classroomId === selectedClassroomId);
 
-  const visibleItems = classroomItems.filter((item) => {
+  const visibleItems = agendaBaseItems.filter((item) => {
     if (weekOffset !== 0 && item.id <= 5) return false;
-    if (!studentPreview && view === "mine" && item.authorTeacherId !== DEMO_CURRENT_TEACHER_ID) return false;
     if (typeFilter !== "ALL" && item.type !== typeFilter) return false;
     if (subjectFilter !== ALL_SUBJECTS_FILTER) {
       const subject = getSubjectById(DEMO_CATALOG, item.subjectId);
@@ -103,13 +138,22 @@ export default function Home() {
     return true;
   });
 
-  function selectClassroom(classroomId: string) {
+  function openAgenda(classroomId: string) {
     setSelectedClassroomId(classroomId);
+    setActiveSection("agenda");
+    setAgendaView(DEFAULT_TEACHER_AGENDA_VIEW);
     setClassPickerOpen(false);
     setSubjectFilter(ALL_SUBJECTS_FILTER);
     setWeekOffset(0);
-    setView("mine");
     setStudentPreview(false);
+  }
+
+  function navigate(section: TeacherNavSection) {
+    setActiveSection(section);
+    if (section === "agenda") {
+      setAgendaView(DEFAULT_TEACHER_AGENDA_VIEW);
+      setStudentPreview(false);
+    }
   }
 
   function submitItem(event: FormEvent<HTMLFormElement>) {
@@ -137,14 +181,16 @@ export default function Home() {
       detail: String(form.get("detail") || "").trim() || "Aucune précision",
     }]);
     setWeekOffset(0);
-    setView("mine");
+    setAgendaView(DEFAULT_TEACHER_AGENDA_VIEW);
     setStudentPreview(false);
     setModalType(null);
+    setActiveSection("agenda");
     setNotice(`${TYPE_LABELS[modalType]} ajouté à ${selectedClassroom.name}.`);
     window.setTimeout(() => setNotice(""), 3200);
   }
 
   const myItemCount = classroomItems.filter((item) => item.authorTeacherId === DEMO_CURRENT_TEACHER_ID).length;
+  const showAgendaTools = activeSection === "agenda";
 
   return (
     <div className="mechanical-app">
@@ -155,25 +201,33 @@ export default function Home() {
         </div>
 
         <nav aria-label="Navigation principale">
-          <button><span>⌂</span> Tableau de bord</button>
-          <button className="active"><span>♙</span> Mes classes</button>
-          <button><span>▣</span> Agenda partagé</button>
-          <button><span>□</span> Documents</button>
-          <button><span>⚙</span> Paramètres</button>
-        </nav>
-
-        <div className="classroom-list" aria-label="Classes rattachées">
-          {TEACHER_CLASSROOMS.map((classroom) => (
+          {TEACHER_NAV_SECTIONS.map((section) => (
             <button
-              key={classroom.id}
-              className={classroom.id === selectedClassroomId ? "classroom-chip active" : "classroom-chip"}
-              onClick={() => selectClassroom(classroom.id)}
+              key={section}
+              className={activeSection === section ? "active" : ""}
+              onClick={() => navigate(section)}
             >
-              <strong>{classroom.name}</strong>
-              <small>{classroom.programLabel}</small>
+              <span>{TEACHER_NAV_ICONS[section]}</span> {TEACHER_NAV_LABELS[section]}
             </button>
           ))}
-        </div>
+          <button disabled><span>□</span> Documents</button>
+          <button disabled><span>⚙</span> Paramètres</button>
+        </nav>
+
+        {(activeSection === "agenda" || activeSection === "classes") && (
+          <div className="classroom-list" aria-label="Classes rattachées">
+            {TEACHER_CLASSROOMS.map((classroom) => (
+              <button
+                key={classroom.id}
+                className={classroom.id === selectedClassroomId ? "classroom-chip active" : "classroom-chip"}
+                onClick={() => openAgenda(classroom.id)}
+              >
+                <strong>{classroom.name}</strong>
+                <small>{classroom.programLabel}</small>
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="technical-note">
           <span>CODE CLASSE</span>
@@ -188,18 +242,16 @@ export default function Home() {
           <div className="mobile-lockup"><BrandEmblem /><strong>CAMPUS AGENDA</strong></div>
           <div className="class-identity">
             <span className="eyebrow">{selectedClassroom.programLabel}</span>
-            <h1>{studentPreview ? "Mon agenda" : "Agenda partagé"}</h1>
-            <p>
-              {studentPreview
-                ? `Tous les éléments publiés pour la classe ${selectedClassroom.name}.`
-                : "Planifiez la semaine et visualisez la charge globale de la classe."}
-            </p>
+            <h1>{sectionTitle(activeSection, agendaView, selectedClassroom.name, studentPreview)}</h1>
+            <p>{sectionDescription(activeSection, agendaView, selectedClassroom.name, studentPreview)}</p>
           </div>
           <div className="header-actions">
-            <button className="student-preview" onClick={() => setStudentPreview((current) => !current)}>
-              {studentPreview ? "Quitter l’aperçu" : "Aperçu élève"}
-            </button>
-            {!studentPreview && (
+            {showAgendaTools && (
+              <button className="student-preview" onClick={() => setStudentPreview((current) => !current)}>
+                {studentPreview ? "Quitter l’aperçu" : "Aperçu élève"}
+              </button>
+            )}
+            {showAgendaTools && !studentPreview && (
               <div className="add-anchor">
                 <button className="navy-add" onClick={() => setAddMenuOpen((current) => !current)} aria-expanded={addMenuOpen}>＋ <span>Ajouter</span>⌄</button>
                 {addMenuOpen && (
@@ -215,128 +267,192 @@ export default function Home() {
               </div>
             )}
             <button className="round-action" aria-label="Notifications">♧<i /></button>
-            <span className="profile-disc">{getTeacherById(DEMO_CATALOG, DEMO_CURRENT_TEACHER_ID)?.initials ?? "FC"}</span>
+            <span className="profile-disc">{CURRENT_TEACHER?.initials ?? "FC"}</span>
           </div>
         </header>
 
-        <section className="brand-showcase" aria-label="Identité visuelle Campus Agenda">
-          <div className="showcase-copy">
-            <div className="showcase-brand"><BrandEmblem /><span><strong>CAMPUS</strong><small>AGENDA</small></span></div>
-            <p className="showcase-overline">{selectedClassroom.programLabel.toUpperCase()}</p>
-            <h2>L’agenda scolaire<br />des passionnés<br />de mécanique</h2>
-            <p className="showcase-text">Un calendrier commun, alimenté par toute l’équipe pédagogique et lisible d’un seul regard par les élèves.</p>
-            <div className="showcase-specs">
-              <span><strong>{selectedClassroom.name}</strong>Classe active</span>
-              <span><strong>{countTeachersInClassroom(DEMO_CATALOG, selectedClassroomId)}</strong>Enseignants</span>
-              <span><strong>{countBranchesInClassroom(DEMO_CATALOG, selectedClassroomId)}</strong>Branches</span>
+        {activeSection === "dashboard" && (
+          <section className="teacher-workspace" aria-label="Tableau de bord enseignant">
+            <div className="workspace-intro">
+              <p className="eyebrow">ESPACE ENSEIGNANT</p>
+              <h2>Bonjour, {CURRENT_TEACHER?.displayName ?? "Professeur démo"}</h2>
+              <p>Consultez vos classes, puis ouvrez l’agenda en vue <strong>Mes éléments</strong> par défaut.</p>
             </div>
-          </div>
-          <figure className="showcase-visual">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/og-v3.png" alt="Esquisses techniques d’un piston, de soupapes, d’un arbre à cames, d’un moteur et d’un véhicule électrifié" />
-          </figure>
-        </section>
-
-        <div className="class-tabs">
-          <button className="active">Calendrier</button>
-          <button>Devoirs</button>
-          <button>Élèves</button>
-          <button>Documents</button>
-        </div>
-
-        <section className="calendar-workbench">
-          <aside className="calendar-tools">
-            {!studentPreview && (
-              <div className="view-selector" aria-label="Choisir la vue">
-                <button className={view === "mine" ? "active" : ""} onClick={() => setView("mine")}>Mes éléments <span>{myItemCount}</span></button>
-                <button className={view === "class" ? "active" : ""} onClick={() => setView("class")}>Toute la classe <span>{classroomItems.length}</span></button>
-              </div>
-            )}
-
-            <section className="mini-calendar">
-              <header><strong>AOÛT 2026</strong><span>‹ &nbsp; ›</span></header>
-              <div className="mini-week"><b>L</b><b>M</b><b>M</b><b>J</b><b>V</b><b>S</b><b>D</b></div>
-              <div className="mini-days">
-                {[27,28,29,30,31,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30].map((day, index) => (
-                  <span className={day === 11 && index > 10 ? "selected" : index < 5 ? "muted" : ""} key={`${day}-${index}`}>{day}</span>
-                ))}
-              </div>
-            </section>
-
-            <section className="filter-panel">
-              <h2>FILTRES</h2>
-              <select value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)} aria-label="Filtrer par branche">
-                {subjectFilterOptions.map((subject) => <option key={subject}>{subject}</option>)}
-              </select>
-              <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "HOMEWORK"} onChange={() => setTypeFilter(typeFilter === "HOMEWORK" ? "ALL" : "HOMEWORK")} /> <span className="check blue" /> Devoirs</label>
-              <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "TEST"} onChange={() => setTypeFilter(typeFilter === "TEST" ? "ALL" : "TEST")} /> <span className="check navy" /> Contrôles</label>
-              <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "INFORMATION"} onChange={() => setTypeFilter(typeFilter === "INFORMATION" ? "ALL" : "INFORMATION")} /> <span className="check pale" /> Informations</label>
-            </section>
-
-            <div className="legend-note"><span>✓</span><p><strong>Données fictives</strong>Aucun élève réel n’est affiché.</p></div>
-          </aside>
-
-          <section className="week-calendar">
-            <header className="week-toolbar">
-              <div><button onClick={() => setWeekOffset((current) => current - 1)}>‹</button><button onClick={() => setWeekOffset(0)}>Aujourd’hui</button><button onClick={() => setWeekOffset((current) => current + 1)}>›</button></div>
-              <h2>{shortDate(days[0])} — {shortDate(days[4])} 2026</h2>
-              <div className="class-picker">
-                <button className="class-picker-trigger" onClick={() => setClassPickerOpen((current) => !current)} aria-expanded={classPickerOpen}>
-                  {selectedClassroom.name} &nbsp;⌄
-                </button>
-                {classPickerOpen && (
-                  <div className="class-picker-menu" role="listbox" aria-label="Choisir une classe">
-                    {TEACHER_CLASSROOMS.map((classroom) => (
-                      <button
-                        key={classroom.id}
-                        role="option"
-                        aria-selected={classroom.id === selectedClassroomId}
-                        className={classroom.id === selectedClassroomId ? "active" : ""}
-                        onClick={() => selectClassroom(classroom.id)}
-                      >
-                        <strong>{classroom.name}</strong>
-                        <small>{classroom.programLabel}</small>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </header>
-
-            <div className="schedule-grid">
-              <div className="corner-cell" />
-              {days.map((date, index) => <div className={`day-head ${index === 1 && weekOffset === 0 ? "today" : ""}`} key={date.toISOString()}><span>{dayName(date)}</span><strong>{date.getDate()}</strong></div>)}
-              {HOURS.map((hour) => (
-                <div className="schedule-row" key={hour}>
-                  <time>{String(hour).padStart(2, "0")}:00</time>
-                  {days.map((date, dayIndex) => {
-                    const slotItems = visibleItems.filter((item) => item.day === dayIndex && item.hour === hour);
-                    return (
-                      <div className="time-slot" key={`${date.toISOString()}-${hour}`}>
-                        {slotItems.map((item) => {
-                          const subjectName = getSubjectById(DEMO_CATALOG, item.subjectId)?.name ?? "Branche";
-                          const isMine = item.authorTeacherId === DEMO_CURRENT_TEACHER_ID;
-                          const authorLabel = teacherLabel(item.authorTeacherId);
-                          return (
-                            <article className={`schedule-event ${item.type.toLowerCase()}`} key={item.id}>
-                              <small>{TYPE_LABELS[item.type]} · {subjectName}</small>
-                              <strong>{item.title}</strong>
-                              <span>{item.detail}</span>
-                              <em>{isMine ? "Vous" : authorLabel.split(" · ")[0]}</em>
-                            </article>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
+            <div className="workspace-grid">
+              {classSummaries.map((summary) => (
+                <article className="workspace-card" key={summary.classroom.id}>
+                  <header>
+                    <span className="eyebrow">{summary.classroom.programLabel}</span>
+                    <h3>{summary.classroom.name}</h3>
+                  </header>
+                  <dl className="workspace-stats">
+                    <div><dt>Mes éléments</dt><dd>{summary.myItemCount}</dd></div>
+                    <div><dt>Classe entière</dt><dd>{summary.classItemCount}</dd></div>
+                    <div><dt>Branches</dt><dd>{summary.branchesTaught.length}</dd></div>
+                  </dl>
+                  <ul className="branch-tags">
+                    {summary.branchesTaught.map((branch) => <li key={branch.id}>{branch.name}</li>)}
+                  </ul>
+                  <button className="workspace-action" onClick={() => openAgenda(summary.classroom.id)}>
+                    Voir mes éléments
+                  </button>
+                </article>
               ))}
             </div>
-
-            {!visibleItems.length && <div className="empty-week"><span>▱</span><strong>Semaine libre</strong><small>Aucun élément ne correspond aux filtres.</small></div>}
           </section>
-        </section>
-        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 0.5</p>
+        )}
+
+        {activeSection === "classes" && (
+          <section className="teacher-workspace" aria-label="Mes classes">
+            <div className="workspace-grid workspace-grid-single">
+              {classSummaries.map((summary) => (
+                <article className="workspace-card workspace-card-wide" key={summary.classroom.id}>
+                  <header>
+                    <span className="eyebrow">CLASSE PARTAGÉE</span>
+                    <h3>{summary.classroom.name}</h3>
+                    <p>{summary.classroom.programLabel}</p>
+                  </header>
+                  <p className="workspace-code">Code démo : <strong>{summary.classroom.accessCodeHint}</strong></p>
+                  <div className="workspace-detail-row">
+                    <span><strong>{summary.myItemCount}</strong> mes publications</span>
+                    <span><strong>{summary.classItemCount}</strong> éléments au total</span>
+                    <span><strong>{countTeachersInClassroom(DEMO_CATALOG, summary.classroom.id)}</strong> enseignants</span>
+                  </div>
+                  <ul className="branch-tags">
+                    {summary.branchesTaught.map((branch) => <li key={branch.id}>{branch.name}</li>)}
+                  </ul>
+                  <button className="workspace-action" onClick={() => openAgenda(summary.classroom.id)}>
+                    Ouvrir l’agenda · Mes éléments
+                  </button>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {activeSection === "agenda" && (
+          <>
+            <section className="brand-showcase" aria-label="Identité visuelle Campus Agenda">
+              <div className="showcase-copy">
+                <div className="showcase-brand"><BrandEmblem /><span><strong>CAMPUS</strong><small>AGENDA</small></span></div>
+                <p className="showcase-overline">{selectedClassroom.programLabel.toUpperCase()}</p>
+                <h2>L’agenda scolaire<br />des passionnés<br />de mécanique</h2>
+                <p className="showcase-text">Un calendrier commun, alimenté par toute l’équipe pédagogique et lisible d’un seul regard par les élèves.</p>
+                <div className="showcase-specs">
+                  <span><strong>{selectedClassroom.name}</strong>Classe active</span>
+                  <span><strong>{countTeachersInClassroom(DEMO_CATALOG, selectedClassroomId)}</strong>Enseignants</span>
+                  <span><strong>{countBranchesInClassroom(DEMO_CATALOG, selectedClassroomId)}</strong>Branches</span>
+                </div>
+              </div>
+              <figure className="showcase-visual">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/og-v3.png" alt="Esquisses techniques d’un piston, de soupapes, d’un arbre à cames, d’un moteur et d’un véhicule électrifié" />
+              </figure>
+            </section>
+
+            <div className="class-tabs">
+              <button className="active">Calendrier</button>
+              <button disabled>Devoirs</button>
+              <button disabled>Élèves</button>
+              <button disabled>Documents</button>
+            </div>
+
+            <section className="calendar-workbench">
+              <aside className="calendar-tools">
+                {!studentPreview && (
+                  <div className="view-selector" aria-label="Choisir la vue">
+                    <button className={agendaView === "mine" ? "active" : ""} onClick={() => setAgendaView("mine")}>Mes éléments <span>{myItemCount}</span></button>
+                    <button className={agendaView === "class" ? "active" : ""} onClick={() => setAgendaView("class")}>Toute la classe <span>{classroomItems.length}</span></button>
+                  </div>
+                )}
+
+                <section className="mini-calendar">
+                  <header><strong>AOÛT 2026</strong><span>‹ &nbsp; ›</span></header>
+                  <div className="mini-week"><b>L</b><b>M</b><b>M</b><b>J</b><b>V</b><b>S</b><b>D</b></div>
+                  <div className="mini-days">
+                    {[27,28,29,30,31,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30].map((day, index) => (
+                      <span className={day === 11 && index > 10 ? "selected" : index < 5 ? "muted" : ""} key={`${day}-${index}`}>{day}</span>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="filter-panel">
+                  <h2>FILTRES</h2>
+                  <select value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)} aria-label="Filtrer par branche">
+                    {subjectFilterOptions.map((subject) => <option key={subject}>{subject}</option>)}
+                  </select>
+                  <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "HOMEWORK"} onChange={() => setTypeFilter(typeFilter === "HOMEWORK" ? "ALL" : "HOMEWORK")} /> <span className="check blue" /> Devoirs</label>
+                  <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "TEST"} onChange={() => setTypeFilter(typeFilter === "TEST" ? "ALL" : "TEST")} /> <span className="check navy" /> Contrôles</label>
+                  <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "INFORMATION"} onChange={() => setTypeFilter(typeFilter === "INFORMATION" ? "ALL" : "INFORMATION")} /> <span className="check pale" /> Informations</label>
+                </section>
+
+                <div className="legend-note"><span>✓</span><p><strong>Données fictives</strong>Aucun élève réel n’est affiché.</p></div>
+              </aside>
+
+              <section className="week-calendar">
+                <header className="week-toolbar">
+                  <div><button onClick={() => setWeekOffset((current) => current - 1)}>‹</button><button onClick={() => setWeekOffset(0)}>Aujourd’hui</button><button onClick={() => setWeekOffset((current) => current + 1)}>›</button></div>
+                  <h2>{shortDate(days[0])} — {shortDate(days[4])} 2026</h2>
+                  <div className="class-picker">
+                    <button className="class-picker-trigger" onClick={() => setClassPickerOpen((current) => !current)} aria-expanded={classPickerOpen}>
+                      {selectedClassroom.name} &nbsp;⌄
+                    </button>
+                    {classPickerOpen && (
+                      <div className="class-picker-menu" role="listbox" aria-label="Choisir une classe">
+                        {TEACHER_CLASSROOMS.map((classroom) => (
+                          <button
+                            key={classroom.id}
+                            role="option"
+                            aria-selected={classroom.id === selectedClassroomId}
+                            className={classroom.id === selectedClassroomId ? "active" : ""}
+                            onClick={() => openAgenda(classroom.id)}
+                          >
+                            <strong>{classroom.name}</strong>
+                            <small>{classroom.programLabel}</small>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </header>
+
+                <div className="schedule-grid">
+                  <div className="corner-cell" />
+                  {days.map((date, index) => <div className={`day-head ${index === 1 && weekOffset === 0 ? "today" : ""}`} key={date.toISOString()}><span>{dayName(date)}</span><strong>{date.getDate()}</strong></div>)}
+                  {HOURS.map((hour) => (
+                    <div className="schedule-row" key={hour}>
+                      <time>{String(hour).padStart(2, "0")}:00</time>
+                      {days.map((date, dayIndex) => {
+                        const slotItems = visibleItems.filter((item) => item.day === dayIndex && item.hour === hour);
+                        return (
+                          <div className="time-slot" key={`${date.toISOString()}-${hour}`}>
+                            {slotItems.map((item) => {
+                              const subjectName = getSubjectById(DEMO_CATALOG, item.subjectId)?.name ?? "Branche";
+                              const isMine = item.authorTeacherId === DEMO_CURRENT_TEACHER_ID;
+                              const authorLabel = teacherLabel(item.authorTeacherId);
+                              return (
+                                <article className={`schedule-event ${item.type.toLowerCase()}`} key={item.id}>
+                                  <small>{TYPE_LABELS[item.type]} · {subjectName}</small>
+                                  <strong>{item.title}</strong>
+                                  <span>{item.detail}</span>
+                                  <em>{isMine ? "Vous" : authorLabel.split(" · ")[0]}</em>
+                                </article>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+
+                {!visibleItems.length && <div className="empty-week"><span>▱</span><strong>Semaine libre</strong><small>Aucun élément ne correspond aux filtres.</small></div>}
+              </section>
+            </section>
+          </>
+        )}
+
+        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 0.6</p>
       </main>
 
       {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
