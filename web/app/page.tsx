@@ -28,7 +28,19 @@ import {
   type TeacherAgendaView,
   type TeacherNavSection,
 } from "@campus/features/teacher";
+import {
+  anonymizeAuthorForStudent,
+  buildStudentAgendaSummary,
+  findStudentAccessForClassroom,
+  getStudentAgendaItems,
+  getStudentClassroom,
+  resolveStudentAccess,
+} from "@campus/features/student";
+import type { StudentAccess } from "@campus/types/student-access";
 import type { AgendaItemType } from "@campus/types/agenda";
+
+type AppMode = "teacher" | "student";
+type StudentEntry = "code" | "teacher-preview";
 
 const TYPE_LABELS: Record<AgendaItemType, string> = {
   HOMEWORK: "Devoir",
@@ -66,15 +78,15 @@ function teacherLabel(teacherId: string) {
   return getTeacherById(DEMO_CATALOG, teacherId)?.displayName ?? "Enseignant · démo";
 }
 
-function sectionTitle(activeSection: TeacherNavSection, agendaView: TeacherAgendaView, classroomName: string, studentPreview: boolean) {
-  if (studentPreview) return "Mon agenda";
+function sectionTitle(activeSection: TeacherNavSection, agendaView: TeacherAgendaView, classroomName: string, isStudentView: boolean) {
+  if (isStudentView) return "Mon agenda";
   if (activeSection === "dashboard") return "Tableau de bord";
   if (activeSection === "classes") return "Mes classes";
   return getAgendaSectionTitle(agendaView, classroomName);
 }
 
-function sectionDescription(activeSection: TeacherNavSection, agendaView: TeacherAgendaView, classroomName: string, studentPreview: boolean) {
-  if (studentPreview) return `Tous les éléments publiés pour la classe ${classroomName}.`;
+function sectionDescription(activeSection: TeacherNavSection, agendaView: TeacherAgendaView, classroomName: string, isStudentView: boolean) {
+  if (isStudentView) return `Consultation anonyme — agenda complet de la classe ${classroomName}, toutes branches confondues.`;
   if (activeSection === "dashboard") return "Vue d’ensemble de vos classes et de vos publications.";
   if (activeSection === "classes") return "Classes auxquelles vous êtes rattaché et branches enseignées.";
   return getAgendaSectionDescription(agendaView, classroomName);
@@ -84,8 +96,11 @@ export default function Home() {
   const [activeSection, setActiveSection] = useState<TeacherNavSection>("dashboard");
   const [selectedClassroomId, setSelectedClassroomId] = useState(DEFAULT_CLASSROOM_ID);
   const [classPickerOpen, setClassPickerOpen] = useState(false);
+  const [appMode, setAppMode] = useState<AppMode>("teacher");
+  const [studentSession, setStudentSession] = useState<StudentAccess | null>(null);
+  const [studentEntry, setStudentEntry] = useState<StudentEntry | null>(null);
+  const [studentCodeModalOpen, setStudentCodeModalOpen] = useState(false);
   const [agendaView, setAgendaView] = useState<TeacherAgendaView>(DEFAULT_TEACHER_AGENDA_VIEW);
-  const [studentPreview, setStudentPreview] = useState(false);
   const [typeFilter, setTypeFilter] = useState<AgendaItemType | "ALL">("ALL");
   const [subjectFilter, setSubjectFilter] = useState(ALL_SUBJECTS_FILTER);
   const [teacherFilter, setTeacherFilter] = useState<string | typeof ALL_FILTER>(ALL_FILTER);
@@ -97,14 +112,18 @@ export default function Home() {
   const [editingItem, setEditingItem] = useState<PrototypeAgendaItem | null>(null);
   const [notice, setNotice] = useState("");
 
-  const selectedClassroom = getClassroomById(DEMO_CATALOG, selectedClassroomId) ?? DEMO_CATALOG.classrooms[0];
+  const isStudentView = appMode === "student" && studentSession !== null;
+  const studentClassroom = studentSession ? getStudentClassroom(DEMO_CATALOG, studentSession) : null;
+  const activeClassroomId = isStudentView ? studentSession!.classroomId : selectedClassroomId;
+
+  const selectedClassroom = (isStudentView ? studentClassroom : getClassroomById(DEMO_CATALOG, selectedClassroomId)) ?? DEMO_CATALOG.classrooms[0];
   const classSummaries = useMemo(
     () => getTeacherClassSummaries(DEMO_CATALOG, DEMO_CURRENT_TEACHER_ID, items),
     [items],
   );
   const classroomSubjects = useMemo(
-    () => getSubjectsForClassroom(DEMO_CATALOG, selectedClassroomId),
-    [selectedClassroomId],
+    () => getSubjectsForClassroom(DEMO_CATALOG, activeClassroomId),
+    [activeClassroomId],
   );
   const publishableSubjects = useMemo(
     () => getSubjectsForTeacherInClassroom(DEMO_CATALOG, DEMO_CURRENT_TEACHER_ID, selectedClassroomId),
@@ -126,18 +145,38 @@ export default function Home() {
 
   const agendaBaseItems = filterItemsForAgendaView(
     items,
-    selectedClassroomId,
+    activeClassroomId,
     DEMO_CURRENT_TEACHER_ID,
-    studentPreview ? "class" : agendaView,
+    isStudentView ? "class" : agendaView,
   );
-  const classroomItems = items.filter((item) => item.classroomId === selectedClassroomId);
+  const classroomItems = items.filter((item) => item.classroomId === activeClassroomId);
   const classroomTeachers = useMemo(
-    () => getTeachersInClassroom(DEMO_CATALOG, selectedClassroomId),
-    [selectedClassroomId],
+    () => getTeachersInClassroom(DEMO_CATALOG, activeClassroomId),
+    [activeClassroomId],
   );
-  const showSharedInsights = agendaView === "class" || studentPreview;
+  const showSharedInsights = !isStudentView && (agendaView === "class");
 
-  const visibleItems = useMemo(
+  const studentVisibleItems = useMemo(() => {
+    if (!studentSession) return [];
+    return applySharedAgendaFilters(
+      getStudentAgendaItems(items, studentSession.classroomId),
+      DEMO_CATALOG,
+      {
+        subjectName: subjectFilter === ALL_SUBJECTS_FILTER ? ALL_FILTER : subjectFilter,
+        type: typeFilter,
+        teacherId: ALL_FILTER,
+        day: dayFilter,
+        weekOffset,
+      },
+    );
+  }, [studentSession, items, subjectFilter, typeFilter, dayFilter, weekOffset]);
+
+  const studentSummary = useMemo(
+    () => buildStudentAgendaSummary(studentVisibleItems),
+    [studentVisibleItems],
+  );
+
+  const teacherVisibleItems = useMemo(
     () => applySharedAgendaFilters(agendaBaseItems, DEMO_CATALOG, {
       subjectName: subjectFilter === ALL_SUBJECTS_FILTER ? ALL_FILTER : subjectFilter,
       type: typeFilter,
@@ -148,10 +187,57 @@ export default function Home() {
     [agendaBaseItems, subjectFilter, typeFilter, teacherFilter, dayFilter, weekOffset],
   );
 
+  const visibleItems = isStudentView ? studentVisibleItems : teacherVisibleItems;
+
   const workload = useMemo(
-    () => (showSharedInsights ? buildClassWorkloadSummary(items, DEMO_CATALOG, selectedClassroomId, weekOffset) : null),
-    [showSharedInsights, items, selectedClassroomId, weekOffset],
+    () => (showSharedInsights ? buildClassWorkloadSummary(items, DEMO_CATALOG, activeClassroomId, weekOffset) : null),
+    [showSharedInsights, items, activeClassroomId, weekOffset],
   );
+
+  function resetAgendaFilters() {
+    setSubjectFilter(ALL_SUBJECTS_FILTER);
+    setTeacherFilter(ALL_FILTER);
+    setDayFilter(ALL_FILTER);
+    setTypeFilter("ALL");
+    setWeekOffset(0);
+  }
+
+  function enterTeacherPreview() {
+    const access = findStudentAccessForClassroom(DEMO_CATALOG, selectedClassroomId);
+    if (!access) {
+      showNotice("Aucun accès élève de démonstration pour cette classe.");
+      return;
+    }
+    setStudentSession(access);
+    setStudentEntry("teacher-preview");
+    setAppMode("student");
+    resetAgendaFilters();
+  }
+
+  function enterStudentWithCode(code: string) {
+    const access = resolveStudentAccess(DEMO_CATALOG, code);
+    if (!access) {
+      showNotice("Code d'accès invalide. Utilisez un identifiant de démonstration.");
+      return;
+    }
+    setStudentSession(access);
+    setSelectedClassroomId(access.classroomId);
+    setStudentEntry("code");
+    setAppMode("student");
+    setStudentCodeModalOpen(false);
+    resetAgendaFilters();
+  }
+
+  function exitStudentMode() {
+    const wasPreview = studentEntry === "teacher-preview";
+    setAppMode("teacher");
+    setStudentSession(null);
+    setStudentEntry(null);
+    if (wasPreview) {
+      setActiveSection("agenda");
+      setAgendaView("class");
+    }
+  }
 
   function openAgenda(classroomId: string) {
     setSelectedClassroomId(classroomId);
@@ -162,7 +248,6 @@ export default function Home() {
     setTeacherFilter(ALL_FILTER);
     setDayFilter(ALL_FILTER);
     setWeekOffset(0);
-    setStudentPreview(false);
   }
 
   function openSharedAgenda(classroomId: string) {
@@ -174,14 +259,12 @@ export default function Home() {
     setTeacherFilter(ALL_FILTER);
     setDayFilter(ALL_FILTER);
     setWeekOffset(0);
-    setStudentPreview(false);
   }
 
   function navigate(section: TeacherNavSection) {
     setActiveSection(section);
     if (section === "agenda") {
       setAgendaView(DEFAULT_TEACHER_AGENDA_VIEW);
-      setStudentPreview(false);
     }
   }
 
@@ -255,7 +338,6 @@ export default function Home() {
     }));
     setWeekOffset(0);
     setAgendaView(DEFAULT_TEACHER_AGENDA_VIEW);
-    setStudentPreview(false);
     closeModal();
     setActiveSection("agenda");
     showNotice(`${TYPE_LABELS[modalType]} ajouté à ${selectedClassroom.name}.`);
@@ -272,7 +354,113 @@ export default function Home() {
   }
 
   const myItemCount = classroomItems.filter((item) => item.authorTeacherId === DEMO_CURRENT_TEACHER_ID).length;
-  const showAgendaTools = activeSection === "agenda";
+  const showAgendaTools = !isStudentView && activeSection === "agenda";
+
+  if (isStudentView && studentSession) {
+    return (
+      <div className="mechanical-app student-app">
+        <aside className="technical-sidebar student-sidebar">
+          <div className="brand-lockup">
+            <BrandEmblem />
+            <span><strong>CAMPUS</strong><small>AGENDA</small></span>
+          </div>
+          <div className="student-access-note">
+            <span>ESPACE ÉLÈVE</span>
+            <strong>{studentSession.label}</strong>
+            <small>Consultation anonyme · démonstration</small>
+          </div>
+          <div className="technical-note">
+            <span>CLASSE</span>
+            <strong>{selectedClassroom.name}</strong>
+            <small>{selectedClassroom.programLabel}</small>
+          </div>
+          <button className="signout" onClick={exitStudentMode}>
+            <span>↪</span> {studentEntry === "teacher-preview" ? "Quitter l’aperçu" : "Se déconnecter"}
+          </button>
+        </aside>
+
+        <main className="technical-main">
+          <header className="technical-header">
+            <div className="mobile-lockup"><BrandEmblem /><strong>CAMPUS AGENDA</strong></div>
+            <div className="class-identity">
+              <span className="eyebrow">{selectedClassroom.programLabel}</span>
+              <h1>Mon agenda</h1>
+              <p>Consultation anonyme — agenda complet de la classe {selectedClassroom.name}, toutes branches confondues.</p>
+            </div>
+          </header>
+
+          <section className="student-summary" aria-label="Résumé de la semaine">
+            <div><span>Total</span><strong>{studentSummary.total}</strong></div>
+            <div><span>Devoirs</span><strong>{studentSummary.homework}</strong></div>
+            <div><span>Contrôles</span><strong>{studentSummary.test}</strong></div>
+            <div><span>Infos</span><strong>{studentSummary.information}</strong></div>
+            <div><span>Branches</span><strong>{studentSummary.branches}</strong></div>
+          </section>
+
+          <section className="calendar-workbench">
+            <aside className="calendar-tools">
+              <section className="filter-panel">
+                <h2>FILTRES</h2>
+                <select value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)} aria-label="Filtrer par branche">
+                  {subjectFilterOptions.map((subject) => <option key={subject}>{subject}</option>)}
+                </select>
+                <select value={dayFilter} onChange={(event) => setDayFilter(event.target.value === ALL_FILTER ? ALL_FILTER : Number(event.target.value))} aria-label="Filtrer par jour">
+                  <option value={ALL_FILTER}>Toute la semaine</option>
+                  {days.map((date, index) => <option key={date.toISOString()} value={index}>{dayName(date)} {date.getDate()}</option>)}
+                </select>
+                <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "HOMEWORK"} onChange={() => setTypeFilter(typeFilter === "HOMEWORK" ? "ALL" : "HOMEWORK")} /> <span className="check blue" /> Devoirs</label>
+                <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "TEST"} onChange={() => setTypeFilter(typeFilter === "TEST" ? "ALL" : "TEST")} /> <span className="check navy" /> Contrôles</label>
+                <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "INFORMATION"} onChange={() => setTypeFilter(typeFilter === "INFORMATION" ? "ALL" : "INFORMATION")} /> <span className="check pale" /> Informations</label>
+              </section>
+              <div className="legend-note"><span>✓</span><p><strong>Lecture seule</strong>Aucune modification possible.</p></div>
+            </aside>
+
+            <section className="week-calendar">
+              <header className="week-toolbar">
+                <div><button onClick={() => setWeekOffset((current) => current - 1)}>‹</button><button onClick={() => setWeekOffset(0)}>Aujourd’hui</button><button onClick={() => setWeekOffset((current) => current + 1)}>›</button></div>
+                <h2>{shortDate(days[0])} — {shortDate(days[4])} 2026</h2>
+                <span className="student-class-label">{selectedClassroom.name}</span>
+              </header>
+
+              <div className="schedule-grid">
+                <div className="corner-cell" />
+                {days.map((date, index) => <div className={`day-head ${index === 1 && weekOffset === 0 ? "today" : ""}`} key={date.toISOString()}><span>{dayName(date)}</span><strong>{date.getDate()}</strong></div>)}
+                {HOURS.map((hour) => (
+                  <div className="schedule-row" key={hour}>
+                    <time>{String(hour).padStart(2, "0")}:00</time>
+                    {days.map((date, dayIndex) => {
+                      const slotItems = visibleItems.filter((item) => item.day === dayIndex && item.hour === hour);
+                      return (
+                        <div className="time-slot" key={`${date.toISOString()}-${hour}`}>
+                          {slotItems.map((item) => {
+                            const subjectName = getSubjectById(DEMO_CATALOG, item.subjectId)?.name ?? "Branche";
+                            return (
+                              <article className={`schedule-event ${item.type.toLowerCase()}`} key={item.id}>
+                                <small>{TYPE_LABELS[item.type]} · {subjectName}</small>
+                                <strong>{item.title}</strong>
+                                <span>{item.detail}</span>
+                                <em>{anonymizeAuthorForStudent(item.authorTeacherId)}</em>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+
+              {!visibleItems.length && <div className="empty-week"><span>▱</span><strong>Semaine libre</strong><small>Aucun élément ne correspond aux filtres.</small></div>}
+            </section>
+          </section>
+
+          <p className="prototype-label">CONSULTATION ÉLÈVE · CAMPUS AGENDA 0.9</p>
+        </main>
+
+        {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
+      </div>
+    );
+  }
 
   return (
     <div className="mechanical-app">
@@ -316,6 +504,7 @@ export default function Home() {
           <strong>{selectedClassroom.accessCodeHint}</strong>
           <small>Démonstration uniquement</small>
         </div>
+        <button className="signout" onClick={() => setStudentCodeModalOpen(true)}><span>👤</span> Espace élève</button>
         <button className="signout"><span>↪</span> Déconnexion</button>
       </aside>
 
@@ -324,16 +513,14 @@ export default function Home() {
           <div className="mobile-lockup"><BrandEmblem /><strong>CAMPUS AGENDA</strong></div>
           <div className="class-identity">
             <span className="eyebrow">{selectedClassroom.programLabel}</span>
-            <h1>{sectionTitle(activeSection, agendaView, selectedClassroom.name, studentPreview)}</h1>
-            <p>{sectionDescription(activeSection, agendaView, selectedClassroom.name, studentPreview)}</p>
+            <h1>{sectionTitle(activeSection, agendaView, selectedClassroom.name, false)}</h1>
+            <p>{sectionDescription(activeSection, agendaView, selectedClassroom.name, false)}</p>
           </div>
           <div className="header-actions">
             {showAgendaTools && (
-              <button className="student-preview" onClick={() => setStudentPreview((current) => !current)}>
-                {studentPreview ? "Quitter l’aperçu" : "Aperçu élève"}
-              </button>
+              <button className="student-preview" onClick={enterTeacherPreview}>Aperçu élève</button>
             )}
-            {showAgendaTools && !studentPreview && (
+            {showAgendaTools && (
               <div className="add-anchor">
                 <button className="navy-add" onClick={() => setAddMenuOpen((current) => !current)} aria-expanded={addMenuOpen}>＋ <span>Ajouter</span>⌄</button>
                 {addMenuOpen && (
@@ -447,12 +634,10 @@ export default function Home() {
 
             <section className="calendar-workbench">
               <aside className="calendar-tools">
-                {!studentPreview && (
-                  <div className="view-selector" aria-label="Choisir la vue">
-                    <button className={agendaView === "mine" ? "active" : ""} onClick={() => { setAgendaView("mine"); setTeacherFilter(ALL_FILTER); setDayFilter(ALL_FILTER); }}>Mes éléments <span>{myItemCount}</span></button>
-                    <button className={agendaView === "class" ? "active" : ""} onClick={() => { setAgendaView("class"); setTeacherFilter(ALL_FILTER); setDayFilter(ALL_FILTER); }}>Toute la classe <span>{classroomItems.filter((item) => (item.weekOffset ?? 0) === weekOffset).length}</span></button>
-                  </div>
-                )}
+                <div className="view-selector" aria-label="Choisir la vue">
+                  <button className={agendaView === "mine" ? "active" : ""} onClick={() => { setAgendaView("mine"); setTeacherFilter(ALL_FILTER); setDayFilter(ALL_FILTER); }}>Mes éléments <span>{myItemCount}</span></button>
+                  <button className={agendaView === "class" ? "active" : ""} onClick={() => { setAgendaView("class"); setTeacherFilter(ALL_FILTER); setDayFilter(ALL_FILTER); }}>Toute la classe <span>{classroomItems.filter((item) => (item.weekOffset ?? 0) === weekOffset).length}</span></button>
+                </div>
 
                 {showSharedInsights && workload && (
                   <section className="workload-panel" aria-label="Charge globale de la classe">
@@ -562,7 +747,7 @@ export default function Home() {
                               const subjectName = getSubjectById(DEMO_CATALOG, item.subjectId)?.name ?? "Branche";
                               const isMine = item.authorTeacherId === DEMO_CURRENT_TEACHER_ID;
                               const authorLabel = teacherLabel(item.authorTeacherId);
-                              const editable = !studentPreview && canModifyPublication(item, DEMO_CURRENT_TEACHER_ID);
+                              const editable = canModifyPublication(item, DEMO_CURRENT_TEACHER_ID);
                               return (
                                 <article className={`schedule-event ${item.type.toLowerCase()}${editable ? " editable" : ""}`} key={item.id}>
                                   {editable && (
@@ -591,10 +776,23 @@ export default function Home() {
           </>
         )}
 
-        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 0.8</p>
+        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 0.9</p>
       </main>
 
       {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
+
+      {studentCodeModalOpen && (
+        <div className="technical-modal-backdrop">
+          <section className="technical-modal" role="dialog" aria-modal="true" aria-labelledby="student-code-title">
+            <header><div><span className="eyebrow">ESPACE ÉLÈVE</span><h2 id="student-code-title">Connexion anonyme</h2></div><button onClick={() => setStudentCodeModalOpen(false)}>×</button></header>
+            <form onSubmit={(event) => { event.preventDefault(); enterStudentWithCode(String(new FormData(event.currentTarget).get("code") || "")); }}>
+              <label>Identifiant de démonstration<input name="code" placeholder="eleve-test-001" required /></label>
+              <p className="modal-hint">Codes fictifs : <strong>eleve-test-001</strong> (2e TMA) ou <strong>eleve-test-002</strong> (1re TMA).</p>
+              <footer><button type="button" onClick={() => setStudentCodeModalOpen(false)}>Annuler</button><button type="submit">Consulter mon agenda</button></footer>
+            </form>
+          </section>
+        </div>
+      )}
 
       {modalType && (
         <div className="technical-modal-backdrop">

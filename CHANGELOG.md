@@ -2,6 +2,17 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [0.9.0] - 2026-08-17
+
+### Ajouté
+
+- **Vue élève** : consultation anonyme de l'agenda complet de la classe.
+- Connexion par identifiant fictif (`eleve-test-001`, `eleve-test-002`).
+- Espace élève dédié en lecture seule, sans noms d'enseignants.
+- Résumé hebdomadaire et filtres branche / type / jour pour l'élève.
+- Aperçu enseignant et bouton « Espace élève » dans la barre latérale.
+- Tests automatisés de l'accès et de l'anonymisation.
+
 ## [0.8.0] - 2026-08-17
 
 ### Ajouté

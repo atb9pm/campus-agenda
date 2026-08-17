@@ -133,6 +133,19 @@ button { color: inherit; }
 .workload-day span { color: #8793a9; font-size: 6px; font-weight: 800; }
 .workload-day strong { color: var(--navy); font-size: 12px; }
 .workload-day i { display: block; height: 4px; border-radius: 999px; background: var(--blue); }
+.student-app .technical-main { width: 100%; margin-left: 0; }
+.student-app .student-sidebar { width: 222px; }
+.student-access-note { margin: 0 8px 14px; padding: 13px; border: 1px solid var(--line); border-radius: 9px; background: #f1f6fd; }
+.student-access-note span, .student-access-note strong, .student-access-note small { display: block; }
+.student-access-note span { color: #8793a9; font-size: 7px; font-weight: 800; letter-spacing: .12em; }
+.student-access-note strong { margin-top: 5px; color: var(--blue); font-size: 11px; letter-spacing: .06em; }
+.student-access-note small { margin-top: 4px; color: #9aa5b6; font-size: 8px; }
+.student-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 0 38px 18px; }
+.student-summary div { padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.student-summary span { display: block; color: #8793a9; font-size: 7px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.student-summary strong { display: block; margin-top: 6px; color: var(--navy); font-size: 20px; }
+.student-class-label { justify-self: end; color: #5e7290; font-size: 8px; font-weight: 750; }
+.modal-hint { margin: 0 0 12px; color: #516582; font-size: 10px; line-height: 1.5; }
 
 .calendar-workbench { position: relative; z-index: 2; display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 640px; margin: 21px 38px 0; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.94); box-shadow: 0 13px 35px rgba(12,35,70,.045); }
 .calendar-tools { padding: 18px 16px; border-right: 1px solid var(--line); background: rgba(250,251,253,.92); }
