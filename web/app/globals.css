@@ -239,6 +239,28 @@ button { color: inherit; }
 .technical-modal form footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 5px; }
 .technical-modal form footer button { padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 6px; color: #4b5f7e; background: #fff; font-size: 9px; font-weight: 800; cursor: pointer; }.technical-modal form footer button[type="submit"] { border-color: var(--navy); color: #fff; background: var(--navy); }
 
+.teacher-login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--canvas); }
+.teacher-login-loading { display: grid; justify-items: center; gap: 10px; color: var(--navy); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.teacher-login { width: min(440px, 100%); display: grid; gap: 18px; }
+.teacher-login-brand { display: flex; align-items: center; gap: 12px; color: var(--navy); }
+.teacher-login-brand > span { display: grid; line-height: 1; }
+.teacher-login-brand strong { font-size: 14px; letter-spacing: .18em; }
+.teacher-login-brand small { margin-top: 4px; color: #7b8aa5; font-size: 8px; font-weight: 800; letter-spacing: .24em; }
+.teacher-login-card { padding: 28px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: var(--shadow); }
+.teacher-login-card h1 { margin: 8px 0 6px; color: var(--navy); font-size: 28px; letter-spacing: -.03em; }
+.teacher-login-card > p { margin: 0 0 18px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.teacher-login-card form { display: grid; gap: 14px; }
+.teacher-login-card label { display: grid; gap: 6px; color: #445a7c; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.teacher-login-card input, .teacher-login-card select { width: 100%; padding: 10px; border: 1px solid var(--line-strong); border-radius: 6px; outline: none; color: var(--ink); background: rgba(255,255,255,.95); font-size: 11px; letter-spacing: 0; text-transform: none; }
+.teacher-login-card input:focus, .teacher-login-card select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(7,93,255,.08); }
+.teacher-login-hint { margin: 0; color: #7b879c; font-size: 10px; line-height: 1.45; }
+.teacher-login-error { margin: 0; color: #b42318; font-size: 10px; font-weight: 700; }
+.teacher-login-card form > button[type="submit"] { padding: 11px 14px; border: 1px solid var(--navy); border-radius: 6px; color: #fff; background: var(--navy); font-size: 10px; font-weight: 800; cursor: pointer; }
+.teacher-login-card form > button[type="submit"]:disabled { opacity: .65; cursor: wait; }
+.teacher-login-card footer { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.student-entry-link { padding: 0; border: 0; color: var(--blue); background: transparent; font-size: 10px; font-weight: 800; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.teacher-login-shell .prototype-label { margin: 0; text-align: center; }
+
 @media (max-width: 1030px) {
   .technical-sidebar { width: 190px; }.technical-main { width: calc(100% - 190px); margin-left: 190px; }
   .calendar-workbench { grid-template-columns: 190px minmax(0, 1fr); margin-right: 20px; margin-left: 20px; }.technical-header { padding-right: 20px; padding-left: 20px; }.class-tabs { padding-right: 20px; padding-left: 20px; }

@@ -38,7 +38,6 @@ import {
 } from "@campus/features/student";
 import type { StudentAccess } from "@campus/types/student-access";
 import type { AgendaItemType } from "@campus/types/agenda";
-import { DEMO_TEACHER_PASSWORD } from "@campus/lib/auth/config.ts";
 import {
   createAgendaItemApi,
   deleteAgendaItemApi,
@@ -48,6 +47,7 @@ import {
   loginTeacherApi,
   logoutApiSession,
   updateAgendaItemApi,
+  type ApiTeacherSession,
 } from "../lib/api-client.ts";
 
 type AppMode = "teacher" | "student";
@@ -135,39 +135,56 @@ export default function Home() {
   const [modalType, setModalType] = useState<AgendaItemType | null>(null);
   const [editingItem, setEditingItem] = useState<PrototypeAgendaItem | null>(null);
   const [notice, setNotice] = useState("");
+  const [authReady, setAuthReady] = useState(false);
+  const [teacherAuthenticated, setTeacherAuthenticated] = useState(false);
+  const [loginPending, setLoginPending] = useState(false);
+  const [loginError, setLoginError] = useState("");
+
+  async function applyTeacherSession(session: ApiTeacherSession) {
+    setCurrentTeacherId(session.teacherId);
+    setAppMode("teacher");
+    setTeacherAuthenticated(true);
+    setStudentSession(null);
+    setStudentEntry(null);
+    setLoginError("");
+    const classroomIds = getClassroomsForTeacher(DEMO_CATALOG, session.teacherId).map((classroom) => classroom.id);
+    const loadedItems = await loadTeacherAgendaItems(classroomIds);
+    setItems(loadedItems);
+    if (classroomIds.length) {
+      setSelectedClassroomId((current) => (classroomIds.includes(current) ? current : classroomIds[0]));
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
 
     async function bootstrapSession() {
       try {
-        let session = await fetchApiSession();
-        if (!session) {
-          session = await loginTeacherApi(DEMO_CURRENT_TEACHER_ID, DEMO_TEACHER_PASSWORD);
-        }
+        const session = await fetchApiSession();
         if (cancelled) return;
 
-        if (session.kind === "teacher") {
-          setCurrentTeacherId(session.teacherId);
-          setAppMode("teacher");
-          const classroomIds = getClassroomsForTeacher(DEMO_CATALOG, session.teacherId).map((classroom) => classroom.id);
-          const loadedItems = await loadTeacherAgendaItems(classroomIds);
-          if (!cancelled) setItems(loadedItems);
+        if (session?.kind === "teacher") {
+          await applyTeacherSession(session);
           return;
         }
 
-        const access = resolveStudentAccess(DEMO_CATALOG, session.label);
-        if (!access) return;
-        setStudentSession(access);
-        setSelectedClassroomId(session.classroomId);
-        setStudentEntry("code");
-        setAppMode("student");
-        const loadedItems = await fetchAgendaItems(session.classroomId);
-        if (!cancelled) setItems(loadedItems);
+        if (session?.kind === "student") {
+          const access = resolveStudentAccess(DEMO_CATALOG, session.label);
+          if (!access) return;
+          setStudentSession(access);
+          setSelectedClassroomId(session.classroomId);
+          setStudentEntry("code");
+          setAppMode("student");
+          const loadedItems = await fetchAgendaItems(session.classroomId);
+          if (!cancelled) setItems(loadedItems);
+          return;
+        }
       } catch (error) {
         if (!cancelled) {
           setNotice(error instanceof Error ? error.message : "Connexion impossible.");
         }
+      } finally {
+        if (!cancelled) setAuthReady(true);
       }
     }
 
@@ -305,18 +322,39 @@ export default function Home() {
   function exitStudentMode() {
     void (async () => {
       const wasPreview = studentEntry === "teacher-preview";
-      await logoutApiSession();
-      const teacherSession = await loginTeacherApi(DEMO_CURRENT_TEACHER_ID, DEMO_TEACHER_PASSWORD);
-      setCurrentTeacherId(teacherSession.teacherId);
-      setAppMode("teacher");
-      setStudentSession(null);
-      setStudentEntry(null);
-      const classroomIds = getClassroomsForTeacher(DEMO_CATALOG, teacherSession.teacherId).map((classroom) => classroom.id);
-      const loadedItems = await loadTeacherAgendaItems(classroomIds);
-      setItems(loadedItems);
       if (wasPreview) {
+        setAppMode("teacher");
+        setStudentSession(null);
+        setStudentEntry(null);
         setActiveSection("agenda");
         setAgendaView("class");
+        return;
+      }
+
+      await logoutApiSession();
+      setStudentSession(null);
+      setStudentEntry(null);
+      setAppMode("teacher");
+      setTeacherAuthenticated(false);
+    })();
+  }
+
+  function submitTeacherLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const teacherId = String(form.get("teacherId") || DEMO_CURRENT_TEACHER_ID);
+    const password = String(form.get("password") || "");
+
+    void (async () => {
+      setLoginPending(true);
+      setLoginError("");
+      try {
+        const session = await loginTeacherApi(teacherId, password);
+        await applyTeacherSession(session);
+      } catch (error) {
+        setLoginError(error instanceof Error ? error.message : "Connexion enseignant impossible.");
+      } finally {
+        setLoginPending(false);
       }
     })();
   }
@@ -386,14 +424,10 @@ export default function Home() {
   function logoutTeacher() {
     void (async () => {
       await logoutApiSession();
-      const teacherSession = await loginTeacherApi(DEMO_CURRENT_TEACHER_ID, DEMO_TEACHER_PASSWORD);
-      setCurrentTeacherId(teacherSession.teacherId);
-      setAppMode("teacher");
       setStudentSession(null);
       setStudentEntry(null);
-      const classroomIds = getClassroomsForTeacher(DEMO_CATALOG, teacherSession.teacherId).map((classroom) => classroom.id);
-      const loadedItems = await loadTeacherAgendaItems(classroomIds);
-      setItems(loadedItems);
+      setAppMode("teacher");
+      setTeacherAuthenticated(false);
       showNotice("Session réinitialisée.");
     })();
   }
@@ -471,6 +505,74 @@ export default function Home() {
 
   const myItemCount = classroomItems.filter((item) => item.authorTeacherId === currentTeacherId).length;
   const showAgendaTools = !isStudentView && activeSection === "agenda";
+
+  if (!authReady) {
+    return (
+      <div className="teacher-login-shell" id="main-content">
+        <div className="teacher-login-loading" role="status" aria-live="polite">
+          <BrandEmblem />
+          <strong>CAMPUS AGENDA</strong>
+          <span>Chargement de la session…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!teacherAuthenticated && !isStudentView) {
+    return (
+      <div className="teacher-login-shell">
+        <main className="teacher-login" id="main-content">
+          <div className="teacher-login-brand">
+            <BrandEmblem />
+            <span><strong>CAMPUS</strong><small>AGENDA</small></span>
+          </div>
+          <section className="teacher-login-card" aria-labelledby="teacher-login-title">
+            <span className="eyebrow">ESPACE ENSEIGNANT</span>
+            <h1 id="teacher-login-title">Connexion</h1>
+            <p>Identifiez-vous pour accéder à l’agenda de démonstration.</p>
+            <form onSubmit={submitTeacherLogin}>
+              <label>
+                Compte enseignant
+                <select name="teacherId" defaultValue={DEMO_CURRENT_TEACHER_ID}>
+                  {DEMO_CATALOG.teachers.map((teacher) => (
+                    <option key={teacher.id} value={teacher.id}>{teacher.displayName}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Mot de passe
+                <input name="password" type="password" autoComplete="current-password" required />
+              </label>
+              <p className="teacher-login-hint">Mot de passe de démonstration&nbsp;: <strong>campus-demo</strong></p>
+              {loginError && <p className="teacher-login-error" role="alert">{loginError}</p>}
+              <button type="submit" disabled={loginPending}>{loginPending ? "Connexion…" : "Se connecter"}</button>
+            </form>
+            <footer>
+              <button type="button" className="student-entry-link" onClick={() => setStudentCodeModalOpen(true)}>
+                Consulter l’agenda élève
+              </button>
+            </footer>
+          </section>
+          <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 1.0</p>
+        </main>
+
+        {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
+
+        {studentCodeModalOpen && (
+          <div className="technical-modal-backdrop">
+            <section className="technical-modal" role="dialog" aria-modal="true" aria-labelledby="student-code-title">
+              <header><div><span className="eyebrow">ESPACE ÉLÈVE</span><h2 id="student-code-title">Connexion anonyme</h2></div><button onClick={() => setStudentCodeModalOpen(false)}>×</button></header>
+              <form onSubmit={(event) => { event.preventDefault(); enterStudentWithCode(String(new FormData(event.currentTarget).get("code") || "")); }}>
+                <label>Identifiant de démonstration<input name="code" placeholder="eleve-test-001" required /></label>
+                <p className="modal-hint">Codes fictifs : <strong>eleve-test-001</strong> (2e TMA) ou <strong>eleve-test-002</strong> (1re TMA).</p>
+                <footer><button type="button" onClick={() => setStudentCodeModalOpen(false)}>Annuler</button><button type="submit">Consulter mon agenda</button></footer>
+              </form>
+            </section>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (isStudentView && studentSession) {
     return (

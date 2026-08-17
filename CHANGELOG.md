@@ -2,6 +2,14 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [1.0.1] - 2026-08-17
+
+### Sécurité
+
+- **Retrait du mot de passe enseignant du bundle client** : plus d’auto-connexion ni de secret compilé dans le JavaScript.
+- **Écran de connexion enseignant** : saisie du mot de passe côté utilisateur, vérification serveur via `POST /api/auth/teacher`.
+- Déconnexion et sortie du mode élève ramènent à l’écran de connexion (l’aperçu enseignant conserve la session sans re-login).
+
 ## [1.0.0] - 2026-08-17
 
 ### Ajouté
