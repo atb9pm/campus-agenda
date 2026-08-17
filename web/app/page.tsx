@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
-import { ALL_FILTER, applySharedAgendaFilters, buildClassWorkloadSummary, canModifyPublication, createPublication, deletePublication, DEMO_PROTOTYPE_ITEMS, updatePublication, WORKLOAD_LEVEL_LABELS, type PrototypeAgendaItem } from "@campus/features/agenda";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ALL_FILTER, applySharedAgendaFilters, buildClassWorkloadSummary, canModifyPublication, DEMO_PROTOTYPE_ITEMS, WORKLOAD_LEVEL_LABELS, type PrototypeAgendaItem } from "@campus/features/agenda";
 import {
   DEMO_CATALOG,
   DEMO_CURRENT_TEACHER_ID,
@@ -38,6 +38,17 @@ import {
 } from "@campus/features/student";
 import type { StudentAccess } from "@campus/types/student-access";
 import type { AgendaItemType } from "@campus/types/agenda";
+import { DEMO_TEACHER_PASSWORD } from "@campus/lib/auth/config.ts";
+import {
+  createAgendaItemApi,
+  deleteAgendaItemApi,
+  fetchAgendaItems,
+  fetchApiSession,
+  loginStudentApi,
+  loginTeacherApi,
+  logoutApiSession,
+  updateAgendaItemApi,
+} from "../lib/api-client.ts";
 
 type AppMode = "teacher" | "student";
 type StudentEntry = "code" | "teacher-preview";
@@ -51,9 +62,14 @@ const TYPE_LABELS: Record<AgendaItemType, string> = {
 const ALL_SUBJECTS_FILTER = "Toutes les branches";
 const HOURS = Array.from({ length: 10 }, (_, index) => index + 8);
 
-const TEACHER_CLASSROOMS = getClassroomsForTeacher(DEMO_CATALOG, DEMO_CURRENT_TEACHER_ID);
-const DEFAULT_CLASSROOM_ID = TEACHER_CLASSROOMS[0]?.id ?? DEMO_CATALOG.classrooms[0].id;
-const CURRENT_TEACHER = getTeacherById(DEMO_CATALOG, DEMO_CURRENT_TEACHER_ID);
+async function loadTeacherAgendaItems(classroomIds: string[]): Promise<PrototypeAgendaItem[]> {
+  const batches = await Promise.all(classroomIds.map((classroomId) => fetchAgendaItems(classroomId)));
+  const merged = new Map<number, PrototypeAgendaItem>();
+  for (const batch of batches) {
+    for (const item of batch) merged.set(item.id, item);
+  }
+  return [...merged.values()].sort((left, right) => left.id - right.id);
+}
 
 function mondayForOffset(offset: number) {
   const date = new Date(2026, 7, 10, 12);
@@ -73,8 +89,8 @@ function BrandEmblem() {
   return <span className="brand-emblem-image" aria-hidden="true" />;
 }
 
-function teacherLabel(teacherId: string) {
-  if (teacherId === DEMO_CURRENT_TEACHER_ID) return "Vous · compte démo";
+function teacherLabel(teacherId: string, currentTeacherId: string) {
+  if (teacherId === currentTeacherId) return "Vous · compte démo";
   return getTeacherById(DEMO_CATALOG, teacherId)?.displayName ?? "Enseignant · démo";
 }
 
@@ -93,8 +109,16 @@ function sectionDescription(activeSection: TeacherNavSection, agendaView: Teache
 }
 
 export default function Home() {
+  const [currentTeacherId, setCurrentTeacherId] = useState(DEMO_CURRENT_TEACHER_ID);
+  const teacherClassrooms = useMemo(
+    () => getClassroomsForTeacher(DEMO_CATALOG, currentTeacherId),
+    [currentTeacherId],
+  );
+  const defaultClassroomId = teacherClassrooms[0]?.id ?? DEMO_CATALOG.classrooms[0].id;
+  const currentTeacher = getTeacherById(DEMO_CATALOG, currentTeacherId);
+
   const [activeSection, setActiveSection] = useState<TeacherNavSection>("dashboard");
-  const [selectedClassroomId, setSelectedClassroomId] = useState(DEFAULT_CLASSROOM_ID);
+  const [selectedClassroomId, setSelectedClassroomId] = useState(defaultClassroomId);
   const [classPickerOpen, setClassPickerOpen] = useState(false);
   const [appMode, setAppMode] = useState<AppMode>("teacher");
   const [studentSession, setStudentSession] = useState<StudentAccess | null>(null);
@@ -112,22 +136,63 @@ export default function Home() {
   const [editingItem, setEditingItem] = useState<PrototypeAgendaItem | null>(null);
   const [notice, setNotice] = useState("");
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function bootstrapSession() {
+      try {
+        let session = await fetchApiSession();
+        if (!session) {
+          session = await loginTeacherApi(DEMO_CURRENT_TEACHER_ID, DEMO_TEACHER_PASSWORD);
+        }
+        if (cancelled) return;
+
+        if (session.kind === "teacher") {
+          setCurrentTeacherId(session.teacherId);
+          setAppMode("teacher");
+          const classroomIds = getClassroomsForTeacher(DEMO_CATALOG, session.teacherId).map((classroom) => classroom.id);
+          const loadedItems = await loadTeacherAgendaItems(classroomIds);
+          if (!cancelled) setItems(loadedItems);
+          return;
+        }
+
+        const access = resolveStudentAccess(DEMO_CATALOG, session.label);
+        if (!access) return;
+        setStudentSession(access);
+        setSelectedClassroomId(session.classroomId);
+        setStudentEntry("code");
+        setAppMode("student");
+        const loadedItems = await fetchAgendaItems(session.classroomId);
+        if (!cancelled) setItems(loadedItems);
+      } catch (error) {
+        if (!cancelled) {
+          setNotice(error instanceof Error ? error.message : "Connexion impossible.");
+        }
+      }
+    }
+
+    bootstrapSession();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const isStudentView = appMode === "student" && studentSession !== null;
   const studentClassroom = studentSession ? getStudentClassroom(DEMO_CATALOG, studentSession) : null;
   const activeClassroomId = isStudentView ? studentSession!.classroomId : selectedClassroomId;
 
   const selectedClassroom = (isStudentView ? studentClassroom : getClassroomById(DEMO_CATALOG, selectedClassroomId)) ?? DEMO_CATALOG.classrooms[0];
   const classSummaries = useMemo(
-    () => getTeacherClassSummaries(DEMO_CATALOG, DEMO_CURRENT_TEACHER_ID, items),
-    [items],
+    () => getTeacherClassSummaries(DEMO_CATALOG, currentTeacherId, items),
+    [currentTeacherId, items],
   );
   const classroomSubjects = useMemo(
     () => getSubjectsForClassroom(DEMO_CATALOG, activeClassroomId),
     [activeClassroomId],
   );
   const publishableSubjects = useMemo(
-    () => getSubjectsForTeacherInClassroom(DEMO_CATALOG, DEMO_CURRENT_TEACHER_ID, selectedClassroomId),
-    [selectedClassroomId],
+    () => getSubjectsForTeacherInClassroom(DEMO_CATALOG, currentTeacherId, selectedClassroomId),
+    [currentTeacherId, selectedClassroomId],
   );
   const subjectFilterOptions = useMemo(
     () => [ALL_SUBJECTS_FILTER, ...classroomSubjects.map((subject) => subject.name)],
@@ -146,7 +211,7 @@ export default function Home() {
   const agendaBaseItems = filterItemsForAgendaView(
     items,
     activeClassroomId,
-    DEMO_CURRENT_TEACHER_ID,
+    currentTeacherId,
     isStudentView ? "class" : agendaView,
   );
   const classroomItems = items.filter((item) => item.classroomId === activeClassroomId);
@@ -215,28 +280,45 @@ export default function Home() {
   }
 
   function enterStudentWithCode(code: string) {
-    const access = resolveStudentAccess(DEMO_CATALOG, code);
-    if (!access) {
-      showNotice("Code d'accès invalide. Utilisez un identifiant de démonstration.");
-      return;
-    }
-    setStudentSession(access);
-    setSelectedClassroomId(access.classroomId);
-    setStudentEntry("code");
-    setAppMode("student");
-    setStudentCodeModalOpen(false);
-    resetAgendaFilters();
+    void (async () => {
+      try {
+        const session = await loginStudentApi(code);
+        const access = resolveStudentAccess(DEMO_CATALOG, code.trim());
+        if (!access) {
+          showNotice("Code d'accès invalide. Utilisez un identifiant de démonstration.");
+          return;
+        }
+        setStudentSession(access);
+        setSelectedClassroomId(session.classroomId);
+        setStudentEntry("code");
+        setAppMode("student");
+        setStudentCodeModalOpen(false);
+        resetAgendaFilters();
+        const loadedItems = await fetchAgendaItems(session.classroomId);
+        setItems(loadedItems);
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : "Connexion élève impossible.");
+      }
+    })();
   }
 
   function exitStudentMode() {
-    const wasPreview = studentEntry === "teacher-preview";
-    setAppMode("teacher");
-    setStudentSession(null);
-    setStudentEntry(null);
-    if (wasPreview) {
-      setActiveSection("agenda");
-      setAgendaView("class");
-    }
+    void (async () => {
+      const wasPreview = studentEntry === "teacher-preview";
+      await logoutApiSession();
+      const teacherSession = await loginTeacherApi(DEMO_CURRENT_TEACHER_ID, DEMO_TEACHER_PASSWORD);
+      setCurrentTeacherId(teacherSession.teacherId);
+      setAppMode("teacher");
+      setStudentSession(null);
+      setStudentEntry(null);
+      const classroomIds = getClassroomsForTeacher(DEMO_CATALOG, teacherSession.teacherId).map((classroom) => classroom.id);
+      const loadedItems = await loadTeacherAgendaItems(classroomIds);
+      setItems(loadedItems);
+      if (wasPreview) {
+        setActiveSection("agenda");
+        setAgendaView("class");
+      }
+    })();
   }
 
   function openAgenda(classroomId: string) {
@@ -298,7 +380,7 @@ export default function Home() {
 
     const subjectName = String(form.get("subject") || publishableSubjects[0]?.name || "Moteur");
     const subject = classroomSubjects.find((entry) => entry.name === subjectName) ?? publishableSubjects[0];
-    if (!subject || !teacherTeachesSubject(DEMO_CATALOG, DEMO_CURRENT_TEACHER_ID, selectedClassroomId, subject.id)) {
+    if (!subject || !teacherTeachesSubject(DEMO_CATALOG, currentTeacherId, selectedClassroomId, subject.id)) {
       return;
     }
 
@@ -306,54 +388,61 @@ export default function Home() {
     const hour = Number(form.get("hour") || 8);
     const detail = String(form.get("detail") || "").trim() || "Aucune précision";
 
-    if (editingItem) {
-      const result = updatePublication(items, editingItem.id, DEMO_CURRENT_TEACHER_ID, {
-        title,
-        detail,
-        day,
-        hour,
-        subjectId: subject.id,
-      });
-      if (!result.ok) {
-        showNotice(result.reason);
-        return;
-      }
-      setItems(result.items);
-      closeModal();
-      showNotice(`${TYPE_LABELS[editingItem.type]} modifié.`);
-      return;
-    }
+    void (async () => {
+      try {
+        if (editingItem) {
+          const updated = await updateAgendaItemApi(editingItem.id, {
+            title,
+            detail,
+            day,
+            hour,
+            subjectId: subject.id,
+          });
+          setItems((previous) => previous.map((item) => (item.id === updated.id ? updated : item)));
+          closeModal();
+          showNotice(`${TYPE_LABELS[editingItem.type]} modifié.`);
+          return;
+        }
 
-    setItems(createPublication(items, {
-      id: Date.now(),
-      classroomId: selectedClassroomId,
-      subjectId: subject.id,
-      authorTeacherId: DEMO_CURRENT_TEACHER_ID,
-      day,
-      hour,
-      weekOffset,
-      type: modalType,
-      title,
-      detail,
-    }));
-    setWeekOffset(0);
-    setAgendaView(DEFAULT_TEACHER_AGENDA_VIEW);
-    closeModal();
-    setActiveSection("agenda");
-    showNotice(`${TYPE_LABELS[modalType]} ajouté à ${selectedClassroom.name}.`);
+        const created = await createAgendaItemApi({
+          classroomId: selectedClassroomId,
+          subjectId: subject.id,
+          day,
+          hour,
+          weekOffset,
+          type: modalType,
+          title,
+          detail,
+        });
+        setItems((previous) => [...previous, created]);
+        setWeekOffset(0);
+        setAgendaView(DEFAULT_TEACHER_AGENDA_VIEW);
+        closeModal();
+        setActiveSection("agenda");
+        showNotice(`${TYPE_LABELS[modalType]} ajouté à ${selectedClassroom.name}.`);
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : "Publication impossible.");
+      }
+    })();
   }
 
   function removeItem(item: PrototypeAgendaItem) {
-    const result = deletePublication(items, item.id, DEMO_CURRENT_TEACHER_ID);
-    if (!result.ok) {
-      showNotice(result.reason);
+    if (!canModifyPublication(item, currentTeacherId)) {
+      showNotice("Seul l'auteur peut supprimer cet élément.");
       return;
     }
-    setItems(result.items);
-    showNotice(`${TYPE_LABELS[item.type]} supprimé.`);
+    void (async () => {
+      try {
+        await deleteAgendaItemApi(item.id);
+        setItems((previous) => previous.filter((entry) => entry.id !== item.id));
+        showNotice(`${TYPE_LABELS[item.type]} supprimé.`);
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : "Suppression impossible.");
+      }
+    })();
   }
 
-  const myItemCount = classroomItems.filter((item) => item.authorTeacherId === DEMO_CURRENT_TEACHER_ID).length;
+  const myItemCount = classroomItems.filter((item) => item.authorTeacherId === currentTeacherId).length;
   const showAgendaTools = !isStudentView && activeSection === "agenda";
 
   if (isStudentView && studentSession) {
@@ -454,7 +543,7 @@ export default function Home() {
             </section>
           </section>
 
-          <p className="prototype-label">CONSULTATION ÉLÈVE · CAMPUS AGENDA 0.9</p>
+          <p className="prototype-label">CONSULTATION ÉLÈVE · CAMPUS AGENDA 0.10</p>
         </main>
 
         {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
@@ -486,7 +575,7 @@ export default function Home() {
 
         {(activeSection === "agenda" || activeSection === "classes") && (
           <div className="classroom-list" aria-label="Classes rattachées">
-            {TEACHER_CLASSROOMS.map((classroom) => (
+            {teacherClassrooms.map((classroom) => (
               <button
                 key={classroom.id}
                 className={classroom.id === selectedClassroomId ? "classroom-chip active" : "classroom-chip"}
@@ -536,7 +625,7 @@ export default function Home() {
               </div>
             )}
             <button className="round-action" aria-label="Notifications">♧<i /></button>
-            <span className="profile-disc">{CURRENT_TEACHER?.initials ?? "FC"}</span>
+            <span className="profile-disc">{currentTeacher?.initials ?? "FC"}</span>
           </div>
         </header>
 
@@ -544,7 +633,7 @@ export default function Home() {
           <section className="teacher-workspace" aria-label="Tableau de bord enseignant">
             <div className="workspace-intro">
               <p className="eyebrow">ESPACE ENSEIGNANT</p>
-              <h2>Bonjour, {CURRENT_TEACHER?.displayName ?? "Professeur démo"}</h2>
+              <h2>Bonjour, {currentTeacher?.displayName ?? "Professeur démo"}</h2>
               <p>Consultez vos classes, puis ouvrez l’agenda en vue <strong>Mes éléments</strong> par défaut.</p>
             </div>
             <div className="workspace-grid">
@@ -704,7 +793,7 @@ export default function Home() {
                     </button>
                     {classPickerOpen && (
                       <div className="class-picker-menu" role="listbox" aria-label="Choisir une classe">
-                        {TEACHER_CLASSROOMS.map((classroom) => (
+                        {teacherClassrooms.map((classroom) => (
                           <button
                             key={classroom.id}
                             role="option"
@@ -745,9 +834,9 @@ export default function Home() {
                           <div className="time-slot" key={`${date.toISOString()}-${hour}`}>
                             {slotItems.map((item) => {
                               const subjectName = getSubjectById(DEMO_CATALOG, item.subjectId)?.name ?? "Branche";
-                              const isMine = item.authorTeacherId === DEMO_CURRENT_TEACHER_ID;
-                              const authorLabel = teacherLabel(item.authorTeacherId);
-                              const editable = canModifyPublication(item, DEMO_CURRENT_TEACHER_ID);
+                              const isMine = item.authorTeacherId === currentTeacherId;
+                              const authorLabel = teacherLabel(item.authorTeacherId, currentTeacherId);
+                              const editable = canModifyPublication(item, currentTeacherId);
                               return (
                                 <article className={`schedule-event ${item.type.toLowerCase()}${editable ? " editable" : ""}`} key={item.id}>
                                   {editable && (
@@ -776,7 +865,7 @@ export default function Home() {
           </>
         )}
 
-        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 0.9</p>
+        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 0.10</p>
       </main>
 
       {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}

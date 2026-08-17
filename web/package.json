@@ -1,6 +1,6 @@
 {
   "name": "campus-agenda-web",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -9,7 +9,7 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
-    "test": "node --experimental-strip-types --test ../tests/classes.test.ts ../tests/teacher.test.ts ../tests/publications.test.ts ../tests/shared-agenda.test.ts ../tests/student.test.ts && pnpm run build && node --test tests/rendered-html.test.mjs",
+    "test": "node --experimental-strip-types --test ../tests/classes.test.ts ../tests/teacher.test.ts ../tests/publications.test.ts ../tests/shared-agenda.test.ts ../tests/student.test.ts ../tests/auth.test.ts ../tests/persistence.test.ts ../tests/api-auth.test.ts && pnpm run build && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },
   "dependencies": {
@@ -40,5 +40,10 @@
     "wrangler": "4.92.0"
   },
   "type": "module",
+  "imports": {
+    "@campus/features/*": "../src/features/*",
+    "@campus/lib/*": "../src/lib/*",
+    "@campus/types/*": "../src/types/*"
+  },
   "packageManager": "pnpm@11.16.0"
 }

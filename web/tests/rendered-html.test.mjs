@@ -44,6 +44,9 @@ test("keeps the validated publication menu and social preview", async () => {
   assert.match(page, /TEST: "Contrôle"/);
   assert.match(page, /INFORMATION: "Information"/);
   assert.match(page, /enterStudentWithCode/);
+  assert.match(page, /fetchApiSession/);
+  assert.match(page, /createAgendaItemApi/);
+  assert.match(page, /loginStudentApi/);
   assert.match(page, /anonymizeAuthorForStudent/);
   assert.match(page, /student-app/);
   assert.match(page, /workload-panel/);

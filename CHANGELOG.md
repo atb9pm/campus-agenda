@@ -2,6 +2,17 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [0.10.0] - 2026-08-17
+
+### Ajouté
+
+- **Persistance et authentification** : sessions signées (cookie `campus_session`) et store mémoire côté serveur.
+- Routes API : connexion enseignant / élève, session, CRUD agenda avec contrôle des droits auteur.
+- Schéma SQL initial (`migrations/0001_initial.sql`) prêt pour D1 / SQLite.
+- Prototype web branché sur l'API (chargement, création, modification, suppression).
+- Mot de passe de démonstration documenté : `campus-demo`.
+- Tests automatisés auth, persistance et routes API.
+
 ## [0.9.0] - 2026-08-17
 
 ### Ajouté
