@@ -422,7 +422,7 @@ export default function Home() {
     setSubjectFilter(ALL_SUBJECTS_FILTER);
     setTeacherFilter(ALL_FILTER);
     setDayFilter(ALL_FILTER);
-    setWeekOffset(0);
+    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date()).number);
   }
 
   function openSharedAgenda(classroomId: string) {
@@ -433,7 +433,7 @@ export default function Home() {
     setSubjectFilter(ALL_SUBJECTS_FILTER);
     setTeacherFilter(ALL_FILTER);
     setDayFilter(ALL_FILTER);
-    setWeekOffset(0);
+    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date()).number);
   }
 
   function navigate(section: TeacherNavSection) {
@@ -1006,7 +1006,7 @@ export default function Home() {
 
                 <div className="schedule-grid">
                   <div className="corner-cell" />
-                  {days.map((date, index) => <div className={`day-head ${isSameCourseDay(date) ? "today" : ""}`} key={date.toISOString()}><span>{dayName(date)}</span><strong>{date.getDate()}</strong></div>)}
+                  {days.map((date, index) => <div className={`day-head ${isTodayCourseColumn(date) ? "today" : ""}`} key={date.toISOString()}><span>{dayName(date)}</span><strong>{date.getDate()}</strong></div>)}
                   {HOURS.map((hour) => (
                     <div className="schedule-row" key={hour}>
                       <time>{String(hour).padStart(2, "0")}:00</time>
