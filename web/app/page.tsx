@@ -29,13 +29,22 @@ import {
   type TeacherNavSection,
 } from "@campus/features/teacher";
 import {
-  anonymizeAuthorForStudent,
-  buildStudentAgendaSummary,
+  filterItemsForCourseDay,
   findStudentAccessForClassroom,
   getStudentAgendaItems,
   getStudentClassroom,
+  groupItemsBySubject,
   resolveStudentAccess,
 } from "@campus/features/student";
+import {
+  courseDayKey,
+  formatCourseDayHeading,
+  formatCourseDayMenuLabel,
+  formatSchoolWeekLabel,
+  listPreviousCourseDays,
+  resolveDisplayCourseDay,
+  type CourseDaySlot,
+} from "@campus/features/calendar";
 import type { StudentAccess } from "@campus/types/student-access";
 import type { AgendaItemType } from "@campus/types/agenda";
 import {
@@ -139,6 +148,8 @@ export default function Home() {
   const [teacherAuthenticated, setTeacherAuthenticated] = useState(false);
   const [loginPending, setLoginPending] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const [studentCourseDayKey, setStudentCourseDayKey] = useState<string | null>(null);
+  const [studentHistoryOpen, setStudentHistoryOpen] = useState(false);
 
   async function applyTeacherSession(session: ApiTeacherSession) {
     setCurrentTeacherId(session.teacherId);
@@ -238,24 +249,42 @@ export default function Home() {
   );
   const showSharedInsights = !isStudentView && (agendaView === "class");
 
-  const studentVisibleItems = useMemo(() => {
-    if (!studentSession) return [];
-    return applySharedAgendaFilters(
-      getStudentAgendaItems(items, studentSession.classroomId),
-      DEMO_CATALOG,
-      {
-        subjectName: subjectFilter === ALL_SUBJECTS_FILTER ? ALL_FILTER : subjectFilter,
-        type: typeFilter,
-        teacherId: ALL_FILTER,
-        day: dayFilter,
-        weekOffset,
-      },
-    );
-  }, [studentSession, items, subjectFilter, typeFilter, dayFilter, weekOffset]);
+  const studentAutoCourseDay = useMemo(
+    () => resolveDisplayCourseDay(new Date()),
+    [],
+  );
 
-  const studentSummary = useMemo(
-    () => buildStudentAgendaSummary(studentVisibleItems),
-    [studentVisibleItems],
+  const studentCourseDayCatalog = useMemo(() => {
+    const all = [studentAutoCourseDay, ...listPreviousCourseDays(studentAutoCourseDay.date, 20)];
+    const unique = new Map<string, CourseDaySlot>();
+    for (const slot of all) {
+      unique.set(courseDayKey(slot), slot);
+    }
+    return unique;
+  }, [studentAutoCourseDay]);
+
+  const studentDisplayCourseDay = useMemo(() => {
+    if (studentCourseDayKey && studentCourseDayCatalog.has(studentCourseDayKey)) {
+      return studentCourseDayCatalog.get(studentCourseDayKey)!;
+    }
+    return studentAutoCourseDay;
+  }, [studentAutoCourseDay, studentCourseDayCatalog, studentCourseDayKey]);
+
+  const studentPreviousCourseDays = useMemo(
+    () => listPreviousCourseDays(studentDisplayCourseDay.date, 12),
+    [studentDisplayCourseDay],
+  );
+
+  const studentCourseDayGroups = useMemo(() => {
+    if (!studentSession) return [];
+    const classroomItems = getStudentAgendaItems(items, studentSession.classroomId);
+    const dayItems = filterItemsForCourseDay(classroomItems, studentDisplayCourseDay);
+    return groupItemsBySubject(dayItems, getSubjectsForClassroom(DEMO_CATALOG, studentSession.classroomId));
+  }, [studentSession, items, studentDisplayCourseDay]);
+
+  const studentFollowingCourseDay = useMemo(
+    () => courseDayKey(studentDisplayCourseDay) === courseDayKey(studentAutoCourseDay),
+    [studentDisplayCourseDay, studentAutoCourseDay],
   );
 
   const teacherVisibleItems = useMemo(
@@ -269,7 +298,7 @@ export default function Home() {
     [agendaBaseItems, subjectFilter, typeFilter, teacherFilter, dayFilter, weekOffset],
   );
 
-  const visibleItems = isStudentView ? studentVisibleItems : teacherVisibleItems;
+  const visibleItems = isStudentView ? [] : teacherVisibleItems;
 
   const workload = useMemo(
     () => (showSharedInsights ? buildClassWorkloadSummary(items, DEMO_CATALOG, activeClassroomId, weekOffset) : null),
@@ -293,6 +322,8 @@ export default function Home() {
     setStudentSession(access);
     setStudentEntry("teacher-preview");
     setAppMode("student");
+    setStudentCourseDayKey(null);
+    setStudentHistoryOpen(false);
     resetAgendaFilters();
   }
 
@@ -309,6 +340,8 @@ export default function Home() {
         setSelectedClassroomId(session.classroomId);
         setStudentEntry("code");
         setAppMode("student");
+        setStudentCourseDayKey(null);
+        setStudentHistoryOpen(false);
         setStudentCodeModalOpen(false);
         resetAgendaFilters();
         const loadedItems = await fetchAgendaItems(session.classroomId);
@@ -576,103 +609,92 @@ export default function Home() {
 
   if (isStudentView && studentSession) {
     return (
-      <div className="mechanical-app student-app">
-        <aside className="technical-sidebar student-sidebar">
-          <div className="brand-lockup">
-            <BrandEmblem />
-            <span><strong>CAMPUS</strong><small>AGENDA</small></span>
-          </div>
-          <div className="student-access-note">
-            <span>ESPACE ÉLÈVE</span>
-            <strong>{studentSession.label}</strong>
-            <small>Consultation anonyme · démonstration</small>
-          </div>
-          <div className="technical-note">
-            <span>CLASSE</span>
-            <strong>{selectedClassroom.name}</strong>
-            <small>{selectedClassroom.programLabel}</small>
-          </div>
-          <button className="signout" onClick={exitStudentMode}>
-            <span>↪</span> {studentEntry === "teacher-preview" ? "Quitter l’aperçu" : "Se déconnecter"}
-          </button>
-        </aside>
-
-        <main className="technical-main" id="main-content">
-          <header className="technical-header">
-            <div className="mobile-lockup"><BrandEmblem /><strong>CAMPUS AGENDA</strong></div>
-            <div className="class-identity">
-              <span className="eyebrow">{selectedClassroom.programLabel}</span>
-              <h1>Mon agenda</h1>
-              <p>Consultation anonyme — agenda complet de la classe {selectedClassroom.name}, toutes branches confondues.</p>
+      <div className="mechanical-app student-app student-course-day-app">
+        <main className="student-course-day-main" id="main-content">
+          <header className="student-course-day-header">
+            <div className="student-course-day-brand">
+              <BrandEmblem />
+              <span><strong>CAMPUS</strong><small>AGENDA</small></span>
+            </div>
+            <div className="student-course-day-actions">
+              <div className="student-history-anchor">
+                <button
+                  type="button"
+                  className="student-history-toggle"
+                  aria-expanded={studentHistoryOpen}
+                  aria-haspopup="menu"
+                  onClick={() => setStudentHistoryOpen((open) => !open)}
+                >
+                  Cours précédents
+                </button>
+                {studentHistoryOpen && (
+                  <menu className="student-history-menu" aria-label="Cours précédents">
+                    {!studentFollowingCourseDay && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStudentCourseDayKey(null);
+                          setStudentHistoryOpen(false);
+                        }}
+                      >
+                        Revenir au prochain cours
+                      </button>
+                    )}
+                    {studentPreviousCourseDays.map((slot) => (
+                      <button
+                        key={courseDayKey(slot)}
+                        type="button"
+                        onClick={() => {
+                          setStudentCourseDayKey(courseDayKey(slot));
+                          setStudentHistoryOpen(false);
+                        }}
+                      >
+                        {formatCourseDayMenuLabel(slot)}
+                      </button>
+                    ))}
+                  </menu>
+                )}
+              </div>
+              <button className="student-signout" type="button" onClick={exitStudentMode}>
+                {studentEntry === "teacher-preview" ? "Quitter l’aperçu" : "Se déconnecter"}
+              </button>
             </div>
           </header>
 
-          <section className="student-summary" aria-label="Résumé de la semaine">
-            <div><span>Total</span><strong>{studentSummary.total}</strong></div>
-            <div><span>Devoirs</span><strong>{studentSummary.homework}</strong></div>
-            <div><span>Contrôles</span><strong>{studentSummary.test}</strong></div>
-            <div><span>Infos</span><strong>{studentSummary.information}</strong></div>
-            <div><span>Branches</span><strong>{studentSummary.branches}</strong></div>
-          </section>
+          <section className="student-course-day-card" aria-labelledby="student-course-day-title">
+            <p className="eyebrow">{selectedClassroom.name} · {studentSession.label}</p>
+            <p className="student-week-label">{formatSchoolWeekLabel(studentDisplayCourseDay)}</p>
+            <h1 id="student-course-day-title">{formatCourseDayHeading(studentDisplayCourseDay)}</h1>
+            {!studentFollowingCourseDay && (
+              <p className="student-course-day-note">Consultation d’un cours passé.</p>
+            )}
 
-          <section className="calendar-workbench">
-            <aside className="calendar-tools">
-              <section className="filter-panel">
-                <h2>FILTRES</h2>
-                <select value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)} aria-label="Filtrer par branche">
-                  {subjectFilterOptions.map((subject) => <option key={subject}>{subject}</option>)}
-                </select>
-                <select value={dayFilter} onChange={(event) => setDayFilter(event.target.value === ALL_FILTER ? ALL_FILTER : Number(event.target.value))} aria-label="Filtrer par jour">
-                  <option value={ALL_FILTER}>Toute la semaine</option>
-                  {days.map((date, index) => <option key={date.toISOString()} value={index}>{dayName(date)} {date.getDate()}</option>)}
-                </select>
-                <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "HOMEWORK"} onChange={() => setTypeFilter(typeFilter === "HOMEWORK" ? "ALL" : "HOMEWORK")} /> <span className="check blue" /> Devoirs</label>
-                <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "TEST"} onChange={() => setTypeFilter(typeFilter === "TEST" ? "ALL" : "TEST")} /> <span className="check navy" /> Contrôles</label>
-                <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "INFORMATION"} onChange={() => setTypeFilter(typeFilter === "INFORMATION" ? "ALL" : "INFORMATION")} /> <span className="check pale" /> Informations</label>
-              </section>
-              <div className="legend-note"><span>✓</span><p><strong>Lecture seule</strong>Aucune modification possible.</p></div>
-            </aside>
-
-            <section className="week-calendar">
-              <header className="week-toolbar">
-                <div><button onClick={() => setWeekOffset((current) => current - 1)}>‹</button><button onClick={() => setWeekOffset(0)}>Aujourd’hui</button><button onClick={() => setWeekOffset((current) => current + 1)}>›</button></div>
-                <h2>{shortDate(days[0])} — {shortDate(days[4])} 2026</h2>
-                <span className="student-class-label">{selectedClassroom.name}</span>
-              </header>
-
-              <div className="schedule-grid">
-                <div className="corner-cell" />
-                {days.map((date, index) => <div className={`day-head ${index === 1 && weekOffset === 0 ? "today" : ""}`} key={date.toISOString()}><span>{dayName(date)}</span><strong>{date.getDate()}</strong></div>)}
-                {HOURS.map((hour) => (
-                  <div className="schedule-row" key={hour}>
-                    <time>{String(hour).padStart(2, "0")}:00</time>
-                    {days.map((date, dayIndex) => {
-                      const slotItems = visibleItems.filter((item) => item.day === dayIndex && item.hour === hour);
-                      return (
-                        <div className="time-slot" key={`${date.toISOString()}-${hour}`}>
-                          {slotItems.map((item) => {
-                            const subjectName = getSubjectById(DEMO_CATALOG, item.subjectId)?.name ?? "Branche";
-                            return (
-                              <article className={`schedule-event ${item.type.toLowerCase()}`} key={item.id}>
-                                <small>{TYPE_LABELS[item.type]} · {subjectName}</small>
-                                <strong>{item.title}</strong>
-                                <span>{item.detail}</span>
-                                <em>{anonymizeAuthorForStudent(item.authorTeacherId)}</em>
-                              </article>
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
-                  </div>
+            {studentCourseDayGroups.length ? (
+              <div className="student-branch-list">
+                {studentCourseDayGroups.map((group) => (
+                  <section className="student-branch-block" key={group.subject.id} aria-label={group.subject.name}>
+                    <h2>{group.subject.name}</h2>
+                    <ul>
+                      {group.items.map((item) => (
+                        <li key={item.id} className={`student-branch-item ${item.type.toLowerCase()}`}>
+                          <span className="student-item-type">{TYPE_LABELS[item.type]}</span>
+                          <strong>{item.title}</strong>
+                          <p>{item.detail}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
                 ))}
               </div>
-
-              {!visibleItems.length && <div className="empty-week"><span>▱</span><strong>Semaine libre</strong><small>Aucun élément ne correspond aux filtres.</small></div>}
-            </section>
+            ) : (
+              <div className="student-course-day-empty">
+                <strong>Aucun élément publié</strong>
+                <small>Pas de devoir, contrôle ou information pour ce jour de cours.</small>
+              </div>
+            )}
           </section>
 
-          <p className="prototype-label">CONSULTATION ÉLÈVE · CAMPUS AGENDA 1.0</p>
+          <p className="prototype-label">CONSULTATION ÉLÈVE · CAMPUS AGENDA 1.1</p>
         </main>
 
         {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}

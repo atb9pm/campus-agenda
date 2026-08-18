@@ -261,6 +261,39 @@ button { color: inherit; }
 .student-entry-link { padding: 0; border: 0; color: var(--blue); background: transparent; font-size: 10px; font-weight: 800; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .teacher-login-shell .prototype-label { margin: 0; text-align: center; }
 
+.student-course-day-app { min-height: 100vh; background: var(--canvas); }
+.student-course-day-main { width: min(720px, 100%); margin: 0 auto; padding: 28px 20px 36px; }
+.student-course-day-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.student-course-day-brand { display: flex; align-items: center; gap: 12px; color: var(--navy); }
+.student-course-day-brand > span { display: grid; line-height: 1; }
+.student-course-day-brand strong { font-size: 14px; letter-spacing: .18em; }
+.student-course-day-brand small { margin-top: 4px; color: #7b879c; font-size: 8px; font-weight: 800; letter-spacing: .24em; }
+.student-course-day-actions { display: flex; align-items: center; gap: 10px; }
+.student-history-anchor { position: relative; }
+.student-history-toggle, .student-signout { padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: #fff; color: var(--navy); font-size: 10px; font-weight: 800; cursor: pointer; }
+.student-history-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; width: min(320px, 88vw); margin: 0; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: var(--shadow); list-style: none; }
+.student-history-menu button { width: 100%; padding: 10px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font-size: 11px; font-weight: 600; text-align: left; cursor: pointer; }
+.student-history-menu button:hover { background: var(--blue-soft); }
+.student-course-day-card { padding: 28px; border: 1px solid var(--line); border-radius: 16px; background: #fff; box-shadow: var(--shadow); }
+.student-course-day-card .eyebrow { margin: 0 0 10px; }
+.student-week-label { margin: 0 0 6px; color: var(--blue); font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.student-course-day-card h1 { margin: 0; color: var(--navy); font-size: 34px; letter-spacing: -.03em; }
+.student-course-day-note { margin: 10px 0 0; color: #7b879c; font-size: 11px; }
+.student-branch-list { display: grid; gap: 18px; margin-top: 28px; }
+.student-branch-block h2 { margin: 0 0 10px; color: var(--navy); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
+.student-branch-block ul { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.student-branch-item { padding: 14px 16px; border: 1px solid var(--line); border-left: 4px solid var(--line-strong); border-radius: 10px; background: #fbfcfe; }
+.student-branch-item.homework { border-left-color: var(--blue); }
+.student-branch-item.test { border-left-color: var(--navy); }
+.student-branch-item.information { border-left-color: #98a7bc; }
+.student-item-type { display: inline-block; margin-bottom: 6px; color: #64748b; font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.student-branch-item strong { display: block; color: var(--navy); font-size: 16px; }
+.student-branch-item p { margin: 6px 0 0; color: #52627f; font-size: 12px; line-height: 1.5; }
+.student-course-day-empty { margin-top: 28px; padding: 28px; border: 1px dashed var(--line-strong); border-radius: 12px; text-align: center; }
+.student-course-day-empty strong { display: block; color: var(--navy); font-size: 14px; }
+.student-course-day-empty small { display: block; margin-top: 6px; color: #7b879c; font-size: 11px; }
+.student-course-day-app .prototype-label { margin-top: 18px; text-align: center; }
+
 @media (max-width: 1030px) {
   .technical-sidebar { width: 190px; }.technical-main { width: calc(100% - 190px); margin-left: 190px; }
   .calendar-workbench { grid-template-columns: 190px minmax(0, 1fr); margin-right: 20px; margin-left: 20px; }.technical-header { padding-right: 20px; padding-left: 20px; }.class-tabs { padding-right: 20px; padding-left: 20px; }
