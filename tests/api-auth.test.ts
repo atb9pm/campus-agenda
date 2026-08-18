@@ -55,6 +55,7 @@ test("phase 0.7 — flux enseignant : création et droits auteur", async () => {
     day: 2,
     hour: 11,
     weekOffset: 0,
+    schoolWeekNumber: 12,
     type: "HOMEWORK",
     title: "API création",
     detail: "Serveur",

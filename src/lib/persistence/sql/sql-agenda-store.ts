@@ -5,6 +5,9 @@ import type { PrototypeAgendaItem } from "../../../features/agenda/demo-items.ts
 import { DEMO_PASSWORD_HASH } from "./seed.ts";
 import type { AgendaItemRow, SqlDatabase, StudentAccessRow } from "./types.ts";
 
+const AGENDA_ITEM_COLUMNS =
+  "id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail";
+
 function rowToItem(row: AgendaItemRow): PrototypeAgendaItem {
   return {
     id: row.id,
@@ -14,6 +17,7 @@ function rowToItem(row: AgendaItemRow): PrototypeAgendaItem {
     day: row.day,
     hour: row.hour,
     weekOffset: row.week_offset,
+    schoolWeekNumber: row.school_week_number ?? row.week_offset,
     type: row.type as PrototypeAgendaItem["type"],
     title: row.title,
     detail: row.detail,
@@ -30,7 +34,7 @@ export class SqlAgendaStore implements AgendaStore {
   async listAgendaItems(classroomId: string): Promise<PrototypeAgendaItem[]> {
     const { results } = await this.db
       .prepare(
-        "SELECT id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, type, title, detail FROM agenda_items WHERE classroom_id = ? ORDER BY id",
+        `SELECT ${AGENDA_ITEM_COLUMNS} FROM agenda_items WHERE classroom_id = ? ORDER BY id`,
       )
       .bind(classroomId)
       .all<AgendaItemRow>();
@@ -40,7 +44,7 @@ export class SqlAgendaStore implements AgendaStore {
   async findAgendaItem(itemId: number): Promise<PrototypeAgendaItem | undefined> {
     const row = await this.db
       .prepare(
-        "SELECT id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, type, title, detail FROM agenda_items WHERE id = ?",
+        `SELECT ${AGENDA_ITEM_COLUMNS} FROM agenda_items WHERE id = ?`,
       )
       .bind(itemId)
       .first<AgendaItemRow>();
@@ -58,6 +62,7 @@ export class SqlAgendaStore implements AgendaStore {
       day: input.day,
       hour: input.hour,
       weekOffset: input.weekOffset ?? 0,
+      schoolWeekNumber: input.schoolWeekNumber,
       type: input.type,
       title: input.title,
       detail: input.detail,
@@ -68,8 +73,8 @@ export class SqlAgendaStore implements AgendaStore {
     await this.db
       .prepare(
         `INSERT INTO agenda_items
-          (id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, type, title, detail)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         created.id,
@@ -79,6 +84,7 @@ export class SqlAgendaStore implements AgendaStore {
         created.day,
         created.hour,
         created.weekOffset,
+        created.schoolWeekNumber,
         created.type,
         created.title,
         created.detail,
@@ -91,7 +97,7 @@ export class SqlAgendaStore implements AgendaStore {
   async updateAgendaItem(
     itemId: number,
     actorTeacherId: string,
-    patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId">>,
+    patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber">>,
   ): Promise<AgendaMutationResult> {
     const items = await this.exportAllItems();
     const result = updatePublication(items, itemId, actorTeacherId, patch);
@@ -104,9 +110,9 @@ export class SqlAgendaStore implements AgendaStore {
 
     await this.db
       .prepare(
-        "UPDATE agenda_items SET title = ?, detail = ?, day = ?, hour = ?, subject_id = ?, updated_at = datetime('now') WHERE id = ?",
+        "UPDATE agenda_items SET title = ?, detail = ?, day = ?, hour = ?, subject_id = ?, school_week_number = ?, updated_at = datetime('now') WHERE id = ?",
       )
-      .bind(updated.title, updated.detail, updated.day, updated.hour, updated.subjectId, itemId)
+      .bind(updated.title, updated.detail, updated.day, updated.hour, updated.subjectId, updated.schoolWeekNumber, itemId)
       .run();
 
     return { ok: true, item: updated };
@@ -168,7 +174,7 @@ export class SqlAgendaStore implements AgendaStore {
   async exportAllItems(): Promise<PrototypeAgendaItem[]> {
     const { results } = await this.db
       .prepare(
-        "SELECT id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, type, title, detail FROM agenda_items ORDER BY id",
+        `SELECT ${AGENDA_ITEM_COLUMNS} FROM agenda_items ORDER BY id`,
       )
       .bind()
       .all<AgendaItemRow>();
@@ -181,8 +187,8 @@ export class SqlAgendaStore implements AgendaStore {
       await this.db
         .prepare(
           `INSERT INTO agenda_items
-            (id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, type, title, detail)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           item.id,
@@ -192,6 +198,7 @@ export class SqlAgendaStore implements AgendaStore {
           item.day,
           item.hour,
           item.weekOffset,
+          item.schoolWeekNumber,
           item.type,
           item.title,
           item.detail,

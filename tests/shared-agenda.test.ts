@@ -79,7 +79,7 @@ test("phase 0.5 — filtre par semaine affichée", () => {
 });
 
 test("phase 0.5 — synthèse de charge de travail hebdomadaire", () => {
-  const summary = buildClassWorkloadSummary(DEMO_PROTOTYPE_ITEMS, DEMO_CATALOG, "classe-demo-tma-2a", 0);
+  const summary = buildClassWorkloadSummary(DEMO_PROTOTYPE_ITEMS, DEMO_CATALOG, "classe-demo-tma-2a", 12);
 
   assert.equal(summary.total, 5);
   assert.equal(summary.homework, 2);

@@ -76,6 +76,7 @@ export async function createAgendaItemApi(input: {
   day: number;
   hour: number;
   weekOffset: number;
+  schoolWeekNumber: number;
   type: AgendaItemType;
   title: string;
   detail: string;
@@ -95,7 +96,7 @@ export async function createAgendaItemApi(input: {
 
 export async function updateAgendaItemApi(
   itemId: number,
-  patch: Partial<{ title: string; detail: string; day: number; hour: number; subjectId: string }>,
+  patch: Partial<{ title: string; detail: string; day: number; hour: number; subjectId: string; schoolWeekNumber: number }>,
 ): Promise<PrototypeAgendaItem> {
   const response = await fetch(`/api/agenda/${itemId}`, {
     method: "PATCH",

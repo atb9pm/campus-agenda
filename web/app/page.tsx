@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ALL_FILTER, applySharedAgendaFilters, buildClassWorkloadSummary, canModifyPublication, DEMO_PROTOTYPE_ITEMS, WORKLOAD_LEVEL_LABELS, type PrototypeAgendaItem } from "@campus/features/agenda";
+import { ALL_FILTER, applySharedAgendaFilters, buildClassWorkloadSummary, canModifyPublication, DEMO_PROTOTYPE_ITEMS, filterItemsForSchoolWeek, WORKLOAD_LEVEL_LABELS, type PrototypeAgendaItem } from "@campus/features/agenda";
 import {
   DEMO_CATALOG,
   DEMO_CURRENT_TEACHER_ID,
@@ -37,10 +37,15 @@ import {
   resolveStudentAccess,
 } from "@campus/features/student";
 import {
+  buildSchoolWeeks,
   courseDayKey,
+  findSchoolWeekByNumber,
+  findSchoolWeekForDate,
   formatCourseDayHeading,
   formatCourseDayMenuLabel,
   formatSchoolWeekLabel,
+  formatSchoolWeekOptionLabel,
+  getCourseDayOptionsForSchoolWeek,
   listPreviousCourseDays,
   resolveDisplayCourseDay,
   type CourseDaySlot,
@@ -78,12 +83,6 @@ async function loadTeacherAgendaItems(classroomIds: string[]): Promise<Prototype
     for (const item of batch) merged.set(item.id, item);
   }
   return [...merged.values()].sort((left, right) => left.id - right.id);
-}
-
-function mondayForOffset(offset: number) {
-  const date = new Date(2026, 7, 10, 12);
-  date.setDate(date.getDate() + offset * 7);
-  return date;
 }
 
 function shortDate(date: Date) {
@@ -138,7 +137,10 @@ export default function Home() {
   const [subjectFilter, setSubjectFilter] = useState(ALL_SUBJECTS_FILTER);
   const [teacherFilter, setTeacherFilter] = useState<string | typeof ALL_FILTER>(ALL_FILTER);
   const [dayFilter, setDayFilter] = useState<number | typeof ALL_FILTER>(ALL_FILTER);
-  const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedSchoolWeekNumber, setSelectedSchoolWeekNumber] = useState(
+    () => findSchoolWeekForDate(new Date()).number,
+  );
+  const [publishSchoolWeekNumber, setPublishSchoolWeekNumber] = useState(selectedSchoolWeekNumber);
   const [items, setItems] = useState<PrototypeAgendaItem[]>(DEMO_PROTOTYPE_ITEMS);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [modalType, setModalType] = useState<AgendaItemType | null>(null);
@@ -227,14 +229,25 @@ export default function Home() {
     [classroomSubjects],
   );
 
+  const schoolWeeks = useMemo(() => buildSchoolWeeks(), []);
+  const selectedSchoolWeek = useMemo(
+    () => findSchoolWeekByNumber(selectedSchoolWeekNumber, schoolWeeks),
+    [selectedSchoolWeekNumber, schoolWeeks],
+  );
+
   const days = useMemo(() => {
-    const monday = mondayForOffset(weekOffset);
+    const monday = new Date(selectedSchoolWeek.monday);
     return Array.from({ length: 5 }, (_, index) => {
       const date = new Date(monday);
       date.setDate(monday.getDate() + index);
       return date;
     });
-  }, [weekOffset]);
+  }, [selectedSchoolWeek]);
+
+  const publishCourseDayOptions = useMemo(
+    () => getCourseDayOptionsForSchoolWeek(publishSchoolWeekNumber, schoolWeeks),
+    [publishSchoolWeekNumber, schoolWeeks],
+  );
 
   const agendaBaseItems = filterItemsForAgendaView(
     items,
@@ -293,16 +306,17 @@ export default function Home() {
       type: typeFilter,
       teacherId: teacherFilter,
       day: dayFilter,
-      weekOffset,
+      weekOffset: 0,
+      schoolWeekNumber: selectedSchoolWeekNumber,
     }),
-    [agendaBaseItems, subjectFilter, typeFilter, teacherFilter, dayFilter, weekOffset],
+    [agendaBaseItems, subjectFilter, typeFilter, teacherFilter, dayFilter, selectedSchoolWeekNumber],
   );
 
   const visibleItems = isStudentView ? [] : teacherVisibleItems;
 
   const workload = useMemo(
-    () => (showSharedInsights ? buildClassWorkloadSummary(items, DEMO_CATALOG, activeClassroomId, weekOffset) : null),
-    [showSharedInsights, items, activeClassroomId, weekOffset],
+    () => (showSharedInsights ? buildClassWorkloadSummary(items, DEMO_CATALOG, activeClassroomId, selectedSchoolWeekNumber) : null),
+    [showSharedInsights, items, activeClassroomId, selectedSchoolWeekNumber],
   );
 
   function resetAgendaFilters() {
@@ -310,7 +324,15 @@ export default function Home() {
     setTeacherFilter(ALL_FILTER);
     setDayFilter(ALL_FILTER);
     setTypeFilter("ALL");
-    setWeekOffset(0);
+    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date()).number);
+  }
+
+  function isTodayCourseColumn(date: Date) {
+    const slot = resolveDisplayCourseDay(new Date());
+    return selectedSchoolWeekNumber === slot.schoolWeekNumber
+      && date.getFullYear() === slot.date.getFullYear()
+      && date.getMonth() === slot.date.getMonth()
+      && date.getDate() === slot.date.getDate();
   }
 
   function enterTeacherPreview() {
@@ -400,7 +422,7 @@ export default function Home() {
     setSubjectFilter(ALL_SUBJECTS_FILTER);
     setTeacherFilter(ALL_FILTER);
     setDayFilter(ALL_FILTER);
-    setWeekOffset(0);
+    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date()).number);
   }
 
   function openSharedAgenda(classroomId: string) {
@@ -411,7 +433,7 @@ export default function Home() {
     setSubjectFilter(ALL_SUBJECTS_FILTER);
     setTeacherFilter(ALL_FILTER);
     setDayFilter(ALL_FILTER);
-    setWeekOffset(0);
+    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date()).number);
   }
 
   function navigate(section: TeacherNavSection) {
@@ -429,12 +451,14 @@ export default function Home() {
   function openCreateModal(type: AgendaItemType) {
     setEditingItem(null);
     setModalType(type);
+    setPublishSchoolWeekNumber(selectedSchoolWeekNumber);
     setAddMenuOpen(false);
   }
 
   function openEditModal(item: PrototypeAgendaItem) {
     setEditingItem(item);
     setModalType(item.type);
+    setPublishSchoolWeekNumber(item.schoolWeekNumber);
   }
 
   function closeModal() {
@@ -478,9 +502,10 @@ export default function Home() {
       return;
     }
 
-    const day = Number(form.get("day") || 0);
-    const hour = Number(form.get("hour") || 8);
+    const schoolWeekNumber = Number(form.get("schoolWeekNumber") || selectedSchoolWeekNumber);
+    const day = Number(form.get("courseDay") || publishCourseDayOptions[0]?.dayIndex || 0);
     const detail = String(form.get("detail") || "").trim() || "Aucune précision";
+    const hour = 8;
 
     void (async () => {
       try {
@@ -491,6 +516,7 @@ export default function Home() {
             day,
             hour,
             subjectId: subject.id,
+            schoolWeekNumber,
           });
           setItems((previous) => previous.map((item) => (item.id === updated.id ? updated : item)));
           closeModal();
@@ -503,13 +529,14 @@ export default function Home() {
           subjectId: subject.id,
           day,
           hour,
-          weekOffset,
+          weekOffset: 0,
+          schoolWeekNumber,
           type: modalType,
           title,
           detail,
         });
         setItems((previous) => [...previous, created]);
-        setWeekOffset(0);
+        setSelectedSchoolWeekNumber(schoolWeekNumber);
         setAgendaView(DEFAULT_TEACHER_AGENDA_VIEW);
         closeModal();
         setActiveSection("agenda");
@@ -876,7 +903,7 @@ export default function Home() {
               <aside className="calendar-tools">
                 <div className="view-selector" aria-label="Choisir la vue">
                   <button className={agendaView === "mine" ? "active" : ""} onClick={() => { setAgendaView("mine"); setTeacherFilter(ALL_FILTER); setDayFilter(ALL_FILTER); }}>Mes éléments <span>{myItemCount}</span></button>
-                  <button className={agendaView === "class" ? "active" : ""} onClick={() => { setAgendaView("class"); setTeacherFilter(ALL_FILTER); setDayFilter(ALL_FILTER); }}>Toute la classe <span>{classroomItems.filter((item) => (item.weekOffset ?? 0) === weekOffset).length}</span></button>
+                  <button className={agendaView === "class" ? "active" : ""} onClick={() => { setAgendaView("class"); setTeacherFilter(ALL_FILTER); setDayFilter(ALL_FILTER); }}>Toute la classe <span>{filterItemsForSchoolWeek(classroomItems, selectedSchoolWeekNumber).length}</span></button>
                 </div>
 
                 {showSharedInsights && workload && (
@@ -936,8 +963,12 @@ export default function Home() {
 
               <section className="week-calendar">
                 <header className="week-toolbar">
-                  <div><button onClick={() => setWeekOffset((current) => current - 1)}>‹</button><button onClick={() => setWeekOffset(0)}>Aujourd’hui</button><button onClick={() => setWeekOffset((current) => current + 1)}>›</button></div>
-                  <h2>{shortDate(days[0])} — {shortDate(days[4])} 2026</h2>
+                  <div>
+                    <button type="button" onClick={() => setSelectedSchoolWeekNumber((current) => Math.max(1, current - 1))}>‹</button>
+                    <button type="button" onClick={() => setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date()).number)}>Aujourd’hui</button>
+                    <button type="button" onClick={() => setSelectedSchoolWeekNumber((current) => Math.min(38, current + 1))}>›</button>
+                  </div>
+                  <h2>{formatSchoolWeekOptionLabel(selectedSchoolWeek)} · {shortDate(days[0])} — {shortDate(days[4])}</h2>
                   <div className="class-picker">
                     <button className="class-picker-trigger" onClick={() => setClassPickerOpen((current) => !current)} aria-expanded={classPickerOpen}>
                       {selectedClassroom.name} &nbsp;⌄
@@ -975,7 +1006,7 @@ export default function Home() {
 
                 <div className="schedule-grid">
                   <div className="corner-cell" />
-                  {days.map((date, index) => <div className={`day-head ${index === 1 && weekOffset === 0 ? "today" : ""}`} key={date.toISOString()}><span>{dayName(date)}</span><strong>{date.getDate()}</strong></div>)}
+                  {days.map((date, index) => <div className={`day-head ${isTodayCourseColumn(date) ? "today" : ""}`} key={date.toISOString()}><span>{dayName(date)}</span><strong>{date.getDate()}</strong></div>)}
                   {HOURS.map((hour) => (
                     <div className="schedule-row" key={hour}>
                       <time>{String(hour).padStart(2, "0")}:00</time>
@@ -1038,13 +1069,37 @@ export default function Home() {
         <div className="technical-modal-backdrop">
           <section className="technical-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
             <header><div><span className="eyebrow">{editingItem ? "MODIFIER" : "NOUVEL ÉLÉMENT"}</span><h2 id="modal-title">{editingItem ? `Modifier le ${TYPE_LABELS[modalType].toLowerCase()}` : `Ajouter un ${TYPE_LABELS[modalType].toLowerCase()}`}</h2></div><button onClick={closeModal}>×</button></header>
-            <form key={editingItem?.id ?? `create-${modalType}`} onSubmit={submitItem}>
+            <form key={editingItem?.id ?? `create-${modalType}-${publishSchoolWeekNumber}`} onSubmit={submitItem}>
               <label>Titre<input name="title" placeholder="Titre visible par la classe" defaultValue={editingItem?.title ?? ""} required /></label>
               <div className="modal-row">
-                <label>Branche<select name="subject" defaultValue={getSubjectById(DEMO_CATALOG, editingItem?.subjectId ?? publishableSubjects[0]?.id ?? "")?.name ?? publishableSubjects[0]?.name ?? "Moteur"}>{publishableSubjects.map((subject) => <option key={subject.id}>{subject.name}</option>)}</select></label>
-                <label>Jour<select name="day" defaultValue={String(editingItem?.day ?? 1)}>{days.map((date, index) => <option key={date.toISOString()} value={index}>{dayName(date)} {date.getDate()}</option>)}</select></label>
-                <label>Heure<select name="hour" defaultValue={String(editingItem?.hour ?? 8)}>{HOURS.map((hour) => <option key={hour} value={hour}>{String(hour).padStart(2, "0")}:00</option>)}</select></label>
+                <label>
+                  Semaine scolaire
+                  <select
+                    name="schoolWeekNumber"
+                    value={publishSchoolWeekNumber}
+                    onChange={(event) => setPublishSchoolWeekNumber(Number(event.target.value))}
+                  >
+                    {schoolWeeks.map((week) => (
+                      <option key={week.number} value={week.number}>{formatSchoolWeekOptionLabel(week)}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Branche
+                  <select name="subject" defaultValue={getSubjectById(DEMO_CATALOG, editingItem?.subjectId ?? publishableSubjects[0]?.id ?? "")?.name ?? publishableSubjects[0]?.name ?? "Moteur"}>
+                    {publishableSubjects.map((subject) => <option key={subject.id}>{subject.name}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Jour de cours
+                  <select name="courseDay" defaultValue={String(editingItem?.day ?? publishCourseDayOptions[0]?.dayIndex ?? 0)}>
+                    {publishCourseDayOptions.map((option) => (
+                      <option key={option.dayIndex} value={option.dayIndex}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
               </div>
+              <p className="modal-hint">Semaine A : lundi · Semaine B : lundi et jeudi.</p>
               <label>Consigne<textarea name="detail" rows={3} placeholder="Ajoutez une indication utile…" defaultValue={editingItem?.detail ?? ""} /></label>
               <footer><button type="button" onClick={closeModal}>Annuler</button><button type="submit">{editingItem ? "Enregistrer" : "Publier dans l’agenda"}</button></footer>
             </form>

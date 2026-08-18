@@ -17,6 +17,7 @@ test("phase 0.7 — le store persiste les modifications en mémoire", async () =
     day: 1,
     hour: 9,
     weekOffset: 0,
+    schoolWeekNumber: 12,
     type: "INFORMATION",
     title: "Consigne persistée",
     detail: "Test",

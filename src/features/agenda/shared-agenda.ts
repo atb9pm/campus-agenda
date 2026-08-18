@@ -11,6 +11,7 @@ export interface SharedAgendaFilters {
   teacherId: string | typeof ALL_FILTER;
   day: number | typeof ALL_FILTER;
   weekOffset: number;
+  schoolWeekNumber?: number;
 }
 
 export function createDefaultSharedAgendaFilters(weekOffset = 0): SharedAgendaFilters {
@@ -30,12 +31,22 @@ export function filterItemsForDisplayedWeek(
   return items.filter((item) => (item.weekOffset ?? 0) === weekOffset);
 }
 
+export function filterItemsForSchoolWeek(
+  items: PrototypeAgendaItem[],
+  schoolWeekNumber: number,
+): PrototypeAgendaItem[] {
+  return items.filter((item) => item.schoolWeekNumber === schoolWeekNumber);
+}
+
 export function applySharedAgendaFilters(
   items: PrototypeAgendaItem[],
   catalog: ClassroomCatalog,
   filters: SharedAgendaFilters,
 ): PrototypeAgendaItem[] {
-  return filterItemsForDisplayedWeek(items, filters.weekOffset).filter((item) => {
+  const weekFiltered = filters.schoolWeekNumber !== undefined
+    ? filterItemsForSchoolWeek(items, filters.schoolWeekNumber)
+    : filterItemsForDisplayedWeek(items, filters.weekOffset);
+  return weekFiltered.filter((item) => {
     if (filters.type !== ALL_FILTER && item.type !== filters.type) return false;
     if (filters.teacherId !== ALL_FILTER && item.authorTeacherId !== filters.teacherId) return false;
     if (filters.day !== ALL_FILTER && item.day !== filters.day) return false;
@@ -90,11 +101,11 @@ export function buildClassWorkloadSummary(
   items: PrototypeAgendaItem[],
   catalog: ClassroomCatalog,
   classroomId: string,
-  weekOffset: number,
+  schoolWeekNumber: number,
 ): ClassWorkloadSummary {
-  const classroomItems = filterItemsForDisplayedWeek(
+  const classroomItems = filterItemsForSchoolWeek(
     items.filter((item) => item.classroomId === classroomId),
-    weekOffset,
+    schoolWeekNumber,
   );
 
   const byDay: WorkloadDayBreakdown[] = Array.from({ length: 5 }, (_, day) => ({

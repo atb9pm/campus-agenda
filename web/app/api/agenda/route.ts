@@ -30,6 +30,7 @@ export async function POST(request: Request) {
     day?: number;
     hour?: number;
     weekOffset?: number;
+    schoolWeekNumber?: number;
     type?: string;
     title?: string;
     detail?: string;
@@ -47,13 +48,24 @@ export async function POST(request: Request) {
     return forbiddenResponse("Vous ne pouvez pas publier dans cette branche.");
   }
 
+  const schoolWeekNumber = Number(body.schoolWeekNumber ?? 0);
+  if (!Number.isFinite(schoolWeekNumber) || schoolWeekNumber < 1 || schoolWeekNumber > 38) {
+    return jsonResponse({ ok: false, reason: "Semaine scolaire invalide." }, { status: 400 });
+  }
+
+  const day = Number(body.day ?? 0);
+  if (day !== 0 && day !== 3) {
+    return jsonResponse({ ok: false, reason: "Jour de cours invalide." }, { status: 400 });
+  }
+
   const item = await auth.store!.createAgendaItem({
     classroomId,
     subjectId,
     authorTeacherId: auth.session!.teacherId,
-    day: Number(body.day ?? 0),
+    day,
     hour: Number(body.hour ?? 8),
     weekOffset: Number(body.weekOffset ?? 0),
+    schoolWeekNumber,
     type: type as typeof AGENDA_ITEM_TYPES[number],
     title: String(body.title ?? ""),
     detail: String(body.detail ?? ""),

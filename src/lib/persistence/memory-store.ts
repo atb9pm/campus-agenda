@@ -36,6 +36,7 @@ export class MemoryAgendaStore implements AgendaStore {
       day: input.day,
       hour: input.hour,
       weekOffset: input.weekOffset ?? 0,
+      schoolWeekNumber: input.schoolWeekNumber,
       type: input.type,
       title: input.title,
       detail: input.detail,
@@ -46,7 +47,7 @@ export class MemoryAgendaStore implements AgendaStore {
   async updateAgendaItem(
     itemId: number,
     actorTeacherId: string,
-    patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId">>,
+    patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber">>,
   ): Promise<AgendaMutationResult> {
     const result = updatePublication(this.items, itemId, actorTeacherId, patch);
     if (!result.ok) {

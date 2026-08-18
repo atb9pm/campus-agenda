@@ -55,6 +55,7 @@ test("phase 0.7 — store mémoire contrôle l'accès enseignant", async () => {
     day: 2,
     hour: 15,
     weekOffset: 0,
+    schoolWeekNumber: 12,
     type: "HOMEWORK",
     title: "Persistance démo",
     detail: "Via store",

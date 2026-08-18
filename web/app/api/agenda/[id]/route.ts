@@ -24,6 +24,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     day?: number;
     hour?: number;
     subjectId?: string;
+    schoolWeekNumber?: number;
   };
 
   const existing = await auth.store!.findAgendaItem(itemId);

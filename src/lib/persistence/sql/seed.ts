@@ -59,8 +59,8 @@ export async function seedDemoDatabase(db: SqlDatabase): Promise<void> {
     await db
       .prepare(
         `INSERT OR IGNORE INTO agenda_items
-          (id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, type, title, detail)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         item.id,
@@ -70,6 +70,7 @@ export async function seedDemoDatabase(db: SqlDatabase): Promise<void> {
         item.day,
         item.hour,
         item.weekOffset,
+        item.schoolWeekNumber,
         item.type,
         item.title,
         item.detail,

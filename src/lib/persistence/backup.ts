@@ -26,6 +26,7 @@ function isValidAgendaItem(value: unknown): value is PrototypeAgendaItem {
     && Number.isFinite(item.day)
     && Number.isFinite(item.hour)
     && Number.isFinite(item.weekOffset)
+    && Number.isFinite(item.schoolWeekNumber)
     && AGENDA_ITEM_TYPES.includes(item.type)
     && typeof item.title === "string"
     && typeof item.detail === "string"

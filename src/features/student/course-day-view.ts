@@ -11,7 +11,9 @@ export function filterItemsForCourseDay(
   items: PrototypeAgendaItem[],
   slot: CourseDaySlot,
 ): PrototypeAgendaItem[] {
-  return items.filter((item) => item.day === slot.dayIndex);
+  return items.filter(
+    (item) => item.day === slot.dayIndex && item.schoolWeekNumber === slot.schoolWeekNumber,
+  );
 }
 
 export function groupItemsBySubject(

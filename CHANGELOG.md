@@ -2,6 +2,15 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [1.2.0] - 2026-08-18
+
+### Ajouté
+
+- **Publication enseignant par semaine scolaire A/B** : choix de la semaine (1–38) et du jour de cours (lundi ou jeudi semaine B).
+- Navigation enseignant par **semaine scolaire** avec libellé `Semaine XX-A/B` et plage de dates.
+- Filtrage de l'agenda partagé et de la synthèse de charge par **numéro de semaine scolaire**.
+- Migration SQL `0002_school_week` : colonne `school_week_number` sur les publications.
+
 ## [1.1.0] - 2026-08-18
 
 ### Ajouté
