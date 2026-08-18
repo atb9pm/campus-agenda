@@ -8,13 +8,14 @@ export interface PublicationInput {
   day: number;
   hour: number;
   weekOffset?: number;
+  schoolWeekNumber: number;
   type: AgendaItemType;
   title: string;
   detail: string;
 }
 
 export type PublicationPatch = Partial<
-  Pick<PublicationInput, "title" | "detail" | "day" | "hour" | "subjectId">
+  Pick<PublicationInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber">
 >;
 
 export function isAllowedPublicationType(type: string): type is AgendaItemType {
@@ -53,6 +54,7 @@ export function createPublication(
     day: input.day,
     hour: input.hour,
     weekOffset: input.weekOffset ?? 0,
+    schoolWeekNumber: input.schoolWeekNumber,
     type: input.type,
     title,
     detail: input.detail.trim() || "Aucune précision",
@@ -87,6 +89,7 @@ export function updatePublication(
     day: patch.day ?? existing.day,
     hour: patch.hour ?? existing.hour,
     subjectId: patch.subjectId ?? existing.subjectId,
+    schoolWeekNumber: patch.schoolWeekNumber ?? existing.schoolWeekNumber,
   };
 
   return {

@@ -19,6 +19,7 @@ export interface AgendaItemRow {
   day: number;
   hour: number;
   week_offset: number;
+  school_week_number: number | null;
   type: string;
   title: string;
   detail: string;

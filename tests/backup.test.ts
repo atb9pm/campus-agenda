@@ -21,6 +21,7 @@ test("phase 0.8 — export puis restauration d'une sauvegarde", async () => {
     day: 0,
     hour: 8,
     weekOffset: 0,
+    schoolWeekNumber: 12,
     type: "INFORMATION",
     title: "Temporaire",
     detail: "Sera effacé",

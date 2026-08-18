@@ -7,15 +7,26 @@ import type { SqlDatabase } from "./types.ts";
 const migrationsRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../migrations");
 
 export async function applyMigrations(db: SqlDatabase): Promise<void> {
-  const migrationPath = path.join(migrationsRoot, "0001_initial.sql");
-  const sql = await readFile(migrationPath, "utf8");
-  const statements = sql
-    .split(";")
-    .map((statement) => statement.trim())
-    .filter(Boolean);
+  const migrationFiles = ["0001_initial.sql", "0002_school_week.sql"];
+  for (const fileName of migrationFiles) {
+    const migrationPath = path.join(migrationsRoot, fileName);
+    const sql = await readFile(migrationPath, "utf8");
+    const statements = sql
+      .split(";")
+      .map((statement) => statement.trim())
+      .filter(Boolean);
 
-  for (const statement of statements) {
-    await db.exec(`${statement};`);
+    for (const statement of statements) {
+      try {
+        await db.exec(`${statement};`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (fileName === "0002_school_week.sql" && message.includes("duplicate column name")) {
+          continue;
+        }
+        throw error;
+      }
+    }
   }
 }
 

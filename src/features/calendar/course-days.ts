@@ -130,6 +130,41 @@ export function formatCourseDayHeading(slot: CourseDaySlot): string {
   return `${capitalizedWeekday} ${datePart.replace(".", "")}`;
 }
 
+export function findSchoolWeekByNumber(number: number, weeks = buildSchoolWeeks()): SchoolWeek {
+  return weeks.find((week) => week.number === number) ?? weeks[0];
+}
+
+export function formatSchoolWeekOptionLabel(week: SchoolWeek): string {
+  return `Semaine ${String(week.number).padStart(2, "0")}-${week.kind}`;
+}
+
+export interface CourseDayOption {
+  dayIndex: number;
+  label: string;
+}
+
+export function getCourseDayOptionsForSchoolWeek(
+  schoolWeekNumber: number,
+  weeks = buildSchoolWeeks(),
+  schedule: TmaCourseSchedule = DEFAULT_TMA_SCHEDULE,
+): CourseDayOption[] {
+  const week = findSchoolWeekByNumber(schoolWeekNumber, weeks);
+  return getCourseDaysForWeek(week, schedule).map((slot) => ({
+    dayIndex: slot.dayIndex,
+    label: formatCourseDayHeading(slot),
+  }));
+}
+
+export function isValidCourseDayForSchoolWeek(
+  schoolWeekNumber: number,
+  dayIndex: number,
+  weeks = buildSchoolWeeks(),
+  schedule: TmaCourseSchedule = DEFAULT_TMA_SCHEDULE,
+): boolean {
+  return getCourseDayOptionsForSchoolWeek(schoolWeekNumber, weeks, schedule)
+    .some((option) => option.dayIndex === dayIndex);
+}
+
 export function formatCourseDayMenuLabel(slot: CourseDaySlot): string {
   return `${formatSchoolWeekLabel(slot)} — ${formatCourseDayHeading(slot)}`;
 }

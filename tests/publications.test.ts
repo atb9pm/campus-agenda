@@ -40,6 +40,7 @@ test("phase 0.4 — création d'une publication valide", () => {
     authorTeacherId: DEMO_CURRENT_TEACHER_ID,
     day: 2,
     hour: 10,
+    schoolWeekNumber: 12,
     type: "HOMEWORK",
     title: "  Révision culasse  ",
     detail: "",

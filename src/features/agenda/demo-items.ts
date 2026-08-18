@@ -9,6 +9,7 @@ export interface PrototypeAgendaItem {
   day: number;
   hour: number;
   weekOffset: number;
+  schoolWeekNumber: number;
   type: AgendaItemType;
   title: string;
   detail: string;
@@ -23,6 +24,7 @@ export const DEMO_PROTOTYPE_ITEMS: PrototypeAgendaItem[] = [
     day: 0,
     hour: 9,
     weekOffset: 0,
+    schoolWeekNumber: 12,
     type: "HOMEWORK",
     title: "Système de freinage",
     detail: "Exercices 12 à 18",
@@ -35,6 +37,7 @@ export const DEMO_PROTOTYPE_ITEMS: PrototypeAgendaItem[] = [
     day: 0,
     hour: 11,
     weekOffset: 0,
+    schoolWeekNumber: 12,
     type: "INFORMATION",
     title: "Tenue de travail",
     detail: "Lunettes de protection",
@@ -47,6 +50,7 @@ export const DEMO_PROTOTYPE_ITEMS: PrototypeAgendaItem[] = [
     day: 3,
     hour: 13,
     weekOffset: 0,
+    schoolWeekNumber: 12,
     type: "TEST",
     title: "Injection électronique",
     detail: "Capteurs et actionneurs",
@@ -59,6 +63,7 @@ export const DEMO_PROTOTYPE_ITEMS: PrototypeAgendaItem[] = [
     day: 3,
     hour: 10,
     weekOffset: 0,
+    schoolWeekNumber: 12,
     type: "HOMEWORK",
     title: "Distribution",
     detail: "Compléter le schéma",
@@ -71,6 +76,7 @@ export const DEMO_PROTOTYPE_ITEMS: PrototypeAgendaItem[] = [
     day: 0,
     hour: 14,
     weekOffset: 0,
+    schoolWeekNumber: 12,
     type: "INFORMATION",
     title: "Dossier technique",
     detail: "Document disponible",
@@ -83,6 +89,7 @@ export const DEMO_PROTOTYPE_ITEMS: PrototypeAgendaItem[] = [
     day: 0,
     hour: 10,
     weekOffset: 0,
+    schoolWeekNumber: 12,
     type: "HOMEWORK",
     title: "Soupapes et culasse",
     detail: "Schéma à annoter",
@@ -95,6 +102,7 @@ export const DEMO_PROTOTYPE_ITEMS: PrototypeAgendaItem[] = [
     day: 3,
     hour: 9,
     weekOffset: 0,
+    schoolWeekNumber: 12,
     type: "TEST",
     title: "Géométrie des trains",
     detail: "Parallélisme et carrossage",

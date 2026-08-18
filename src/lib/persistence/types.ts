@@ -34,6 +34,7 @@ export interface CreateAgendaInput {
   day: number;
   hour: number;
   weekOffset?: number;
+  schoolWeekNumber: number;
   type: AgendaItemType;
   title: string;
   detail: string;
@@ -46,7 +47,7 @@ export interface AgendaStore {
   updateAgendaItem(
     itemId: number,
     actorTeacherId: string,
-    patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId">>,
+    patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber">>,
   ): Promise<AgendaMutationResult>;
   deleteAgendaItem(itemId: number, actorTeacherId: string): Promise<AgendaMutationResult>;
   teacherCanAccessClassroom(teacherId: string, classroomId: string): Promise<boolean>;

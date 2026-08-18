@@ -16,6 +16,7 @@ export {
   buildClassWorkloadSummary,
   createDefaultSharedAgendaFilters,
   filterItemsForDisplayedWeek,
+  filterItemsForSchoolWeek,
   type ClassWorkloadSummary,
   type SharedAgendaFilters,
   type WorkloadLevel,

@@ -25,6 +25,7 @@ test("phase 1.0 — store SQLite persiste l'agenda de démonstration", async () 
     day: 2,
     hour: 16,
     weekOffset: 0,
+    schoolWeekNumber: 12,
     type: "TEST",
     title: "Contrôle SQLite",
     detail: "Persisté en base",
