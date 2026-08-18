@@ -8,7 +8,7 @@ import { SqlAgendaStore, classroomExistsInDatabase } from "./sql/sql-agenda-stor
 import { getMemoryAgendaStore } from "./memory-store.ts";
 import { classroomExists as memoryClassroomExists } from "./memory-store.ts";
 
-export const APP_VERSION = "1.0.2";
+export const APP_VERSION = "1.1.0";
 
 interface ResolvedStore {
   store: AgendaStore;

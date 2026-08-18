@@ -2,6 +2,16 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [1.1.0] - 2026-08-18
+
+### Ajouté
+
+- **Calendrier scolaire 38 semaines A/B** (année 2026-2027) aligné sur le plan des semaines.
+- **Vue élève épurée** : une page par jour de cours, sans grille horaire.
+- Affichage automatique du **prochain jour de cours** (lundi ou jeudi semaine B).
+- Menu **Cours précédents** pour consulter l'historique.
+- Contenu groupé **par branche** (Devoir, Contrôle, Information).
+
 ## [1.0.2] - 2026-08-17
 
 ### Sécurité

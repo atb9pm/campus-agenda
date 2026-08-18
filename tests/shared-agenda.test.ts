@@ -48,10 +48,10 @@ test("phase 0.5 — filtres par branche, type, enseignant et jour", () => {
 
   const byDay = applySharedAgendaFilters(classroomItems, DEMO_CATALOG, {
     ...createDefaultSharedAgendaFilters(0),
-    day: 2,
+    day: 3,
   });
-  assert.equal(byDay.length, 1);
-  assert.equal(byDay[0]?.title, "Injection électronique");
+  assert.equal(byDay.length, 2);
+  assert.ok(byDay.some((item) => item.title === "Injection électronique"));
 });
 
 test("phase 0.5 — filtre par semaine affichée", () => {

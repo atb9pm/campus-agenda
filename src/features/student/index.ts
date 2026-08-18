@@ -6,6 +6,11 @@ export {
   resolveStudentAccess,
 } from "./access.ts";
 export {
+  filterItemsForCourseDay,
+  groupItemsBySubject,
+  type SubjectAgendaGroup,
+} from "./course-day-view.ts";
+export {
   STUDENT_AUTHOR_LABEL,
   anonymizeAuthorForStudent,
   buildStudentAgendaSummary,
