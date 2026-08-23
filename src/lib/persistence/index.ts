@@ -26,11 +26,14 @@ export {
   APP_VERSION,
   checkClassroomExists,
   getAgendaStore,
+  getSchoolYearStore,
   getStoreKind,
   resetStoreFactory,
   resolveAgendaStore,
 } from "./store-factory.ts";
-export { SqlAgendaStore } from "./sql/sql-agenda-store.ts";
+export type { SchoolYearStore } from "./school-year-types.ts";
+export { MemorySchoolYearStore, resetMemorySchoolYearStore } from "./memory-school-year-store.ts";
+export { SqlSchoolYearStore } from "./sql/sql-school-year-store.ts";
 export { createNodeSqliteDatabase } from "./sql/adapters.ts";
 export { applyMigrations } from "./sql/migrate.ts";
 export { seedDemoDatabase } from "./sql/seed.ts";

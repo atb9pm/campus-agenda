@@ -1,4 +1,4 @@
-import { SCHOOL_WEEK_MONDAYS } from "./school-week-dates.ts";
+import { getActiveSchoolWeeks } from "./active-calendar.ts";
 import type { CourseDaySlot, SchoolWeek, TmaCourseSchedule } from "./types.ts";
 import { DEFAULT_TMA_SCHEDULE } from "./types.ts";
 
@@ -16,11 +16,7 @@ function isSameDay(left: Date, right: Date): boolean {
 }
 
 export function buildSchoolWeeks(): SchoolWeek[] {
-  return SCHOOL_WEEK_MONDAYS.map((entry) => ({
-    number: entry.number,
-    kind: entry.kind,
-    monday: parseLocalDate(entry.monday),
-  }));
+  return getActiveSchoolWeeks();
 }
 
 export function findSchoolWeekForDate(date: Date, weeks = buildSchoolWeeks()): SchoolWeek {

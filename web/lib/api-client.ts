@@ -17,6 +17,18 @@ export interface ApiStudentSession {
 
 export type ApiSession = ApiTeacherSession | ApiStudentSession | null;
 
+export interface SchoolCalendarWeek {
+  number: number;
+  kind: "A" | "B";
+  monday: string;
+}
+
+export interface SchoolCalendarPayload {
+  label: string;
+  status: string;
+  weeks: SchoolCalendarWeek[];
+}
+
 async function parseJson<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
@@ -120,4 +132,13 @@ export async function deleteAgendaItemApi(itemId: number): Promise<void> {
   if (!response.ok || !payload.ok) {
     throw new Error(payload.reason ?? "Suppression impossible.");
   }
+}
+
+export async function fetchSchoolCalendar(): Promise<SchoolCalendarPayload> {
+  const response = await fetch("/api/school-year/calendar", { credentials: "include" });
+  const payload = await parseJson<{ ok: boolean; calendar?: SchoolCalendarPayload; reason?: string }>(response);
+  if (!response.ok || !payload.ok || !payload.calendar) {
+    throw new Error(payload.reason ?? "Impossible de charger le calendrier scolaire.");
+  }
+  return payload.calendar;
 }
