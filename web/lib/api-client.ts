@@ -360,3 +360,87 @@ export async function duplicateFromPreviousYear(input: {
   }
   return { created: payload.created, createdCount: payload.createdCount ?? payload.created.length };
 }
+
+export interface TimetableImportSummary {
+  id: string;
+  schoolYearId: string | null;
+  sourceFilename: string;
+  schoolYearLabel: string;
+  status: "draft" | "active" | "archived";
+  importedAt: string;
+  slotCount: number;
+}
+
+export interface TimetablePreviewPayload {
+  schoolYearLabel: string;
+  sourceVersion: string | null;
+  slotCount: number;
+  classCount: number;
+  excludedSpsCount: number;
+  warnings: string[];
+  classes: Array<{ classCode: string; slotCount: number; branches: string[] }>;
+  sampleSlots: Array<{
+    classCode: string;
+    dayOfWeek: number;
+    period: number;
+    branchLabel: string;
+    teacherCode: string | null;
+    weekKind: string;
+  }>;
+}
+
+export async function fetchTimetableImports(): Promise<TimetableImportSummary[]> {
+  const response = await fetch("/api/admin/timetable", { credentials: "include" });
+  const payload = await parseJson<{ ok: boolean; imports?: TimetableImportSummary[]; reason?: string }>(response);
+  if (!response.ok || !payload.ok || !payload.imports) {
+    throw new Error(payload.reason ?? "Impossible de charger les imports horaire.");
+  }
+  return payload.imports;
+}
+
+export async function parseTimetablePdf(file: File): Promise<{ receivable: boolean; preview: TimetablePreviewPayload }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch("/api/admin/timetable/parse", {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  const payload = await parseJson<{ ok: boolean; receivable?: boolean; preview?: TimetablePreviewPayload; reason?: string }>(response);
+  if (!response.ok || !payload.ok || !payload.preview) {
+    throw new Error(payload.reason ?? "Analyse du PDF horaire impossible.");
+  }
+  return { receivable: payload.receivable ?? false, preview: payload.preview };
+}
+
+export async function importTimetablePdf(file: File): Promise<{
+  slotCount: number;
+  classCount: number;
+  excludedSpsCount: number;
+  warnings: string[];
+}> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch("/api/admin/timetable/import", {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    slotCount?: number;
+    classCount?: number;
+    excludedSpsCount?: number;
+    warnings?: string[];
+    reason?: string;
+  }>(response);
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.reason ?? "Import horaire impossible.");
+  }
+  return {
+    slotCount: payload.slotCount ?? 0,
+    classCount: payload.classCount ?? 0,
+    excludedSpsCount: payload.excludedSpsCount ?? 0,
+    warnings: payload.warnings ?? [],
+  };
+}

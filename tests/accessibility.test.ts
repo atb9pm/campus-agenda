@@ -21,7 +21,10 @@ test("phase 0.8 — structure d'accessibilité de base", async () => {
   assert.match(page, /role="dialog"/);
   assert.match(page, /closeModalOnEscape/);
   assert.match(css, /\.skip-to-content/);
+  assert.match(page, /SchoolYearAdminPanel/);
   assert.match(page, /PedagogicalLibraryPanel/);
+  assert.match(page, /TimetableImportPanel/);
+  assert.match(css, /\.timetable-import-panel/);
   assert.match(page, /Enregistrer dans la bibliothèque/);
   assert.match(css, /\.library-panel/);
   assert.match(schoolYearPanel, /aria-labelledby="school-year-admin-title"/);

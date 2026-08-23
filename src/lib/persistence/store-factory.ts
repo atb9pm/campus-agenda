@@ -9,6 +9,9 @@ import { SqlTemplateStore } from "./sql/sql-template-store.ts";
 import { SqlSchoolYearStore, hydrateActiveSchoolCalendar } from "./sql/sql-school-year-store.ts";
 import { getMemoryAgendaStore } from "./memory-store.ts";
 import { getMemoryTemplateStore } from "./memory-template-store.ts";
+import { getMemoryTimetableStore } from "./memory-timetable-store.ts";
+import { SqlTimetableStore } from "./sql/sql-timetable-store.ts";
+import type { TimetableStore } from "./timetable-types.ts";
 import { classroomExists as memoryClassroomExists } from "./memory-store.ts";
 import { MemorySchoolYearStore, hydrateMemorySchoolCalendar } from "./memory-school-year-store.ts";
 import type { SchoolYearStore } from "./school-year-types.ts";
@@ -19,6 +22,7 @@ export const APP_VERSION = "1.2.0";
 interface ResolvedStore {
   store: AgendaStore;
   templateStore: TemplateStore;
+  timetableStore: TimetableStore;
   schoolYearStore: SchoolYearStore;
   kind: StoreKind;
   classroomExists: (classroomId: string) => Promise<boolean>;
@@ -54,6 +58,7 @@ async function createStore(): Promise<ResolvedStore> {
     return {
       store: getMemoryAgendaStore(),
       templateStore: getMemoryTemplateStore(),
+      timetableStore: getMemoryTimetableStore(),
       schoolYearStore,
       kind: "memory",
       classroomExists: memoryClassroomExists,
@@ -67,6 +72,7 @@ async function createStore(): Promise<ResolvedStore> {
     return {
       store,
       templateStore: new SqlTemplateStore(sqlite, store),
+      timetableStore: new SqlTimetableStore(sqlite),
       schoolYearStore,
       kind: "sqlite",
       classroomExists: (classroomId) => classroomExistsInDatabase(sqlite, classroomId),
@@ -82,6 +88,7 @@ async function createStore(): Promise<ResolvedStore> {
       return {
         store,
         templateStore: new SqlTemplateStore(db, store),
+        timetableStore: new SqlTimetableStore(db),
         schoolYearStore,
         kind: "d1",
         classroomExists: (classroomId) => classroomExistsInDatabase(db, classroomId),
@@ -95,6 +102,7 @@ async function createStore(): Promise<ResolvedStore> {
   return {
     store: getMemoryAgendaStore(),
     templateStore: getMemoryTemplateStore(),
+    timetableStore: getMemoryTimetableStore(),
     schoolYearStore,
     kind: "memory",
     classroomExists: memoryClassroomExists,
@@ -123,6 +131,10 @@ export async function getAgendaStore(): Promise<AgendaStore> {
 
 export async function getTemplateStore(): Promise<TemplateStore> {
   return (await resolveAgendaStore()).templateStore;
+}
+
+export async function getTimetableStore(): Promise<TimetableStore> {
+  return (await resolveAgendaStore()).timetableStore;
 }
 
 export async function getSchoolYearStore(): Promise<SchoolYearStore> {
