@@ -3,10 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("phase 0.8 — structure d'accessibilité de base", async () => {
-  const [page, layout, css] = await Promise.all([
+  const [page, layout, css, schoolYearPanel] = await Promise.all([
     readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/components/school-year-admin-panel.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.match(layout, /lang="fr"/);
@@ -20,5 +21,9 @@ test("phase 0.8 — structure d'accessibilité de base", async () => {
   assert.match(page, /role="dialog"/);
   assert.match(page, /closeModalOnEscape/);
   assert.match(css, /\.skip-to-content/);
+  assert.match(page, /SchoolYearAdminPanel/);
+  assert.match(schoolYearPanel, /aria-labelledby="school-year-admin-title"/);
+  assert.match(schoolYearPanel, /id="school-year-admin-title"/);
+  assert.match(css, /\.school-year-admin/);
   assert.match(css, /\.teacher-login/);
 });

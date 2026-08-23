@@ -38,6 +38,7 @@ import {
 } from "@campus/features/student";
 import {
   buildSchoolWeeks,
+  buildSchoolWeeksFromEntries,
   courseDayKey,
   findSchoolWeekByNumber,
   findSchoolWeekForDate,
@@ -49,6 +50,7 @@ import {
   listPreviousCourseDays,
   resolveDisplayCourseDay,
   type CourseDaySlot,
+  type SchoolWeek,
 } from "@campus/features/calendar";
 import type { StudentAccess } from "@campus/types/student-access";
 import type { AgendaItemType } from "@campus/types/agenda";
@@ -57,12 +59,15 @@ import {
   deleteAgendaItemApi,
   fetchAgendaItems,
   fetchApiSession,
+  fetchSchoolCalendar,
   loginStudentApi,
   loginTeacherApi,
   logoutApiSession,
   updateAgendaItemApi,
   type ApiTeacherSession,
+  type SchoolCalendarWeek,
 } from "../lib/api-client.ts";
+import { SchoolYearAdminPanel } from "./components/school-year-admin-panel.tsx";
 
 type AppMode = "teacher" | "student";
 type StudentEntry = "code" | "teacher-preview";
@@ -106,6 +111,7 @@ function sectionTitle(activeSection: TeacherNavSection, agendaView: TeacherAgend
   if (isStudentView) return "Mon agenda";
   if (activeSection === "dashboard") return "Tableau de bord";
   if (activeSection === "classes") return "Mes classes";
+  if (activeSection === "settings") return "Paramètres";
   return getAgendaSectionTitle(agendaView, classroomName);
 }
 
@@ -113,6 +119,7 @@ function sectionDescription(activeSection: TeacherNavSection, agendaView: Teache
   if (isStudentView) return `Consultation anonyme — agenda complet de la classe ${classroomName}, toutes branches confondues.`;
   if (activeSection === "dashboard") return "Vue d’ensemble de vos classes et de vos publications.";
   if (activeSection === "classes") return "Classes auxquelles vous êtes rattaché et branches enseignées.";
+  if (activeSection === "settings") return "Année scolaire, plan des semaines A/B et activation.";
   return getAgendaSectionDescription(agendaView, classroomName);
 }
 
@@ -152,6 +159,7 @@ export default function Home() {
   const [loginError, setLoginError] = useState("");
   const [studentCourseDayKey, setStudentCourseDayKey] = useState<string | null>(null);
   const [studentHistoryOpen, setStudentHistoryOpen] = useState(false);
+  const [schoolWeeks, setSchoolWeeks] = useState<SchoolWeek[]>(() => buildSchoolWeeks());
 
   async function applyTeacherSession(session: ApiTeacherSession) {
     setCurrentTeacherId(session.teacherId);
@@ -173,6 +181,11 @@ export default function Home() {
 
     async function bootstrapSession() {
       try {
+        const calendar = await fetchSchoolCalendar().catch(() => null);
+        if (!cancelled && calendar?.weeks.length) {
+          setSchoolWeeks(buildSchoolWeeksFromEntries(calendar.weeks));
+        }
+
         const session = await fetchApiSession();
         if (cancelled) return;
 
@@ -229,10 +242,10 @@ export default function Home() {
     [classroomSubjects],
   );
 
-  const schoolWeeks = useMemo(() => buildSchoolWeeks(), []);
+  const schoolWeeksMemo = schoolWeeks;
   const selectedSchoolWeek = useMemo(
-    () => findSchoolWeekByNumber(selectedSchoolWeekNumber, schoolWeeks),
-    [selectedSchoolWeekNumber, schoolWeeks],
+    () => findSchoolWeekByNumber(selectedSchoolWeekNumber, schoolWeeksMemo),
+    [selectedSchoolWeekNumber, schoolWeeksMemo],
   );
 
   const days = useMemo(() => {
@@ -245,8 +258,8 @@ export default function Home() {
   }, [selectedSchoolWeek]);
 
   const publishCourseDayOptions = useMemo(
-    () => getCourseDayOptionsForSchoolWeek(publishSchoolWeekNumber, schoolWeeks),
-    [publishSchoolWeekNumber, schoolWeeks],
+    () => getCourseDayOptionsForSchoolWeek(publishSchoolWeekNumber, schoolWeeksMemo),
+    [publishSchoolWeekNumber, schoolWeeksMemo],
   );
 
   const agendaBaseItems = filterItemsForAgendaView(
@@ -263,18 +276,18 @@ export default function Home() {
   const showSharedInsights = !isStudentView && (agendaView === "class");
 
   const studentAutoCourseDay = useMemo(
-    () => resolveDisplayCourseDay(new Date()),
-    [],
+    () => resolveDisplayCourseDay(new Date(), schoolWeeksMemo),
+    [schoolWeeksMemo],
   );
 
   const studentCourseDayCatalog = useMemo(() => {
-    const all = [studentAutoCourseDay, ...listPreviousCourseDays(studentAutoCourseDay.date, 20)];
+    const all = [studentAutoCourseDay, ...listPreviousCourseDays(studentAutoCourseDay.date, 20, schoolWeeksMemo)];
     const unique = new Map<string, CourseDaySlot>();
     for (const slot of all) {
       unique.set(courseDayKey(slot), slot);
     }
     return unique;
-  }, [studentAutoCourseDay]);
+  }, [studentAutoCourseDay, schoolWeeksMemo]);
 
   const studentDisplayCourseDay = useMemo(() => {
     if (studentCourseDayKey && studentCourseDayCatalog.has(studentCourseDayKey)) {
@@ -284,8 +297,8 @@ export default function Home() {
   }, [studentAutoCourseDay, studentCourseDayCatalog, studentCourseDayKey]);
 
   const studentPreviousCourseDays = useMemo(
-    () => listPreviousCourseDays(studentDisplayCourseDay.date, 12),
-    [studentDisplayCourseDay],
+    () => listPreviousCourseDays(studentDisplayCourseDay.date, 12, schoolWeeksMemo),
+    [studentDisplayCourseDay, schoolWeeksMemo],
   );
 
   const studentCourseDayGroups = useMemo(() => {
@@ -324,11 +337,11 @@ export default function Home() {
     setTeacherFilter(ALL_FILTER);
     setDayFilter(ALL_FILTER);
     setTypeFilter("ALL");
-    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date()).number);
+    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date(), schoolWeeksMemo).number);
   }
 
   function isTodayCourseColumn(date: Date) {
-    const slot = resolveDisplayCourseDay(new Date());
+    const slot = resolveDisplayCourseDay(new Date(), schoolWeeksMemo);
     return selectedSchoolWeekNumber === slot.schoolWeekNumber
       && date.getFullYear() === slot.date.getFullYear()
       && date.getMonth() === slot.date.getMonth()
@@ -422,7 +435,7 @@ export default function Home() {
     setSubjectFilter(ALL_SUBJECTS_FILTER);
     setTeacherFilter(ALL_FILTER);
     setDayFilter(ALL_FILTER);
-    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date()).number);
+    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date(), schoolWeeksMemo).number);
   }
 
   function openSharedAgenda(classroomId: string) {
@@ -433,7 +446,7 @@ export default function Home() {
     setSubjectFilter(ALL_SUBJECTS_FILTER);
     setTeacherFilter(ALL_FILTER);
     setDayFilter(ALL_FILTER);
-    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date()).number);
+    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date(), schoolWeeksMemo).number);
   }
 
   function navigate(section: TeacherNavSection) {
@@ -446,6 +459,10 @@ export default function Home() {
   function showNotice(message: string) {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 3200);
+  }
+
+  function applySchoolCalendarWeeks(weeks: SchoolCalendarWeek[]) {
+    setSchoolWeeks(buildSchoolWeeksFromEntries(weeks));
   }
 
   function openCreateModal(type: AgendaItemType) {
@@ -748,7 +765,6 @@ export default function Home() {
             </button>
           ))}
           <button disabled><span>□</span> Documents</button>
-          <button disabled><span>⚙</span> Paramètres</button>
         </nav>
 
         {(activeSection === "agenda" || activeSection === "classes") && (
@@ -872,6 +888,10 @@ export default function Home() {
           </section>
         )}
 
+        {activeSection === "settings" && (
+          <SchoolYearAdminPanel onCalendarUpdated={applySchoolCalendarWeeks} onNotice={showNotice} />
+        )}
+
         {activeSection === "agenda" && (
           <>
             <section className="brand-showcase" aria-label="Identité visuelle Campus Agenda">
@@ -965,7 +985,7 @@ export default function Home() {
                 <header className="week-toolbar">
                   <div>
                     <button type="button" onClick={() => setSelectedSchoolWeekNumber((current) => Math.max(1, current - 1))}>‹</button>
-                    <button type="button" onClick={() => setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date()).number)}>Aujourd’hui</button>
+                    <button type="button" onClick={() => setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date(), schoolWeeksMemo).number)}>Aujourd’hui</button>
                     <button type="button" onClick={() => setSelectedSchoolWeekNumber((current) => Math.min(38, current + 1))}>›</button>
                   </div>
                   <h2>{formatSchoolWeekOptionLabel(selectedSchoolWeek)} · {shortDate(days[0])} — {shortDate(days[4])}</h2>
@@ -1079,7 +1099,7 @@ export default function Home() {
                     value={publishSchoolWeekNumber}
                     onChange={(event) => setPublishSchoolWeekNumber(Number(event.target.value))}
                   >
-                    {schoolWeeks.map((week) => (
+                    {schoolWeeksMemo.map((week) => (
                       <option key={week.number} value={week.number}>{formatSchoolWeekOptionLabel(week)}</option>
                     ))}
                   </select>

@@ -2,6 +2,16 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [Unreleased] — Phase 2.0 (fondations)
+
+### Ajouté
+
+- **Année scolaire en base** : tables `school_years` / `school_weeks`, statuts brouillon → active → archivée.
+- **Import PDF du plan des semaines A/B** (format secrétariat : calendrier Août–Juin, titre « Année scolaire YYYY-YYYY »).
+- **Écran Paramètres · Année scolaire** : déposer le PDF, prévisualiser les 38 semaines, enregistrer en brouillon, activer.
+- API : `GET /api/school-year/calendar`, `POST /api/admin/school-year/parse`, `POST /api/admin/school-year/import`, `POST /api/admin/school-year/activate`.
+- Calendrier runtime lu depuis l'année **active** en base (repli sur le référentiel codé 2026-2027).
+
 ## [1.2.0] - 2026-08-18
 
 ### Ajouté
