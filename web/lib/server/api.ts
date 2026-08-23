@@ -9,7 +9,9 @@ import {
   readSessionTokenFromRequest,
   unauthorizedResponse,
 } from "@campus/lib/auth/index.ts";
-import { checkClassroomExists, getAgendaStore, getSchoolYearStore, getTemplateStore } from "@campus/lib/persistence/store-factory.ts";
+import { checkClassroomExists, getAgendaStore, getMembershipStore, getSchoolYearStore, getTemplateStore } from "@campus/lib/persistence/store-factory.ts";
+import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
+import { ARCHIVED_YEAR_READONLY_REASON, getArchivedYearIds, isArchivedYearItem } from "@campus/features/school-year/archived-readonly.ts";
 import type { AppSession } from "@campus/lib/persistence/types.ts";
 
 export async function getRequestSession(request: Request): Promise<AppSession | null> {
@@ -44,10 +46,29 @@ export async function getTemplatesStore() {
   return getTemplateStore();
 }
 
+export async function getMembershipsStore() {
+  return getMembershipStore();
+}
+
 export async function getActiveSchoolYearId(): Promise<string | null> {
   const schoolYearStore = await getSchoolYearStore();
   const active = await schoolYearStore.getActiveSchoolYear();
   return active?.id ?? null;
+}
+
+export async function getArchivedSchoolYearIds(): Promise<Set<string>> {
+  const schoolYearStore = await getSchoolYearStore();
+  const years = await schoolYearStore.listSchoolYears();
+  return getArchivedYearIds(years);
+}
+
+export async function assertAgendaItemMutable(item: PrototypeAgendaItem | undefined): Promise<Response | null> {
+  if (!item?.schoolYearId) return null;
+  const archivedIds = await getArchivedSchoolYearIds();
+  if (isArchivedYearItem(item, archivedIds)) {
+    return jsonResponse({ ok: false, reason: ARCHIVED_YEAR_READONLY_REASON }, { status: 403 });
+  }
+  return null;
 }
 
 export async function requireClassroomReadAccess(request: Request, classroomId: string) {

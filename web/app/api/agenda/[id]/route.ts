@@ -1,4 +1,5 @@
 import {
+  assertAgendaItemMutable,
   forbiddenResponse,
   jsonResponse,
   requireTeacherSession,
@@ -28,6 +29,9 @@ export async function PATCH(request: Request, context: RouteContext) {
   };
 
   const existing = await auth.store!.findAgendaItem(itemId);
+  const archivedBlock = await assertAgendaItemMutable(existing);
+  if (archivedBlock) return archivedBlock;
+
   if (existing && !(await auth.store!.teacherCanPublish(auth.session!.teacherId, existing.classroomId, body.subjectId ?? existing.subjectId))) {
     return forbiddenResponse("Branche non autorisée.");
   }
@@ -49,6 +53,10 @@ export async function DELETE(request: Request, context: RouteContext) {
   if (!Number.isFinite(itemId)) {
     return jsonResponse({ ok: false, reason: "Identifiant invalide." }, { status: 400 });
   }
+
+  const existing = await auth.store!.findAgendaItem(itemId);
+  const archivedBlock = await assertAgendaItemMutable(existing);
+  if (archivedBlock) return archivedBlock;
 
   const result = await auth.store!.deleteAgendaItem(itemId, auth.session!.teacherId);
   if (!result.ok) {

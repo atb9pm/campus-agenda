@@ -40,48 +40,64 @@ export const DEMO_SUBJECTS: Subject[] = [
   { id: "subject-demo-chassis-1a", classroomId: "classe-demo-tma-1a", name: "Châssis" },
 ];
 
+const DEMO_MEMBERSHIP_START = "2026-08-01T00:00:00.000Z";
+
 export const DEMO_MEMBERSHIPS: Membership[] = [
   {
     id: "membership-demo-current-2a",
     teacherId: DEMO_CURRENT_TEACHER_ID,
     classroomId: "classe-demo-tma-2a",
     subjectIds: ["subject-demo-moteur-2a", "subject-demo-electricite-2a"],
+    validFrom: DEMO_MEMBERSHIP_START,
+    validTo: null,
   },
   {
     id: "membership-demo-dupont-2a",
     teacherId: "teacher-demo-dupont",
     classroomId: "classe-demo-tma-2a",
     subjectIds: ["subject-demo-chassis-2a", "subject-demo-atelier-2a"],
+    validFrom: DEMO_MEMBERSHIP_START,
+    validTo: null,
   },
   {
     id: "membership-demo-martin-2a",
     teacherId: "teacher-demo-martin",
     classroomId: "classe-demo-tma-2a",
     subjectIds: ["subject-demo-moteur-2a", "subject-demo-maths-2a"],
+    validFrom: DEMO_MEMBERSHIP_START,
+    validTo: null,
   },
   {
     id: "membership-demo-bernard-2a",
     teacherId: "teacher-demo-bernard",
     classroomId: "classe-demo-tma-2a",
     subjectIds: ["subject-demo-electricite-2a"],
+    validFrom: DEMO_MEMBERSHIP_START,
+    validTo: null,
   },
   {
     id: "membership-demo-robert-2a",
     teacherId: "teacher-demo-robert",
     classroomId: "classe-demo-tma-2a",
     subjectIds: ["subject-demo-moteur-2a", "subject-demo-chassis-2a"],
+    validFrom: DEMO_MEMBERSHIP_START,
+    validTo: null,
   },
   {
     id: "membership-demo-current-1a",
     teacherId: DEMO_CURRENT_TEACHER_ID,
     classroomId: "classe-demo-tma-1a",
     subjectIds: ["subject-demo-moteur-1a", "subject-demo-chassis-1a"],
+    validFrom: DEMO_MEMBERSHIP_START,
+    validTo: null,
   },
   {
     id: "membership-demo-martin-1a",
     teacherId: "teacher-demo-martin",
     classroomId: "classe-demo-tma-1a",
     subjectIds: ["subject-demo-electricite-1a"],
+    validFrom: DEMO_MEMBERSHIP_START,
+    validTo: null,
   },
 ];
 

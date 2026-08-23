@@ -1,11 +1,12 @@
 import { DEMO_PROTOTYPE_ITEMS } from "../../features/agenda/demo-items.ts";
 import { createPublication, deletePublication, updatePublication } from "../../features/agenda/publications.ts";
-import { DEMO_CATALOG } from "../../features/classes/demo-data.ts";
+import { DEMO_CATALOG, DEMO_CURRENT_TEACHER_ID } from "../../features/classes/demo-data.ts";
 import {
   getClassroomById,
   getMembershipsForTeacher,
   teacherTeachesSubject,
 } from "../../features/classes/queries.ts";
+import { getMemoryMembershipsSnapshot } from "./memory-membership-store.ts";
 import { resolveStudentAccess } from "../../features/student/access.ts";
 import { isDemoTeacherPassword } from "../auth/config.ts";
 import type { AgendaMutationResult, AgendaStore, CreateAgendaInput } from "./types.ts";
@@ -73,17 +74,17 @@ export class MemoryAgendaStore implements AgendaStore {
   }
 
   async teacherCanAccessClassroom(teacherId: string, classroomId: string): Promise<boolean> {
-    return getMembershipsForTeacher(DEMO_CATALOG, teacherId).some(
+    return getMembershipsForTeacher(getRuntimeCatalog(), teacherId).some(
       (membership) => membership.classroomId === classroomId,
     );
   }
 
   async teacherCanPublish(teacherId: string, classroomId: string, subjectId: string): Promise<boolean> {
-    return teacherTeachesSubject(DEMO_CATALOG, teacherId, classroomId, subjectId);
+    return teacherTeachesSubject(getRuntimeCatalog(), teacherId, classroomId, subjectId);
   }
 
-  async teacherIsAdmin(_teacherId: string): Promise<boolean> {
-    return false;
+  async teacherIsAdmin(teacherId: string): Promise<boolean> {
+    return teacherId === DEMO_CURRENT_TEACHER_ID;
   }
 
   async resolveStudentAccess(label: string) {
@@ -107,6 +108,10 @@ export class MemoryAgendaStore implements AgendaStore {
 }
 
 let singletonStore: MemoryAgendaStore | null = null;
+
+function getRuntimeCatalog() {
+  return { ...DEMO_CATALOG, memberships: getMemoryMembershipsSnapshot() };
+}
 
 export function getMemoryAgendaStore(): MemoryAgendaStore {
   singletonStore ??= new MemoryAgendaStore();

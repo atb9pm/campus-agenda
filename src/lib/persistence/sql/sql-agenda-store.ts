@@ -142,7 +142,13 @@ export class SqlAgendaStore implements AgendaStore {
 
   async teacherCanAccessClassroom(teacherId: string, classroomId: string): Promise<boolean> {
     const row = await this.db
-      .prepare("SELECT 1 AS ok FROM memberships WHERE teacher_id = ? AND classroom_id = ? LIMIT 1")
+      .prepare(
+        `SELECT 1 AS ok FROM memberships
+         WHERE teacher_id = ? AND classroom_id = ?
+           AND valid_from <= datetime('now')
+           AND (valid_to IS NULL OR valid_to > datetime('now'))
+         LIMIT 1`,
+      )
       .bind(teacherId, classroomId)
       .first<{ ok: number }>();
     return Boolean(row);
@@ -154,6 +160,8 @@ export class SqlAgendaStore implements AgendaStore {
         `SELECT 1 AS ok FROM memberships m
          JOIN membership_subjects ms ON ms.membership_id = m.id
          WHERE m.teacher_id = ? AND m.classroom_id = ? AND ms.subject_id = ?
+           AND m.valid_from <= datetime('now')
+           AND (m.valid_to IS NULL OR m.valid_to > datetime('now'))
          LIMIT 1`,
       )
       .bind(teacherId, classroomId, subjectId)

@@ -6,6 +6,7 @@ export interface ApiTeacherSession {
   teacherId: string;
   displayName: string;
   initials: string;
+  isAdmin?: boolean;
 }
 
 export interface ApiStudentSession {
@@ -442,5 +443,123 @@ export async function importTimetablePdf(file: File): Promise<{
     classCount: payload.classCount ?? 0,
     excludedSpsCount: payload.excludedSpsCount ?? 0,
     warnings: payload.warnings ?? [],
+  };
+}
+
+export interface MembershipPayload {
+  id: string;
+  teacherId: string;
+  classroomId: string;
+  subjectIds: string[];
+  validFrom: string;
+  validTo: string | null;
+}
+
+export interface ClassYearStatsPayload {
+  classroomId: string;
+  schoolYearId: string;
+  totalItems: number;
+  byType: Record<AgendaItemType, number>;
+  bySubject: { subjectId: string; count: number }[];
+  testsByWeek: { schoolWeekNumber: number; count: number }[];
+}
+
+export async function fetchAgendaItemsForYear(
+  classroomId: string,
+  schoolYearId: string,
+): Promise<{ items: PrototypeAgendaItem[]; readOnly: boolean }> {
+  const response = await fetch(
+    `/api/agenda?classroomId=${encodeURIComponent(classroomId)}&schoolYearId=${encodeURIComponent(schoolYearId)}`,
+    { credentials: "include" },
+  );
+  const payload = await parseJson<{
+    ok: boolean;
+    items?: PrototypeAgendaItem[];
+    readOnly?: boolean;
+    reason?: string;
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.items) {
+    throw new Error(payload.reason ?? "Impossible de charger l'agenda archivé.");
+  }
+  return { items: payload.items, readOnly: payload.readOnly ?? true };
+}
+
+export async function exportSchoolYear(
+  schoolYearId: string,
+  format: "json" | "csv" = "json",
+): Promise<{ snapshot?: { itemCount: number; schoolYearLabel: string }; csvText?: string }> {
+  const response = await fetch(
+    `/api/admin/school-year/${encodeURIComponent(schoolYearId)}/export?format=${format}`,
+    { credentials: "include" },
+  );
+  if (format === "csv") {
+    if (!response.ok) {
+      throw new Error("Export CSV impossible.");
+    }
+    return { csvText: await response.text() };
+  }
+  const payload = await parseJson<{
+    ok: boolean;
+    snapshot?: { itemCount: number; schoolYearLabel: string };
+    reason?: string;
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.snapshot) {
+    throw new Error(payload.reason ?? "Export impossible.");
+  }
+  return { snapshot: payload.snapshot };
+}
+
+export async function fetchClassYearStats(
+  schoolYearId: string,
+  classroomId: string,
+): Promise<ClassYearStatsPayload> {
+  const response = await fetch(
+    `/api/admin/school-year/${encodeURIComponent(schoolYearId)}/stats?classroomId=${encodeURIComponent(classroomId)}`,
+    { credentials: "include" },
+  );
+  const payload = await parseJson<{ ok: boolean; stats?: ClassYearStatsPayload; reason?: string }>(response);
+  if (!response.ok || !payload.ok || !payload.stats) {
+    throw new Error(payload.reason ?? "Statistiques indisponibles.");
+  }
+  return payload.stats;
+}
+
+export async function fetchMemberships(classroomId: string): Promise<MembershipPayload[]> {
+  const response = await fetch(
+    `/api/admin/memberships?classroomId=${encodeURIComponent(classroomId)}`,
+    { credentials: "include" },
+  );
+  const payload = await parseJson<{ ok: boolean; memberships?: MembershipPayload[]; reason?: string }>(response);
+  if (!response.ok || !payload.ok || !payload.memberships) {
+    throw new Error(payload.reason ?? "Impossible de charger les affectations.");
+  }
+  return payload.memberships;
+}
+
+export async function replaceTeacherMembership(input: {
+  classroomId: string;
+  outgoingTeacherId: string;
+  incomingTeacherId: string;
+  subjectIds: string[];
+  effectiveAt?: string;
+}): Promise<{ created: MembershipPayload; closedMembershipIds: string[] }> {
+  const response = await fetch("/api/admin/memberships/replace", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    created?: MembershipPayload;
+    closedMembershipIds?: string[];
+    reason?: string;
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.created) {
+    throw new Error(payload.reason ?? "Remplacement impossible.");
+  }
+  return {
+    created: payload.created,
+    closedMembershipIds: payload.closedMembershipIds ?? [],
   };
 }

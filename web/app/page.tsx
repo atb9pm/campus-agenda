@@ -77,6 +77,7 @@ import {
   type SchoolCalendarWeek,
 } from "../lib/api-client.ts";
 import { SchoolYearAdminPanel } from "./components/school-year-admin-panel.tsx";
+import { MultiYearOperationsPanel } from "./components/multi-year-operations-panel.tsx";
 import { TimetableImportPanel } from "./components/timetable-import-panel.tsx";
 import { PedagogicalLibraryPanel } from "./components/pedagogical-library-panel.tsx";
 
@@ -132,7 +133,7 @@ function sectionDescription(activeSection: TeacherNavSection, agendaView: Teache
   if (activeSection === "dashboard") return "Vue d’ensemble de vos classes et de vos publications.";
   if (activeSection === "classes") return "Classes auxquelles vous êtes rattaché et branches enseignées.";
   if (activeSection === "library") return "Modèles réutilisables, déploiement annuel et reprise depuis une année archivée.";
-  if (activeSection === "settings") return "Année scolaire, grille horaire secteur MA et activation.";
+  if (activeSection === "settings") return "Année scolaire, archives multi-années, grille horaire secteur MA et activation.";
   return getAgendaSectionDescription(agendaView, classroomName);
 }
 
@@ -167,7 +168,7 @@ export default function Home() {
   const [editingItem, setEditingItem] = useState<PrototypeAgendaItem | null>(null);
   const [notice, setNotice] = useState("");
   const [authReady, setAuthReady] = useState(false);
-  const [teacherAuthenticated, setTeacherAuthenticated] = useState(false);
+  const [teacherIsAdmin, setTeacherIsAdmin] = useState(false);
   const [loginPending, setLoginPending] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [studentCourseDayKey, setStudentCourseDayKey] = useState<string | null>(null);
@@ -185,6 +186,7 @@ export default function Home() {
 
   async function applyTeacherSession(session: ApiTeacherSession) {
     setCurrentTeacherId(session.teacherId);
+    setTeacherIsAdmin(Boolean(session.isAdmin));
     setAppMode("teacher");
     setTeacherAuthenticated(true);
     setStudentSession(null);
@@ -1049,6 +1051,11 @@ export default function Home() {
         {activeSection === "settings" && (
           <>
             <SchoolYearAdminPanel onCalendarUpdated={applySchoolCalendarWeeks} onNotice={showNotice} />
+            <MultiYearOperationsPanel
+              isAdmin={teacherIsAdmin}
+              defaultClassroomId={selectedClassroomId}
+              onNotice={showNotice}
+            />
             <TimetableImportPanel onNotice={showNotice} />
           </>
         )}
