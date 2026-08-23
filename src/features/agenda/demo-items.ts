@@ -13,6 +13,10 @@ export interface PrototypeAgendaItem {
   type: AgendaItemType;
   title: string;
   detail: string;
+  /** Lien vers un modèle de bibliothèque (instance dérivée). */
+  templateId?: string | null;
+  /** Année scolaire de rattachement (phase 2.1+). */
+  schoolYearId?: string | null;
 }
 
 export const DEMO_PROTOTYPE_ITEMS: PrototypeAgendaItem[] = [

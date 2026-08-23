@@ -40,6 +40,8 @@ export class MemoryAgendaStore implements AgendaStore {
       type: input.type,
       title: input.title,
       detail: input.detail,
+      templateId: input.templateId ?? null,
+      schoolYearId: input.schoolYearId ?? null,
     });
     return (await this.findAgendaItem(id))!;
   }

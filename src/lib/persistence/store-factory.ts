@@ -1,12 +1,14 @@
 import type { AgendaBackupSnapshot, BackupRestoreResult } from "./backup.ts";
 import { exportAgendaSnapshot, restoreAgendaSnapshot } from "./backup.ts";
-import type { AgendaStore, StoreKind } from "./types.ts";
+import type { AgendaStore, StoreKind, TemplateStore } from "./types.ts";
 import { createNodeSqliteDatabase, wrapD1Database } from "./sql/adapters.ts";
 import { applyMigrations, isDatabaseSeeded } from "./sql/migrate.ts";
 import { seedDemoDatabase } from "./sql/seed.ts";
 import { SqlAgendaStore, classroomExistsInDatabase } from "./sql/sql-agenda-store.ts";
+import { SqlTemplateStore } from "./sql/sql-template-store.ts";
 import { SqlSchoolYearStore, hydrateActiveSchoolCalendar } from "./sql/sql-school-year-store.ts";
 import { getMemoryAgendaStore } from "./memory-store.ts";
+import { getMemoryTemplateStore } from "./memory-template-store.ts";
 import { classroomExists as memoryClassroomExists } from "./memory-store.ts";
 import { MemorySchoolYearStore, hydrateMemorySchoolCalendar } from "./memory-school-year-store.ts";
 import type { SchoolYearStore } from "./school-year-types.ts";
@@ -16,6 +18,7 @@ export const APP_VERSION = "1.2.0";
 
 interface ResolvedStore {
   store: AgendaStore;
+  templateStore: TemplateStore;
   schoolYearStore: SchoolYearStore;
   kind: StoreKind;
   classroomExists: (classroomId: string) => Promise<boolean>;
@@ -50,6 +53,7 @@ async function createStore(): Promise<ResolvedStore> {
     const { schoolYearStore } = await prepareMemoryStores();
     return {
       store: getMemoryAgendaStore(),
+      templateStore: getMemoryTemplateStore(),
       schoolYearStore,
       kind: "memory",
       classroomExists: memoryClassroomExists,
@@ -62,6 +66,7 @@ async function createStore(): Promise<ResolvedStore> {
     const store = new SqlAgendaStore(sqlite);
     return {
       store,
+      templateStore: new SqlTemplateStore(sqlite, store),
       schoolYearStore,
       kind: "sqlite",
       classroomExists: (classroomId) => classroomExistsInDatabase(sqlite, classroomId),
@@ -76,6 +81,7 @@ async function createStore(): Promise<ResolvedStore> {
       const store = new SqlAgendaStore(db);
       return {
         store,
+        templateStore: new SqlTemplateStore(db, store),
         schoolYearStore,
         kind: "d1",
         classroomExists: (classroomId) => classroomExistsInDatabase(db, classroomId),
@@ -88,6 +94,7 @@ async function createStore(): Promise<ResolvedStore> {
   const { schoolYearStore } = await prepareMemoryStores();
   return {
     store: getMemoryAgendaStore(),
+    templateStore: getMemoryTemplateStore(),
     schoolYearStore,
     kind: "memory",
     classroomExists: memoryClassroomExists,
@@ -112,6 +119,10 @@ export async function resolveAgendaStore(): Promise<ResolvedStore> {
 
 export async function getAgendaStore(): Promise<AgendaStore> {
   return (await resolveAgendaStore()).store;
+}
+
+export async function getTemplateStore(): Promise<TemplateStore> {
+  return (await resolveAgendaStore()).templateStore;
 }
 
 export async function getSchoolYearStore(): Promise<SchoolYearStore> {

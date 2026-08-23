@@ -356,6 +356,31 @@ button { color: inherit; }
 .student-upcoming-tests-list strong { display: block; margin-top: 4px; color: var(--navy); font-size: 13px; }
 .student-upcoming-tests-empty { margin: 0; color: #7b879c; font-size: 11px; }
 
+.library-panel { margin: 0 38px 28px; }
+.library-panel-header { margin-bottom: 18px; }
+.library-panel-header h2 { margin: 8px 0 6px; color: var(--navy); font-size: 22px; }
+.library-panel-header p { margin: 0; color: #52627f; font-size: 12px; line-height: 1.5; }
+.library-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.library-card { padding: 18px 20px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: var(--shadow); }
+.library-card header h3 { margin: 0; color: var(--navy); font-size: 14px; }
+.library-card header p { margin: 6px 0 0; color: #7b879c; font-size: 11px; }
+.library-empty { margin: 14px 0 0; color: #7b879c; font-size: 11px; line-height: 1.5; }
+.library-error { margin: 0 0 12px; color: #b42318; font-size: 11px; }
+.library-template-list { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.library-template-list li { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; }
+.library-template-row { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfe; cursor: pointer; }
+.library-template-copy strong { display: block; color: var(--navy); font-size: 12px; }
+.library-template-copy small { display: block; margin-top: 3px; color: #7b879c; font-size: 10px; }
+.library-delete { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: #7b879c; cursor: pointer; }
+.library-form { margin-top: 14px; display: grid; gap: 10px; }
+.library-form label { display: grid; gap: 4px; color: #52627f; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.library-form select, .library-form button { padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 6px; background: #fff; font-size: 11px; }
+.library-form button { border-color: var(--navy); background: var(--navy); color: #fff; font-weight: 800; cursor: pointer; }
+.library-form button:disabled { opacity: .55; cursor: not-allowed; }
+.library-checkbox { display: flex !important; align-items: center; gap: 8px; text-transform: none; font-weight: 600; }
+.modal-library-actions { margin-top: 8px; display: grid; gap: 6px; }
+.secondary-library-action { justify-self: start; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 6px; background: #fff; color: var(--navy); font-size: 10px; font-weight: 800; cursor: pointer; }
+
 @media (max-width: 1030px) {
   .technical-sidebar { width: 190px; }.technical-main { width: calc(100% - 190px); margin-left: 190px; }
   .calendar-workbench { grid-template-columns: 190px minmax(0, 1fr); margin-right: 20px; margin-left: 20px; }.technical-header { padding-right: 20px; padding-left: 20px; }.class-tabs { padding-right: 20px; padding-left: 20px; }

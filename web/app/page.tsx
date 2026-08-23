@@ -70,11 +70,14 @@ import {
   loginStudentApi,
   loginTeacherApi,
   logoutApiSession,
+  savePublicationToLibrary,
+  syncTemplateFromPublication,
   updateAgendaItemApi,
   type ApiTeacherSession,
   type SchoolCalendarWeek,
 } from "../lib/api-client.ts";
 import { SchoolYearAdminPanel } from "./components/school-year-admin-panel.tsx";
+import { PedagogicalLibraryPanel } from "./components/pedagogical-library-panel.tsx";
 
 type AppMode = "teacher" | "student";
 type StudentEntry = "code" | "teacher-preview";
@@ -118,6 +121,7 @@ function sectionTitle(activeSection: TeacherNavSection, agendaView: TeacherAgend
   if (isStudentView) return "Mon agenda";
   if (activeSection === "dashboard") return "Tableau de bord";
   if (activeSection === "classes") return "Mes classes";
+  if (activeSection === "library") return "Bibliothèque pédagogique";
   if (activeSection === "settings") return "Paramètres";
   return getAgendaSectionTitle(agendaView, classroomName);
 }
@@ -126,6 +130,7 @@ function sectionDescription(activeSection: TeacherNavSection, agendaView: Teache
   if (isStudentView) return `Consultation anonyme — agenda complet de la classe ${classroomName}, toutes branches confondues.`;
   if (activeSection === "dashboard") return "Vue d’ensemble de vos classes et de vos publications.";
   if (activeSection === "classes") return "Classes auxquelles vous êtes rattaché et branches enseignées.";
+  if (activeSection === "library") return "Modèles réutilisables, déploiement annuel et reprise depuis une année archivée.";
   if (activeSection === "settings") return "Année scolaire, plan des semaines A/B et activation.";
   return getAgendaSectionDescription(agendaView, classroomName);
 }
@@ -669,6 +674,36 @@ export default function Home() {
     })();
   }
 
+  function mergeDeployedItems(created: PrototypeAgendaItem[]) {
+    setItems((previous) => {
+      const merged = new Map(previous.map((item) => [item.id, item]));
+      for (const item of created) merged.set(item.id, item);
+      return [...merged.values()].sort((left, right) => left.id - right.id);
+    });
+  }
+
+  async function saveCurrentItemToLibrary() {
+    if (!editingItem) return;
+    try {
+      const { template, item } = await savePublicationToLibrary(editingItem.id);
+      setItems((previous) => previous.map((entry) => (entry.id === item.id ? item : entry)));
+      setEditingItem(item);
+      showNotice(`Modèle « ${template.title} » enregistré dans la bibliothèque.`);
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "Enregistrement impossible.");
+    }
+  }
+
+  async function syncCurrentItemToTemplate() {
+    if (!editingItem?.templateId) return;
+    try {
+      const template = await syncTemplateFromPublication(editingItem.id);
+      showNotice(`Modèle « ${template.title} » mis à jour depuis cette publication.`);
+    } catch (error) {
+      showNotice(error instanceof Error ? error.message : "Mise à jour du modèle impossible.");
+    }
+  }
+
   function removeItem(item: PrototypeAgendaItem) {
     if (!canModifyPublication(item, currentTeacherId)) {
       showNotice("Seul l'auteur peut supprimer cet élément.");
@@ -887,7 +922,6 @@ export default function Home() {
               <span>{TEACHER_NAV_ICONS[section]}</span> {TEACHER_NAV_LABELS[section]}
             </button>
           ))}
-          <button disabled><span>□</span> Documents</button>
         </nav>
 
         {(activeSection === "agenda" || activeSection === "classes") && (
@@ -1015,6 +1049,16 @@ export default function Home() {
           <SchoolYearAdminPanel onCalendarUpdated={applySchoolCalendarWeeks} onNotice={showNotice} />
         )}
 
+        {activeSection === "library" && (
+          <PedagogicalLibraryPanel
+            teacherId={currentTeacherId}
+            defaultClassroomId={selectedClassroomId}
+            schoolWeeks={schoolWeeksMemo}
+            onNotice={showNotice}
+            onItemsChanged={mergeDeployedItems}
+          />
+        )}
+
         {activeSection === "agenda" && (
           <>
             <section className="brand-showcase" aria-label="Identité visuelle Campus Agenda">
@@ -1039,7 +1083,7 @@ export default function Home() {
               <button type="button" role="tab" aria-selected={controlsPanel === null} className={controlsPanel === null ? "active" : ""} onClick={() => setControlsPanel(null)}>Calendrier</button>
               <button type="button" role="tab" aria-selected={controlsPanel === "class"} className={controlsPanel === "class" ? "active" : ""} onClick={() => { setControlsPanel("class"); setAgendaView("class"); setTypeFilter("TEST"); }}>Contrôles · classe</button>
               <button type="button" role="tab" aria-selected={controlsPanel === "mine"} className={controlsPanel === "mine" ? "active" : ""} onClick={() => { setControlsPanel("mine"); setAgendaView("mine"); }}>Mes contrôles</button>
-              <button type="button" disabled>Documents</button>
+              <button type="button" role="tab" onClick={() => navigate("library")}>Bibliothèque</button>
             </div>
 
             {controlsPanel === "class" && (
@@ -1324,6 +1368,22 @@ export default function Home() {
               </div>
               <p className="modal-hint">Semaine A : lundi · Semaine B : lundi et jeudi.</p>
               <label>Consigne<textarea name="detail" rows={3} placeholder="Ajoutez une indication utile…" defaultValue={editingItem?.detail ?? ""} /></label>
+              {editingItem && canModifyPublication(editingItem, currentTeacherId) ? (
+                <div className="modal-library-actions">
+                  {editingItem.templateId ? (
+                    <button type="button" className="secondary-library-action" onClick={() => void syncCurrentItemToTemplate()}>
+                      Mettre à jour le modèle
+                    </button>
+                  ) : (
+                    <button type="button" className="secondary-library-action" onClick={() => void saveCurrentItemToLibrary()}>
+                      Enregistrer dans la bibliothèque
+                    </button>
+                  )}
+                  {editingItem.templateId ? (
+                    <p className="modal-hint">Modifier cette publication n&apos;altère pas le modèle, sauf action explicite ci-dessus.</p>
+                  ) : null}
+                </div>
+              ) : null}
               <footer><button type="button" onClick={closeModal}>Annuler</button><button type="submit">{editingItem ? "Enregistrer" : "Publier dans l’agenda"}</button></footer>
             </form>
           </section>

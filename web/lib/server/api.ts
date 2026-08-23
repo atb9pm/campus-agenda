@@ -9,7 +9,7 @@ import {
   readSessionTokenFromRequest,
   unauthorizedResponse,
 } from "@campus/lib/auth/index.ts";
-import { checkClassroomExists, getAgendaStore } from "@campus/lib/persistence/store-factory.ts";
+import { checkClassroomExists, getAgendaStore, getSchoolYearStore, getTemplateStore } from "@campus/lib/persistence/store-factory.ts";
 import type { AppSession } from "@campus/lib/persistence/types.ts";
 
 export async function getRequestSession(request: Request): Promise<AppSession | null> {
@@ -38,6 +38,16 @@ export function logoutResponse(): Response {
 
 export async function getStore() {
   return getAgendaStore();
+}
+
+export async function getTemplatesStore() {
+  return getTemplateStore();
+}
+
+export async function getActiveSchoolYearId(): Promise<string | null> {
+  const schoolYearStore = await getSchoolYearStore();
+  const active = await schoolYearStore.getActiveSchoolYear();
+  return active?.id ?? null;
 }
 
 export async function requireClassroomReadAccess(request: Request, classroomId: string) {

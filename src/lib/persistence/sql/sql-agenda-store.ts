@@ -6,7 +6,7 @@ import { DEMO_PASSWORD_HASH } from "./seed.ts";
 import type { AgendaItemRow, SqlDatabase, StudentAccessRow } from "./types.ts";
 
 const AGENDA_ITEM_COLUMNS =
-  "id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail";
+  "id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id";
 
 function rowToItem(row: AgendaItemRow): PrototypeAgendaItem {
   return {
@@ -21,6 +21,8 @@ function rowToItem(row: AgendaItemRow): PrototypeAgendaItem {
     type: row.type as PrototypeAgendaItem["type"],
     title: row.title,
     detail: row.detail,
+    templateId: row.template_id ?? null,
+    schoolYearId: row.school_year_id ?? null,
   };
 }
 
@@ -66,6 +68,8 @@ export class SqlAgendaStore implements AgendaStore {
       type: input.type,
       title: input.title,
       detail: input.detail,
+      templateId: input.templateId ?? null,
+      schoolYearId: input.schoolYearId ?? null,
     });
     const created = nextItems.find((item) => item.id === id);
     if (!created) throw new Error("Publication créée mais introuvable.");
@@ -73,8 +77,8 @@ export class SqlAgendaStore implements AgendaStore {
     await this.db
       .prepare(
         `INSERT INTO agenda_items
-          (id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         created.id,
@@ -88,6 +92,8 @@ export class SqlAgendaStore implements AgendaStore {
         created.type,
         created.title,
         created.detail,
+        created.templateId ?? null,
+        created.schoolYearId ?? null,
       )
       .run();
 
@@ -197,8 +203,8 @@ export class SqlAgendaStore implements AgendaStore {
       await this.db
         .prepare(
           `INSERT INTO agenda_items
-            (id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           item.id,
@@ -212,6 +218,8 @@ export class SqlAgendaStore implements AgendaStore {
           item.type,
           item.title,
           item.detail,
+          item.templateId ?? null,
+          item.schoolYearId ?? null,
         )
         .run();
     }

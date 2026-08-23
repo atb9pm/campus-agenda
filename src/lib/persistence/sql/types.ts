@@ -23,6 +23,8 @@ export interface AgendaItemRow {
   type: string;
   title: string;
   detail: string;
+  template_id: string | null;
+  school_year_id: string | null;
 }
 
 export interface StudentAccessRow {
