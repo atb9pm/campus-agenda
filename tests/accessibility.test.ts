@@ -25,5 +25,9 @@ test("phase 0.8 — structure d'accessibilité de base", async () => {
   assert.match(schoolYearPanel, /aria-labelledby="school-year-admin-title"/);
   assert.match(schoolYearPanel, /id="school-year-admin-title"/);
   assert.match(css, /\.school-year-admin/);
+  assert.match(page, /aria-labelledby="control-alert-title"/);
+  assert.match(page, /Contrôles à venir/);
+  assert.match(css, /\.student-upcoming-tests/);
+  assert.match(css, /\.controls-panel/);
   assert.match(css, /\.teacher-login/);
 });

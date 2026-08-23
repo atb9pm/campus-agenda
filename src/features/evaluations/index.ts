@@ -1,0 +1,15 @@
+export {
+  TEST_ALERT_THRESHOLD,
+  STUDENT_UPCOMING_TESTS_LIMIT,
+  courseDaysWithMultipleTests,
+  evaluateThirdTestAlert,
+  listClassTestsForSchoolWeek,
+  listTestsOnCourseDay,
+  listUpcomingTestsForClass,
+  listUpcomingTestsForTeacher,
+  matchesCourseDay,
+  type CourseDayRef,
+  type ExistingTestSummary,
+  type ThirdTestAlert,
+  type UpcomingTestEntry,
+} from "./coordination.ts";

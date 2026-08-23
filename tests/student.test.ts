@@ -26,7 +26,7 @@ test("phase 0.6 — l'élève voit l'agenda complet de sa classe", () => {
   assert.ok(access);
 
   const agenda = getStudentAgendaItems(DEMO_PROTOTYPE_ITEMS, access.classroomId);
-  assert.equal(agenda.length, 5);
+  assert.equal(agenda.length, 7);
   assert.ok(agenda.some((item) => item.authorTeacherId === "teacher-demo-dupont"));
   assert.ok(agenda.some((item) => item.authorTeacherId === "teacher-demo-martin"));
 });
@@ -42,9 +42,9 @@ test("phase 0.6 — synthèse de charge lisible par l'élève", () => {
   const items = getStudentAgendaItems(DEMO_PROTOTYPE_ITEMS, "classe-demo-tma-2a");
   const summary = buildStudentAgendaSummary(items);
 
-  assert.equal(summary.total, 5);
+  assert.equal(summary.total, 7);
   assert.equal(summary.homework, 2);
-  assert.equal(summary.test, 1);
+  assert.equal(summary.test, 3);
   assert.equal(summary.information, 2);
-  assert.equal(summary.branches, 4);
+  assert.equal(summary.branches, 5);
 });

@@ -325,6 +325,37 @@ button { color: inherit; }
 .school-year-history li > div { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .school-year-history strong { color: var(--navy); font-size: 12px; }
 
+.controls-panel { margin: 0 38px 24px; padding: 22px 24px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: var(--shadow); }
+.controls-panel header h2 { margin: 6px 0 0; color: var(--navy); font-size: 18px; }
+.controls-panel header p { margin: 6px 0 0; color: #7b879c; font-size: 11px; }
+.controls-list { margin: 16px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.controls-list li { padding: 12px 14px; border: 1px solid var(--line); border-left: 4px solid var(--navy); border-radius: 8px; background: #fbfcfe; }
+.controls-list-date { display: block; color: var(--blue); font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.controls-list strong { display: block; margin-top: 4px; color: var(--navy); font-size: 13px; }
+.controls-list small { display: block; margin-top: 4px; color: #7b879c; font-size: 10px; }
+.controls-empty { margin: 14px 0 0; color: #7b879c; font-size: 11px; }
+
+.control-alert-modal p { margin: 0; color: #52627f; font-size: 11px; line-height: 1.5; }
+.control-alert-list { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.control-alert-list li { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff7ed; }
+.control-alert-list strong { color: var(--navy); font-size: 11px; }
+.control-alert-list small { display: block; margin-top: 4px; color: #7b879c; font-size: 10px; }
+.control-alert-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.control-alert-actions button { padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 6px; background: #fff; color: #4b5f7e; font-size: 9px; font-weight: 800; cursor: pointer; }
+.control-alert-actions .confirm-anyway { border-color: var(--navy); background: var(--navy); color: #fff; }
+
+.workload-day.busy-tests strong, .workload-day.multi-tests strong { color: #b54708; }
+.workload-day.busy-tests i, .workload-day.multi-tests i { background: #f79009; }
+.workload-alert { margin: 10px 0 0; color: #b54708; font-size: 9px; font-weight: 700; }
+
+.student-upcoming-tests { margin-top: 18px; padding: 22px 24px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: var(--shadow); }
+.student-upcoming-tests h2 { margin: 0 0 12px; color: var(--navy); font-size: 14px; letter-spacing: .08em; text-transform: uppercase; }
+.student-upcoming-tests-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; counter-reset: upcoming-test; }
+.student-upcoming-tests-list li { padding: 12px 14px; border: 1px solid var(--line); border-left: 4px solid var(--navy); border-radius: 8px; background: #fbfcfe; }
+.student-upcoming-tests-date { display: block; color: var(--blue); font-size: 10px; font-weight: 800; letter-spacing: .05em; }
+.student-upcoming-tests-list strong { display: block; margin-top: 4px; color: var(--navy); font-size: 13px; }
+.student-upcoming-tests-empty { margin: 0; color: #7b879c; font-size: 11px; }
+
 @media (max-width: 1030px) {
   .technical-sidebar { width: 190px; }.technical-main { width: calc(100% - 190px); margin-left: 190px; }
   .calendar-workbench { grid-template-columns: 190px minmax(0, 1fr); margin-right: 20px; margin-left: 20px; }.technical-header { padding-right: 20px; padding-left: 20px; }.class-tabs { padding-right: 20px; padding-left: 20px; }
@@ -345,6 +376,7 @@ button { color: inherit; }
   .week-toolbar, .schedule-grid { min-width: 760px; }.week-calendar { max-height: 620px; }.prototype-label { margin-right: 16px; }
   .modal-row { grid-template-columns: 1fr; }
   .school-year-admin { padding-right: 16px; padding-left: 16px; }
+  .controls-panel { margin-right: 16px; margin-left: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
