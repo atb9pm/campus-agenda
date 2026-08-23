@@ -294,11 +294,43 @@ button { color: inherit; }
 .student-course-day-empty small { display: block; margin-top: 6px; color: #7b879c; font-size: 11px; }
 .student-course-day-app .prototype-label { margin-top: 18px; text-align: center; }
 
+.school-year-admin { padding: 0 38px 28px; display: grid; gap: 18px; }
+.school-year-card { padding: 22px 24px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: var(--shadow); }
+.school-year-card header h3 { margin: 6px 0 0; color: var(--navy); font-size: 18px; letter-spacing: -.02em; }
+.school-year-meta { margin: 10px 0 0; color: #52627f; font-size: 11px; }
+.school-year-hint { margin: 8px 0 0; color: #7b879c; font-size: 11px; line-height: 1.5; }
+.school-year-status { margin: 0; color: #64748b; font-size: 11px; font-weight: 700; }
+.school-year-error { margin: 0; color: #b42318; font-size: 11px; font-weight: 700; }
+.school-year-upload { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.school-year-upload input[type="file"] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.school-year-file-label { display: inline-flex; align-items: center; padding: 10px 14px; border: 1px dashed var(--line-strong); border-radius: 8px; color: var(--navy); background: #fbfcfe; font-size: 10px; font-weight: 800; cursor: pointer; }
+.school-year-preview { margin-top: 18px; display: grid; gap: 12px; }
+.school-year-preview-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.school-year-preview-header strong { color: var(--navy); font-size: 16px; }
+.school-year-badge { display: inline-flex; padding: 4px 8px; border-radius: 999px; font-size: 9px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.school-year-badge.ok { color: #027a48; background: #ecfdf3; }
+.school-year-badge.warn { color: #b54708; background: #fffaeb; }
+.school-year-badge.active { color: #175cd3; background: #eff8ff; }
+.school-year-badge.draft { color: #6941c6; background: #f9f5ff; }
+.school-year-badge.archived { color: #475467; background: #f2f4f7; }
+.school-year-warnings { margin: 0; padding-left: 18px; color: #b54708; font-size: 10px; line-height: 1.45; }
+.school-year-week-snapshot { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; color: #52627f; font-size: 11px; }
+.school-year-week-table-wrap { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.school-year-week-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+.school-year-week-table th, .school-year-week-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+.school-year-week-table th { position: sticky; top: 0; color: #64748b; background: #f8fafc; font-size: 8px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.school-year-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.school-year-history { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.school-year-history li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfe; }
+.school-year-history li > div { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.school-year-history strong { color: var(--navy); font-size: 12px; }
+
 @media (max-width: 1030px) {
   .technical-sidebar { width: 190px; }.technical-main { width: calc(100% - 190px); margin-left: 190px; }
   .calendar-workbench { grid-template-columns: 190px minmax(0, 1fr); margin-right: 20px; margin-left: 20px; }.technical-header { padding-right: 20px; padding-left: 20px; }.class-tabs { padding-right: 20px; padding-left: 20px; }
   .student-preview { display: none; }
   .brand-showcase { grid-template-columns: minmax(260px, .7fr) minmax(430px, 1.3fr); margin-right: 20px; margin-left: 20px; }.showcase-copy { padding: 27px 24px; }.showcase-brand { margin-bottom: 18px; }.showcase-specs { gap: 13px; }
+  .school-year-admin { padding-right: 20px; padding-left: 20px; }
 }
 
 @media (max-width: 760px) {
@@ -312,6 +344,7 @@ button { color: inherit; }
   .calendar-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px 16px; border-right: 0; border-bottom: 1px solid var(--line); }.mini-calendar, .legend-note { display: none; }.view-selector { margin: 0; }.filter-panel { display: flex; align-items: center; gap: 8px; padding: 0; }.filter-panel h2, .filter-panel label { display: none; }.filter-panel select { margin: 0; }
   .week-toolbar, .schedule-grid { min-width: 760px; }.week-calendar { max-height: 620px; }.prototype-label { margin-right: 16px; }
   .modal-row { grid-template-columns: 1fr; }
+  .school-year-admin { padding-right: 16px; padding-left: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }

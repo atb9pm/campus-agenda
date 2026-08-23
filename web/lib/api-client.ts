@@ -142,3 +142,102 @@ export async function fetchSchoolCalendar(): Promise<SchoolCalendarPayload> {
   }
   return payload.calendar;
 }
+
+export interface SchoolYearSummary {
+  id: string;
+  label: string;
+  status: "draft" | "active" | "archived";
+  startsOn: string;
+  endsOn: string;
+  sourceFilename: string | null;
+  importedAt: string | null;
+  activatedAt: string | null;
+  createdAt: string;
+}
+
+export interface SchoolYearPreview {
+  label: string;
+  weekCount: number;
+  warnings: string[];
+  weeks: SchoolCalendarWeek[];
+}
+
+export async function fetchSchoolYears(): Promise<SchoolYearSummary[]> {
+  const response = await fetch("/api/admin/school-year", { credentials: "include" });
+  const payload = await parseJson<{ ok: boolean; years?: SchoolYearSummary[]; reason?: string }>(response);
+  if (!response.ok || !payload.ok || !payload.years) {
+    throw new Error(payload.reason ?? "Impossible de charger les années scolaires.");
+  }
+  return payload.years;
+}
+
+export async function parseSchoolYearPdf(file: File): Promise<{ receivable: boolean; preview: SchoolYearPreview }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch("/api/admin/school-year/parse", {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    receivable?: boolean;
+    preview?: SchoolYearPreview;
+    reason?: string;
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.preview) {
+    throw new Error(payload.reason ?? "Analyse du PDF impossible.");
+  }
+  return { receivable: payload.receivable ?? false, preview: payload.preview };
+}
+
+export async function importSchoolYearPdf(file: File): Promise<{
+  receivable: boolean;
+  preview: SchoolYearPreview;
+  draft: { id: string; label: string; status: string };
+}> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch("/api/admin/school-year/import", {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    receivable?: boolean;
+    preview?: SchoolYearPreview;
+    draft?: { id: string; label: string; status: string };
+    reason?: string;
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.preview || !payload.draft) {
+    throw new Error(payload.reason ?? "Import du PDF impossible.");
+  }
+  return {
+    receivable: payload.receivable ?? false,
+    preview: payload.preview,
+    draft: payload.draft,
+  };
+}
+
+export async function activateSchoolYear(schoolYearId: string): Promise<SchoolCalendarPayload> {
+  const response = await fetch("/api/admin/school-year/activate", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ schoolYearId }),
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    active?: { label: string; status: string; weeks: SchoolCalendarWeek[] };
+    reason?: string;
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.active) {
+    throw new Error(payload.reason ?? "Activation impossible.");
+  }
+  return {
+    label: payload.active.label,
+    status: payload.active.status,
+    weeks: payload.active.weeks,
+  };
+}

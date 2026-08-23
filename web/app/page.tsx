@@ -65,7 +65,9 @@ import {
   logoutApiSession,
   updateAgendaItemApi,
   type ApiTeacherSession,
+  type SchoolCalendarWeek,
 } from "../lib/api-client.ts";
+import { SchoolYearAdminPanel } from "./components/school-year-admin-panel.tsx";
 
 type AppMode = "teacher" | "student";
 type StudentEntry = "code" | "teacher-preview";
@@ -109,6 +111,7 @@ function sectionTitle(activeSection: TeacherNavSection, agendaView: TeacherAgend
   if (isStudentView) return "Mon agenda";
   if (activeSection === "dashboard") return "Tableau de bord";
   if (activeSection === "classes") return "Mes classes";
+  if (activeSection === "settings") return "Paramètres";
   return getAgendaSectionTitle(agendaView, classroomName);
 }
 
@@ -116,6 +119,7 @@ function sectionDescription(activeSection: TeacherNavSection, agendaView: Teache
   if (isStudentView) return `Consultation anonyme — agenda complet de la classe ${classroomName}, toutes branches confondues.`;
   if (activeSection === "dashboard") return "Vue d’ensemble de vos classes et de vos publications.";
   if (activeSection === "classes") return "Classes auxquelles vous êtes rattaché et branches enseignées.";
+  if (activeSection === "settings") return "Année scolaire, plan des semaines A/B et activation.";
   return getAgendaSectionDescription(agendaView, classroomName);
 }
 
@@ -457,6 +461,10 @@ export default function Home() {
     window.setTimeout(() => setNotice(""), 3200);
   }
 
+  function applySchoolCalendarWeeks(weeks: SchoolCalendarWeek[]) {
+    setSchoolWeeks(buildSchoolWeeksFromEntries(weeks));
+  }
+
   function openCreateModal(type: AgendaItemType) {
     setEditingItem(null);
     setModalType(type);
@@ -757,7 +765,6 @@ export default function Home() {
             </button>
           ))}
           <button disabled><span>□</span> Documents</button>
-          <button disabled><span>⚙</span> Paramètres</button>
         </nav>
 
         {(activeSection === "agenda" || activeSection === "classes") && (
@@ -879,6 +886,10 @@ export default function Home() {
               ))}
             </div>
           </section>
+        )}
+
+        {activeSection === "settings" && (
+          <SchoolYearAdminPanel onCalendarUpdated={applySchoolCalendarWeeks} onNotice={showNotice} />
         )}
 
         {activeSection === "agenda" && (

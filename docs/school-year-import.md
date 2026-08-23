@@ -8,6 +8,14 @@ Campus Agenda accepte le **PDF officiel du secrétariat** tel que fourni chaque 
 
 Ce format est **recevable en début d'année** pour préparer ou mettre à jour l'année scolaire sans modification du code.
 
+## Interface enseignant
+
+Menu **Paramètres → Année scolaire** :
+
+1. Choisir le PDF des semaines A/B
+2. Vérifier l’aperçu (badge « PDF recevable », tableau des 38 semaines)
+3. **Enregistrer en brouillon**, puis **Activer cette année**
+
 ## Workflow admin (API)
 
 1. **Analyser** — `POST /api/admin/school-year/parse` (multipart, champ `file`)  
@@ -31,6 +39,5 @@ Ce format est **recevable en début d'année** pour préparer ou mettre à jour 
 
 ## Hors scope (phase ultérieure)
 
-- Interface graphique admin dédiée
 - Jours fériés / vacances (affichage)
 - Rôle administrateur distinct (prévu phase 2.4)
