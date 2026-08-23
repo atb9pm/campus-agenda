@@ -206,16 +206,26 @@ export default function Home() {
 
     async function bootstrapSession() {
       try {
-        const calendar = await fetchSchoolCalendar().catch(() => null);
-        if (!cancelled && calendar?.weeks.length) {
-          setSchoolWeeks(buildSchoolWeeksFromEntries(calendar.weeks));
-        }
+        void fetchSchoolCalendar()
+          .then((calendar) => {
+            if (!cancelled && calendar?.weeks.length) {
+              setSchoolWeeks(buildSchoolWeeksFromEntries(calendar.weeks));
+            }
+          })
+          .catch(() => undefined);
 
-        const session = await fetchApiSession();
+        const session = await Promise.race([
+          fetchApiSession(),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
+        ]);
         if (cancelled) return;
 
         if (session?.kind === "teacher") {
-          await applyTeacherSession(session);
+          void applyTeacherSession(session).catch((error) => {
+            if (!cancelled) {
+              setNotice(error instanceof Error ? error.message : "Connexion impossible.");
+            }
+          });
           return;
         }
 
@@ -226,8 +236,15 @@ export default function Home() {
           setSelectedClassroomId(session.classroomId);
           setStudentEntry("code");
           setAppMode("student");
-          const loadedItems = await fetchAgendaItems(session.classroomId);
-          if (!cancelled) setItems(loadedItems);
+          void fetchAgendaItems(session.classroomId)
+            .then((loadedItems) => {
+              if (!cancelled) setItems(loadedItems);
+            })
+            .catch((error) => {
+              if (!cancelled) {
+                setNotice(error instanceof Error ? error.message : "Chargement agenda impossible.");
+              }
+            });
           return;
         }
       } catch (error) {
