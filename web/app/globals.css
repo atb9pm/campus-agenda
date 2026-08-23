@@ -381,6 +381,17 @@ button { color: inherit; }
 .modal-library-actions { margin-top: 8px; display: grid; gap: 6px; }
 .secondary-library-action { justify-self: start; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 6px; background: #fff; color: var(--navy); font-size: 10px; font-weight: 800; cursor: pointer; }
 
+.timetable-import-panel { margin: 28px 38px; padding: 22px 24px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: var(--shadow); }
+.timetable-import-panel header h2 { margin: 8px 0 6px; color: var(--navy); font-size: 18px; }
+.timetable-import-panel header p { margin: 0; color: #52627f; font-size: 12px; line-height: 1.5; }
+.timetable-import-form { display: grid; gap: 10px; margin-top: 16px; max-width: 420px; }
+.timetable-import-form label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #52627f; }
+.timetable-import-form button { padding: 9px 12px; border: 1px solid var(--navy); border-radius: 6px; background: var(--navy); color: #fff; font-weight: 800; cursor: pointer; }
+.timetable-preview, .timetable-history { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.timetable-preview h3, .timetable-history h3 { margin: 0 0 8px; color: var(--navy); font-size: 14px; }
+.timetable-warnings, .timetable-sample, .timetable-history ul { margin: 8px 0 0; padding-left: 18px; color: #52627f; font-size: 11px; }
+.timetable-warning, .timetable-error { color: #b42318; font-size: 11px; }
+
 @media (max-width: 1030px) {
   .technical-sidebar { width: 190px; }.technical-main { width: calc(100% - 190px); margin-left: 190px; }
   .calendar-workbench { grid-template-columns: 190px minmax(0, 1fr); margin-right: 20px; margin-left: 20px; }.technical-header { padding-right: 20px; padding-left: 20px; }.class-tabs { padding-right: 20px; padding-left: 20px; }
