@@ -49,7 +49,7 @@ export class MemoryAgendaStore implements AgendaStore {
     actorTeacherId: string,
     patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber">>,
   ): Promise<AgendaMutationResult> {
-    const result = updatePublication(this.items, itemId, actorTeacherId, patch);
+    const result = updatePublication(this.items, itemId, actorTeacherId, patch, false);
     if (!result.ok) {
       return { ok: false, reason: result.reason, status: result.reason.includes("introuvable") ? 404 : 403 };
     }
@@ -61,7 +61,7 @@ export class MemoryAgendaStore implements AgendaStore {
 
   async deleteAgendaItem(itemId: number, actorTeacherId: string): Promise<AgendaMutationResult> {
     const existing = await this.findAgendaItem(itemId);
-    const result = deletePublication(this.items, itemId, actorTeacherId);
+    const result = deletePublication(this.items, itemId, actorTeacherId, false);
     if (!result.ok) {
       return { ok: false, reason: result.reason, status: result.reason.includes("introuvable") ? 404 : 403 };
     }
@@ -78,6 +78,10 @@ export class MemoryAgendaStore implements AgendaStore {
 
   async teacherCanPublish(teacherId: string, classroomId: string, subjectId: string): Promise<boolean> {
     return teacherTeachesSubject(DEMO_CATALOG, teacherId, classroomId, subjectId);
+  }
+
+  async teacherIsAdmin(_teacherId: string): Promise<boolean> {
+    return false;
   }
 
   async resolveStudentAccess(label: string) {
