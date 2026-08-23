@@ -56,6 +56,7 @@ Objectifs métier validés :
 2. **Préparer chaque année scolaire** en début d'année : plan des semaines A/B, jours de cours, sans modifier le code source.
 3. **Importer la grille horaire du secteur** pour créer classes, branches et affectations enseignants en masse.
 4. **Conserver une saisie manuelle** pour les changements en cours d'année (remplacement, déplacement, nouvelle branche).
+5. **Coordonner les contrôles** entre enseignants d'une même classe — remplacer le calendrier Outlook partagé par le titulaire (visibilité, alertes, échéances élève).
 
 Principes directeurs :
 
@@ -143,6 +144,54 @@ Principes directeurs :
 
 ---
 
+## 2.4 — Coordination des évaluations et échéances
+
+**Problème actuel :** chaque titulaire crée un calendrier Outlook de la classe, le partage à tous les profs et vérifie manuellement qu'il n'y a pas trop de contrôles le même jour. Processus chronophage, hors outil pédagogique, sans vue élève dédiée.
+
+**Objectif :** remplacer cette coordination Outlook par Campus Agenda — visibilité partagée, alerte à la publication, panneau élève — sans retirer la responsabilité pédagogique aux enseignants.
+
+**Règles métier validées :**
+
+| Sujet | Règle |
+|-------|-------|
+| Seuil d'alerte | À la saisie du **3ᵉ contrôle** (`TEST`) le **même jour de cours** pour la **même classe** |
+| Blocage | **Aucun** — le professeur peut toujours **« Publier quand même »** (choix pédagogique) |
+| 1er et 2ᵉ contrôle du jour | Publication **sans alerte** |
+| Droits enseignants | **Séparation complète** : chaque prof ne modifie/supprime que **ses** publications |
+| Titulaire | **Pas de droit spécial** sur les publications des collègues (même vue coordination en lecture) |
+| Administrateur | **Seul** rôle habilité à modifier ou supprimer la publication d'un **autre** enseignant |
+| Élève — contrôles | Panneau **« Contrôles à venir »** : tous les `TEST` de la classe, **ordre chronologique**, **8 maximum** affichés |
+
+**Livrables enseignant :**
+
+- **Alerte à la publication** (3ᵉ contrôle) : liste des contrôles déjà prévus ce jour + boutons « Modifier la date » / « Publier quand même ».
+- **Vue « Contrôles · ma classe »** : calendrier par semaines A/B et jours de cours, tous profs et branches (remplace le calendrier Outlook partagé en consultation).
+- **Vue « Mes contrôles »** : timeline ou grille des prochains contrôles du professeur, **toutes classes confondues**.
+- Enrichissement de la **charge globale** existante (vue « Toute la classe ») : mise en évidence des jours avec 2+ contrôles.
+
+**Livrables élève :**
+
+- Panneau compact **« Contrôles à venir »** sur la vue élève (à côté du jour de cours actuel).
+- Contenu : date du jour de cours, branche, titre ; tri chronologique ; plafond **8** entrées.
+- Périmètre : contrôles dont le jour de cours est **à venir** (≥ prochain jour de cours de l'élève).
+
+**Livrables administrateur :**
+
+- Rôle **`admin`** : modification / suppression de toute publication, quel que soit l'auteur.
+- **Journal des actions admin** (qui a modifié quoi, quand) — recommandé pour la confiance entre enseignants.
+
+**Hors scope immédiat :**
+
+- Sync bidirectionnelle Outlook (option ultérieure : export **iCal** en lecture seule pour transition).
+- Panneau « Devoirs à venir » élève (phase ultérieure si demandé).
+- Titulaire avec droits de modification sur les publications des collègues.
+
+**Critère de succès :** plus besoin de maintenir un calendrier Outlook partagé pour la coordination des contrôles, dès lors que toute l'équipe publie dans Campus Agenda ; l'élève voit ses 8 prochains contrôles sans naviguer semaine par semaine.
+
+**Contexte actuel (v1.2) :** la vue « Toute la classe », le filtre Contrôles et la synthèse de charge posent les bases ; il manque l'alerte à la publication, les vues dédiées contrôles et le panneau élève.
+
+---
+
 ## Modèle de données cible (schéma simplifié)
 
 ```text
@@ -162,6 +211,9 @@ PublicationTemplate (bibliothèque, multi-années)
 
 AgendaItem (instance, rattachée à school_year_id)
   └── school_week_number, course_day, template_id?, author, …
+
+AdminUser (rôle admin)
+  └── peut modifier/supprimer tout AgendaItem + journal d'audit
 ```
 
 ---
@@ -171,9 +223,12 @@ AgendaItem (instance, rattachée à school_year_id)
 | Ordre | Phase | Pourquoi en premier |
 |------:|-------|---------------------|
 | 1 | **2.0** | Sans année configurable, rien d'autre n'est pérenne |
-| 2 | **2.1** | Réutilisation du contenu — gain métier immédiat |
-| 3 | **2.2** | Import grille — dépend du modèle année + classes en base |
-| 4 | **2.3** | Archivage et mid-year — une fois le cycle complet en place |
+| 2 | **2.4** | Coordination contrôles — gain métier immédiat, remplace Outlook ; peut démarrer dès que 2.0 stabilise l'année active |
+| 3 | **2.1** | Réutilisation du contenu d'une année sur l'autre |
+| 4 | **2.2** | Import grille — dépend du modèle année + classes en base |
+| 5 | **2.3** | Archivage et mid-year — une fois le cycle complet en place |
+
+**Note :** la phase **2.4** peut être partiellement prototypée avant 2.0 (alerte et panneau élève sur l'année codée en dur), mais la pérennité complète repose sur **2.0**.
 
 La saisie manuelle unitaire (publication, modification, suppression) reste disponible **à chaque phase** en parallèle des imports et assistants.
 
