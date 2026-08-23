@@ -4,6 +4,7 @@ import {
   jsonResponse,
   requireClassroomReadAccess,
   requireTeacherSession,
+  getActiveSchoolYearId,
 } from "../../../lib/server/api.ts";
 
 export async function GET(request: Request) {
@@ -69,6 +70,7 @@ export async function POST(request: Request) {
     type: type as typeof AGENDA_ITEM_TYPES[number],
     title: String(body.title ?? ""),
     detail: String(body.detail ?? ""),
+    schoolYearId: await getActiveSchoolYearId(),
   });
 
   return jsonResponse({ ok: true, item }, { status: 201 });

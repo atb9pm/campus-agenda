@@ -241,3 +241,122 @@ export async function activateSchoolYear(schoolYearId: string): Promise<SchoolCa
     weeks: payload.active.weeks,
   };
 }
+
+export interface PublicationTemplatePayload {
+  id: string;
+  ownerTeacherId: string;
+  title: string;
+  detail: string;
+  type: AgendaItemType;
+  subjectId: string | null;
+  defaultSchoolWeekNumber: number | null;
+  defaultDay: number | null;
+  sourceSchoolYearId: string | null;
+  sourceItemId: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TemplateDeploymentPayload {
+  templateId: string;
+  classroomId: string;
+  subjectId: string;
+  schoolWeekNumber: number;
+  day: number;
+  hour?: number;
+}
+
+export async function fetchPublicationTemplates(): Promise<PublicationTemplatePayload[]> {
+  const response = await fetch("/api/library/templates", { credentials: "include" });
+  const payload = await parseJson<{ ok: boolean; templates?: PublicationTemplatePayload[]; reason?: string }>(response);
+  if (!response.ok || !payload.ok || !payload.templates) {
+    throw new Error(payload.reason ?? "Impossible de charger la bibliothèque.");
+  }
+  return payload.templates;
+}
+
+export async function savePublicationToLibrary(itemId: number): Promise<{
+  template: PublicationTemplatePayload;
+  item: PrototypeAgendaItem;
+}> {
+  const response = await fetch("/api/library/templates", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ itemId }),
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    template?: PublicationTemplatePayload;
+    item?: PrototypeAgendaItem;
+    reason?: string;
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.template || !payload.item) {
+    throw new Error(payload.reason ?? "Enregistrement dans la bibliothèque impossible.");
+  }
+  return { template: payload.template, item: payload.item };
+}
+
+export async function syncTemplateFromPublication(itemId: number): Promise<PublicationTemplatePayload> {
+  const response = await fetch("/api/library/templates/sync-from-item", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ itemId }),
+  });
+  const payload = await parseJson<{ ok: boolean; template?: PublicationTemplatePayload; reason?: string }>(response);
+  if (!response.ok || !payload.ok || !payload.template) {
+    throw new Error(payload.reason ?? "Mise à jour du modèle impossible.");
+  }
+  return payload.template;
+}
+
+export async function deletePublicationTemplate(templateId: string): Promise<void> {
+  const response = await fetch(`/api/library/templates/${encodeURIComponent(templateId)}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  const payload = await parseJson<{ ok: boolean; reason?: string }>(response);
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.reason ?? "Suppression du modèle impossible.");
+  }
+}
+
+export async function deployPublicationTemplates(
+  deployments: TemplateDeploymentPayload[],
+): Promise<PrototypeAgendaItem[]> {
+  const response = await fetch("/api/library/deploy", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ deployments }),
+  });
+  const payload = await parseJson<{ ok: boolean; created?: PrototypeAgendaItem[]; reason?: string }>(response);
+  if (!response.ok || !payload.ok || !payload.created) {
+    throw new Error(payload.reason ?? "Déploiement impossible.");
+  }
+  return payload.created;
+}
+
+export async function duplicateFromPreviousYear(input: {
+  archivedSchoolYearId: string;
+  classroomId: string;
+  alsoCreateTemplates?: boolean;
+}): Promise<{ created: PrototypeAgendaItem[]; createdCount: number }> {
+  const response = await fetch("/api/library/duplicate-previous-year", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    created?: PrototypeAgendaItem[];
+    createdCount?: number;
+    reason?: string;
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.created) {
+    throw new Error(payload.reason ?? "Duplication depuis l'année précédente impossible.");
+  }
+  return { created: payload.created, createdCount: payload.createdCount ?? payload.created.length };
+}

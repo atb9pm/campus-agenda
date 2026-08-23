@@ -30,6 +30,8 @@ function isValidAgendaItem(value: unknown): value is PrototypeAgendaItem {
     && AGENDA_ITEM_TYPES.includes(item.type)
     && typeof item.title === "string"
     && typeof item.detail === "string"
+    && (item.templateId === undefined || item.templateId === null || typeof item.templateId === "string")
+    && (item.schoolYearId === undefined || item.schoolYearId === null || typeof item.schoolYearId === "string")
   );
 }
 

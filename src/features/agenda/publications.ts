@@ -12,6 +12,8 @@ export interface PublicationInput {
   type: AgendaItemType;
   title: string;
   detail: string;
+  templateId?: string | null;
+  schoolYearId?: string | null;
 }
 
 export type PublicationPatch = Partial<
@@ -63,6 +65,8 @@ export function createPublication(
     type: input.type,
     title,
     detail: input.detail.trim() || "Aucune précision",
+    templateId: input.templateId ?? null,
+    schoolYearId: input.schoolYearId ?? null,
   };
 
   return [...items, publication];
@@ -96,6 +100,8 @@ export function updatePublication(
     hour: patch.hour ?? existing.hour,
     subjectId: patch.subjectId ?? existing.subjectId,
     schoolWeekNumber: patch.schoolWeekNumber ?? existing.schoolWeekNumber,
+    templateId: existing.templateId ?? null,
+    schoolYearId: existing.schoolYearId ?? null,
   };
 
   return {
