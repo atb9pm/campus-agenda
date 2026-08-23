@@ -168,6 +168,7 @@ export default function Home() {
   const [editingItem, setEditingItem] = useState<PrototypeAgendaItem | null>(null);
   const [notice, setNotice] = useState("");
   const [authReady, setAuthReady] = useState(false);
+  const [teacherAuthenticated, setTeacherAuthenticated] = useState(false);
   const [teacherIsAdmin, setTeacherIsAdmin] = useState(false);
   const [loginPending, setLoginPending] = useState(false);
   const [loginError, setLoginError] = useState("");
