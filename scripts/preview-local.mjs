@@ -36,11 +36,15 @@ function contentType(filePath) {
   return MIME[path.extname(filePath).toLowerCase()] ?? "application/octet-stream";
 }
 
+function assetPathname(pathname) {
+  return pathname.replace(/\.\./g, "").replace(/^\/+/, "");
+}
+
 async function readAsset(pathname) {
-  const safePath = pathname.replace(/\.\./g, "");
+  const relativePath = assetPathname(pathname);
   const candidates = [
-    path.join(clientRoot, safePath),
-    path.join(clientRoot, safePath, "index.html"),
+    path.join(clientRoot, relativePath),
+    path.join(clientRoot, relativePath, "index.html"),
   ];
   for (const candidate of candidates) {
     try {
@@ -51,6 +55,25 @@ async function readAsset(pathname) {
     }
   }
   return null;
+}
+
+async function tryServeStatic(req, res) {
+  if (req.method !== "GET" && req.method !== "HEAD") return false;
+
+  const host = req.headers.host ?? `localhost:${port}`;
+  const url = new URL(req.url ?? "/", `http://${host}`);
+  const asset = await readAsset(url.pathname);
+  if (!asset) return false;
+
+  res.statusCode = 200;
+  res.setHeader("Content-Type", asset.type);
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  if (req.method === "HEAD") {
+    res.end();
+  } else {
+    res.end(asset.data);
+  }
+  return true;
 }
 
 const env = {
@@ -79,6 +102,8 @@ function readRequestBody(req) {
 
 const server = createServer(async (req, res) => {
   try {
+    if (await tryServeStatic(req, res)) return;
+
     const host = req.headers.host ?? `localhost:${port}`;
     const url = new URL(req.url ?? "/", `http://${host}`);
     const body = req.method === "GET" || req.method === "HEAD" ? undefined : await readRequestBody(req);

@@ -24,11 +24,14 @@ Vous devez voir du JSON (`"ok":true`). Sinon le serveur ne répond pas correctem
 
 ## Si « Chargement de la session… » ne finit pas
 
-1. **Ctrl + C** dans PowerShell pour arrêter le serveur
+Cause la plus fréquente : le serveur tourne encore avec un **ancien build** (les fichiers JavaScript ne se chargent pas).
+
+1. **Ctrl + C** dans PowerShell pour **arrêter complètement** le serveur
 2. Mettre à jour le code : `git pull` (à la racine du projet)
-3. Rebuild + start (commandes ci-dessus)
+3. Rebuild + preview Node (voir ci-dessous) — **pas** `pnpm.cmd start` sous Windows
 4. **Navigation privée** ou supprimer les cookies de `localhost:5173`
 5. Retester `/api/health` puis `http://localhost:5173`
+6. Si besoin : **F12 → Console** — des erreurs 404 sur `/_next/static/...` indiquent qu'il faut refaire build + redémarrer le serveur
 
 ## Erreur build « pdfjs-dist/legacy/build/pdf.mjs »
 

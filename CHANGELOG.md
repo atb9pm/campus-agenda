@@ -15,6 +15,11 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 - Écran Paramètres · **Archives et transitions**.
 - Documentation : `docs/multi-year-operations.md`.
 
+### Corrigé
+
+- **Prévisualisation Windows** : `preview:node` sert désormais les fichiers `/_next/static/` directement (le worker vinext ne les exposait pas → écran « Chargement de la session… » infini).
+- **Écran de connexion** : affiché immédiatement au chargement (plus d'écran bloquant en attendant l'API).
+
 ## [Unreleased] — Phase 2.0 (fondations)
 
 ### Ajouté

@@ -21,7 +21,7 @@ test("server-renders the Campus Agenda prototype", async () => {
 
   const html = await response.text();
   assert.match(html, /Campus Agenda — Agenda scolaire partagé/);
-  assert.match(html, /Chargement de la session/);
+  assert.match(html, /Connexion/);
   assert.match(html, /id="main-content"/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });

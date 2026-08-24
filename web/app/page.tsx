@@ -167,7 +167,6 @@ export default function Home() {
   const [modalType, setModalType] = useState<AgendaItemType | null>(null);
   const [editingItem, setEditingItem] = useState<PrototypeAgendaItem | null>(null);
   const [notice, setNotice] = useState("");
-  const [authReady, setAuthReady] = useState(false);
   const [teacherAuthenticated, setTeacherAuthenticated] = useState(false);
   const [teacherIsAdmin, setTeacherIsAdmin] = useState(false);
   const [loginPending, setLoginPending] = useState(false);
@@ -200,11 +199,6 @@ export default function Home() {
       setSelectedClassroomId((current) => (classroomIds.includes(current) ? current : classroomIds[0]));
     }
   }
-
-  useEffect(() => {
-    const fallbackTimer = setTimeout(() => setAuthReady(true), 4000);
-    return () => clearTimeout(fallbackTimer);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -256,8 +250,6 @@ export default function Home() {
         if (!cancelled) {
           setNotice(error instanceof Error ? error.message : "Connexion impossible.");
         }
-      } finally {
-        if (!cancelled) setAuthReady(true);
       }
     }
 
@@ -748,18 +740,6 @@ export default function Home() {
 
   const myItemCount = classroomItems.filter((item) => item.authorTeacherId === currentTeacherId).length;
   const showAgendaTools = !isStudentView && activeSection === "agenda";
-
-  if (!authReady) {
-    return (
-      <div className="teacher-login-shell" id="main-content">
-        <div className="teacher-login-loading" role="status" aria-live="polite">
-          <BrandEmblem />
-          <strong>CAMPUS AGENDA</strong>
-          <span>Chargement de la session…</span>
-        </div>
-      </div>
-    );
-  }
 
   if (!teacherAuthenticated && !isStudentView) {
     return (
