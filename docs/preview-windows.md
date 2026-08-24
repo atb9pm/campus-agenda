@@ -14,8 +14,12 @@ cd web
 $env:CAMPUS_STORE="memory"
 $env:AUTH_SECRET="dev-secret"
 pnpm.cmd run build
-pnpm.cmd run preview:node
+pnpm.cmd run preview:fresh
 ```
+
+`preview:fresh` libère d'abord le port 5173 s'il est encore pris, puis démarre le serveur.
+
+Alternative sans libérer le port : `pnpm.cmd run preview:node` (choisit automatiquement 5174, 5175… si besoin).
 
 Le terminal affiche :
 
@@ -42,7 +46,7 @@ Test rapide : http://127.0.0.1:5173/api/health → `{"ok":true,...}`
 - Compte : `teacher-chf` (François Cheseaux · ChF)
 - Mot de passe : `campus-demo` (espaces avant/après acceptés)
 
-Si la connexion échoue avec « Trop de tentatives », arrêtez le serveur (Ctrl+C), relancez `pnpm.cmd run preview:node` et réessayez. La prévisualisation locale désactive le rate limit automatiquement.
+Si la connexion échoue avec « Trop de tentatives », arrêtez le serveur (Ctrl+C), relancez `pnpm.cmd run preview:fresh` et réessayez. La prévisualisation locale désactive le rate limit automatiquement.
 
 Si vous voyez encore « Professeur démo » avec un menu déroulant, faites `git pull` puis `pnpm.cmd run build` — vous n'avez pas la dernière version.
 
@@ -50,7 +54,7 @@ Si vous voyez encore « Professeur démo » avec un menu déroulant, faites `git
 
 | Message / symptôme | Action |
 |---|---|
-| Port déjà utilisé (`EADDRINUSE`) | **Sans git pull** : `$env:PORT="5174"; pnpm.cmd run preview:node` ou `..\scripts\stop-preview-port.ps1` puis relancer. **Avec la dernière version** : le script choisit le port suivant ou affiche « serveur déjà actif ». |
+| Port déjà utilisé (`EADDRINUSE`) | `pnpm.cmd run preview:fresh` — ou `$env:PORT="5174"; pnpm.cmd run preview:node`. La dernière version ne plante plus : elle réessaie le port suivant. |
 | Build manquant | `pnpm.cmd run build` dans `web/` |
 | Page blanche avec `localhost` | Remplacez par `http://127.0.0.1:5173` |
 | Ancien écran « Chargement… » | Cache Cursor — ouvrez Edge sur 127.0.0.1 |
@@ -58,3 +62,9 @@ Si vous voyez encore « Professeur démo » avec un menu déroulant, faites `git
 ## Arrêter
 
 **Ctrl + C** dans la fenêtre PowerShell du serveur.
+
+Pour forcer la libération du port :
+
+```powershell
+pnpm.cmd run preview:free-port
+```
