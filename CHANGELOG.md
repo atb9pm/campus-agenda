@@ -20,6 +20,8 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 - **Prévisualisation Windows** : `preview:node` sert désormais les fichiers `/_next/static/` directement (le worker vinext ne les exposait pas → écran « Chargement de la session… » infini).
 - **Écran de connexion** : affiché immédiatement au chargement (plus d'écran bloquant en attendant l'API).
 - **Diagnostic preview** : `GET /api/preview-info` et vérification du build au démarrage de `preview:node`.
+- **Page statique** `/preview-login.html` — connexion sans React (contournement cache navigateur Cursor).
+- **Démarrage instantané** : `/ping` et `/preview-login.html` répondent avant le worker ; port par défaut **5180** sur **127.0.0.1**.
 
 ## [Unreleased] — Phase 2.0 (fondations)
 

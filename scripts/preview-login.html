@@ -76,17 +76,22 @@
     const form = document.getElementById("login-form");
     const submit = document.getElementById("submit");
 
-    fetch("/api/preview-info", { cache: "no-store" })
+    fetch("/ping", { cache: "no-store" })
+      .then((res) => res.text())
+      .then((text) => {
+        statusEl.innerHTML = '<span class="ok">Serveur OK</span> · ' + text.trim();
+        return fetch("/api/preview-info", { cache: "no-store" });
+      })
       .then((res) => res.json())
       .then((info) => {
         statusEl.innerHTML =
           '<span class="ok">Serveur OK</span> · version ' + info.version +
-          '<br>Ouvrez cette page dans <strong>Chrome ou Edge</strong> (pas l’aperçu Cursor).';
+          '<br>Utilisez <strong>127.0.0.1</strong> si localhost rame.';
       })
       .catch(() => {
         statusEl.innerHTML =
           '<span class="bad">Serveur inaccessible</span><br>' +
-          'Vérifiez que <code>pnpm.cmd run preview:node</code> tourne dans PowerShell.';
+          'Dans PowerShell : vérifiez que preview:node tourne et testez <code>/ping</code>.';
       });
 
     form.addEventListener("submit", async (event) => {
