@@ -50,7 +50,7 @@ Si vous voyez encore « Professeur démo » avec un menu déroulant, faites `git
 
 | Message / symptôme | Action |
 |---|---|
-| Port déjà utilisé | Ctrl+C partout, ou `$env:PORT="5180"; pnpm.cmd run preview:node` |
+| Port déjà utilisé (`EADDRINUSE`) | Le script choisit automatiquement le port suivant (5174, 5175…). Utilisez l'URL affichée. Sinon : Ctrl+C dans l'autre terminal PowerShell, ou `$env:PORT="5180"; pnpm.cmd run preview:node` |
 | Build manquant | `pnpm.cmd run build` dans `web/` |
 | Page blanche avec `localhost` | Remplacez par `http://127.0.0.1:5173` |
 | Ancien écran « Chargement… » | Cache Cursor — ouvrez Edge sur 127.0.0.1 |

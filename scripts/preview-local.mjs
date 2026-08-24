@@ -10,19 +10,44 @@
  *   $env:CAMPUS_STORE="memory"; $env:AUTH_SECRET="dev-secret"; pnpm.cmd run preview:node
  */
 import { access } from "node:fs/promises";
+import net from "node:net";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const webRoot = path.resolve(scriptDir, "../web");
 const outDir = path.join(webRoot, "dist");
-const port = Number(process.env.PORT ?? 5173);
+const preferredPort = Number(process.env.PORT ?? 5173);
 const host = process.env.HOST ?? "127.0.0.1";
+const MAX_PORT_ATTEMPTS = 10;
 
 process.env.CAMPUS_STORE ??= "memory";
 process.env.AUTH_SECRET ??= "dev-secret";
 // Évite le blocage 429 après plusieurs essais ratés en prévisualisation locale.
 process.env.CAMPUS_DISABLE_RATE_LIMIT ??= "1";
+
+function isPortAvailable(port, listenHost) {
+  return new Promise((resolve) => {
+    const probe = net.createServer();
+    probe.once("error", () => resolve(false));
+    probe.once("listening", () => {
+      probe.close(() => resolve(true));
+    });
+    probe.listen(port, listenHost);
+  });
+}
+
+async function resolvePreviewPort() {
+  for (let offset = 0; offset < MAX_PORT_ATTEMPTS; offset += 1) {
+    const candidate = preferredPort + offset;
+    if (await isPortAvailable(candidate, host)) {
+      return { port: candidate, autoSelected: offset > 0 };
+    }
+  }
+  console.error(`\n❌ Aucun port libre entre ${preferredPort} et ${preferredPort + MAX_PORT_ATTEMPTS - 1} sur ${host}.`);
+  console.error("   Fermez l'autre serveur (Ctrl+C) ou choisissez un port : $env:PORT=\"5180\"; pnpm.cmd run preview:node\n");
+  process.exit(1);
+}
 
 async function requireBuild() {
   const entry = path.join(outDir, "server/index.js");
@@ -36,24 +61,21 @@ async function requireBuild() {
 
 await requireBuild();
 
+const { port, autoSelected } = await resolvePreviewPort();
+process.env.PORT = String(port);
+
 const prodServerUrl = pathToFileURL(
   path.join(webRoot, "node_modules/vinext/dist/server/prod-server.js"),
 ).href;
 const { startProdServer } = await import(prodServerUrl);
 
-try {
-  await startProdServer({ port, host, outDir });
-} catch (error) {
-  if (error && typeof error === "object" && "code" in error && error.code === "EADDRINUSE") {
-    console.error(`\n❌ Port ${port} déjà utilisé sur ${host}.`);
-    console.error(`   Ctrl+C dans l'autre terminal, ou : $env:PORT="${port + 1}"; pnpm.cmd run preview:node\n`);
-    process.exit(1);
-  }
-  throw error;
-}
+await startProdServer({ port, host, outDir });
 
 const origin = `http://${host}:${port}`;
 console.log("");
+if (autoSelected) {
+  console.log(`⚠ Port ${preferredPort} déjà utilisé — serveur démarré sur le port ${port}.`);
+}
 console.log(`Campus Agenda  →  ${origin}`);
 console.log(`Santé API      →  ${origin}/api/health`);
 console.log("Connexion      →  teacher-chf (ChF) / campus-demo");
