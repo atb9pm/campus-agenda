@@ -478,7 +478,7 @@ export default function Home() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const teacherId = String(form.get("teacherId") || DEMO_CURRENT_TEACHER_ID);
-    const password = String(form.get("password") || "");
+    const password = String(form.get("password") || "").trim();
 
     void (async () => {
       setLoginPending(true);

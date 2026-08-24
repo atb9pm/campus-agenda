@@ -13,7 +13,7 @@ export async function POST(request: Request) {
 
   const body = await request.json() as { teacherId?: string; password?: string };
   const teacherId = String(body.teacherId ?? "").trim();
-  const password = String(body.password ?? "");
+  const password = String(body.password ?? "").trim();
 
   const store = await getStore();
   if (!(await store.verifyTeacherCredentials(teacherId, password))) {

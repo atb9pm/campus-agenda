@@ -38,6 +38,7 @@ test("phase 0.7 — cookie de session extrait de la requête", async () => {
 
 test("phase 0.7 — mot de passe de démonstration documenté", () => {
   assert.equal(isDemoTeacherPassword(DEMO_TEACHER_PASSWORD), true);
+  assert.equal(isDemoTeacherPassword(" campus-demo "), true);
   assert.equal(isDemoTeacherPassword("secret-réel"), false);
 });
 
@@ -45,12 +46,12 @@ test("phase 0.7 — store mémoire contrôle l'accès enseignant", async () => {
   resetMemoryAgendaStore();
   const store = getMemoryAgendaStore();
   assert.equal(await store.verifyTeacherCredentials(DEMO_CURRENT_TEACHER_ID, DEMO_TEACHER_PASSWORD), true);
-  assert.equal(await store.teacherCanAccessClassroom(DEMO_CURRENT_TEACHER_ID, "classe-demo-tma-2a"), true);
-  assert.equal(await store.teacherCanPublish(DEMO_CURRENT_TEACHER_ID, "classe-demo-tma-2a", "subject-demo-moteur-2a"), true);
+  assert.equal(await store.teacherCanAccessClassroom(DEMO_CURRENT_TEACHER_ID, "classe-chf-ma2"), true);
+  assert.equal(await store.teacherCanPublish(DEMO_CURRENT_TEACHER_ID, "classe-chf-ma2", "subject-chf-ma2-cp1"), true);
 
   const created = await store.createAgendaItem({
-    classroomId: "classe-demo-tma-2a",
-    subjectId: "subject-demo-moteur-2a",
+    classroomId: "classe-chf-ma2",
+    subjectId: "subject-chf-ma2-cp1",
     authorTeacherId: DEMO_CURRENT_TEACHER_ID,
     day: 2,
     hour: 15,

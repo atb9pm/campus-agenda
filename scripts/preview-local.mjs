@@ -21,6 +21,8 @@ const host = process.env.HOST ?? "127.0.0.1";
 
 process.env.CAMPUS_STORE ??= "memory";
 process.env.AUTH_SECRET ??= "dev-secret";
+// Évite le blocage 429 après plusieurs essais ratés en prévisualisation locale.
+process.env.CAMPUS_DISABLE_RATE_LIMIT ??= "1";
 
 async function requireBuild() {
   const entry = path.join(outDir, "server/index.js");

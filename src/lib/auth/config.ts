@@ -2,7 +2,7 @@
 export const DEMO_TEACHER_PASSWORD = "campus-demo";
 
 export function isDemoTeacherPassword(password: string): boolean {
-  return password === DEMO_TEACHER_PASSWORD;
+  return password.trim() === DEMO_TEACHER_PASSWORD;
 }
 
 export function getAuthSecret(): string {

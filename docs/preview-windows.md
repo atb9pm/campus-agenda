@@ -40,7 +40,11 @@ Test rapide : http://127.0.0.1:5173/api/health → `{"ok":true,...}`
 ## Connexion démo
 
 - Compte : `teacher-chf` (François Cheseaux · ChF)
-- Mot de passe : `campus-demo`
+- Mot de passe : `campus-demo` (espaces avant/après acceptés)
+
+Si la connexion échoue avec « Trop de tentatives », arrêtez le serveur (Ctrl+C), relancez `pnpm.cmd run preview:node` et réessayez. La prévisualisation locale désactive le rate limit automatiquement.
+
+Si vous voyez encore « Professeur démo » avec un menu déroulant, faites `git pull` puis `pnpm.cmd run build` — vous n'avez pas la dernière version.
 
 ## Si ça ne démarre pas
 
