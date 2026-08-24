@@ -202,6 +202,11 @@ export default function Home() {
   }
 
   useEffect(() => {
+    const fallbackTimer = setTimeout(() => setAuthReady(true), 4000);
+    return () => clearTimeout(fallbackTimer);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function bootstrapSession() {
