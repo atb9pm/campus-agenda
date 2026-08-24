@@ -103,6 +103,14 @@ POST /api/admin/restore
 5. Déployer : `cd web && pnpm build && npx wrangler deploy`.
 6. Vérifier `GET /api/health` → `ok: true`, `store: "d1"`.
 
+## Mise en service Infomaniak (Node.js + SQLite)
+
+Pour un hébergement **Infomaniak** (sans Cloudflare), suivre le guide dédié :
+
+→ **`docs/infomaniak-deploy.md`**
+
+Résumé : dossier d'exécution `web`, build `corepack enable && pnpm install && pnpm run build`, lancement `pnpm run start:infomaniak`, variable `AUTH_SECRET` obligatoire.
+
 ## Vérifications
 
 1. `pnpm test`
