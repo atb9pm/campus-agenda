@@ -54,7 +54,7 @@ const origin = `http://${host}:${port}`;
 console.log("");
 console.log(`Campus Agenda  →  ${origin}`);
 console.log(`Santé API      →  ${origin}/api/health`);
-console.log("Connexion      →  teacher-demo-current / campus-demo");
+console.log("Connexion      →  teacher-chf (ChF) / campus-demo");
 console.log("");
 console.log("Ouvrez l'URL 127.0.0.1 (pas localhost) dans Edge ou Chrome.");
 console.log("Gardez cette fenêtre PowerShell ouverte.");

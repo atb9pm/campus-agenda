@@ -48,10 +48,10 @@ test("preview vinext sert HTML, JS et login enseignant", async (t) => {
   const login = await fetch(`${origin}/api/auth/teacher`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ teacherId: "teacher-demo-current", password: "campus-demo" }),
+    body: JSON.stringify({ teacherId: "teacher-chf", password: "campus-demo" }),
   });
   assert.equal(login.status, 200);
   const loginPayload = await login.json();
   assert.equal(loginPayload.ok, true);
-  assert.equal(loginPayload.session.teacherId, "teacher-demo-current");
+  assert.equal(loginPayload.session.teacherId, "teacher-chf");
 });

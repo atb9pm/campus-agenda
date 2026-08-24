@@ -754,16 +754,12 @@ export default function Home() {
           <section className="teacher-login-card" aria-labelledby="teacher-login-title">
             <span className="eyebrow">ESPACE ENSEIGNANT</span>
             <h1 id="teacher-login-title">Connexion</h1>
-            <p>Identifiez-vous pour accéder à l’agenda de démonstration.</p>
+            <p>Accédez à votre calendrier personnel et aux agendas de vos classes.</p>
             <form onSubmit={submitTeacherLogin}>
-              <label>
-                Compte enseignant
-                <select name="teacherId" defaultValue={DEMO_CURRENT_TEACHER_ID}>
-                  {DEMO_CATALOG.teachers.map((teacher) => (
-                    <option key={teacher.id} value={teacher.id}>{teacher.displayName}</option>
-                  ))}
-                </select>
-              </label>
+              <input type="hidden" name="teacherId" value={DEMO_CURRENT_TEACHER_ID} />
+              <p className="teacher-login-account">
+                Compte&nbsp;: <strong>{currentTeacher?.displayName ?? "François Cheseaux (ChF)"}</strong>
+              </p>
               <label>
                 Mot de passe
                 <input name="password" type="password" autoComplete="current-password" required />
@@ -1313,8 +1309,8 @@ export default function Home() {
           <section className="technical-modal" role="dialog" aria-modal="true" aria-labelledby="student-code-title">
             <header><div><span className="eyebrow">ESPACE ÉLÈVE</span><h2 id="student-code-title">Connexion anonyme</h2></div><button onClick={() => setStudentCodeModalOpen(false)}>×</button></header>
             <form onSubmit={(event) => { event.preventDefault(); enterStudentWithCode(String(new FormData(event.currentTarget).get("code") || "")); }}>
-              <label>Identifiant de démonstration<input name="code" placeholder="eleve-test-001" required /></label>
-              <p className="modal-hint">Codes fictifs : <strong>eleve-test-001</strong> (2e TMA) ou <strong>eleve-test-002</strong> (1re TMA).</p>
+              <label>Identifiant élève<input name="code" placeholder="eleve-ma2" required /></label>
+              <p className="modal-hint">Exemples&nbsp;: <strong>eleve-ma2</strong>, <strong>eleve-mma3a</strong>, <strong>eleve-pai</strong> (une classe de test par code).</p>
               <footer><button type="button" onClick={() => setStudentCodeModalOpen(false)}>Annuler</button><button type="submit">Consulter mon agenda</button></footer>
             </form>
           </section>

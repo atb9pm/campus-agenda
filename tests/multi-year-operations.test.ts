@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { DEMO_PROTOTYPE_ITEMS } from "../src/features/agenda/demo-items.ts";
-import { DEMO_CATALOG, DEMO_CURRENT_TEACHER_ID } from "../src/features/classes/index.ts";
+import { DEMO_CATALOG, TEACHER_DEMO_ID } from "../src/features/classes/index.ts";
 import { replaceTeacherMemberships } from "../src/features/memberships/replacement.ts";
 import { filterActiveMemberships, isMembershipActiveAt } from "../src/features/memberships/validity.ts";
 import { computeClassYearStats } from "../src/features/memberships/year-stats.ts";

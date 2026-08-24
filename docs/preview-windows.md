@@ -39,7 +39,7 @@ Test rapide : http://127.0.0.1:5173/api/health → `{"ok":true,...}`
 
 ## Connexion démo
 
-- Compte : `teacher-demo-current`
+- Compte : `teacher-chf` (François Cheseaux · ChF)
 - Mot de passe : `campus-demo`
 
 ## Si ça ne démarre pas

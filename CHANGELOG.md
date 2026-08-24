@@ -21,6 +21,15 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 - **Écran de connexion** : affiché immédiatement (plus d'écran « Chargement de la session… » bloquant).
 - Test HTTP `tests/preview-smoke.test.mjs` : HTML + chunks JS + login enseignant.
 
+## [Unreleased] — Espace ChF (calendrier personnel)
+
+### Ajouté
+
+- Compte enseignant **François Cheseaux (ChF)** — code grille horaire du PDF 2026-2027.
+- **8 classes** : MA2, MA3B, MA3A-B, MMA1C, MMA2C, MMA3A, AMA2A, PAI.
+- Branches **Con. Prof I**, **Con. Prof L**, **BG** selon la grille.
+- Codes élève de test (`eleve-ma2`, `eleve-mma3a`, …) pour essayer la consultation par classe.
+
 ## [Unreleased] — Phase 2.0 (fondations)
 
 ### Ajouté

@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   DEMO_CATALOG,
   DEMO_CURRENT_TEACHER_ID,
+  TEACHER_DEMO_ID,
   countBranchesInClassroom,
   countTeachersInClassroom,
   getClassroomById,
@@ -15,7 +16,7 @@ import {
 } from "../src/features/classes/index.ts";
 
 test("phase 0.2 — un enseignant peut être rattaché à plusieurs classes", () => {
-  const classrooms = getClassroomsForTeacher(DEMO_CATALOG, DEMO_CURRENT_TEACHER_ID);
+  const classrooms = getClassroomsForTeacher(DEMO_CATALOG, TEACHER_DEMO_ID);
   assert.equal(classrooms.length, 2);
   assert.deepEqual(
     classrooms.map((classroom) => classroom.id).sort(),
@@ -43,7 +44,7 @@ test("phase 0.2 — le rattachement enseignant ↔ branche est vérifiable", () 
   assert.equal(
     teacherTeachesSubject(
       DEMO_CATALOG,
-      DEMO_CURRENT_TEACHER_ID,
+      TEACHER_DEMO_ID,
       "classe-demo-tma-2a",
       "subject-demo-electricite-2a",
     ),
@@ -52,7 +53,7 @@ test("phase 0.2 — le rattachement enseignant ↔ branche est vérifiable", () 
   assert.equal(
     teacherTeachesSubject(
       DEMO_CATALOG,
-      DEMO_CURRENT_TEACHER_ID,
+      TEACHER_DEMO_ID,
       "classe-demo-tma-2a",
       "subject-demo-chassis-2a",
     ),
@@ -61,7 +62,7 @@ test("phase 0.2 — le rattachement enseignant ↔ branche est vérifiable", () 
 
   const branches = getSubjectsForTeacherInClassroom(
     DEMO_CATALOG,
-    DEMO_CURRENT_TEACHER_ID,
+    TEACHER_DEMO_ID,
     "classe-demo-tma-2a",
   );
   assert.deepEqual(

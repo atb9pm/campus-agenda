@@ -2,12 +2,24 @@ import type { Classroom, Subject } from "../../types/classroom.ts";
 import type { Membership } from "../../types/membership.ts";
 import type { StudentAccess } from "../../types/student-access.ts";
 import type { Teacher } from "../../types/teacher.ts";
+import {
+  CHF_CLASSROOMS,
+  CHF_MEMBERSHIPS,
+  CHF_STUDENT_ACCESSES,
+  CHF_SUBJECTS,
+  CHF_TEACHER,
+  TEACHER_CHF_ID,
+} from "./chf-catalog.ts";
 
-/** Enseignant connecté dans la démonstration. */
-export const DEMO_CURRENT_TEACHER_ID = "teacher-demo-current";
+/** Enseignant démo historique (tests automatisés). */
+export const TEACHER_DEMO_ID = "teacher-demo-current";
+
+/** Enseignant connecté par défaut dans l'application. */
+export const DEMO_CURRENT_TEACHER_ID = TEACHER_CHF_ID;
 
 export const DEMO_TEACHERS: Teacher[] = [
-  { id: DEMO_CURRENT_TEACHER_ID, displayName: "Professeur démo", initials: "FC" },
+  CHF_TEACHER,
+  { id: TEACHER_DEMO_ID, displayName: "Professeur démo", initials: "FC" },
   { id: "teacher-demo-dupont", displayName: "Mme Dupont · démo", initials: "MD" },
   { id: "teacher-demo-martin", displayName: "M. Martin · démo", initials: "MM" },
   { id: "teacher-demo-bernard", displayName: "Mme Bernard · démo", initials: "MB" },
@@ -15,6 +27,7 @@ export const DEMO_TEACHERS: Teacher[] = [
 ];
 
 export const DEMO_CLASSROOMS: Classroom[] = [
+  ...CHF_CLASSROOMS,
   {
     id: "classe-demo-tma-2a",
     name: "2e TMA",
@@ -30,6 +43,7 @@ export const DEMO_CLASSROOMS: Classroom[] = [
 ];
 
 export const DEMO_SUBJECTS: Subject[] = [
+  ...CHF_SUBJECTS,
   { id: "subject-demo-moteur-2a", classroomId: "classe-demo-tma-2a", name: "Moteur" },
   { id: "subject-demo-electricite-2a", classroomId: "classe-demo-tma-2a", name: "Électricité" },
   { id: "subject-demo-chassis-2a", classroomId: "classe-demo-tma-2a", name: "Châssis" },
@@ -43,9 +57,10 @@ export const DEMO_SUBJECTS: Subject[] = [
 const DEMO_MEMBERSHIP_START = "2026-08-01T00:00:00.000Z";
 
 export const DEMO_MEMBERSHIPS: Membership[] = [
+  ...CHF_MEMBERSHIPS,
   {
     id: "membership-demo-current-2a",
-    teacherId: DEMO_CURRENT_TEACHER_ID,
+    teacherId: TEACHER_DEMO_ID,
     classroomId: "classe-demo-tma-2a",
     subjectIds: ["subject-demo-moteur-2a", "subject-demo-electricite-2a"],
     validFrom: DEMO_MEMBERSHIP_START,
@@ -85,7 +100,7 @@ export const DEMO_MEMBERSHIPS: Membership[] = [
   },
   {
     id: "membership-demo-current-1a",
-    teacherId: DEMO_CURRENT_TEACHER_ID,
+    teacherId: TEACHER_DEMO_ID,
     classroomId: "classe-demo-tma-1a",
     subjectIds: ["subject-demo-moteur-1a", "subject-demo-chassis-1a"],
     validFrom: DEMO_MEMBERSHIP_START,
@@ -102,6 +117,7 @@ export const DEMO_MEMBERSHIPS: Membership[] = [
 ];
 
 export const DEMO_STUDENT_ACCESSES: StudentAccess[] = [
+  ...CHF_STUDENT_ACCESSES,
   { id: "student-access-demo-2a", classroomId: "classe-demo-tma-2a", label: "eleve-test-001" },
   { id: "student-access-demo-1a", classroomId: "classe-demo-tma-1a", label: "eleve-test-002" },
 ];
@@ -121,3 +137,5 @@ export const DEMO_CATALOG: DemoCatalog = {
   memberships: DEMO_MEMBERSHIPS,
   studentAccesses: DEMO_STUDENT_ACCESSES,
 };
+
+export { TEACHER_CHF_ID } from "./chf-catalog.ts";

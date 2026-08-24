@@ -88,6 +88,7 @@ export function getMemoryTimetableStore(): MemoryTimetableStore {
 
 export function resolveDemoTeacherCode(teacherId: string): string | null {
   const map: Record<string, string> = {
+    "teacher-chf": "ChF",
     "teacher-demo-current": "RoP",
     "teacher-demo-dupont": "DuP",
     "teacher-demo-martin": "MaF",
