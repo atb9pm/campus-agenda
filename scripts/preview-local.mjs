@@ -33,15 +33,31 @@ function isPortAvailable(port, listenHost) {
     probe.once("listening", () => {
       probe.close(() => resolve(true));
     });
-    probe.listen(port, listenHost);
+    probe.listen({ port, host: listenHost, exclusive: true });
   });
+}
+
+async function isCampusAgendaRunning(port, listenHost) {
+  try {
+    const response = await fetch(`http://${listenHost}:${port}/api/health`, {
+      signal: AbortSignal.timeout(800),
+    });
+    if (!response.ok) return false;
+    const payload = await response.json();
+    return payload?.ok === true;
+  } catch {
+    return false;
+  }
 }
 
 async function resolvePreviewPort() {
   for (let offset = 0; offset < MAX_PORT_ATTEMPTS; offset += 1) {
     const candidate = preferredPort + offset;
+    if (await isCampusAgendaRunning(candidate, host)) {
+      return { port: candidate, alreadyRunning: true, autoSelected: offset > 0 };
+    }
     if (await isPortAvailable(candidate, host)) {
-      return { port: candidate, autoSelected: offset > 0 };
+      return { port: candidate, alreadyRunning: false, autoSelected: offset > 0 };
     }
   }
   console.error(`\n❌ Aucun port libre entre ${preferredPort} et ${preferredPort + MAX_PORT_ATTEMPTS - 1} sur ${host}.`);
@@ -61,8 +77,21 @@ async function requireBuild() {
 
 await requireBuild();
 
-const { port, autoSelected } = await resolvePreviewPort();
+const { port, autoSelected, alreadyRunning } = await resolvePreviewPort();
 process.env.PORT = String(port);
+
+if (alreadyRunning) {
+  const origin = `http://${host}:${port}`;
+  console.log("");
+  console.log(`✓ Campus Agenda tourne déjà sur ${origin}`);
+  console.log(`  Santé API → ${origin}/api/health`);
+  console.log("  Connexion → teacher-chf (ChF) / campus-demo");
+  console.log("");
+  console.log("Ouvrez cette URL dans Edge ou Chrome (pas localhost).");
+  console.log("Pour redémarrer : fermez l'autre fenêtre PowerShell (Ctrl+C), puis relancez preview:node.");
+  console.log("");
+  process.exit(0);
+}
 
 const prodServerUrl = pathToFileURL(
   path.join(webRoot, "node_modules/vinext/dist/server/prod-server.js"),
