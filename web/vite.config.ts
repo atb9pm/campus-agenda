@@ -61,6 +61,7 @@ export default defineConfig(async () => {
     resolve: {
       alias: {
         "@campus": path.resolve(webRoot, "../src"),
+        "pdfjs-dist": path.resolve(webRoot, "node_modules/pdfjs-dist"),
       },
     },
     server: isCodexSeatbeltSandbox

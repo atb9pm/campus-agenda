@@ -30,6 +30,18 @@ Vous devez voir du JSON (`"ok":true`). Sinon le serveur ne répond pas correctem
 4. **Navigation privée** ou supprimer les cookies de `localhost:5173`
 5. Retester `/api/health` puis `http://localhost:5173`
 
+## Erreur build « pdfjs-dist/legacy/build/pdf.mjs »
+
+Mettez à jour le code (`git pull`) — un alias Vite corrige ce problème.
+
+Sinon, à la racine du projet :
+```powershell
+cd "C:\Users\François Cheseaux\campus-agenda"
+npm install
+cd web
+pnpm.cmd run build
+```
+
 ## Mode Node (recommandé sous Windows si `start` bloque)
 
 Après le build :
