@@ -1,6 +1,8 @@
 import { AGENDA_ITEM_TYPES } from "@campus/types/agenda.ts";
 import {
+  assertAgendaItemMutable,
   forbiddenResponse,
+  getArchivedSchoolYearIds,
   jsonResponse,
   requireClassroomReadAccess,
   requireTeacherSession,
@@ -10,6 +12,7 @@ import {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const classroomId = url.searchParams.get("classroomId")?.trim();
+  const schoolYearId = url.searchParams.get("schoolYearId")?.trim() || null;
   if (!classroomId) {
     return jsonResponse({ ok: false, reason: "Paramètre classroomId requis." }, { status: 400 });
   }
@@ -17,8 +20,15 @@ export async function GET(request: Request) {
   const access = await requireClassroomReadAccess(request, classroomId);
   if ("error" in access && access.error) return access.error;
 
-  const items = await access.store!.listAgendaItems(classroomId);
-  return jsonResponse({ ok: true, items });
+  let items = await access.store!.listAgendaItems(classroomId);
+  if (schoolYearId) {
+    items = items.filter((item) => item.schoolYearId === schoolYearId);
+  }
+
+  const archivedIds = await getArchivedSchoolYearIds();
+  const readOnly = Boolean(schoolYearId && archivedIds.has(schoolYearId));
+
+  return jsonResponse({ ok: true, items, readOnly, schoolYearId });
 }
 
 export async function POST(request: Request) {

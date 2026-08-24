@@ -1,6 +1,6 @@
 {
   "name": "campus-agenda-web",
-  "version": "1.2.0",
+  "version": "2.3.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -9,7 +9,8 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
-    "test": "CAMPUS_STORE=memory node --experimental-strip-types --test ../tests/classes.test.ts ../tests/teacher.test.ts ../tests/publications.test.ts ../tests/shared-agenda.test.ts ../tests/student.test.ts ../tests/auth.test.ts ../tests/persistence.test.ts ../tests/api-auth.test.ts ../tests/backup.test.ts ../tests/observability.test.ts ../tests/accessibility.test.ts ../tests/sqlite-store.test.ts ../tests/rate-limit.test.ts ../tests/school-calendar.test.ts ../tests/student-course-day.test.ts ../tests/school-year-pdf.test.ts ../tests/evaluations-coordination.test.ts ../tests/pedagogical-library.test.ts ../tests/timetable-import.test.ts && pnpm run build && CAMPUS_STORE=memory AUTH_SECRET=test-secret-e2e-phase-08 node --test tests/rendered-html.test.mjs tests/e2e-api.test.mjs",
+    "preview:node": "node ../scripts/preview-local.mjs",
+    "test": "CAMPUS_STORE=memory node --experimental-strip-types --test ../tests/classes.test.ts ../tests/teacher.test.ts ../tests/publications.test.ts ../tests/shared-agenda.test.ts ../tests/student.test.ts ../tests/auth.test.ts ../tests/persistence.test.ts ../tests/api-auth.test.ts ../tests/backup.test.ts ../tests/observability.test.ts ../tests/accessibility.test.ts ../tests/sqlite-store.test.ts ../tests/rate-limit.test.ts ../tests/school-calendar.test.ts ../tests/student-course-day.test.ts ../tests/school-year-pdf.test.ts ../tests/evaluations-coordination.test.ts ../tests/pedagogical-library.test.ts ../tests/timetable-import.test.ts ../tests/multi-year-operations.test.ts && pnpm run build && CAMPUS_STORE=memory AUTH_SECRET=test-secret-e2e-phase-08 node --test tests/rendered-html.test.mjs tests/e2e-api.test.mjs && CAMPUS_STORE=memory AUTH_SECRET=test-secret-e2e-phase-08 node --test tests/preview-smoke.test.mjs",
     "db:local": "CAMPUS_STORE=sqlite CAMPUS_SQLITE_PATH=.data/campus-agenda.sqlite node --experimental-strip-types ../scripts/init-local-db.ts",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },

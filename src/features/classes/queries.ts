@@ -1,3 +1,4 @@
+import { filterActiveMemberships } from "../memberships/validity.ts";
 import type { Classroom, Subject } from "../../types/classroom.ts";
 import type { Membership } from "../../types/membership.ts";
 import type { Teacher } from "../../types/teacher.ts";
@@ -23,12 +24,26 @@ export function getSubjectById(catalog: ClassroomCatalog, subjectId: string): Su
   return catalog.subjects.find((subject) => subject.id === subjectId);
 }
 
-export function getMembershipsForClassroom(catalog: ClassroomCatalog, classroomId: string): Membership[] {
-  return catalog.memberships.filter((membership) => membership.classroomId === classroomId);
+export function getMembershipsForClassroom(
+  catalog: ClassroomCatalog,
+  classroomId: string,
+  at?: string | Date,
+): Membership[] {
+  return filterActiveMemberships(
+    catalog.memberships.filter((membership) => membership.classroomId === classroomId),
+    at,
+  );
 }
 
-export function getMembershipsForTeacher(catalog: ClassroomCatalog, teacherId: string): Membership[] {
-  return catalog.memberships.filter((membership) => membership.teacherId === teacherId);
+export function getMembershipsForTeacher(
+  catalog: ClassroomCatalog,
+  teacherId: string,
+  at?: string | Date,
+): Membership[] {
+  return filterActiveMemberships(
+    catalog.memberships.filter((membership) => membership.teacherId === teacherId),
+    at,
+  );
 }
 
 export function getClassroomsForTeacher(catalog: ClassroomCatalog, teacherId: string): Classroom[] {
@@ -56,8 +71,9 @@ export function teacherTeachesSubject(
   teacherId: string,
   classroomId: string,
   subjectId: string,
+  at?: string | Date,
 ): boolean {
-  return getMembershipsForTeacher(catalog, teacherId).some(
+  return getMembershipsForTeacher(catalog, teacherId, at).some(
     (membership) =>
       membership.classroomId === classroomId && membership.subjectIds.includes(subjectId),
   );

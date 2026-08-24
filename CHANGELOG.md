@@ -2,6 +2,25 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [Unreleased] — Phase 2.3 (exploitation multi-années)
+
+### Ajouté
+
+- **Archivage lecture seule** : publications d'une année `archived` non modifiables (403).
+- **Consultation agenda archivé** : filtre `schoolYearId` sur `GET /api/agenda`.
+- **Export annuel** JSON/CSV : `GET /api/admin/school-year/{id}/export`.
+- **Statistiques charge par classe** : `GET /api/admin/school-year/{id}/stats`.
+- **Affectations temporelles** : `valid_from` / `valid_to` sur `memberships` (migration `0007`).
+- **Remplacement enseignant** (admin) : `POST /api/admin/memberships/replace` — historique auteur intact.
+- Écran Paramètres · **Archives et transitions**.
+- Documentation : `docs/multi-year-operations.md`.
+
+### Corrigé
+
+- **Prévisualisation Windows** : `preview:node` lance le serveur officiel vinext (`startProdServer`) sur `127.0.0.1` — HTML, `/_next/static/` et API. `localhost` (IPv6) provoquait une page blanche dans Edge.
+- **Écran de connexion** : affiché immédiatement (plus d'écran « Chargement de la session… » bloquant).
+- Test HTTP `tests/preview-smoke.test.mjs` : HTML + chunks JS + login enseignant.
+
 ## [Unreleased] — Phase 2.0 (fondations)
 
 ### Ajouté

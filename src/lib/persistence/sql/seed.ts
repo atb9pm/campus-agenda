@@ -1,5 +1,5 @@
 import { DEMO_PROTOTYPE_ITEMS } from "../../../features/agenda/demo-items.ts";
-import { DEMO_CATALOG } from "../../../features/classes/demo-data.ts";
+import { DEMO_CATALOG, DEMO_CURRENT_TEACHER_ID } from "../../../features/classes/demo-data.ts";
 import { DEMO_TEACHER_PASSWORD } from "../../auth/config.ts";
 import type { SqlDatabase } from "./types.ts";
 
@@ -10,9 +10,9 @@ export async function seedDemoDatabase(db: SqlDatabase): Promise<void> {
   for (const teacher of DEMO_CATALOG.teachers) {
     await db
       .prepare(
-        "INSERT OR IGNORE INTO teachers (id, display_name, initials, password_hash) VALUES (?, ?, ?, ?)",
+        "INSERT OR IGNORE INTO teachers (id, display_name, initials, password_hash, is_admin) VALUES (?, ?, ?, ?, ?)",
       )
-      .bind(teacher.id, teacher.displayName, teacher.initials, DEMO_PASSWORD_HASH)
+      .bind(teacher.id, teacher.displayName, teacher.initials, DEMO_PASSWORD_HASH, teacher.id === DEMO_CURRENT_TEACHER_ID ? 1 : 0)
       .run();
   }
 
@@ -34,8 +34,10 @@ export async function seedDemoDatabase(db: SqlDatabase): Promise<void> {
 
   for (const membership of DEMO_CATALOG.memberships) {
     await db
-      .prepare("INSERT OR IGNORE INTO memberships (id, teacher_id, classroom_id) VALUES (?, ?, ?)")
-      .bind(membership.id, membership.teacherId, membership.classroomId)
+      .prepare(
+        "INSERT OR IGNORE INTO memberships (id, teacher_id, classroom_id, valid_from, valid_to) VALUES (?, ?, ?, ?, ?)",
+      )
+      .bind(membership.id, membership.teacherId, membership.classroomId, membership.validFrom, membership.validTo)
       .run();
 
     for (const subjectId of membership.subjectIds) {

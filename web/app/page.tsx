@@ -36,6 +36,7 @@ import {
   groupItemsBySubject,
   resolveStudentAccess,
 } from "@campus/features/student";
+import type { StudentAccess } from "@campus/types/student-access";
 import {
   buildSchoolWeeks,
   buildSchoolWeeksFromEntries,
@@ -77,6 +78,7 @@ import {
   type SchoolCalendarWeek,
 } from "../lib/api-client.ts";
 import { SchoolYearAdminPanel } from "./components/school-year-admin-panel.tsx";
+import { MultiYearOperationsPanel } from "./components/multi-year-operations-panel.tsx";
 import { TimetableImportPanel } from "./components/timetable-import-panel.tsx";
 import { PedagogicalLibraryPanel } from "./components/pedagogical-library-panel.tsx";
 
@@ -91,6 +93,7 @@ const TYPE_LABELS: Record<AgendaItemType, string> = {
 
 const ALL_SUBJECTS_FILTER = "Toutes les branches";
 const HOURS = Array.from({ length: 10 }, (_, index) => index + 8);
+const APP_VERSION = "2.3.0";
 
 async function loadTeacherAgendaItems(classroomIds: string[]): Promise<PrototypeAgendaItem[]> {
   const batches = await Promise.all(classroomIds.map((classroomId) => fetchAgendaItems(classroomId)));
@@ -132,7 +135,7 @@ function sectionDescription(activeSection: TeacherNavSection, agendaView: Teache
   if (activeSection === "dashboard") return "Vue d’ensemble de vos classes et de vos publications.";
   if (activeSection === "classes") return "Classes auxquelles vous êtes rattaché et branches enseignées.";
   if (activeSection === "library") return "Modèles réutilisables, déploiement annuel et reprise depuis une année archivée.";
-  if (activeSection === "settings") return "Année scolaire, grille horaire secteur MA et activation.";
+  if (activeSection === "settings") return "Année scolaire, archives multi-années, grille horaire secteur MA et activation.";
   return getAgendaSectionDescription(agendaView, classroomName);
 }
 
@@ -166,8 +169,8 @@ export default function Home() {
   const [modalType, setModalType] = useState<AgendaItemType | null>(null);
   const [editingItem, setEditingItem] = useState<PrototypeAgendaItem | null>(null);
   const [notice, setNotice] = useState("");
-  const [authReady, setAuthReady] = useState(false);
   const [teacherAuthenticated, setTeacherAuthenticated] = useState(false);
+  const [teacherIsAdmin, setTeacherIsAdmin] = useState(false);
   const [loginPending, setLoginPending] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [studentCourseDayKey, setStudentCourseDayKey] = useState<string | null>(null);
@@ -185,6 +188,7 @@ export default function Home() {
 
   async function applyTeacherSession(session: ApiTeacherSession) {
     setCurrentTeacherId(session.teacherId);
+    setTeacherIsAdmin(Boolean(session.isAdmin));
     setAppMode("teacher");
     setTeacherAuthenticated(true);
     setStudentSession(null);
@@ -203,16 +207,26 @@ export default function Home() {
 
     async function bootstrapSession() {
       try {
-        const calendar = await fetchSchoolCalendar().catch(() => null);
-        if (!cancelled && calendar?.weeks.length) {
-          setSchoolWeeks(buildSchoolWeeksFromEntries(calendar.weeks));
-        }
+        void fetchSchoolCalendar()
+          .then((calendar) => {
+            if (!cancelled && calendar?.weeks.length) {
+              setSchoolWeeks(buildSchoolWeeksFromEntries(calendar.weeks));
+            }
+          })
+          .catch(() => undefined);
 
-        const session = await fetchApiSession();
+        const session = await Promise.race([
+          fetchApiSession(),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
+        ]);
         if (cancelled) return;
 
         if (session?.kind === "teacher") {
-          await applyTeacherSession(session);
+          void applyTeacherSession(session).catch((error) => {
+            if (!cancelled) {
+              setNotice(error instanceof Error ? error.message : "Connexion impossible.");
+            }
+          });
           return;
         }
 
@@ -223,16 +237,21 @@ export default function Home() {
           setSelectedClassroomId(session.classroomId);
           setStudentEntry("code");
           setAppMode("student");
-          const loadedItems = await fetchAgendaItems(session.classroomId);
-          if (!cancelled) setItems(loadedItems);
+          void fetchAgendaItems(session.classroomId)
+            .then((loadedItems) => {
+              if (!cancelled) setItems(loadedItems);
+            })
+            .catch((error) => {
+              if (!cancelled) {
+                setNotice(error instanceof Error ? error.message : "Chargement agenda impossible.");
+              }
+            });
           return;
         }
       } catch (error) {
         if (!cancelled) {
           setNotice(error instanceof Error ? error.message : "Connexion impossible.");
         }
-      } finally {
-        if (!cancelled) setAuthReady(true);
       }
     }
 
@@ -724,18 +743,6 @@ export default function Home() {
   const myItemCount = classroomItems.filter((item) => item.authorTeacherId === currentTeacherId).length;
   const showAgendaTools = !isStudentView && activeSection === "agenda";
 
-  if (!authReady) {
-    return (
-      <div className="teacher-login-shell" id="main-content">
-        <div className="teacher-login-loading" role="status" aria-live="polite">
-          <BrandEmblem />
-          <strong>CAMPUS AGENDA</strong>
-          <span>Chargement de la session…</span>
-        </div>
-      </div>
-    );
-  }
-
   if (!teacherAuthenticated && !isStudentView) {
     return (
       <div className="teacher-login-shell">
@@ -771,7 +778,7 @@ export default function Home() {
               </button>
             </footer>
           </section>
-          <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 1.2</p>
+          <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA {APP_VERSION}</p>
         </main>
 
         {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
@@ -1049,6 +1056,11 @@ export default function Home() {
         {activeSection === "settings" && (
           <>
             <SchoolYearAdminPanel onCalendarUpdated={applySchoolCalendarWeeks} onNotice={showNotice} />
+            <MultiYearOperationsPanel
+              isAdmin={teacherIsAdmin}
+              defaultClassroomId={selectedClassroomId}
+              onNotice={showNotice}
+            />
             <TimetableImportPanel onNotice={showNotice} />
           </>
         )}
