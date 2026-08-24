@@ -18,9 +18,13 @@ Avant d'ouvrir l'app, testez dans le navigateur :
 
 ```
 http://localhost:5173/api/health
+http://localhost:5173/api/preview-info
 ```
 
-Vous devez voir du JSON (`"ok":true`). Sinon le serveur ne répond pas correctement.
+- `/api/health` → `"ok":true`
+- `/api/preview-info` → `"version":"2.3.0"` et `"loginScreen":"immediate"`
+
+Si `/api/preview-info` renvoie une erreur ou une version ancienne, le serveur n'est pas à jour.
 
 ## Si « Chargement de la session… » ne finit pas
 
@@ -32,6 +36,8 @@ Cause la plus fréquente : le serveur tourne encore avec un **ancien build** (le
 4. **Navigation privée** ou supprimer les cookies de `localhost:5173`
 5. Retester `/api/health` puis `http://localhost:5173`
 6. Si besoin : **F12 → Console** — des erreurs 404 sur `/_next/static/...` indiquent qu'il faut refaire build + redémarrer le serveur
+7. **Vider le cache** : **Ctrl+Shift+R** (ou navigation privée). L'ancienne page HTML peut rester en cache.
+8. En bas de l'écran de connexion, vous devez voir **« PREVIEW NODE · CAMPUS AGENDA 2.3.0 »** — sinon le build n'est pas à jour.
 
 ## Erreur build « pdfjs-dist/legacy/build/pdf.mjs »
 

@@ -92,6 +92,7 @@ const TYPE_LABELS: Record<AgendaItemType, string> = {
 
 const ALL_SUBJECTS_FILTER = "Toutes les branches";
 const HOURS = Array.from({ length: 10 }, (_, index) => index + 8);
+const APP_VERSION = "2.3.0";
 
 async function loadTeacherAgendaItems(classroomIds: string[]): Promise<PrototypeAgendaItem[]> {
   const batches = await Promise.all(classroomIds.map((classroomId) => fetchAgendaItems(classroomId)));
@@ -776,7 +777,7 @@ export default function Home() {
               </button>
             </footer>
           </section>
-          <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 1.2</p>
+          <p className="prototype-label">PREVIEW NODE · CAMPUS AGENDA {APP_VERSION}</p>
         </main>
 
         {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}

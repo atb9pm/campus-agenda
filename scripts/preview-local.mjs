@@ -4,21 +4,21 @@
  *   $env:CAMPUS_STORE="memory"; $env:AUTH_SECRET="dev-secret"; node ../scripts/preview-local.mjs
  */
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const webRoot = path.resolve(scriptDir, "../web");
 const clientRoot = path.join(webRoot, "dist/client");
+const serverEntry = path.join(webRoot, "dist/server/index.js");
 const port = Number(process.env.PORT ?? 5173);
 
 process.env.CAMPUS_STORE ??= "memory";
 process.env.AUTH_SECRET ??= "dev-secret";
 
-const workerUrl = pathToFileURL(path.join(webRoot, "dist/server/index.js")).href;
-const workerModule = await import(`${workerUrl}?preview=${process.pid}`);
-const worker = workerModule.default;
+const packageJson = JSON.parse(await readFile(path.join(webRoot, "package.json"), "utf8"));
+const previewVersion = packageJson.version ?? "unknown";
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -37,25 +37,85 @@ function contentType(filePath) {
 }
 
 function assetPathname(pathname) {
-  return pathname.replace(/\.\./g, "").replace(/^\/+/, "");
+  return pathname
+    .replace(/\\/g, "/")
+    .replace(/\.\./g, "")
+    .replace(/^\/+/, "");
+}
+
+async function fileExists(filePath) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function readAsset(pathname) {
   const relativePath = assetPathname(pathname);
   const candidates = [
-    path.join(clientRoot, relativePath),
-    path.join(clientRoot, relativePath, "index.html"),
+    path.join(clientRoot, ...relativePath.split("/")),
+    path.join(clientRoot, ...relativePath.split("/"), "index.html"),
   ];
   for (const candidate of candidates) {
     try {
       const data = await readFile(candidate);
-      return { data, type: contentType(candidate) };
+      return { data, type: contentType(candidate), path: candidate };
     } catch {
       // try next
     }
   }
   return null;
 }
+
+async function verifyBuild() {
+  const problems = [];
+
+  if (!(await fileExists(serverEntry))) {
+    problems.push("dist/server/index.js manquant — lancez « pnpm run build » dans web/.");
+  }
+  if (!(await fileExists(clientRoot))) {
+    problems.push("dist/client/ manquant — lancez « pnpm run build » dans web/.");
+  }
+
+  const manifestPath = path.join(clientRoot, "vinext-client-entry-manifest.json");
+  if (await fileExists(manifestPath)) {
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    const entryPath = path.join(clientRoot, manifest.appBrowserEntry ?? "");
+    if (!(await fileExists(entryPath))) {
+      problems.push(`Entrée client introuvable : ${manifest.appBrowserEntry}`);
+    }
+  }
+
+  const chunksDir = path.join(clientRoot, "_next/static/chunks");
+  if (await fileExists(chunksDir)) {
+    const chunks = await readdir(chunksDir);
+    const pageChunks = chunks.filter((name) => name.startsWith("page-") && name.endsWith(".js"));
+    for (const chunkName of pageChunks) {
+      const source = await readFile(path.join(chunksDir, chunkName), "utf8");
+      if (source.includes("Chargement de la session")) {
+        problems.push(
+          `Build obsolète (${chunkName} contient encore l'écran de chargement). Refaites « pnpm run build » après git pull.`,
+        );
+      }
+    }
+  }
+
+  return problems;
+}
+
+const buildProblems = await verifyBuild();
+if (buildProblems.length) {
+  console.error("\n❌ Prévisualisation impossible :\n");
+  for (const problem of buildProblems) console.error(`   • ${problem}`);
+  console.error("\n");
+  process.exit(1);
+}
+
+const workerUrl = pathToFileURL(serverEntry).href;
+const workerModule = await import(`${workerUrl}?preview=${process.pid}`);
+const worker = workerModule.default;
 
 async function tryServeStatic(req, res) {
   if (req.method !== "GET" && req.method !== "HEAD") return false;
@@ -74,6 +134,21 @@ async function tryServeStatic(req, res) {
     res.end(asset.data);
   }
   return true;
+}
+
+function sendPreviewInfo(res) {
+  const payload = {
+    ok: true,
+    preview: "node",
+    version: previewVersion,
+    staticAssets: "direct",
+    loginScreen: "immediate",
+    hint: "Si vous voyez encore « Chargement de la session », videz le cache (Ctrl+Shift+R) ou ouvrez une fenêtre privée.",
+  };
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.end(JSON.stringify(payload, null, 2));
 }
 
 const env = {
@@ -100,12 +175,22 @@ function readRequestBody(req) {
   });
 }
 
+function shouldDisableCache(contentType) {
+  return typeof contentType === "string" && contentType.includes("text/html");
+}
+
 const server = createServer(async (req, res) => {
   try {
-    if (await tryServeStatic(req, res)) return;
-
     const host = req.headers.host ?? `localhost:${port}`;
     const url = new URL(req.url ?? "/", `http://${host}`);
+
+    if (url.pathname === "/api/preview-info") {
+      sendPreviewInfo(res);
+      return;
+    }
+
+    if (await tryServeStatic(req, res)) return;
+
     const body = req.method === "GET" || req.method === "HEAD" ? undefined : await readRequestBody(req);
     const headers = new Headers();
     for (const [key, value] of Object.entries(req.headers)) {
@@ -127,6 +212,12 @@ const server = createServer(async (req, res) => {
       }
     });
 
+    const responseType = response.headers.get("content-type") ?? "";
+    if (shouldDisableCache(responseType)) {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
+    }
+
     if (response.body) {
       const buffer = Buffer.from(await response.arrayBuffer());
       res.end(buffer);
@@ -136,12 +227,15 @@ const server = createServer(async (req, res) => {
   } catch (error) {
     res.statusCode = 500;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
     res.end(error instanceof Error ? error.message : "Erreur serveur");
   }
 });
 
 server.listen(port, "0.0.0.0", () => {
-  console.log(`Campus Agenda preview (Node) → http://localhost:${port}`);
-  console.log(`Test API : http://localhost:${port}/api/health`);
-  console.log("Connexion : teacher-demo-current / campus-demo");
+  console.log(`Campus Agenda preview (Node v${previewVersion}) → http://localhost:${port}`);
+  console.log(`Test API      : http://localhost:${port}/api/health`);
+  console.log(`Info preview  : http://localhost:${port}/api/preview-info`);
+  console.log("Connexion     : teacher-demo-current / campus-demo");
+  console.log("Si l'écran reste bloqué : Ctrl+Shift+R ou navigation privée.");
 });
