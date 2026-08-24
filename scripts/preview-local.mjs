@@ -12,6 +12,7 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const webRoot = path.resolve(scriptDir, "../web");
 const clientRoot = path.join(webRoot, "dist/client");
 const serverEntry = path.join(webRoot, "dist/server/index.js");
+const previewLoginPath = path.join(scriptDir, "preview-login.html");
 const port = Number(process.env.PORT ?? 5173);
 
 process.env.CAMPUS_STORE ??= "memory";
@@ -143,12 +144,23 @@ function sendPreviewInfo(res) {
     version: previewVersion,
     staticAssets: "direct",
     loginScreen: "immediate",
-    hint: "Si vous voyez encore « Chargement de la session », videz le cache (Ctrl+Shift+R) ou ouvrez une fenêtre privée.",
+    loginPage: `http://localhost:${port}/preview-login.html`,
+    hint: "Utilisez Chrome ou Edge. Ouvrez /preview-login.html si l'écran reste bloqué.",
   };
   res.statusCode = 200;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
-  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
   res.end(JSON.stringify(payload, null, 2));
+}
+
+async function sendPreviewLogin(res) {
+  const html = await readFile(previewLoginPath, "utf8");
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.end(html);
 }
 
 const env = {
@@ -186,6 +198,11 @@ const server = createServer(async (req, res) => {
 
     if (url.pathname === "/api/preview-info") {
       sendPreviewInfo(res);
+      return;
+    }
+
+    if (url.pathname === "/preview-login.html") {
+      await sendPreviewLogin(res);
       return;
     }
 
@@ -233,9 +250,14 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(port, "0.0.0.0", () => {
+  const loginUrl = `http://localhost:${port}/preview-login.html`;
   console.log(`Campus Agenda preview (Node v${previewVersion}) → http://localhost:${port}`);
-  console.log(`Test API      : http://localhost:${port}/api/health`);
-  console.log(`Info preview  : http://localhost:${port}/api/preview-info`);
-  console.log("Connexion     : teacher-demo-current / campus-demo");
-  console.log("Si l'écran reste bloqué : Ctrl+Shift+R ou navigation privée.");
+  console.log(`Connexion (Chrome/Edge) : ${loginUrl}`);
+  console.log(`Test API              : http://localhost:${port}/api/health`);
+  console.log(`Info preview          : http://localhost:${port}/api/preview-info`);
+  console.log("Compte démo           : teacher-demo-current / campus-demo");
+  console.log("");
+  console.log("⚠ N'utilisez PAS l'aperçu navigateur intégré de Cursor (cache bloquant).");
+  console.log("  Ouvrez l'URL ci-dessus dans Chrome ou Edge.");
+  console.log("  Si besoin : $env:PORT=5180; pnpm.cmd run preview:node");
 });

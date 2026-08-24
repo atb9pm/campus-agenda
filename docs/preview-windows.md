@@ -1,5 +1,15 @@
 # Prévisualiser sur Windows (PowerShell)
 
+## ⚠ Important : quel navigateur utiliser
+
+**N'utilisez pas l'aperçu navigateur intégré à Cursor** — il garde en cache une ancienne version de l'app (« Chargement de la session… ») même quand le serveur fonctionne.
+
+Ouvrez **Chrome** ou **Microsoft Edge** et utilisez l'URL affichée par le serveur :
+
+```
+http://localhost:5173/preview-login.html
+```
+
 ## Commandes (copier-coller)
 
 ```powershell
@@ -7,37 +17,41 @@ cd "C:\Users\François Cheseaux\campus-agenda\web"
 $env:CAMPUS_STORE="memory"
 $env:AUTH_SECRET="dev-secret"
 pnpm.cmd run build
-pnpm.cmd start --port 5173
+pnpm.cmd run preview:node
 ```
+
+Le terminal affiche :
+
+```
+Connexion (Chrome/Edge) : http://localhost:5173/preview-login.html
+```
+
+**Copiez cette URL dans Chrome ou Edge** (pas dans Cursor).
 
 **Important :** les chemins avec espace (`François Cheseaux`) doivent être entre **guillemets**.
 
 ## Vérifier que l'API fonctionne
 
-Avant d'ouvrir l'app, testez dans le navigateur :
+Dans **Chrome ou Edge** :
 
+| URL | Résultat attendu |
+|-----|------------------|
+| http://localhost:5173/api/preview-info | JSON avec `"version":"2.3.0"` |
+| http://localhost:5173/api/health | JSON avec `"ok":true` |
+| http://localhost:5173/preview-login.html | Formulaire **Connexion** (page statique) |
+
+Si `/api/preview-info` affiche l'écran « Chargement… » au lieu du JSON → mauvais navigateur ou cache. Utilisez Chrome/Edge.
+
+## Si le cache bloque encore
+
+Changez de port pour contourner le cache de localhost:5173 :
+
+```powershell
+$env:PORT="5180"
+pnpm.cmd run preview:node
 ```
-http://localhost:5173/api/health
-http://localhost:5173/api/preview-info
-```
 
-- `/api/health` → `"ok":true`
-- `/api/preview-info` → `"version":"2.3.0"` et `"loginScreen":"immediate"`
-
-Si `/api/preview-info` renvoie une erreur ou une version ancienne, le serveur n'est pas à jour.
-
-## Si « Chargement de la session… » ne finit pas
-
-Cause la plus fréquente : le serveur tourne encore avec un **ancien build** (les fichiers JavaScript ne se chargent pas).
-
-1. **Ctrl + C** dans PowerShell pour **arrêter complètement** le serveur
-2. Mettre à jour le code : `git pull` (à la racine du projet)
-3. Rebuild + preview Node (voir ci-dessous) — **pas** `pnpm.cmd start` sous Windows
-4. **Navigation privée** ou supprimer les cookies de `localhost:5173`
-5. Retester `/api/health` puis `http://localhost:5173`
-6. Si besoin : **F12 → Console** — des erreurs 404 sur `/_next/static/...` indiquent qu'il faut refaire build + redémarrer le serveur
-7. **Vider le cache** : **Ctrl+Shift+R** (ou navigation privée). L'ancienne page HTML peut rester en cache.
-8. En bas de l'écran de connexion, vous devez voir **« PREVIEW NODE · CAMPUS AGENDA 2.3.0 »** — sinon le build n'est pas à jour.
+Puis ouvrez : **http://localhost:5180/preview-login.html**
 
 ## Erreur build « pdfjs-dist/legacy/build/pdf.mjs »
 
@@ -51,7 +65,7 @@ cd web
 pnpm.cmd run build
 ```
 
-## Mode Node (recommandé sous Windows si `start` bloque)
+## Mode Node (recommandé sous Windows)
 
 Après le build :
 
@@ -61,19 +75,6 @@ $env:CAMPUS_STORE="memory"
 $env:AUTH_SECRET="dev-secret"
 pnpm.cmd run build
 pnpm.cmd run preview:node
-```
-
-Testez **http://localhost:5173/api/health** puis **http://localhost:5173**.
-
-## Mode développement (alternative)
-
-Si `start` pose problème, essayez :
-
-```powershell
-cd "C:\Users\François Cheseaux\campus-agenda\web"
-$env:CAMPUS_STORE="memory"
-$env:AUTH_SECRET="dev-secret"
-pnpm.cmd dev --port 5173
 ```
 
 ## Connexion démo
