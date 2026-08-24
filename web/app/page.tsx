@@ -36,6 +36,7 @@ import {
   groupItemsBySubject,
   resolveStudentAccess,
 } from "@campus/features/student";
+import type { StudentAccess } from "@campus/types/student-access";
 import {
   buildSchoolWeeks,
   buildSchoolWeeksFromEntries,
@@ -777,7 +778,7 @@ export default function Home() {
               </button>
             </footer>
           </section>
-          <p className="prototype-label">PREVIEW NODE · CAMPUS AGENDA {APP_VERSION}</p>
+          <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA {APP_VERSION}</p>
         </main>
 
         {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}

@@ -1,6 +1,10 @@
-# Prévisualiser sur Windows (PowerShell)
+# Prévisualiser Campus Agenda sur Windows
 
-## Commandes
+Le site n'est pas une appli Vite classique. C'est une app **vinext** (React + API Cloudflare Workers). En local, le serveur officiel est **`vinext start`** : il sert le HTML, les fichiers `/_next/static/` et les API.
+
+## Une seule procédure
+
+Dans **PowerShell** :
 
 ```powershell
 cd "C:\Users\François Cheseaux\campus-agenda"
@@ -13,41 +17,40 @@ pnpm.cmd run build
 pnpm.cmd run preview:node
 ```
 
-Le serveur écoute par défaut sur **http://127.0.0.1:5180** (port 5180 pour éviter les conflits avec 5173).
-
-## Test obligatoire (avant le navigateur)
-
-Dans **une autre fenêtre PowerShell**, pendant que le serveur tourne :
-
-```powershell
-Invoke-WebRequest http://127.0.0.1:5180/ping
-```
-
-Vous devez voir : **`pong 2.3.0`**
-
-- Si ça **bloque ou échoue** → le serveur ne répond pas (port occupé, mauvais terminal fermé, pare-feu).
-- Si **`pong` OK** → ouvrez Edge :
+Le terminal affiche :
 
 ```
-http://127.0.0.1:5180/preview-login.html
+Campus Agenda  →  http://127.0.0.1:5173
 ```
 
-Utilisez **127.0.0.1** (pas `localhost`) si la page rame.
+**Gardez cette fenêtre ouverte.**
+
+## Ouvrir le site
+
+Dans **Edge** ou **Chrome** (pas l'aperçu intégré de Cursor) :
+
+```
+http://127.0.0.1:5173
+```
+
+Utilisez **127.0.0.1**, pas `localhost`. Sous Windows, `localhost` passe souvent par IPv6 (`::1`) et la page reste blanche.
+
+Test rapide : http://127.0.0.1:5173/api/health → `{"ok":true,...}`
 
 ## Connexion démo
 
 - Compte : `teacher-demo-current`
 - Mot de passe : `campus-demo`
 
-## Problèmes fréquents
+## Si ça ne démarre pas
 
-| Symptôme | Solution |
-|----------|----------|
-| Page blanche qui charge indéfiniment | Testez `/ping` dans PowerShell. Gardez la fenêtre du serveur **ouverte**. |
-| Port déjà utilisé | `$env:PORT="5190"; pnpm.cmd run preview:node` |
-| Ancien écran « Chargement… » | N'utilisez pas l'aperçu Cursor — utilisez **Edge** avec **127.0.0.1** |
+| Message / symptôme | Action |
+|---|---|
+| Port déjà utilisé | Ctrl+C partout, ou `$env:PORT="5180"; pnpm.cmd run preview:node` |
 | Build manquant | `pnpm.cmd run build` dans `web/` |
+| Page blanche avec `localhost` | Remplacez par `http://127.0.0.1:5173` |
+| Ancien écran « Chargement… » | Cache Cursor — ouvrez Edge sur 127.0.0.1 |
 
 ## Arrêter
 
-**Ctrl + C** dans la fenêtre PowerShell où le serveur tourne.
+**Ctrl + C** dans la fenêtre PowerShell du serveur.

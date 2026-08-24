@@ -36,6 +36,10 @@ async function parseJson<T>(response: Response): Promise<T> {
 
 export async function fetchApiSession(): Promise<ApiSession> {
   const response = await fetch("/api/auth/session", { credentials: "include" });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!response.ok || !contentType.includes("application/json")) {
+    return null;
+  }
   const payload = await parseJson<{ ok: boolean; session: ApiSession }>(response);
   return payload.session ?? null;
 }

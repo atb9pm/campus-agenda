@@ -21,3 +21,5 @@ pnpm dev
 ```
 
 Le projet est construit avec React et vinext pour un déploiement compatible Cloudflare Workers.
+
+Prévisualisation Windows : voir `docs/preview-windows.md` (`pnpm run preview:node` écoute sur `http://127.0.0.1:5173`).
