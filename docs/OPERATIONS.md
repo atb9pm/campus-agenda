@@ -109,7 +109,7 @@ Pour un hébergement **Infomaniak** (sans Cloudflare), suivre le guide dédié :
 
 → **`docs/infomaniak-deploy.md`**
 
-Résumé : dossier d'exécution `web`, build `corepack enable && pnpm install && pnpm run build`, lancement `pnpm run start:infomaniak`, variable `AUTH_SECRET` obligatoire.
+Résumé : dossier d'exécution `web`, build `npm install && npm run build`, lancement `AUTH_SECRET=… CAMPUS_STORE=sqlite npm run start:infomaniak` (pas de corepack/pnpm — EROFS sur Infomaniak).
 
 ## Vérifications
 

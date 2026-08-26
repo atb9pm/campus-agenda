@@ -10,7 +10,7 @@
     "build": "vinext build",
     "start": "vinext start",
     "start:infomaniak": "node ../scripts/start-infomaniak.mjs",
-    "build:infomaniak": "corepack enable && pnpm install && pnpm run build",
+    "build:infomaniak": "npm install && npm run build",
     "preview:node": "node ../scripts/preview-local.mjs",
     "preview:free-port": "node ../scripts/free-preview-port.mjs",
     "preview:fresh": "node ../scripts/free-preview-port.mjs && node ../scripts/preview-local.mjs",

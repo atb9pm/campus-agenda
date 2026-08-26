@@ -1,124 +1,89 @@
 # Déployer Campus Agenda sur Infomaniak
 
-Guide pour reprendre (ou finaliser) la mise en ligne sur un **site Node.js Infomaniak**, avec persistance **SQLite** et le compte enseignant **ChF**.
+Guide à jour pour un **site Node.js Infomaniak** avec persistance **SQLite**.
 
-> **Alternative** : Cloudflare Workers + D1 — voir `docs/OPERATIONS.md`.
+> **Attention** : Infomaniak a un système de fichiers en **lecture seule** hors de votre site.
+> `corepack enable` et `pnpm` via corepack **échouent** (`EROFS: read-only file system`).
+> Utilisez **npm** uniquement.
 
 ## Prérequis
 
-- Hébergement Infomaniak avec **site Node.js** (Web ou Serveur Cloud managé)
-- Dépôt GitHub : `https://github.com/atb9pm/campus-agenda`
-- Branche recommandée : `cursor/chf-personal-calendar-9156` (ou `main` après fusion)
-- Node.js **22 LTS** (minimum 22.13 dans `web/package.json`)
+- Hébergement Infomaniak **payant** avec site Node.js (pas Starter 10 Mo)
+- Domaine : `campusagenda.ch`
+- Dépôt GitHub public : `https://github.com/atb9pm/campus-agenda`
+- Branche : `cursor/infomaniak-deploy-9156`
 
-## 1. Créer ou rouvrir le site Node.js
+## Paramètres Manager Infomaniak
 
-Dans le [Manager Infomaniak](https://manager.infomaniak.com/) :
+**Avancé → Node.js** :
 
-1. **Hébergement Web** → votre hébergement → **Ajouter un site**
-2. Choisir **Node.js** → méthode **Personnalisée**
-3. Source Git : dépôt `atb9pm/campus-agenda`
-4. Branche : `cursor/chf-personal-calendar-9156`
-
-## 2. Paramètres Node.js (Manager)
-
-Onglet **Node.js** → **Gérer les paramètres avancés** :
-
-| Paramètre | Valeur |
+| Paramètre | Valeur exacte |
 |---|---|
 | **Dossier d'exécution** | `web` |
-| **Version Node.js** | 22 LTS |
-| **Commande de build** | `corepack enable && pnpm install && pnpm run build` |
-| **Commande de lancement** | `pnpm run start:infomaniak` |
+| **Version Node.js** | 22 LTS (ou 24) |
+| **Commande de build** | `npm install && npm run build` |
+| **Commande de lancement** | voir ci-dessous |
+| **Port** | `3000` (Infomaniak remplace via `PORT`) |
 
-> Infomaniak transmet le **port** via la variable `PORT`. Ne le fixez pas en dur dans le code.
+### Commande de lancement (avec secret)
 
-### Variables d'environnement (Manager)
+Infomaniak **n'a pas** d'écran « Variables d'environnement » pour Node.js.
+Le secret se met **dans la commande** :
 
-| Variable | Valeur | Obligatoire |
-|---|---|---|
-| `AUTH_SECRET` | Chaîne aléatoire longue (32+ caractères) | **Oui** |
-| `CAMPUS_STORE` | `sqlite` | Recommandé |
-| `CAMPUS_SQLITE_PATH` | `.data/campus-agenda.sqlite` | Optionnel |
-| `APP_ENV` | `production` | Optionnel |
+```bash
+AUTH_SECRET=REMPLACEZ_PAR_VOTRE_SECRET CAMPUS_STORE=sqlite npm run start:infomaniak
+```
 
-Générer un secret (PowerShell local) :
+Générer un secret (PowerShell) :
 
 ```powershell
 -join ((48..57 + 65..90 + 97..122 | Get-Random -Count 48 | ForEach-Object {[char]$_}))
 ```
 
-**Ne jamais** committer `AUTH_SECRET` dans Git.
-
-## 3. Domaine et SSL
-
-1. Associer votre domaine (ex. `agenda.votre-ecole.ch`) au site Node.js
-2. Activer le certificat **SSL Let's Encrypt** dans le Manager
-3. Attendre la propagation DNS (souvent quelques minutes)
-
-## 4. Premier déploiement
-
-1. Lancer **Build** depuis le Manager (ou push Git si déploiement auto)
-2. **Redémarrer** l'application
-3. Vérifier : `https://votre-domaine/api/health`
-
-Réponse attendue :
-
-```json
-{
-  "ok": true,
-  "service": "campus-agenda",
-  "version": "2.3.0",
-  "store": "sqlite"
-}
-```
-
-## 5. Connexion enseignant
-
-- Compte : **François Cheseaux (ChF)** — `teacher-chf`
-- Mot de passe démo : **`campus-demo`**
-
-La base SQLite est créée et initialisée automatiquement au premier démarrage (schéma + données ChF).
-
-## 6. Mises à jour
-
-À chaque évolution du code :
-
-1. `git push` sur la branche suivie par Infomaniak
-2. Relancer **Build** dans le Manager
-3. **Redémarrer** l'application
-
-Commande build (identique à la config initiale) :
+Exemple (à personnaliser) :
 
 ```bash
-corepack enable && pnpm install && pnpm run build
+AUTH_SECRET=K7mP2xQ9vL4nR8wT6yU3zA1bC5dE0fGHjKlMnPqRsTuVwXyZ CAMPUS_STORE=sqlite npm run start:infomaniak
 ```
 
-## Dépannage
+## Déploiement
 
-| Symptôme | Action |
-|---|---|
-| Build échoue (`pnpm` introuvable) | Vérifier `corepack enable` en tête de la commande build |
-| Crash au démarrage « AUTH_SECRET requis » | Ajouter `AUTH_SECRET` dans les variables d'environnement |
-| `store: "memory"` dans `/api/health` | Définir `CAMPUS_STORE=sqlite` + redémarrer |
-| Page blanche | Consulter la **console d'exécution** Node.js dans le Manager |
-| Port / crash au démarrage | Vérifier que la commande de lancement est `pnpm run start:infomaniak` |
+1. Branche Git du site = `cursor/infomaniak-deploy-9156` (ou pull après merge)
+2. **Enregistrer** les paramètres Node.js
+3. Désactiver la **maintenance** du site
+4. **Build** → cocher « Oui » pour réinstaller `node_modules` au premier essai
+5. Attendre la fin du build (2–5 min)
+6. **Run**
+7. SSL Let's Encrypt pour `campusagenda.ch`
 
-## Sauvegardes
+## Vérification
 
-Exports via l'API (enseignant connecté) :
-
-```http
-GET /api/admin/backup
+```
+https://campusagenda.ch/api/health
 ```
 
-Le fichier SQLite (`.data/campus-agenda.sqlite`) peut aussi être sauvegardé via SFTP depuis le dossier `web/.data/` — **ne pas** le versionner dans Git.
+Attendu :
 
-## Différences Cloudflare vs Infomaniak
+```json
+{ "ok": true, "store": "sqlite" }
+```
 
-| | Cloudflare Workers | Infomaniak Node.js |
+Connexion enseignant : mot de passe démo **`campus-demo`**
+
+## Erreurs courantes
+
+| Erreur | Cause | Correctif |
 |---|---|---|
-| Base de données | D1 | SQLite (fichier) |
-| Commande | `wrangler deploy` | Git + build Manager |
-| Rate limit IP | Binding natif | Compteur mémoire par processus |
-| Coût | Gratuit / Workers | Hébergement Web Infomaniak |
+| `EROFS … corepack … /usr/local/bin/pnpm` | `corepack enable` interdit | Build/lancement **sans** corepack, avec **npm** |
+| `pnpm: command not found` | pnpm non installé globalement | Utiliser `npm` |
+| `AUTH_SECRET requis` | Secret absent | Mettre `AUTH_SECRET=…` dans la commande de lancement |
+| Site en maintenance | Mode maintenance ON | **Gérer** → désactiver maintenance |
+| Build OK mais Run échoue | Ancienne commande avec corepack | Remplacer la commande de lancement |
+
+## Ne plus utiliser
+
+```bash
+# ❌ NE PAS utiliser sur Infomaniak
+corepack enable && pnpm install && pnpm run build
+pnpm run start:infomaniak
+```
