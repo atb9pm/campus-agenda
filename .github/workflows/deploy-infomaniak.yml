@@ -52,7 +52,10 @@ jobs:
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "Secrets incomplets — déploiement ignoré. Voir docs/infomaniak-deploy.md"
+            echo "::error::Secrets incomplets — déploiement impossible. Voir docs/infomaniak-deploy.md"
+            echo "Requis : INFOMANIAK_SSH_HOST, INFOMANIAK_SSH_USER, INFOMANIAK_SITE_DIR,"
+            echo "         et INFOMANIAK_SSH_PASSWORD (ou INFOMANIAK_SSH_KEY)"
+            exit 1
           fi
 
       - name: Build et mise à jour du code (SSH)
