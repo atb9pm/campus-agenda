@@ -109,7 +109,7 @@ Pour un hébergement **Infomaniak** (sans Cloudflare), suivre le guide dédié :
 
 → **`docs/infomaniak-deploy.md`**
 
-Résumé : dossier d'exécution `web`, build `npm install && npm run build`, lancement `AUTH_SECRET=… CAMPUS_STORE=sqlite npm run start:infomaniak` (pas de corepack/pnpm — EROFS sur Infomaniak).
+Résumé : dossier d'exécution `.` (racine du dépôt), build `git pull origin main && cd web && npm install && npm run build`, lancement `cd web && AUTH_SECRET=… CAMPUS_STORE=sqlite npm run start:infomaniak`. Déploiement auto : merge PR sur `main` → GitHub Actions (voir `docs/infomaniak-deploy.md`).
 
 ## Vérifications
 
