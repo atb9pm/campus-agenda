@@ -16,6 +16,8 @@ test("phase 0.8 — structure d'accessibilité de base", async () => {
   assert.match(page, /aria-modal="true"/);
   assert.match(page, /aria-labelledby="student-code-title"/);
   assert.match(page, /aria-labelledby="teacher-login-title"/);
+  assert.doesNotMatch(page, /Compte&nbsp;: <strong>\{currentTeacher/);
+  assert.doesNotMatch(page, /François Cheseaux \(ChF\)/);
   assert.match(page, /aria-labelledby="site-gate-title"/);
   assert.match(page, /id="site-gate-title"/);
   assert.match(page, /campus-accueil/);
