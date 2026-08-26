@@ -1,4 +1,8 @@
 # Déploie campusagenda.ch sur Infomaniak après merge d'une PR sur main.
+#
+# Infomaniak Node.js : pas de clé SSH pour l'instant → mot de passe.
+# Le Builder Infomaniak est recommandé pour npm build (SSH a des ressources limitées).
+# Ici : git pull via SSH, puis Build/Restart via API Manager si cookies présents.
 name: Deploy Infomaniak
 
 on:
@@ -27,7 +31,6 @@ jobs:
       SSH_HOST: ${{ secrets.INFOMANIAK_SSH_HOST }}
       SSH_USER: ${{ secrets.INFOMANIAK_SSH_USER }}
       SSH_PASSWORD: ${{ secrets.INFOMANIAK_SSH_PASSWORD }}
-      SSH_KEY: ${{ secrets.INFOMANIAK_SSH_KEY }}
       SITE_DIR: ${{ secrets.INFOMANIAK_SITE_DIR }}
       MANAGER_SESSION: ${{ secrets.INFOMANIAK_SASESSION }}
 
@@ -39,61 +42,83 @@ jobs:
         id: secrets
         run: |
           missing=0
-          [ -n "$SSH_HOST" ] || { echo "::warning::INFOMANIAK_SSH_HOST manquant"; missing=1; }
-          [ -n "$SSH_USER" ] || { echo "::warning::INFOMANIAK_SSH_USER manquant"; missing=1; }
-          [ -n "$SITE_DIR" ] || { echo "::warning::INFOMANIAK_SITE_DIR manquant"; missing=1; }
-          if [ -n "$SSH_KEY" ] || [ -n "$SSH_PASSWORD" ]; then
-            :
-          else
-            echo "::warning::INFOMANIAK_SSH_KEY ou INFOMANIAK_SSH_PASSWORD requis"
-            missing=1
-          fi
-          if [ "$missing" -eq 0 ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::error::Secrets incomplets — déploiement impossible. Voir docs/infomaniak-deploy.md"
-            echo "Requis : INFOMANIAK_SSH_HOST, INFOMANIAK_SSH_USER, INFOMANIAK_SITE_DIR,"
-            echo "         et INFOMANIAK_SSH_PASSWORD (ou INFOMANIAK_SSH_KEY)"
+          [ -n "$SSH_HOST" ] || { echo "::error::INFOMANIAK_SSH_HOST manquant"; missing=1; }
+          [ -n "$SSH_USER" ] || { echo "::error::INFOMANIAK_SSH_USER manquant"; missing=1; }
+          [ -n "$SITE_DIR" ] || { echo "::error::INFOMANIAK_SITE_DIR manquant"; missing=1; }
+          [ -n "$SSH_PASSWORD" ] || { echo "::error::INFOMANIAK_SSH_PASSWORD manquant"; missing=1; }
+          if [ "$missing" -ne 0 ]; then
+            echo "Voir docs/infomaniak-deploy.md"
             exit 1
           fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          if [ -n "$MANAGER_SESSION" ]; then
+            echo "manager=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "manager=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Pas de cookies Manager — après git pull, lancez Build + Run dans Infomaniak."
+          fi
 
-      - name: Build et mise à jour du code (SSH)
-        if: ${{ steps.secrets.outputs.ready == 'true' }}
-        uses: appleboy/ssh-action@v1.2.0
-        env:
-          INFOMANIAK_SITE_DIR: ${{ secrets.INFOMANIAK_SITE_DIR }}
-        with:
-          host: ${{ secrets.INFOMANIAK_SSH_HOST }}
-          username: ${{ secrets.INFOMANIAK_SSH_USER }}
-          key: ${{ secrets.INFOMANIAK_SSH_KEY }}
-          password: ${{ secrets.INFOMANIAK_SSH_PASSWORD }}
-          port: 22
-          script_stop: true
-          envs: INFOMANIAK_SITE_DIR,DEPLOY_BRANCH
-          script: |
-            set -euo pipefail
-            DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
-            SITE_DIR="${INFOMANIAK_SITE_DIR:?INFOMANIAK_SITE_DIR manquant dans les secrets GitHub}"
-            cd "${SITE_DIR}"
-            git fetch origin "${DEPLOY_BRANCH}"
-            git reset --hard "origin/${DEPLOY_BRANCH}"
-            cd web
-            npm install
-            npm run build
-            echo "✓ Build OK ($(git -C .. rev-parse --short HEAD))"
+      - name: Installer sshpass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
 
-      - name: Redémarrer l'application (API Manager Infomaniak)
-        if: ${{ steps.secrets.outputs.ready == 'true' && env.MANAGER_SESSION != '' }}
+      - name: Tester la connexion SSH
+        run: |
+          set -euo pipefail
+          export SSHPASS="$SSH_PASSWORD"
+          echo "Connexion à ${SSH_USER}@${SSH_HOST} …"
+          sshpass -e ssh -o StrictHostKeyChecking=accept-new \
+            -o PreferredAuthentications=password \
+            -o PubkeyAuthentication=no \
+            -o NumberOfPasswordPrompts=1 \
+            "${SSH_USER}@${SSH_HOST}" \
+            'echo "SSH_OK"; whoami; pwd; ls -la'
+
+      - name: Mettre à jour le code (git pull via SSH)
+        run: |
+          set -euo pipefail
+          export SSHPASS="$SSH_PASSWORD"
+          # shellcheck disable=SC2029
+          sshpass -e ssh -o StrictHostKeyChecking=accept-new \
+            -o PreferredAuthentications=password \
+            -o PubkeyAuthentication=no \
+            "${SSH_USER}@${SSH_HOST}" \
+            "set -euo pipefail
+             SITE_DIR=$(printf %q "$SITE_DIR")
+             DEPLOY_BRANCH=$(printf %q "$DEPLOY_BRANCH")
+             echo '==> Déploiement Campus Agenda'
+             echo \"    Dossier : \$SITE_DIR\"
+             echo \"    Branche : \$DEPLOY_BRANCH\"
+             cd \"\$SITE_DIR\"
+             if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+               echo \"❌ \$SITE_DIR n'est pas un dépôt Git\"
+               ls -la
+               exit 1
+             fi
+             echo \"Commit actuel : \$(git rev-parse --short HEAD)\"
+             git remote -v
+             git fetch origin \"\$DEPLOY_BRANCH\"
+             git reset --hard \"origin/\$DEPLOY_BRANCH\"
+             echo \"✓ Code à jour : \$(git rev-parse --short HEAD)\"
+             ls -la web/package.json"
+
+      - name: Build + redémarrage (API Manager Infomaniak)
+        if: ${{ steps.secrets.outputs.manager == 'true' }}
         env:
           INFOMANIAK_HOSTING_ID: ${{ secrets.INFOMANIAK_HOSTING_ID }}
           INFOMANIAK_VHOST_ROUTE_ID: ${{ secrets.INFOMANIAK_VHOST_ROUTE_ID }}
           INFOMANIAK_SASESSION: ${{ secrets.INFOMANIAK_SASESSION }}
           INFOMANIAK_MANAGER_XSRF: ${{ secrets.INFOMANIAK_MANAGER_XSRF }}
-        run: node scripts/trigger-infomaniak-action.mjs restart
+        run: |
+          node scripts/trigger-infomaniak-action.mjs build
+          node scripts/trigger-infomaniak-action.mjs restart
+
+      - name: Rappel Build manuel Infomaniak
+        if: ${{ steps.secrets.outputs.manager != 'true' }}
+        run: |
+          echo "::warning::Code mis à jour sur le serveur. Dans le Manager Infomaniak → campusagenda.ch → Build puis Run."
 
       - name: Vérifier /api/health
-        if: ${{ steps.secrets.outputs.ready == 'true' }}
+        if: ${{ steps.secrets.outputs.manager == 'true' }}
         run: |
           echo "Attente du redémarrage…"
           for attempt in 1 2 3 4 5 6; do
