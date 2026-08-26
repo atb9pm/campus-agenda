@@ -254,7 +254,6 @@ button { color: inherit; }
 .teacher-login-card input, .teacher-login-card select { width: 100%; padding: 10px; border: 1px solid var(--line-strong); border-radius: 6px; outline: none; color: var(--ink); background: rgba(255,255,255,.95); font-size: 11px; letter-spacing: 0; text-transform: none; }
 .teacher-login-card input:focus, .teacher-login-card select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(7,93,255,.08); }
 .teacher-login-hint { margin: 0; color: #7b879c; font-size: 10px; line-height: 1.45; }
-.teacher-login-account { margin: 0 0 4px; color: var(--navy); font-size: 12px; line-height: 1.45; }
 .teacher-login-error { margin: 0; color: #b42318; font-size: 10px; font-weight: 700; }
 .teacher-login-card form > button[type="submit"] { padding: 11px 14px; border: 1px solid var(--navy); border-radius: 6px; color: #fff; background: var(--navy); font-size: 10px; font-weight: 800; cursor: pointer; }
 .teacher-login-card form > button[type="submit"]:disabled { opacity: .65; cursor: wait; }

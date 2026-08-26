@@ -93,7 +93,7 @@ const TYPE_LABELS: Record<AgendaItemType, string> = {
 
 const ALL_SUBJECTS_FILTER = "Toutes les branches";
 const HOURS = Array.from({ length: 10 }, (_, index) => index + 8);
-const APP_VERSION = "2.3.1";
+const APP_VERSION = "2.3.2";
 
 async function loadTeacherAgendaItems(classroomIds: string[]): Promise<PrototypeAgendaItem[]> {
   const batches = await Promise.all(classroomIds.map((classroomId) => fetchAgendaItems(classroomId)));
@@ -813,9 +813,6 @@ export default function Home() {
             <p>Accédez à votre calendrier personnel et aux agendas de vos classes.</p>
             <form onSubmit={submitTeacherLogin}>
               <input type="hidden" name="teacherId" value={DEMO_CURRENT_TEACHER_ID} />
-              <p className="teacher-login-account">
-                Compte&nbsp;: <strong>{currentTeacher?.displayName ?? "François Cheseaux (ChF)"}</strong>
-              </p>
               <label>
                 Mot de passe
                 <input name="password" type="password" autoComplete="current-password" required />
