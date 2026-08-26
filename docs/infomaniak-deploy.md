@@ -158,6 +158,8 @@ Attendu :
 
 Connexion enseignant : mot de passe démo **`campus-demo`**
 
+Verrou d’accueil du site : mot de passe **`campus-accueil`** (écran « Site verrouillé »).
+
 ## Erreurs courantes
 
 | Erreur | Cause | Correctif |

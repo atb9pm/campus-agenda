@@ -1,4 +1,4 @@
-export { DEMO_TEACHER_PASSWORD, getAuthSecret, isDemoTeacherPassword } from "./config.ts";
+export { DEMO_TEACHER_PASSWORD, SITE_GATE_PASSWORD, SITE_GATE_STORAGE_KEY, getAuthSecret, isDemoTeacherPassword, isSiteGatePassword } from "./config.ts";
 export {
   buildSessionCookie,
   clearSessionCookie,

@@ -80,7 +80,7 @@ import {
 import { SchoolYearAdminPanel } from "./components/school-year-admin-panel.tsx";
 import { MultiYearOperationsPanel } from "./components/multi-year-operations-panel.tsx";
 import { TimetableImportPanel } from "./components/timetable-import-panel.tsx";
-import { PedagogicalLibraryPanel } from "./components/pedagogical-library-panel.tsx";
+import { isSiteGatePassword, SITE_GATE_STORAGE_KEY } from "@campus/lib/auth/config";
 
 type AppMode = "teacher" | "student";
 type StudentEntry = "code" | "teacher-preview";
@@ -93,7 +93,7 @@ const TYPE_LABELS: Record<AgendaItemType, string> = {
 
 const ALL_SUBJECTS_FILTER = "Toutes les branches";
 const HOURS = Array.from({ length: 10 }, (_, index) => index + 8);
-const APP_VERSION = "2.3.0";
+const APP_VERSION = "2.3.1";
 
 async function loadTeacherAgendaItems(classroomIds: string[]): Promise<PrototypeAgendaItem[]> {
   const batches = await Promise.all(classroomIds.map((classroomId) => fetchAgendaItems(classroomId)));
@@ -173,6 +173,8 @@ export default function Home() {
   const [teacherIsAdmin, setTeacherIsAdmin] = useState(false);
   const [loginPending, setLoginPending] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const [siteUnlocked, setSiteUnlocked] = useState(false);
+  const [siteGateError, setSiteGateError] = useState("");
   const [studentCourseDayKey, setStudentCourseDayKey] = useState<string | null>(null);
   const [studentHistoryOpen, setStudentHistoryOpen] = useState(false);
   const [schoolWeeks, setSchoolWeeks] = useState<SchoolWeek[]>(() => buildSchoolWeeks());
@@ -200,6 +202,32 @@ export default function Home() {
     if (classroomIds.length) {
       setSelectedClassroomId((current) => (classroomIds.includes(current) ? current : classroomIds[0]));
     }
+  }
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(SITE_GATE_STORAGE_KEY) === "1") {
+        setSiteUnlocked(true);
+      }
+    } catch {
+      // sessionStorage indisponible
+    }
+  }, []);
+
+  function submitSiteGate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const password = String(new FormData(event.currentTarget).get("sitePassword") || "");
+    if (!isSiteGatePassword(password)) {
+      setSiteGateError("Mot de passe incorrect.");
+      return;
+    }
+    try {
+      sessionStorage.setItem(SITE_GATE_STORAGE_KEY, "1");
+    } catch {
+      // sessionStorage indisponible
+    }
+    setSiteGateError("");
+    setSiteUnlocked(true);
   }
 
   useEffect(() => {
@@ -742,6 +770,34 @@ export default function Home() {
 
   const myItemCount = classroomItems.filter((item) => item.authorTeacherId === currentTeacherId).length;
   const showAgendaTools = !isStudentView && activeSection === "agenda";
+
+  if (!siteUnlocked) {
+    return (
+      <div className="teacher-login-shell">
+        <main className="teacher-login" id="main-content">
+          <div className="teacher-login-brand">
+            <BrandEmblem />
+            <span><strong>CAMPUS</strong><small>AGENDA</small></span>
+          </div>
+          <section className="teacher-login-card" aria-labelledby="site-gate-title">
+            <span className="eyebrow">ACCÈS RESTREINT</span>
+            <h1 id="site-gate-title">Site verrouillé</h1>
+            <p>Entrez le mot de passe d’accueil pour ouvrir Campus Agenda.</p>
+            <form onSubmit={submitSiteGate}>
+              <label>
+                Mot de passe d’accueil
+                <input name="sitePassword" type="password" autoComplete="current-password" required autoFocus />
+              </label>
+              <p className="teacher-login-hint">Mot de passe&nbsp;: <strong>campus-accueil</strong></p>
+              {siteGateError && <p className="teacher-login-error" role="alert">{siteGateError}</p>}
+              <button type="submit">Ouvrir le site</button>
+            </form>
+          </section>
+          <p className="prototype-label">TEST MISE À JOUR · CAMPUS AGENDA {APP_VERSION}</p>
+        </main>
+      </div>
+    );
+  }
 
   if (!teacherAuthenticated && !isStudentView) {
     return (
