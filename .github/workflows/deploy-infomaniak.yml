@@ -24,6 +24,12 @@ jobs:
     env:
       DEPLOY_BRANCH: ${{ github.event.inputs.branch || 'main' }}
       HEALTH_URL: https://campusagenda.ch/api/health
+      SSH_HOST: ${{ secrets.INFOMANIAK_SSH_HOST }}
+      SSH_USER: ${{ secrets.INFOMANIAK_SSH_USER }}
+      SSH_PASSWORD: ${{ secrets.INFOMANIAK_SSH_PASSWORD }}
+      SSH_KEY: ${{ secrets.INFOMANIAK_SSH_KEY }}
+      SITE_DIR: ${{ secrets.INFOMANIAK_SITE_DIR }}
+      MANAGER_SESSION: ${{ secrets.INFOMANIAK_SASESSION }}
 
     steps:
       - name: Checkout
@@ -33,10 +39,10 @@ jobs:
         id: secrets
         run: |
           missing=0
-          [ -n "${{ secrets.INFOMANIAK_SSH_HOST }}" ] || { echo "::warning::INFOMANIAK_SSH_HOST manquant"; missing=1; }
-          [ -n "${{ secrets.INFOMANIAK_SSH_USER }}" ] || { echo "::warning::INFOMANIAK_SSH_USER manquant"; missing=1; }
-          [ -n "${{ secrets.INFOMANIAK_SITE_DIR }}" ] || { echo "::warning::INFOMANIAK_SITE_DIR manquant"; missing=1; }
-          if [ -n "${{ secrets.INFOMANIAK_SSH_KEY }}" ] || [ -n "${{ secrets.INFOMANIAK_SSH_PASSWORD }}" ]; then
+          [ -n "$SSH_HOST" ] || { echo "::warning::INFOMANIAK_SSH_HOST manquant"; missing=1; }
+          [ -n "$SSH_USER" ] || { echo "::warning::INFOMANIAK_SSH_USER manquant"; missing=1; }
+          [ -n "$SITE_DIR" ] || { echo "::warning::INFOMANIAK_SITE_DIR manquant"; missing=1; }
+          if [ -n "$SSH_KEY" ] || [ -n "$SSH_PASSWORD" ]; then
             :
           else
             echo "::warning::INFOMANIAK_SSH_KEY ou INFOMANIAK_SSH_PASSWORD requis"
@@ -50,10 +56,10 @@ jobs:
           fi
 
       - name: Build et mise à jour du code (SSH)
-        if: steps.secrets.outputs.ready == 'true'
+        if: ${{ steps.secrets.outputs.ready == 'true' }}
+        uses: appleboy/ssh-action@v1.2.0
         env:
           INFOMANIAK_SITE_DIR: ${{ secrets.INFOMANIAK_SITE_DIR }}
-        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.INFOMANIAK_SSH_HOST }}
           username: ${{ secrets.INFOMANIAK_SSH_USER }}
@@ -75,7 +81,7 @@ jobs:
             echo "✓ Build OK ($(git -C .. rev-parse --short HEAD))"
 
       - name: Redémarrer l'application (API Manager Infomaniak)
-        if: steps.secrets.outputs.ready == 'true' && secrets.INFOMANIAK_SASESSION != ''
+        if: ${{ steps.secrets.outputs.ready == 'true' && env.MANAGER_SESSION != '' }}
         env:
           INFOMANIAK_HOSTING_ID: ${{ secrets.INFOMANIAK_HOSTING_ID }}
           INFOMANIAK_VHOST_ROUTE_ID: ${{ secrets.INFOMANIAK_VHOST_ROUTE_ID }}
@@ -84,7 +90,7 @@ jobs:
         run: node scripts/trigger-infomaniak-action.mjs restart
 
       - name: Vérifier /api/health
-        if: steps.secrets.outputs.ready == 'true'
+        if: ${{ steps.secrets.outputs.ready == 'true' }}
         run: |
           echo "Attente du redémarrage…"
           for attempt in 1 2 3 4 5 6; do
