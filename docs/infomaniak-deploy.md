@@ -78,19 +78,19 @@ Les PR sont testées par [`.github/workflows/ci.yml`](../.github/workflows/ci.ym
 3. Choisir l'environnement **Node.js** (`campusagenda.ch`)
 4. Noter : hôte SSH, utilisateur, mot de passe
 
-### Étape 2 — Clé SSH pour GitHub Actions
+### Étape 2 — Authentification SSH pour GitHub Actions
 
-Sur votre PC (PowerShell ou Git Bash) :
+> **Infomaniak Node.js** affiche actuellement : *« L'authentification par clé privée
+> n'est pas encore disponible »*. Utilisez donc le **mot de passe** du compte SSH
+> (pas de champ clé publique dans le Manager).
 
-```bash
-ssh-keygen -t ed25519 -C "github-actions-campus-agenda" -f campus-agenda-deploy -N ""
-```
+1. Créez un compte **FTP + SSH** → environnement **Node.js**
+2. Définissez un mot de passe fort (8 car., majuscule, minuscule, chiffre, caractère spécial)
+3. Notez les infos de connexion (menu ⋮ → **Voir les informations de connexion SSH**) :
+   - Hôte : ex. `57-115909.ssh.hosting-ik.com`
+   - Utilisateur : ex. `KtVVAsNzFhW_atb_9pm`
 
-1. Copier le contenu de `campus-agenda-deploy.pub` dans le Manager Infomaniak
-   (compte SSH → clé publique, ou `~/.ssh/authorized_keys` selon l'interface)
-2. Garder `campus-agenda-deploy` (clé privée) — **ne jamais la committer**
-
-Trouver le chemin du clone Git sur le serveur (en SSH) :
+Trouver le chemin du clone Git sur le serveur (via **Console SSH** Infomaniak ou terminal) :
 
 ```bash
 ssh VOTRE_USER@VOTRE_HOST.infomaniak.com
@@ -105,16 +105,17 @@ Dépôt → **Settings** → **Secrets and variables** → **Actions** → **New
 
 | Secret | Description |
 |---|---|
-| `INFOMANIAK_SSH_HOST` | Hôte SSH (ex. `xxx.ftp.infomaniak.com`) |
-| `INFOMANIAK_SSH_USER` | Utilisateur SSH |
-| `INFOMANIAK_SSH_KEY` | Clé privée complète (`campus-agenda-deploy`) |
+| `INFOMANIAK_SSH_HOST` | Hôte SSH Node.js (ex. `57-115909.ssh.hosting-ik.com`) |
+| `INFOMANIAK_SSH_USER` | Utilisateur SSH (ex. `KtVVAsNzFhW_atb_9pm`) |
+| `INFOMANIAK_SSH_PASSWORD` | Mot de passe du compte SSH (**requis** sur Node.js Infomaniak) |
 | `INFOMANIAK_SITE_DIR` | Chemin absolu du clone Git sur Infomaniak |
+| `INFOMANIAK_SSH_KEY` | *(Optionnel)* Clé privée — quand Infomaniak l'activera |
 | `INFOMANIAK_HOSTING_ID` | ID hébergement (Manager, URL ou API) |
 | `INFOMANIAK_VHOST_ROUTE_ID` | ID route Node.js du site |
 | `INFOMANIAK_SASESSION` | Cookie session Manager (voir ci-dessous) |
 | `INFOMANIAK_MANAGER_XSRF` | Token CSRF Manager (voir ci-dessous) |
 
-Les 4 premiers secrets suffisent pour le build ; les 4 derniers permettent le **redémarrage automatique**.
+Les secrets SSH + `INFOMANIAK_SITE_DIR` suffisent pour le build ; les cookies Manager permettent le **redémarrage automatique**.
 
 #### Obtenir les cookies Manager (redémarrage auto)
 

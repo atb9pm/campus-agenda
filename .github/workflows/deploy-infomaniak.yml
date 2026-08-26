@@ -20,8 +20,13 @@ jobs:
   deploy:
     name: Déployer sur Infomaniak
     runs-on: ubuntu-latest
-    # Ne pas déployer si les secrets SSH ne sont pas configurés (PR de CI seulement).
-    if: ${{ secrets.INFOMANIAK_SSH_HOST != '' && secrets.INFOMANIAK_SSH_KEY != '' }}
+    # Clé SSH ou mot de passe (Infomaniak Node.js : clés pas encore dispo → mot de passe).
+    if: >-
+      ${{
+        secrets.INFOMANIAK_SSH_HOST != '' &&
+        secrets.INFOMANIAK_SSH_USER != '' &&
+        (secrets.INFOMANIAK_SSH_KEY != '' || secrets.INFOMANIAK_SSH_PASSWORD != '')
+      }}
 
     env:
       DEPLOY_BRANCH: ${{ github.event.inputs.branch || 'main' }}
@@ -39,6 +44,7 @@ jobs:
           host: ${{ secrets.INFOMANIAK_SSH_HOST }}
           username: ${{ secrets.INFOMANIAK_SSH_USER }}
           key: ${{ secrets.INFOMANIAK_SSH_KEY }}
+          password: ${{ secrets.INFOMANIAK_SSH_PASSWORD }}
           port: 22
           script_stop: true
           envs: INFOMANIAK_SITE_DIR,DEPLOY_BRANCH
