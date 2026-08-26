@@ -29,7 +29,10 @@ export async function generateMetadata(): Promise<Metadata> {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="fr">
-      <body>{children}</body>
+      <body>
+        <a className="skip-to-content" href="#main-content">Aller au contenu principal</a>
+        {children}
+      </body>
     </html>
   );
 }

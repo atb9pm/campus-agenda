@@ -28,7 +28,11 @@ Consultation anonyme de l'agenda complet de la classe.
 
 Base de données, comptes enseignants, contrôles d'accès et gestion sécurisée des secrets.
 
+## 0.8 — Préparation production
+
+Tests de bout en bout, accessibilité renforcée, sauvegardes de démonstration, observabilité et documentation d'exploitation.
+
 ## 1.0 — Première version utilisable
 
-Tests de bout en bout, accessibilité, sauvegardes, observabilité et documentation d'exploitation.
+Persistance D1/SQLite, sélection automatique du store, documentation de déploiement Cloudflare et parcours complet prêt pour une mise en service de démonstration.
 

@@ -1,7 +1,11 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import vinext from "vinext";
 import { defineConfig } from "vite";
 import hostingConfig from "./.openai/hosting.json";
 import { sites } from "./build/sites-vite-plugin";
+
+const webRoot = fileURLToPath(new URL(".", import.meta.url));
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   "00000000-0000-4000-8000-000000000000";
@@ -18,7 +22,7 @@ const localBindingConfig = {
     ? [
         {
           binding: d1,
-          database_name: "site-creator-d1",
+          database_name: "campus-agenda-db",
           database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
         },
       ]
@@ -31,6 +35,16 @@ const localBindingConfig = {
         },
       ]
     : [],
+  ratelimits: [
+    {
+      name: "AUTH_RATE_LIMITER",
+      namespace_id: "9156001",
+      simple: {
+        limit: 10,
+        period: 60,
+      },
+    },
+  ],
 };
 
 export default defineConfig(async () => {
@@ -44,6 +58,12 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    resolve: {
+      alias: {
+        "@campus": path.resolve(webRoot, "../src"),
+        "pdfjs-dist": path.resolve(webRoot, "node_modules/pdfjs-dist"),
+      },
+    },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,

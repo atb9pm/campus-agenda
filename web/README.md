@@ -11,7 +11,7 @@ Prototype interactif de l'agenda scolaire partagé.
 - ajout local d'un Devoir, d'un Contrôle ou d'une Information ;
 - navigation entre les semaines.
 
-Toutes les données affichées sont fictives. Cette version ne possède encore ni authentification réelle ni base de données persistante.
+Toutes les données affichées sont fictives. Version **1.0.0** avec persistance SQLite locale ou Cloudflare D1 — voir `docs/OPERATIONS.md`.
 
 ## Développement
 
@@ -21,3 +21,7 @@ pnpm dev
 ```
 
 Le projet est construit avec React et vinext pour un déploiement compatible Cloudflare Workers.
+
+Prévisualisation Windows : voir `docs/preview-windows.md` (`pnpm run preview:node` écoute sur `http://127.0.0.1:5173`).
+
+Déploiement Infomaniak : voir `docs/infomaniak-deploy.md`.

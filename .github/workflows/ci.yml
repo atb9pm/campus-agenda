@@ -1,0 +1,42 @@
+# Tests automatiques sur chaque pull request (avant merge).
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Installer les dépendances
+        working-directory: web
+        run: npm install
+
+      - name: Tests unitaires (memory store)
+        working-directory: web
+        run: |
+          CAMPUS_STORE=memory AUTH_SECRET=test-secret-ci \
+            node --experimental-strip-types --test \
+            ../tests/classes.test.ts \
+            ../tests/auth.test.ts \
+            ../tests/persistence.test.ts \
+            ../tests/sqlite-store.test.ts
+
+      - name: Build production
+        working-directory: web
+        run: npm run build

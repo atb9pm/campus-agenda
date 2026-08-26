@@ -21,11 +21,8 @@ test("server-renders the Campus Agenda prototype", async () => {
 
   const html = await response.text();
   assert.match(html, /Campus Agenda — Agenda scolaire partagé/);
-  assert.match(html, /Agenda partagé/);
-  assert.match(html, /Mes éléments/);
-  assert.match(html, /Toute la classe/);
-  assert.match(html, /Données fictives/);
-  assert.match(html, /Aucun élève réel/);
+  assert.match(html, /Connexion/);
+  assert.match(html, /id="main-content"/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 
@@ -40,6 +37,25 @@ test("keeps the validated publication menu and social preview", async () => {
   assert.match(page, /HOMEWORK: "Devoir"/);
   assert.match(page, /TEST: "Contrôle"/);
   assert.match(page, /INFORMATION: "Information"/);
+  assert.match(page, /enterStudentWithCode/);
+  assert.match(page, /fetchApiSession/);
+  assert.match(page, /createAgendaItemApi/);
+  assert.match(page, /publishSchoolWeekNumber/);
+  assert.match(page, /selectedSchoolWeekNumber/);
+  assert.match(page, /filterItemsForSchoolWeek/);
+  assert.match(page, /loginStudentApi/);
+  assert.match(page, /student-course-day-app/);
+  assert.match(page, /resolveDisplayCourseDay/);
+  assert.match(page, /studentHistoryOpen/);
+  assert.match(page, /workload-panel/);
+  assert.match(page, /openSharedAgenda/);
+  assert.match(page, /canModifyPublication/);
+  assert.match(page, /event-actions/);
+  assert.match(page, /teacher-login/);
+  assert.match(page, /submitTeacherLogin/);
+  assert.doesNotMatch(page, /DEMO_TEACHER_PASSWORD/);
+  assert.match(page, /DEMO_CATALOG/);
+  assert.match(page, /selectedClassroomId/);
   assert.match(page, /className="brand-showcase"/);
   assert.match(page, /src="\/og-v3\.png"/);
   assert.match(page, /Esquisses techniques d’un piston/);
