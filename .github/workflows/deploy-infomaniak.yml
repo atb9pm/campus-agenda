@@ -64,42 +64,34 @@ jobs:
       - name: Tester la connexion SSH
         run: |
           set -euo pipefail
-          export SSHPASS="$SSH_PASSWORD"
+          chmod +x scripts/ssh-infomaniak.sh
           echo "Connexion à ${SSH_USER}@${SSH_HOST} …"
-          sshpass -e ssh -o StrictHostKeyChecking=accept-new \
-            -o PreferredAuthentications=password \
-            -o PubkeyAuthentication=no \
-            -o NumberOfPasswordPrompts=1 \
-            "${SSH_USER}@${SSH_HOST}" \
-            'echo "SSH_OK"; whoami; pwd; ls -la'
+          scripts/ssh-infomaniak.sh 'echo SSH_OK; whoami; pwd; ls -la'
 
       - name: Mettre à jour le code (git pull via SSH)
         run: |
           set -euo pipefail
-          export SSHPASS="$SSH_PASSWORD"
-          # shellcheck disable=SC2029
-          sshpass -e ssh -o StrictHostKeyChecking=accept-new \
-            -o PreferredAuthentications=password \
-            -o PubkeyAuthentication=no \
-            "${SSH_USER}@${SSH_HOST}" \
-            "set -euo pipefail
-             SITE_DIR=$(printf %q "$SITE_DIR")
-             DEPLOY_BRANCH=$(printf %q "$DEPLOY_BRANCH")
-             echo '==> Déploiement Campus Agenda'
-             echo \"    Dossier : \$SITE_DIR\"
-             echo \"    Branche : \$DEPLOY_BRANCH\"
-             cd \"\$SITE_DIR\"
-             if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-               echo \"❌ \$SITE_DIR n'est pas un dépôt Git\"
-               ls -la
-               exit 1
-             fi
-             echo \"Commit actuel : \$(git rev-parse --short HEAD)\"
-             git remote -v
-             git fetch origin \"\$DEPLOY_BRANCH\"
-             git reset --hard \"origin/\$DEPLOY_BRANCH\"
-             echo \"✓ Code à jour : \$(git rev-parse --short HEAD)\"
-             ls -la web/package.json"
+          chmod +x scripts/ssh-infomaniak.sh
+          SITE_Q=$(printf %q "$SITE_DIR")
+          BRANCH_Q=$(printf %q "$DEPLOY_BRANCH")
+          scripts/ssh-infomaniak.sh "set -euo pipefail
+            SITE_DIR=${SITE_Q}
+            DEPLOY_BRANCH=${BRANCH_Q}
+            echo '==> Déploiement Campus Agenda'
+            echo \"    Dossier : \$SITE_DIR\"
+            echo \"    Branche : \$DEPLOY_BRANCH\"
+            cd \"\$SITE_DIR\"
+            if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+              echo \"❌ \$SITE_DIR n'est pas un dépôt Git\"
+              ls -la
+              exit 1
+            fi
+            echo \"Commit actuel : \$(git rev-parse --short HEAD)\"
+            git remote -v
+            git fetch origin \"\$DEPLOY_BRANCH\"
+            git reset --hard \"origin/\$DEPLOY_BRANCH\"
+            echo \"✓ Code à jour : \$(git rev-parse --short HEAD)\"
+            ls -la web/package.json"
 
       - name: Build + redémarrage (API Manager Infomaniak)
         if: ${{ steps.secrets.outputs.manager == 'true' }}
