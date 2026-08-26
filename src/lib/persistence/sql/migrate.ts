@@ -1,12 +1,36 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { SqlDatabase } from "./types.ts";
 
-const migrationsRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../migrations");
+async function resolveMigrationsRoot(): Promise<string> {
+  if (process.env.CAMPUS_MIGRATIONS_PATH) {
+    return path.resolve(process.env.CAMPUS_MIGRATIONS_PATH);
+  }
+
+  const candidates = [
+    path.resolve(process.cwd(), "../migrations"),
+    path.resolve(process.cwd(), "migrations"),
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../migrations"),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      await access(path.join(candidate, "0001_initial.sql"));
+      return candidate;
+    } catch {
+      // essai suivant
+    }
+  }
+
+  throw new Error(
+    "Migrations SQL introuvables. Définissez CAMPUS_MIGRATIONS_PATH ou déployez le dossier migrations/ à la racine du dépôt.",
+  );
+}
 
 export async function applyMigrations(db: SqlDatabase): Promise<void> {
+  const migrationsRoot = await resolveMigrationsRoot();
   const migrationFiles = ["0001_initial.sql", "0002_school_week.sql", "0003_school_year.sql", "0004_teacher_admin.sql", "0005_publication_templates.sql", "0006_timetable.sql", "0007_membership_validity.sql"];
   for (const fileName of migrationFiles) {
     const migrationPath = path.join(migrationsRoot, fileName);

@@ -103,6 +103,14 @@ POST /api/admin/restore
 5. Déployer : `cd web && pnpm build && npx wrangler deploy`.
 6. Vérifier `GET /api/health` → `ok: true`, `store: "d1"`.
 
+## Mise en service Infomaniak (Node.js + SQLite)
+
+Pour un hébergement **Infomaniak** (sans Cloudflare), suivre le guide dédié :
+
+→ **`docs/infomaniak-deploy.md`**
+
+Résumé : dossier d'exécution `.` (racine du dépôt), build `git pull origin main && cd web && npm install && npm run build`, lancement `cd web && AUTH_SECRET=… CAMPUS_STORE=sqlite npm run start:infomaniak`. Déploiement auto : merge PR sur `main` → GitHub Actions (voir `docs/infomaniak-deploy.md`).
+
 ## Vérifications
 
 1. `pnpm test`
