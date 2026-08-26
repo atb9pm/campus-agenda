@@ -20,13 +20,6 @@ jobs:
   deploy:
     name: Déployer sur Infomaniak
     runs-on: ubuntu-latest
-    # Clé SSH ou mot de passe (Infomaniak Node.js : clés pas encore dispo → mot de passe).
-    if: >-
-      ${{
-        secrets.INFOMANIAK_SSH_HOST != '' &&
-        secrets.INFOMANIAK_SSH_USER != '' &&
-        (secrets.INFOMANIAK_SSH_KEY != '' || secrets.INFOMANIAK_SSH_PASSWORD != '')
-      }}
 
     env:
       DEPLOY_BRANCH: ${{ github.event.inputs.branch || 'main' }}
@@ -36,7 +29,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Vérifier les secrets de déploiement
+        id: secrets
+        run: |
+          missing=0
+          [ -n "${{ secrets.INFOMANIAK_SSH_HOST }}" ] || { echo "::warning::INFOMANIAK_SSH_HOST manquant"; missing=1; }
+          [ -n "${{ secrets.INFOMANIAK_SSH_USER }}" ] || { echo "::warning::INFOMANIAK_SSH_USER manquant"; missing=1; }
+          [ -n "${{ secrets.INFOMANIAK_SITE_DIR }}" ] || { echo "::warning::INFOMANIAK_SITE_DIR manquant"; missing=1; }
+          if [ -n "${{ secrets.INFOMANIAK_SSH_KEY }}" ] || [ -n "${{ secrets.INFOMANIAK_SSH_PASSWORD }}" ]; then
+            :
+          else
+            echo "::warning::INFOMANIAK_SSH_KEY ou INFOMANIAK_SSH_PASSWORD requis"
+            missing=1
+          fi
+          if [ "$missing" -eq 0 ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Secrets incomplets — déploiement ignoré. Voir docs/infomaniak-deploy.md"
+          fi
+
       - name: Build et mise à jour du code (SSH)
+        if: steps.secrets.outputs.ready == 'true'
         env:
           INFOMANIAK_SITE_DIR: ${{ secrets.INFOMANIAK_SITE_DIR }}
         uses: appleboy/ssh-action@v1.2.0
@@ -61,7 +75,7 @@ jobs:
             echo "✓ Build OK ($(git -C .. rev-parse --short HEAD))"
 
       - name: Redémarrer l'application (API Manager Infomaniak)
-        if: ${{ secrets.INFOMANIAK_SASESSION != '' && secrets.INFOMANIAK_HOSTING_ID != '' }}
+        if: steps.secrets.outputs.ready == 'true' && secrets.INFOMANIAK_SASESSION != ''
         env:
           INFOMANIAK_HOSTING_ID: ${{ secrets.INFOMANIAK_HOSTING_ID }}
           INFOMANIAK_VHOST_ROUTE_ID: ${{ secrets.INFOMANIAK_VHOST_ROUTE_ID }}
@@ -70,6 +84,7 @@ jobs:
         run: node scripts/trigger-infomaniak-action.mjs restart
 
       - name: Vérifier /api/health
+        if: steps.secrets.outputs.ready == 'true'
         run: |
           echo "Attente du redémarrage…"
           for attempt in 1 2 3 4 5 6; do
