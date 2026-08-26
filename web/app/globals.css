@@ -392,6 +392,45 @@ button { color: inherit; }
 .timetable-warnings, .timetable-sample, .timetable-history ul { margin: 8px 0 0; padding-left: 18px; color: #52627f; font-size: 11px; }
 .timetable-warning, .timetable-error { color: #b42318; font-size: 11px; }
 
+.config-summary-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 14px; color: #516582; font-size: 11px; }
+.config-summary-row strong { color: var(--navy); font-size: 18px; }
+.config-section-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.config-section-header h3 { margin: 0; color: var(--navy); font-size: 16px; }
+.config-section-header p { margin: 4px 0 0; color: #6d7f9b; font-size: 11px; max-width: 520px; }
+.config-classes-editor, .config-week-plan { margin: 0 38px 24px; padding: 22px 24px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.config-class-list { display: grid; gap: 12px; }
+.config-class-row { display: grid; grid-template-columns: 72px repeat(3, minmax(120px, 1fr)) minmax(220px, 2fr) auto; gap: 10px; align-items: end; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #f8fbff; }
+.config-field { display: grid; gap: 4px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8793a9; }
+.config-field input, .config-field select { padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); background: #fff; font-size: 11px; }
+.config-field-icon input { text-align: center; font-size: 18px; }
+.config-field-wide { grid-column: span 1; }
+.config-remove-class { padding: 9px 10px; border: 0; border-radius: 8px; color: #8b3a3a; background: #fdeeee; font-size: 9px; font-weight: 700; cursor: pointer; }
+.config-week-table-wrap { overflow-x: auto; }
+.config-week-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.config-week-table th, .config-week-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+.config-week-table th { color: #8793a9; font-size: 8px; letter-spacing: .08em; text-transform: uppercase; }
+.week-kind-badge { display: inline-flex; min-width: 22px; justify-content: center; padding: 2px 6px; border-radius: 999px; font-size: 9px; font-weight: 800; }
+.week-kind-a { color: #0a2f73; background: #dfeafb; }
+.week-kind-b { color: #6b4d0a; background: #fff1cc; }
+.ma-semaine-intro { margin-bottom: 18px; }
+.ma-semaine-week-banner { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; margin: 0 38px 18px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(135deg, #f8fbff, #fff); }
+.ma-semaine-week-banner strong { display: block; margin-top: 4px; color: var(--navy); font-size: 16px; }
+.ma-semaine-week-banner p { margin: 6px 0 0; color: #516582; font-size: 11px; }
+.ma-semaine-week-picker { display: grid; gap: 4px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8793a9; }
+.ma-semaine-week-picker select { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); background: #fff; font-size: 11px; }
+.ma-semaine-empty { margin: 0 38px; padding: 24px; border: 1px dashed var(--line-strong); border-radius: 12px; color: #516582; font-size: 12px; }
+.ma-semaine-days { display: grid; gap: 18px; margin: 0 38px 24px; }
+.ma-semaine-day-group { display: grid; gap: 10px; }
+.ma-semaine-day-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-bottom: 6px; border-bottom: 2px solid var(--navy); color: var(--navy); font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.ma-semaine-day-heading small { color: #8793a9; font-size: 9px; font-weight: 700; }
+.ma-semaine-class-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.ma-semaine-class-card { display: grid; grid-template-columns: 56px 1fr; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 8px 24px rgba(18, 38, 63, .05); }
+.ma-semaine-class-icon { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 12px; background: #eef4fd; font-size: 26px; }
+.ma-semaine-class-body h3 { margin: 4px 0 0; color: var(--navy); font-size: 18px; }
+.ma-semaine-class-day { margin: 4px 0 10px; color: #6d7f9b; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.ma-semaine-no-branches { margin: 0; color: #8793a9; font-size: 10px; font-style: italic; }
+.ma-semaine-plan-hint { margin: 0 38px 24px; padding: 14px 16px; border-radius: 10px; background: #f4f7fb; color: #516582; font-size: 11px; }
+
 @media (max-width: 1030px) {
   .technical-sidebar { width: 190px; }.technical-main { width: calc(100% - 190px); margin-left: 190px; }
   .calendar-workbench { grid-template-columns: 190px minmax(0, 1fr); margin-right: 20px; margin-left: 20px; }.technical-header { padding-right: 20px; padding-left: 20px; }.class-tabs { padding-right: 20px; padding-left: 20px; }
@@ -412,6 +451,8 @@ button { color: inherit; }
   .week-toolbar, .schedule-grid { min-width: 760px; }.week-calendar { max-height: 620px; }.prototype-label { margin-right: 16px; }
   .modal-row { grid-template-columns: 1fr; }
   .school-year-admin { padding-right: 16px; padding-left: 16px; }
+  .config-classes-editor, .config-week-plan, .ma-semaine-week-banner, .ma-semaine-days, .ma-semaine-empty, .ma-semaine-plan-hint { margin-right: 16px; margin-left: 16px; }
+  .config-class-row { grid-template-columns: 1fr; }
   .controls-panel { margin-right: 16px; margin-left: 16px; }
 }
 

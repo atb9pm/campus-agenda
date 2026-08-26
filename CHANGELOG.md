@@ -2,6 +2,15 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.4.0] — Vue personnelle enseignant
+
+### Ajouté
+
+- Navigation réduite à **Ma semaine** et **Configuration**.
+- Saisie manuelle des classes, jours de cours et branches (persistées localement).
+- Affichage des classes triées par jour de la semaine avec icône et branches.
+- Tableau de vérification du plan des semaines A et B.
+
 ## [Unreleased] — Phase 2.3 (exploitation multi-années)
 
 ### Ajouté
