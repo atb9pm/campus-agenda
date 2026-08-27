@@ -7,7 +7,6 @@ import {
   DEFAULT_TEACHER_AGENDA_VIEW,
   createDefaultWorkspace,
   filterItemsForAgendaView,
-  getAgendaSectionTitle,
   getMyItemsForClassroom,
   getTeacherClassSummaries,
   navigateToSection,
@@ -19,20 +18,12 @@ test("phase 0.3 — la vue par défaut de l'agenda enseignant est Mes éléments
 
   const workspace = createDefaultWorkspace(TEACHER_DEMO_ID, "classe-demo-tma-2a");
   assert.equal(workspace.agendaView, "mine");
-  assert.equal(workspace.activeSection, "dashboard");
+  assert.equal(workspace.activeSection, "ma-semaine");
 
   const opened = openClassAgenda(workspace, "classe-demo-tma-1a");
   assert.equal(opened.selectedClassroomId, "classe-demo-tma-1a");
-  assert.equal(opened.activeSection, "agenda");
+  assert.equal(opened.activeSection, "ma-semaine");
   assert.equal(opened.agendaView, "mine");
-});
-
-test("phase 0.3 — la navigation vers l'agenda réinitialise Mes éléments", () => {
-  const workspace = navigateToSection(
-    { ...createDefaultWorkspace(TEACHER_DEMO_ID, "classe-demo-tma-2a"), agendaView: "class" },
-    "agenda",
-  );
-  assert.equal(workspace.agendaView, "mine");
 });
 
 test("phase 0.3 — Mes éléments ne montre que les publications de l'enseignant", () => {
@@ -69,7 +60,11 @@ test("phase 0.3 — le tableau de bord résume chaque classe rattachée", () => 
   assert.equal(getMyItemsForClassroom(DEMO_PROTOTYPE_ITEMS, TEACHER_DEMO_ID, firstYear.classroom.id).length, 1);
 });
 
-test("phase 0.3 — le titre de section reflète la vue active", () => {
-  assert.equal(getAgendaSectionTitle("mine", "2e TMA"), "Mes éléments");
-  assert.equal(getAgendaSectionTitle("class", "2e TMA"), "Agenda partagé · 2e TMA");
+test("navigation — changement de section sans effet de bord", () => {
+  const workspace = navigateToSection(
+    { ...createDefaultWorkspace(TEACHER_DEMO_ID, "classe-demo-tma-2a"), agendaView: "class" },
+    "configuration",
+  );
+  assert.equal(workspace.activeSection, "configuration");
+  assert.equal(workspace.agendaView, "class");
 });

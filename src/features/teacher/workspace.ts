@@ -16,7 +16,7 @@ export function createDefaultWorkspace(teacherId: string, defaultClassroomId: st
   return {
     teacherId,
     selectedClassroomId: defaultClassroomId,
-    activeSection: "dashboard",
+    activeSection: "ma-semaine",
     agendaView: DEFAULT_TEACHER_AGENDA_VIEW,
   };
 }
@@ -28,7 +28,7 @@ export function openClassAgenda(
   return {
     ...workspace,
     selectedClassroomId: classroomId,
-    activeSection: "agenda",
+    activeSection: "ma-semaine",
     agendaView: DEFAULT_TEACHER_AGENDA_VIEW,
   };
 }
@@ -44,8 +44,5 @@ export function navigateToSection(
   workspace: TeacherWorkspaceState,
   section: import("./navigation.ts").TeacherNavSection,
 ): TeacherWorkspaceState {
-  if (section === "agenda") {
-    return { ...workspace, activeSection: section, agendaView: DEFAULT_TEACHER_AGENDA_VIEW };
-  }
   return { ...workspace, activeSection: section };
 }

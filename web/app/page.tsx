@@ -21,9 +21,8 @@ import {
   TEACHER_NAV_ICONS,
   TEACHER_NAV_LABELS,
   TEACHER_NAV_SECTIONS,
+  DEFAULT_TEACHER_NAV_SECTION,
   filterItemsForAgendaView,
-  getAgendaSectionDescription,
-  getAgendaSectionTitle,
   getTeacherClassSummaries,
   type TeacherAgendaView,
   type TeacherNavSection,
@@ -77,10 +76,25 @@ import {
   type ApiTeacherSession,
   type SchoolCalendarWeek,
 } from "../lib/api-client.ts";
-import { SchoolYearAdminPanel } from "./components/school-year-admin-panel.tsx";
-import { MultiYearOperationsPanel } from "./components/multi-year-operations-panel.tsx";
-import { TimetableImportPanel } from "./components/timetable-import-panel.tsx";
 import { isSiteGatePassword, SITE_GATE_STORAGE_KEY } from "@campus/lib/auth/config";
+import {
+  buildDefaultTeacherSetup,
+  loadTeacherSetupFromBrowser,
+  saveTeacherSetupToBrowser,
+  type TeacherSetupConfig,
+  type TeacherClassSetup,
+} from "@campus/features/teacher-setup";
+import {
+  loadNotesFromBrowser,
+  resolveCatalogClassroomId,
+  resolveDefaultSubjectId,
+  saveNotesToBrowser,
+  weekdayToCourseDayIndex,
+  type ClassNotesDocument,
+} from "@campus/features/class-notebook";
+import { ConfigurationPanel } from "./components/configuration-panel.tsx";
+import { ClassNotebookPanel } from "./components/class-notebook-panel.tsx";
+import { MaSemainePanel } from "./components/ma-semaine-panel.tsx";
 
 type AppMode = "teacher" | "student";
 type StudentEntry = "code" | "teacher-preview";
@@ -93,7 +107,7 @@ const TYPE_LABELS: Record<AgendaItemType, string> = {
 
 const ALL_SUBJECTS_FILTER = "Toutes les branches";
 const HOURS = Array.from({ length: 10 }, (_, index) => index + 8);
-const APP_VERSION = "2.3.2";
+const APP_VERSION = "2.5.0";
 
 async function loadTeacherAgendaItems(classroomIds: string[]): Promise<PrototypeAgendaItem[]> {
   const batches = await Promise.all(classroomIds.map((classroomId) => fetchAgendaItems(classroomId)));
@@ -113,7 +127,7 @@ function dayName(date: Date) {
 }
 
 function BrandEmblem() {
-  return <span className="brand-emblem-image" aria-hidden="true" />;
+  return <span className="brand-emblem-image" aria-hidden="true">CA</span>;
 }
 
 function teacherLabel(teacherId: string, currentTeacherId: string) {
@@ -121,22 +135,22 @@ function teacherLabel(teacherId: string, currentTeacherId: string) {
   return getTeacherById(DEMO_CATALOG, teacherId)?.displayName ?? "Enseignant · démo";
 }
 
-function sectionTitle(activeSection: TeacherNavSection, agendaView: TeacherAgendaView, classroomName: string, isStudentView: boolean) {
+function sectionTitle(activeSection: TeacherNavSection, isStudentView: boolean, notebookClassName?: string) {
   if (isStudentView) return "Mon agenda";
-  if (activeSection === "dashboard") return "Tableau de bord";
-  if (activeSection === "classes") return "Mes classes";
-  if (activeSection === "library") return "Bibliothèque pédagogique";
-  if (activeSection === "settings") return "Paramètres";
-  return getAgendaSectionTitle(agendaView, classroomName);
+  if (notebookClassName) return `Carnet · ${notebookClassName}`;
+  if (activeSection === "ma-semaine") return "Ma semaine";
+  return "Configuration";
 }
 
-function sectionDescription(activeSection: TeacherNavSection, agendaView: TeacherAgendaView, classroomName: string, isStudentView: boolean) {
-  if (isStudentView) return `Consultation anonyme — agenda complet de la classe ${classroomName}, toutes branches confondues.`;
-  if (activeSection === "dashboard") return "Vue d’ensemble de vos classes et de vos publications.";
-  if (activeSection === "classes") return "Classes auxquelles vous êtes rattaché et branches enseignées.";
-  if (activeSection === "library") return "Modèles réutilisables, déploiement annuel et reprise depuis une année archivée.";
-  if (activeSection === "settings") return "Année scolaire, archives multi-années, grille horaire secteur MA et activation.";
-  return getAgendaSectionDescription(agendaView, classroomName);
+function sectionDescription(activeSection: TeacherNavSection, isStudentView: boolean, notebookOpen: boolean) {
+  if (isStudentView) return "Consultation anonyme — agenda complet de la classe, toutes branches confondues.";
+  if (notebookOpen) {
+    return "Contrôles, publications élèves et notes prof — semaine par semaine.";
+  }
+  if (activeSection === "ma-semaine") {
+    return "Vos classes par jour de cours, avec les branches que vous avez définies.";
+  }
+  return "Classes, branches, jours de cours et vérification du plan A/B.";
 }
 
 export default function Home() {
@@ -148,7 +162,7 @@ export default function Home() {
   const defaultClassroomId = teacherClassrooms[0]?.id ?? DEMO_CATALOG.classrooms[0].id;
   const currentTeacher = getTeacherById(DEMO_CATALOG, currentTeacherId);
 
-  const [activeSection, setActiveSection] = useState<TeacherNavSection>("dashboard");
+  const [activeSection, setActiveSection] = useState<TeacherNavSection>(DEFAULT_TEACHER_NAV_SECTION);
   const [selectedClassroomId, setSelectedClassroomId] = useState(defaultClassroomId);
   const [classPickerOpen, setClassPickerOpen] = useState(false);
   const [appMode, setAppMode] = useState<AppMode>("teacher");
@@ -187,6 +201,23 @@ export default function Home() {
     schoolWeekNumber: number;
     day: number;
   } | null>(null);
+  const [teacherSetup, setTeacherSetup] = useState<TeacherSetupConfig>(() =>
+    buildDefaultTeacherSetup(DEMO_CATALOG, currentTeacherId),
+  );
+  const [teacherSetupReady, setTeacherSetupReady] = useState(false);
+  const [openNotebookClassId, setOpenNotebookClassId] = useState<string | null>(null);
+  const [notebookCenterWeek, setNotebookCenterWeek] = useState(selectedSchoolWeekNumber);
+  const [classNotesDocument, setClassNotesDocument] = useState<ClassNotesDocument>(() =>
+    loadNotesFromBrowser(currentTeacherId),
+  );
+  const [pendingNotebookControl, setPendingNotebookControl] = useState<{
+    classroomId: string;
+    subjectId: string;
+    schoolWeekNumber: number;
+    day: number;
+    title: string;
+  } | null>(null);
+  const [classNotesReady, setClassNotesReady] = useState(false);
 
   async function applyTeacherSession(session: ApiTeacherSession) {
     setCurrentTeacherId(session.teacherId);
@@ -213,6 +244,27 @@ export default function Home() {
       // sessionStorage indisponible
     }
   }, []);
+
+  useEffect(() => {
+    const stored = loadTeacherSetupFromBrowser(currentTeacherId);
+    setTeacherSetup(stored ?? buildDefaultTeacherSetup(DEMO_CATALOG, currentTeacherId));
+    setTeacherSetupReady(true);
+  }, [currentTeacherId]);
+
+  useEffect(() => {
+    if (!teacherSetupReady) return;
+    saveTeacherSetupToBrowser(currentTeacherId, teacherSetup);
+  }, [currentTeacherId, teacherSetup, teacherSetupReady]);
+
+  useEffect(() => {
+    setClassNotesDocument(loadNotesFromBrowser(currentTeacherId));
+    setClassNotesReady(true);
+  }, [currentTeacherId]);
+
+  useEffect(() => {
+    if (!classNotesReady) return;
+    saveNotesToBrowser(currentTeacherId, classNotesDocument);
+  }, [classNotesDocument, classNotesReady, currentTeacherId]);
 
   function submitSiteGate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -312,6 +364,40 @@ export default function Home() {
   );
 
   const schoolWeeksMemo = schoolWeeks;
+  const openNotebookClass = useMemo(
+    () => teacherSetup.classes.find((entry) => entry.id === openNotebookClassId) ?? null,
+    [openNotebookClassId, teacherSetup.classes],
+  );
+  const notebookClassroomId = useMemo(
+    () => (openNotebookClass ? resolveCatalogClassroomId(openNotebookClass, DEMO_CATALOG) : null),
+    [openNotebookClass],
+  );
+  const notebookSubjectId = useMemo(
+    () =>
+      openNotebookClass && notebookClassroomId
+        ? resolveDefaultSubjectId(
+            DEMO_CATALOG,
+            currentTeacherId,
+            notebookClassroomId,
+            openNotebookClass.branchNames,
+          )
+        : null,
+    [currentTeacherId, notebookClassroomId, openNotebookClass],
+  );
+  const notebookItems = useMemo(() => {
+    if (!notebookClassroomId) return [];
+    return items.filter(
+      (item) => item.classroomId === notebookClassroomId && item.authorTeacherId === currentTeacherId,
+    );
+  }, [currentTeacherId, items, notebookClassroomId]);
+  const notebookCanPublish = Boolean(notebookClassroomId && notebookSubjectId);
+  const notebookBlockedReason = !openNotebookClass
+    ? undefined
+    : !notebookClassroomId
+      ? "Cette classe n'est pas reliée au catalogue — publications élèves indisponibles."
+      : !notebookSubjectId
+        ? "Aucune branche enseignée trouvée pour publier."
+        : undefined;
   const selectedSchoolWeek = useMemo(
     () => findSchoolWeekByNumber(selectedSchoolWeekNumber, schoolWeeksMemo),
     [selectedSchoolWeekNumber, schoolWeeksMemo],
@@ -489,7 +575,7 @@ export default function Home() {
         setAppMode("teacher");
         setStudentSession(null);
         setStudentEntry(null);
-        setActiveSection("agenda");
+        setActiveSection("ma-semaine");
         setAgendaView("class");
         return;
       }
@@ -524,7 +610,7 @@ export default function Home() {
 
   function openAgenda(classroomId: string) {
     setSelectedClassroomId(classroomId);
-    setActiveSection("agenda");
+    setActiveSection("ma-semaine");
     setAgendaView(DEFAULT_TEACHER_AGENDA_VIEW);
     setClassPickerOpen(false);
     setSubjectFilter(ALL_SUBJECTS_FILTER);
@@ -535,7 +621,7 @@ export default function Home() {
 
   function openSharedAgenda(classroomId: string) {
     setSelectedClassroomId(classroomId);
-    setActiveSection("agenda");
+    setActiveSection("ma-semaine");
     setAgendaView("class");
     setClassPickerOpen(false);
     setSubjectFilter(ALL_SUBJECTS_FILTER);
@@ -546,14 +632,16 @@ export default function Home() {
 
   function navigate(section: TeacherNavSection) {
     setActiveSection(section);
-    if (section === "agenda") {
-      setAgendaView(DEFAULT_TEACHER_AGENDA_VIEW);
-    }
   }
 
   function showNotice(message: string) {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 3200);
+  }
+
+  function resetTeacherSetup() {
+    setTeacherSetup(buildDefaultTeacherSetup(DEMO_CATALOG, currentTeacherId));
+    showNotice("Configuration réinitialisée depuis le catalogue.");
   }
 
   function applySchoolCalendarWeeks(weeks: SchoolCalendarWeek[]) {
@@ -651,7 +739,7 @@ export default function Home() {
     setSelectedSchoolWeekNumber(input.schoolWeekNumber);
     setAgendaView(DEFAULT_TEACHER_AGENDA_VIEW);
     closeModal();
-    setActiveSection("agenda");
+    setActiveSection("ma-semaine");
     showNotice(`${TYPE_LABELS[input.type]} ajouté à ${selectedClassroom.name}.`);
   }
 
@@ -706,6 +794,18 @@ export default function Home() {
   }
 
   function confirmPublishDespiteAlert() {
+    if (pendingNotebookControl) {
+      void (async () => {
+        try {
+          await performNotebookControl(pendingNotebookControl);
+          setControlAlert(null);
+          setPendingNotebookControl(null);
+        } catch (error) {
+          showNotice(error instanceof Error ? error.message : "Publication impossible.");
+        }
+      })();
+      return;
+    }
     if (!modalType || !pendingPublish) return;
     void (async () => {
       try {
@@ -720,6 +820,98 @@ export default function Home() {
         showNotice(error instanceof Error ? error.message : "Publication impossible.");
       }
     })();
+  }
+
+  function openClassNotebook(classSetup: TeacherClassSetup) {
+    setOpenNotebookClassId(classSetup.id);
+    setNotebookCenterWeek(selectedSchoolWeekNumber);
+    const mappedClassroomId = resolveCatalogClassroomId(classSetup, DEMO_CATALOG);
+    if (mappedClassroomId) {
+      setSelectedClassroomId(mappedClassroomId);
+    }
+  }
+
+  function closeClassNotebook() {
+    setOpenNotebookClassId(null);
+  }
+
+  function shiftNotebookWeeks(direction: -1 | 1) {
+    const index = schoolWeeksMemo.findIndex((week) => week.number === notebookCenterWeek);
+    if (index < 0) return;
+    const target = schoolWeeksMemo[index + direction];
+    if (target) setNotebookCenterWeek(target.number);
+  }
+
+  async function performNotebookControl(input: {
+    classroomId: string;
+    subjectId: string;
+    schoolWeekNumber: number;
+    day: number;
+    title: string;
+  }) {
+    const created = await createAgendaItemApi({
+      classroomId: input.classroomId,
+      subjectId: input.subjectId,
+      day: input.day,
+      hour: 8,
+      weekOffset: 0,
+      schoolWeekNumber: input.schoolWeekNumber,
+      type: "TEST",
+      title: input.title.trim(),
+      detail: "",
+    });
+    setItems((previous) => [...previous, created]);
+    showNotice("Contrôle planifié.");
+  }
+
+  async function notebookCreatePublication(schoolWeekNumber: number, text: string) {
+    if (!notebookClassroomId || !notebookSubjectId || !openNotebookClass) return;
+    const created = await createAgendaItemApi({
+      classroomId: notebookClassroomId,
+      subjectId: notebookSubjectId,
+      day: weekdayToCourseDayIndex(openNotebookClass.dayOfWeek),
+      hour: 8,
+      weekOffset: 0,
+      schoolWeekNumber,
+      type: "HOMEWORK",
+      title: text.trim(),
+      detail: "",
+    });
+    setItems((previous) => [...previous, created]);
+    showNotice("Publication ajoutée.");
+  }
+
+  async function notebookMovePublication(itemId: number, schoolWeekNumber: number) {
+    const updated = await updateAgendaItemApi(itemId, { schoolWeekNumber });
+    setItems((previous) => previous.map((item) => (item.id === itemId ? updated : item)));
+  }
+
+  async function notebookDeletePublication(itemId: number) {
+    await deleteAgendaItemApi(itemId);
+    setItems((previous) => previous.filter((item) => item.id !== itemId));
+  }
+
+  async function notebookSaveControl(input: { schoolWeekNumber: number; day: number; title: string }) {
+    if (!notebookClassroomId || !notebookSubjectId) return;
+    const alert = evaluateThirdTestAlert(items, DEMO_CATALOG, {
+      classroomId: notebookClassroomId,
+      type: "TEST",
+      courseDay: { schoolWeekNumber: input.schoolWeekNumber, dayIndex: input.day },
+    });
+    if (alert.triggered) {
+      setControlAlert(alert);
+      setPendingNotebookControl({
+        classroomId: notebookClassroomId,
+        subjectId: notebookSubjectId,
+        ...input,
+      });
+      return;
+    }
+    await performNotebookControl({
+      classroomId: notebookClassroomId,
+      subjectId: notebookSubjectId,
+      ...input,
+    });
   }
 
   function mergeDeployedItems(created: PrototypeAgendaItem[]) {
@@ -769,7 +961,7 @@ export default function Home() {
   }
 
   const myItemCount = classroomItems.filter((item) => item.authorTeacherId === currentTeacherId).length;
-  const showAgendaTools = !isStudentView && activeSection === "agenda";
+  const showAgendaTools = false;
 
   if (!siteUnlocked) {
     return (
@@ -981,25 +1173,10 @@ export default function Home() {
           ))}
         </nav>
 
-        {(activeSection === "agenda" || activeSection === "classes") && (
-          <div className="classroom-list" aria-label="Classes rattachées">
-            {teacherClassrooms.map((classroom) => (
-              <button
-                key={classroom.id}
-                className={classroom.id === selectedClassroomId ? "classroom-chip active" : "classroom-chip"}
-                onClick={() => openAgenda(classroom.id)}
-              >
-                <strong>{classroom.name}</strong>
-                <small>{classroom.programLabel}</small>
-              </button>
-            ))}
-          </div>
-        )}
-
         <div className="technical-note">
-          <span>CODE CLASSE</span>
-          <strong>{selectedClassroom.accessCodeHint}</strong>
-          <small>Démonstration uniquement</small>
+          <span>CLASSES CONFIGURÉES</span>
+          <strong>{teacherSetup.classes.filter((entry) => entry.name.trim()).length}</strong>
+          <small>Vue personnelle</small>
         </div>
         <button className="signout" onClick={() => setStudentCodeModalOpen(true)}><span>👤</span> Espace élève</button>
         <button className="signout" onClick={logoutTeacher}><span>↪</span> Déconnexion</button>
@@ -1009,9 +1186,9 @@ export default function Home() {
         <header className="technical-header">
           <div className="mobile-lockup"><BrandEmblem /><strong>CAMPUS AGENDA</strong></div>
           <div className="class-identity">
-            <span className="eyebrow">{selectedClassroom.programLabel}</span>
-            <h1>{sectionTitle(activeSection, agendaView, selectedClassroom.name, false)}</h1>
-            <p>{sectionDescription(activeSection, agendaView, selectedClassroom.name, false)}</p>
+            <span className="eyebrow">Espace enseignant</span>
+            <h1>{sectionTitle(activeSection, false, openNotebookClass?.name)}</h1>
+            <p>{sectionDescription(activeSection, false, Boolean(openNotebookClass))}</p>
           </div>
           <div className="header-actions">
             {showAgendaTools && (
@@ -1037,322 +1214,49 @@ export default function Home() {
           </div>
         </header>
 
-        {activeSection === "dashboard" && (
-          <section className="teacher-workspace" aria-label="Tableau de bord enseignant">
-            <div className="workspace-intro">
-              <p className="eyebrow">ESPACE ENSEIGNANT</p>
-              <h2>Bonjour, {currentTeacher?.displayName ?? "Professeur démo"}</h2>
-              <p>Consultez vos classes, puis ouvrez l’agenda en vue <strong>Mes éléments</strong> par défaut.</p>
-            </div>
-            <div className="workspace-grid">
-              {classSummaries.map((summary) => (
-                <article className="workspace-card" key={summary.classroom.id}>
-                  <header>
-                    <span className="eyebrow">{summary.classroom.programLabel}</span>
-                    <h3>{summary.classroom.name}</h3>
-                  </header>
-                  <dl className="workspace-stats">
-                    <div><dt>Mes éléments</dt><dd>{summary.myItemCount}</dd></div>
-                    <div><dt>Classe entière</dt><dd>{summary.classItemCount}</dd></div>
-                    <div><dt>Branches</dt><dd>{summary.branchesTaught.length}</dd></div>
-                  </dl>
-                  <ul className="branch-tags">
-                    {summary.branchesTaught.map((branch) => <li key={branch.id}>{branch.name}</li>)}
-                  </ul>
-                  <button className="workspace-action" onClick={() => openAgenda(summary.classroom.id)}>
-                    Voir mes éléments
-                  </button>
-                  <button className="workspace-action secondary" onClick={() => openSharedAgenda(summary.classroom.id)}>
-                    Toute la classe
-                  </button>
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {activeSection === "classes" && (
-          <section className="teacher-workspace" aria-label="Mes classes">
-            <div className="workspace-grid workspace-grid-single">
-              {classSummaries.map((summary) => (
-                <article className="workspace-card workspace-card-wide" key={summary.classroom.id}>
-                  <header>
-                    <span className="eyebrow">CLASSE PARTAGÉE</span>
-                    <h3>{summary.classroom.name}</h3>
-                    <p>{summary.classroom.programLabel}</p>
-                  </header>
-                  <p className="workspace-code">Code démo : <strong>{summary.classroom.accessCodeHint}</strong></p>
-                  <div className="workspace-detail-row">
-                    <span><strong>{summary.myItemCount}</strong> mes publications</span>
-                    <span><strong>{summary.classItemCount}</strong> éléments au total</span>
-                    <span><strong>{countTeachersInClassroom(DEMO_CATALOG, summary.classroom.id)}</strong> enseignants</span>
-                  </div>
-                  <ul className="branch-tags">
-                    {summary.branchesTaught.map((branch) => <li key={branch.id}>{branch.name}</li>)}
-                  </ul>
-                  <button className="workspace-action" onClick={() => openAgenda(summary.classroom.id)}>
-                    Ouvrir l’agenda · Mes éléments
-                  </button>
-                  <button className="workspace-action secondary" onClick={() => openSharedAgenda(summary.classroom.id)}>
-                    Charge globale · Toute la classe
-                  </button>
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {activeSection === "settings" && (
-          <>
-            <SchoolYearAdminPanel onCalendarUpdated={applySchoolCalendarWeeks} onNotice={showNotice} />
-            <MultiYearOperationsPanel
-              isAdmin={teacherIsAdmin}
-              defaultClassroomId={selectedClassroomId}
-              onNotice={showNotice}
-            />
-            <TimetableImportPanel onNotice={showNotice} />
-          </>
-        )}
-
-        {activeSection === "library" && (
-          <PedagogicalLibraryPanel
-            teacherId={currentTeacherId}
-            defaultClassroomId={selectedClassroomId}
+        {activeSection === "ma-semaine" && openNotebookClass && (
+          <ClassNotebookPanel
+            classSetup={openNotebookClass}
             schoolWeeks={schoolWeeksMemo}
-            onNotice={showNotice}
-            onItemsChanged={mergeDeployedItems}
+            centerWeekNumber={notebookCenterWeek}
+            items={notebookItems}
+            notesDocument={classNotesDocument}
+            canPublish={notebookCanPublish}
+            publishBlockedReason={notebookBlockedReason}
+            onBack={closeClassNotebook}
+            onShiftWeeks={shiftNotebookWeeks}
+            onCenterWeekChange={setNotebookCenterWeek}
+            onNotesChange={setClassNotesDocument}
+            onCreatePublication={notebookCreatePublication}
+            onMovePublication={notebookMovePublication}
+            onDeletePublication={notebookDeletePublication}
+            onSaveControl={notebookSaveControl}
+            onDeleteControl={notebookDeletePublication}
+            onPreviewStudent={enterTeacherPreview}
           />
         )}
 
-        {activeSection === "agenda" && (
-          <>
-            <section className="brand-showcase" aria-label="Identité visuelle Campus Agenda">
-              <div className="showcase-copy">
-                <div className="showcase-brand"><BrandEmblem /><span><strong>CAMPUS</strong><small>AGENDA</small></span></div>
-                <p className="showcase-overline">{selectedClassroom.programLabel.toUpperCase()}</p>
-                <h2>L’agenda scolaire<br />des passionnés<br />de mécanique</h2>
-                <p className="showcase-text">Un calendrier commun, alimenté par toute l’équipe pédagogique et lisible d’un seul regard par les élèves.</p>
-                <div className="showcase-specs">
-                  <span><strong>{selectedClassroom.name}</strong>Classe active</span>
-                  <span><strong>{countTeachersInClassroom(DEMO_CATALOG, selectedClassroomId)}</strong>Enseignants</span>
-                  <span><strong>{countBranchesInClassroom(DEMO_CATALOG, selectedClassroomId)}</strong>Branches</span>
-                </div>
-              </div>
-              <figure className="showcase-visual">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/og-v3.png" alt="Esquisses techniques d’un piston, de soupapes, d’un arbre à cames, d’un moteur et d’un véhicule électrifié" />
-              </figure>
-            </section>
-
-            <div className="class-tabs" role="tablist" aria-label="Vues de l'agenda">
-              <button type="button" role="tab" aria-selected={controlsPanel === null} className={controlsPanel === null ? "active" : ""} onClick={() => setControlsPanel(null)}>Calendrier</button>
-              <button type="button" role="tab" aria-selected={controlsPanel === "class"} className={controlsPanel === "class" ? "active" : ""} onClick={() => { setControlsPanel("class"); setAgendaView("class"); setTypeFilter("TEST"); }}>Contrôles · classe</button>
-              <button type="button" role="tab" aria-selected={controlsPanel === "mine"} className={controlsPanel === "mine" ? "active" : ""} onClick={() => { setControlsPanel("mine"); setAgendaView("mine"); }}>Mes contrôles</button>
-              <button type="button" role="tab" onClick={() => navigate("library")}>Bibliothèque</button>
-            </div>
-
-            {controlsPanel === "class" && (
-              <section className="controls-panel" aria-labelledby="class-controls-title">
-                <header>
-                  <h2 id="class-controls-title">Contrôles · {selectedClassroom.name}</h2>
-                  <p>{formatSchoolWeekOptionLabel(selectedSchoolWeek)} — tous les enseignants et branches</p>
-                </header>
-                {classTestsForWeek.length ? (
-                  <ul className="controls-list">
-                    {classTestsForWeek.map((entry) => (
-                      <li key={entry.item.id}>
-                        <span className="controls-list-date">{formatCourseDayHeading(entry.slot)}</span>
-                        <strong>{entry.subjectName} — {entry.item.title}</strong>
-                        <small>{entry.teacherName}</small>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="controls-empty">Aucun contrôle planifié pour cette semaine scolaire.</p>
-                )}
-              </section>
-            )}
-
-            {controlsPanel === "mine" && (
-              <section className="controls-panel" aria-labelledby="my-controls-title">
-                <header>
-                  <h2 id="my-controls-title">Mes contrôles à venir</h2>
-                  <p>Toutes vos classes confondues</p>
-                </header>
-                {myUpcomingTests.length ? (
-                  <ul className="controls-list">
-                    {myUpcomingTests.map((entry) => (
-                      <li key={entry.item.id}>
-                        <span className="controls-list-date">
-                          {formatSchoolWeekLabel(entry.slot)} · {formatCourseDayHeading(entry.slot)}
-                        </span>
-                        <strong>{getClassroomById(DEMO_CATALOG, entry.item.classroomId)?.name ?? "Classe"} · {entry.subjectName} — {entry.item.title}</strong>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="controls-empty">Aucun contrôle à venir dans vos publications.</p>
-                )}
-              </section>
-            )}
-
-            {controlsPanel === null && (
-            <section className="calendar-workbench">
-              <aside className="calendar-tools">
-                <div className="view-selector" aria-label="Choisir la vue">
-                  <button className={agendaView === "mine" ? "active" : ""} onClick={() => { setAgendaView("mine"); setTeacherFilter(ALL_FILTER); setDayFilter(ALL_FILTER); }}>Mes éléments <span>{myItemCount}</span></button>
-                  <button className={agendaView === "class" ? "active" : ""} onClick={() => { setAgendaView("class"); setTeacherFilter(ALL_FILTER); setDayFilter(ALL_FILTER); }}>Toute la classe <span>{filterItemsForSchoolWeek(classroomItems, selectedSchoolWeekNumber).length}</span></button>
-                </div>
-
-                {showSharedInsights && workload && (
-                  <section className="workload-panel" aria-label="Charge globale de la classe">
-                    <header>
-                      <h2>CHARGE GLOBALE</h2>
-                      <span className={`workload-badge ${workload.level}`}>{WORKLOAD_LEVEL_LABELS[workload.level]}</span>
-                    </header>
-                    <dl className="workload-totals">
-                      <div><dt>Total</dt><dd>{workload.total}</dd></div>
-                      <div><dt>Devoirs</dt><dd>{workload.homework}</dd></div>
-                      <div><dt>Contrôles</dt><dd>{workload.test}</dd></div>
-                      <div><dt>Infos</dt><dd>{workload.information}</dd></div>
-                    </dl>
-                    <ul className="workload-breakdown">
-                      {workload.bySubject.slice(0, 4).map((entry) => (
-                        <li key={entry.subjectId}><span>{entry.subjectName}</span><strong>{entry.count}</strong></li>
-                      ))}
-                    </ul>
-                    {busyTestDays.length > 0 && (
-                      <p className="workload-alert">Jours avec plusieurs contrôles repérés cette semaine.</p>
-                    )}
-                  </section>
-                )}
-
-                <section className="mini-calendar">
-                  <header><strong>AOÛT 2026</strong><span>‹ &nbsp; ›</span></header>
-                  <div className="mini-week"><b>L</b><b>M</b><b>M</b><b>J</b><b>V</b><b>S</b><b>D</b></div>
-                  <div className="mini-days">
-                    {[27,28,29,30,31,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30].map((day, index) => (
-                      <span className={day === 11 && index > 10 ? "selected" : index < 5 ? "muted" : ""} key={`${day}-${index}`}>{day}</span>
-                    ))}
-                  </div>
-                </section>
-
-                <section className="filter-panel">
-                  <h2>FILTRES</h2>
-                  <select value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)} aria-label="Filtrer par branche">
-                    {subjectFilterOptions.map((subject) => <option key={subject}>{subject}</option>)}
-                  </select>
-                  {showSharedInsights && (
-                    <>
-                      <select value={teacherFilter} onChange={(event) => setTeacherFilter(event.target.value)} aria-label="Filtrer par enseignant">
-                        <option value={ALL_FILTER}>Tous les enseignants</option>
-                        {classroomTeachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.displayName}</option>)}
-                      </select>
-                      <select value={dayFilter} onChange={(event) => setDayFilter(event.target.value === ALL_FILTER ? ALL_FILTER : Number(event.target.value))} aria-label="Filtrer par jour">
-                        <option value={ALL_FILTER}>Toute la semaine</option>
-                        {days.map((date, index) => <option key={date.toISOString()} value={index}>{dayName(date)} {date.getDate()}</option>)}
-                      </select>
-                    </>
-                  )}
-                  <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "HOMEWORK"} onChange={() => setTypeFilter(typeFilter === "HOMEWORK" ? "ALL" : "HOMEWORK")} /> <span className="check blue" /> Devoirs</label>
-                  <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "TEST"} onChange={() => setTypeFilter(typeFilter === "TEST" ? "ALL" : "TEST")} /> <span className="check navy" /> Contrôles</label>
-                  <label><input type="checkbox" checked={typeFilter === "ALL" || typeFilter === "INFORMATION"} onChange={() => setTypeFilter(typeFilter === "INFORMATION" ? "ALL" : "INFORMATION")} /> <span className="check pale" /> Informations</label>
-                </section>
-
-                <div className="legend-note"><span>✓</span><p><strong>Données fictives</strong>Aucun élève réel n’est affiché.</p></div>
-              </aside>
-
-              <section className="week-calendar">
-                <header className="week-toolbar">
-                  <div>
-                    <button type="button" onClick={() => setSelectedSchoolWeekNumber((current) => Math.max(1, current - 1))}>‹</button>
-                    <button type="button" onClick={() => setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date(), schoolWeeksMemo).number)}>Aujourd’hui</button>
-                    <button type="button" onClick={() => setSelectedSchoolWeekNumber((current) => Math.min(38, current + 1))}>›</button>
-                  </div>
-                  <h2>{formatSchoolWeekOptionLabel(selectedSchoolWeek)} · {shortDate(days[0])} — {shortDate(days[4])}</h2>
-                  <div className="class-picker">
-                    <button className="class-picker-trigger" onClick={() => setClassPickerOpen((current) => !current)} aria-expanded={classPickerOpen}>
-                      {selectedClassroom.name} &nbsp;⌄
-                    </button>
-                    {classPickerOpen && (
-                      <div className="class-picker-menu" role="listbox" aria-label="Choisir une classe">
-                        {teacherClassrooms.map((classroom) => (
-                          <button
-                            key={classroom.id}
-                            role="option"
-                            aria-selected={classroom.id === selectedClassroomId}
-                            className={classroom.id === selectedClassroomId ? "active" : ""}
-                            onClick={() => openAgenda(classroom.id)}
-                          >
-                            <strong>{classroom.name}</strong>
-                            <small>{classroom.programLabel}</small>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </header>
-
-                {showSharedInsights && workload && (
-                  <div className="workload-strip" aria-label="Répartition hebdomadaire">
-                    {workload.byDay.map((entry, index) => {
-                      const isBusyTests = busyTestDays.some((day) => day.dayIndex === index);
-                      return (
-                      <div className={`workload-day${isBusyTests ? " busy-tests" : ""}${entry.test >= 2 ? " multi-tests" : ""}`} key={entry.day}>
-                        <span>{dayName(days[index] ?? days[0])}</span>
-                        <strong>{entry.test > 0 ? entry.test : entry.total}</strong>
-                        <i style={{ width: `${Math.min(100, (entry.test || entry.total) * 20)}%` }} />
-                      </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                <div className="schedule-grid">
-                  <div className="corner-cell" />
-                  {days.map((date, index) => <div className={`day-head ${isTodayCourseColumn(date) ? "today" : ""}`} key={date.toISOString()}><span>{dayName(date)}</span><strong>{date.getDate()}</strong></div>)}
-                  {HOURS.map((hour) => (
-                    <div className="schedule-row" key={hour}>
-                      <time>{String(hour).padStart(2, "0")}:00</time>
-                      {days.map((date, dayIndex) => {
-                        const slotItems = visibleItems.filter((item) => item.day === dayIndex && item.hour === hour);
-                        return (
-                          <div className="time-slot" key={`${date.toISOString()}-${hour}`}>
-                            {slotItems.map((item) => {
-                              const subjectName = getSubjectById(DEMO_CATALOG, item.subjectId)?.name ?? "Branche";
-                              const isMine = item.authorTeacherId === currentTeacherId;
-                              const authorLabel = teacherLabel(item.authorTeacherId, currentTeacherId);
-                              const editable = canModifyPublication(item, currentTeacherId);
-                              return (
-                                <article className={`schedule-event ${item.type.toLowerCase()}${editable ? " editable" : ""}`} key={item.id}>
-                                  {editable && (
-                                    <div className="event-actions">
-                                      <button type="button" aria-label={`Modifier ${item.title}`} onClick={() => openEditModal(item)}>✎</button>
-                                      <button type="button" aria-label={`Supprimer ${item.title}`} onClick={() => removeItem(item)}>×</button>
-                                    </div>
-                                  )}
-                                  <small>{TYPE_LABELS[item.type]} · {subjectName}</small>
-                                  <strong>{item.title}</strong>
-                                  <span>{item.detail}</span>
-                                  <em>{isMine ? "Vous" : authorLabel.split(" · ")[0]}</em>
-                                </article>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
-
-                {!visibleItems.length && <div className="empty-week"><span>▱</span><strong>Semaine libre</strong><small>Aucun élément ne correspond aux filtres.</small></div>}
-              </section>
-            </section>
-            )}
-          </>
+        {activeSection === "ma-semaine" && !openNotebookClass && (
+          <MaSemainePanel
+            config={teacherSetup}
+            schoolWeeks={schoolWeeksMemo}
+            selectedSchoolWeekNumber={selectedSchoolWeekNumber}
+            onSelectSchoolWeek={setSelectedSchoolWeekNumber}
+            onOpenClass={openClassNotebook}
+          />
         )}
 
-        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 1.2</p>
+        {activeSection === "configuration" && (
+          <ConfigurationPanel
+            config={teacherSetup}
+            schoolWeeks={schoolWeeksMemo}
+            onChange={setTeacherSetup}
+            onReset={resetTeacherSetup}
+            onNotice={showNotice}
+          />
+        )}
+
+        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA {APP_VERSION}</p>
       </main>
 
       {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
@@ -1378,7 +1282,7 @@ export default function Home() {
                 <span className="eyebrow">COORDINATION</span>
                 <h2 id="control-alert-title">3 contrôles ce jour de cours</h2>
               </div>
-              <button type="button" onClick={() => { setControlAlert(null); setPendingPublish(null); }}>×</button>
+              <button type="button" onClick={() => { setControlAlert(null); setPendingPublish(null); setPendingNotebookControl(null); }}>×</button>
             </header>
             <p>Cette publication porterait à <strong>3 contrôles</strong> le même jour de cours pour la classe. Les collègues ont déjà planifié :</p>
             <ul className="control-alert-list">
@@ -1390,7 +1294,7 @@ export default function Home() {
               ))}
             </ul>
             <footer className="control-alert-actions">
-              <button type="button" onClick={() => { setControlAlert(null); setPendingPublish(null); }}>Modifier la date</button>
+              <button type="button" onClick={() => { setControlAlert(null); setPendingPublish(null); setPendingNotebookControl(null); }}>Modifier la date</button>
               <button type="button" className="confirm-anyway" onClick={confirmPublishDespiteAlert}>Publier quand même</button>
             </footer>
           </section>
