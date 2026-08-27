@@ -117,7 +117,7 @@ function dayName(date: Date) {
 }
 
 function BrandEmblem() {
-  return <span className="brand-emblem-image" aria-hidden="true" />;
+  return <span className="brand-emblem-image" aria-hidden="true">CA</span>;
 }
 
 function teacherLabel(teacherId: string, currentTeacherId: string) {

@@ -56,9 +56,8 @@ test("keeps the validated publication menu and social preview", async () => {
   assert.doesNotMatch(page, /DEMO_TEACHER_PASSWORD/);
   assert.match(page, /DEMO_CATALOG/);
   assert.match(page, /selectedClassroomId/);
-  assert.match(page, /className="brand-showcase"/);
-  assert.match(page, /src="\/og-v3\.png"/);
-  assert.match(page, /Esquisses techniques d’un piston/);
+  assert.doesNotMatch(page, /src="\/og-v3\.png"/);
+  assert.match(page, /brand-emblem-image/);
   assert.doesNotMatch(page, /blueprint-watermark|MechanicalEmblem/);
   assert.match(layout, /\/og-v3\.png/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
