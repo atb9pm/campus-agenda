@@ -82,8 +82,18 @@ import {
   loadTeacherSetupFromBrowser,
   saveTeacherSetupToBrowser,
   type TeacherSetupConfig,
+  type TeacherClassSetup,
 } from "@campus/features/teacher-setup";
+import {
+  loadNotesFromBrowser,
+  resolveCatalogClassroomId,
+  resolveDefaultSubjectId,
+  saveNotesToBrowser,
+  weekdayToCourseDayIndex,
+  type ClassNotesDocument,
+} from "@campus/features/class-notebook";
 import { ConfigurationPanel } from "./components/configuration-panel.tsx";
+import { ClassNotebookPanel } from "./components/class-notebook-panel.tsx";
 import { MaSemainePanel } from "./components/ma-semaine-panel.tsx";
 
 type AppMode = "teacher" | "student";
@@ -97,7 +107,7 @@ const TYPE_LABELS: Record<AgendaItemType, string> = {
 
 const ALL_SUBJECTS_FILTER = "Toutes les branches";
 const HOURS = Array.from({ length: 10 }, (_, index) => index + 8);
-const APP_VERSION = "2.4.0";
+const APP_VERSION = "2.5.0";
 
 async function loadTeacherAgendaItems(classroomIds: string[]): Promise<PrototypeAgendaItem[]> {
   const batches = await Promise.all(classroomIds.map((classroomId) => fetchAgendaItems(classroomId)));
@@ -125,14 +135,18 @@ function teacherLabel(teacherId: string, currentTeacherId: string) {
   return getTeacherById(DEMO_CATALOG, teacherId)?.displayName ?? "Enseignant · démo";
 }
 
-function sectionTitle(activeSection: TeacherNavSection, isStudentView: boolean) {
+function sectionTitle(activeSection: TeacherNavSection, isStudentView: boolean, notebookClassName?: string) {
   if (isStudentView) return "Mon agenda";
+  if (notebookClassName) return `Carnet · ${notebookClassName}`;
   if (activeSection === "ma-semaine") return "Ma semaine";
   return "Configuration";
 }
 
-function sectionDescription(activeSection: TeacherNavSection, isStudentView: boolean) {
+function sectionDescription(activeSection: TeacherNavSection, isStudentView: boolean, notebookOpen: boolean) {
   if (isStudentView) return "Consultation anonyme — agenda complet de la classe, toutes branches confondues.";
+  if (notebookOpen) {
+    return "Contrôles, publications élèves et notes prof — semaine par semaine.";
+  }
   if (activeSection === "ma-semaine") {
     return "Vos classes par jour de cours, avec les branches que vous avez définies.";
   }
@@ -191,6 +205,19 @@ export default function Home() {
     buildDefaultTeacherSetup(DEMO_CATALOG, currentTeacherId),
   );
   const [teacherSetupReady, setTeacherSetupReady] = useState(false);
+  const [openNotebookClassId, setOpenNotebookClassId] = useState<string | null>(null);
+  const [notebookCenterWeek, setNotebookCenterWeek] = useState(selectedSchoolWeekNumber);
+  const [classNotesDocument, setClassNotesDocument] = useState<ClassNotesDocument>(() =>
+    loadNotesFromBrowser(currentTeacherId),
+  );
+  const [pendingNotebookControl, setPendingNotebookControl] = useState<{
+    classroomId: string;
+    subjectId: string;
+    schoolWeekNumber: number;
+    day: number;
+    title: string;
+  } | null>(null);
+  const [classNotesReady, setClassNotesReady] = useState(false);
 
   async function applyTeacherSession(session: ApiTeacherSession) {
     setCurrentTeacherId(session.teacherId);
@@ -228,6 +255,16 @@ export default function Home() {
     if (!teacherSetupReady) return;
     saveTeacherSetupToBrowser(currentTeacherId, teacherSetup);
   }, [currentTeacherId, teacherSetup, teacherSetupReady]);
+
+  useEffect(() => {
+    setClassNotesDocument(loadNotesFromBrowser(currentTeacherId));
+    setClassNotesReady(true);
+  }, [currentTeacherId]);
+
+  useEffect(() => {
+    if (!classNotesReady) return;
+    saveNotesToBrowser(currentTeacherId, classNotesDocument);
+  }, [classNotesDocument, classNotesReady, currentTeacherId]);
 
   function submitSiteGate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -327,6 +364,40 @@ export default function Home() {
   );
 
   const schoolWeeksMemo = schoolWeeks;
+  const openNotebookClass = useMemo(
+    () => teacherSetup.classes.find((entry) => entry.id === openNotebookClassId) ?? null,
+    [openNotebookClassId, teacherSetup.classes],
+  );
+  const notebookClassroomId = useMemo(
+    () => (openNotebookClass ? resolveCatalogClassroomId(openNotebookClass, DEMO_CATALOG) : null),
+    [openNotebookClass],
+  );
+  const notebookSubjectId = useMemo(
+    () =>
+      openNotebookClass && notebookClassroomId
+        ? resolveDefaultSubjectId(
+            DEMO_CATALOG,
+            currentTeacherId,
+            notebookClassroomId,
+            openNotebookClass.branchNames,
+          )
+        : null,
+    [currentTeacherId, notebookClassroomId, openNotebookClass],
+  );
+  const notebookItems = useMemo(() => {
+    if (!notebookClassroomId) return [];
+    return items.filter(
+      (item) => item.classroomId === notebookClassroomId && item.authorTeacherId === currentTeacherId,
+    );
+  }, [currentTeacherId, items, notebookClassroomId]);
+  const notebookCanPublish = Boolean(notebookClassroomId && notebookSubjectId);
+  const notebookBlockedReason = !openNotebookClass
+    ? undefined
+    : !notebookClassroomId
+      ? "Cette classe n'est pas reliée au catalogue — publications élèves indisponibles."
+      : !notebookSubjectId
+        ? "Aucune branche enseignée trouvée pour publier."
+        : undefined;
   const selectedSchoolWeek = useMemo(
     () => findSchoolWeekByNumber(selectedSchoolWeekNumber, schoolWeeksMemo),
     [selectedSchoolWeekNumber, schoolWeeksMemo],
@@ -723,6 +794,18 @@ export default function Home() {
   }
 
   function confirmPublishDespiteAlert() {
+    if (pendingNotebookControl) {
+      void (async () => {
+        try {
+          await performNotebookControl(pendingNotebookControl);
+          setControlAlert(null);
+          setPendingNotebookControl(null);
+        } catch (error) {
+          showNotice(error instanceof Error ? error.message : "Publication impossible.");
+        }
+      })();
+      return;
+    }
     if (!modalType || !pendingPublish) return;
     void (async () => {
       try {
@@ -737,6 +820,98 @@ export default function Home() {
         showNotice(error instanceof Error ? error.message : "Publication impossible.");
       }
     })();
+  }
+
+  function openClassNotebook(classSetup: TeacherClassSetup) {
+    setOpenNotebookClassId(classSetup.id);
+    setNotebookCenterWeek(selectedSchoolWeekNumber);
+    const mappedClassroomId = resolveCatalogClassroomId(classSetup, DEMO_CATALOG);
+    if (mappedClassroomId) {
+      setSelectedClassroomId(mappedClassroomId);
+    }
+  }
+
+  function closeClassNotebook() {
+    setOpenNotebookClassId(null);
+  }
+
+  function shiftNotebookWeeks(direction: -1 | 1) {
+    const index = schoolWeeksMemo.findIndex((week) => week.number === notebookCenterWeek);
+    if (index < 0) return;
+    const target = schoolWeeksMemo[index + direction];
+    if (target) setNotebookCenterWeek(target.number);
+  }
+
+  async function performNotebookControl(input: {
+    classroomId: string;
+    subjectId: string;
+    schoolWeekNumber: number;
+    day: number;
+    title: string;
+  }) {
+    const created = await createAgendaItemApi({
+      classroomId: input.classroomId,
+      subjectId: input.subjectId,
+      day: input.day,
+      hour: 8,
+      weekOffset: 0,
+      schoolWeekNumber: input.schoolWeekNumber,
+      type: "TEST",
+      title: input.title.trim(),
+      detail: "",
+    });
+    setItems((previous) => [...previous, created]);
+    showNotice("Contrôle planifié.");
+  }
+
+  async function notebookCreatePublication(schoolWeekNumber: number, text: string) {
+    if (!notebookClassroomId || !notebookSubjectId || !openNotebookClass) return;
+    const created = await createAgendaItemApi({
+      classroomId: notebookClassroomId,
+      subjectId: notebookSubjectId,
+      day: weekdayToCourseDayIndex(openNotebookClass.dayOfWeek),
+      hour: 8,
+      weekOffset: 0,
+      schoolWeekNumber,
+      type: "HOMEWORK",
+      title: text.trim(),
+      detail: "",
+    });
+    setItems((previous) => [...previous, created]);
+    showNotice("Publication ajoutée.");
+  }
+
+  async function notebookMovePublication(itemId: number, schoolWeekNumber: number) {
+    const updated = await updateAgendaItemApi(itemId, { schoolWeekNumber });
+    setItems((previous) => previous.map((item) => (item.id === itemId ? updated : item)));
+  }
+
+  async function notebookDeletePublication(itemId: number) {
+    await deleteAgendaItemApi(itemId);
+    setItems((previous) => previous.filter((item) => item.id !== itemId));
+  }
+
+  async function notebookSaveControl(input: { schoolWeekNumber: number; day: number; title: string }) {
+    if (!notebookClassroomId || !notebookSubjectId) return;
+    const alert = evaluateThirdTestAlert(items, DEMO_CATALOG, {
+      classroomId: notebookClassroomId,
+      type: "TEST",
+      courseDay: { schoolWeekNumber: input.schoolWeekNumber, dayIndex: input.day },
+    });
+    if (alert.triggered) {
+      setControlAlert(alert);
+      setPendingNotebookControl({
+        classroomId: notebookClassroomId,
+        subjectId: notebookSubjectId,
+        ...input,
+      });
+      return;
+    }
+    await performNotebookControl({
+      classroomId: notebookClassroomId,
+      subjectId: notebookSubjectId,
+      ...input,
+    });
   }
 
   function mergeDeployedItems(created: PrototypeAgendaItem[]) {
@@ -1012,8 +1187,8 @@ export default function Home() {
           <div className="mobile-lockup"><BrandEmblem /><strong>CAMPUS AGENDA</strong></div>
           <div className="class-identity">
             <span className="eyebrow">Espace enseignant</span>
-            <h1>{sectionTitle(activeSection, false)}</h1>
-            <p>{sectionDescription(activeSection, false)}</p>
+            <h1>{sectionTitle(activeSection, false, openNotebookClass?.name)}</h1>
+            <p>{sectionDescription(activeSection, false, Boolean(openNotebookClass))}</p>
           </div>
           <div className="header-actions">
             {showAgendaTools && (
@@ -1039,12 +1214,35 @@ export default function Home() {
           </div>
         </header>
 
-        {activeSection === "ma-semaine" && (
+        {activeSection === "ma-semaine" && openNotebookClass && (
+          <ClassNotebookPanel
+            classSetup={openNotebookClass}
+            schoolWeeks={schoolWeeksMemo}
+            centerWeekNumber={notebookCenterWeek}
+            items={notebookItems}
+            notesDocument={classNotesDocument}
+            canPublish={notebookCanPublish}
+            publishBlockedReason={notebookBlockedReason}
+            onBack={closeClassNotebook}
+            onShiftWeeks={shiftNotebookWeeks}
+            onCenterWeekChange={setNotebookCenterWeek}
+            onNotesChange={setClassNotesDocument}
+            onCreatePublication={notebookCreatePublication}
+            onMovePublication={notebookMovePublication}
+            onDeletePublication={notebookDeletePublication}
+            onSaveControl={notebookSaveControl}
+            onDeleteControl={notebookDeletePublication}
+            onPreviewStudent={enterTeacherPreview}
+          />
+        )}
+
+        {activeSection === "ma-semaine" && !openNotebookClass && (
           <MaSemainePanel
             config={teacherSetup}
             schoolWeeks={schoolWeeksMemo}
             selectedSchoolWeekNumber={selectedSchoolWeekNumber}
             onSelectSchoolWeek={setSelectedSchoolWeekNumber}
+            onOpenClass={openClassNotebook}
           />
         )}
 
@@ -1084,7 +1282,7 @@ export default function Home() {
                 <span className="eyebrow">COORDINATION</span>
                 <h2 id="control-alert-title">3 contrôles ce jour de cours</h2>
               </div>
-              <button type="button" onClick={() => { setControlAlert(null); setPendingPublish(null); }}>×</button>
+              <button type="button" onClick={() => { setControlAlert(null); setPendingPublish(null); setPendingNotebookControl(null); }}>×</button>
             </header>
             <p>Cette publication porterait à <strong>3 contrôles</strong> le même jour de cours pour la classe. Les collègues ont déjà planifié :</p>
             <ul className="control-alert-list">
@@ -1096,7 +1294,7 @@ export default function Home() {
               ))}
             </ul>
             <footer className="control-alert-actions">
-              <button type="button" onClick={() => { setControlAlert(null); setPendingPublish(null); }}>Modifier la date</button>
+              <button type="button" onClick={() => { setControlAlert(null); setPendingPublish(null); setPendingNotebookControl(null); }}>Modifier la date</button>
               <button type="button" className="confirm-anyway" onClick={confirmPublishDespiteAlert}>Publier quand même</button>
             </footer>
           </section>

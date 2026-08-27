@@ -2,6 +2,18 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.5.0] — Carnet de classe (maquette validée)
+
+### Ajouté
+
+- Clic sur une classe dans **Ma semaine** → **Carnet de classe**
+- Colonnes par semaine (1 à 4 visibles, défaut 3) avec zones :
+  - **Contrôle** (menu dédié, visible élève)
+  - **Publication élèves** (1 ligne = 1 item, Entrée pour publier)
+  - **Notes prof** (privées, localStorage)
+- Glisser-déposer et Ctrl+X / Ctrl+V entre semaines
+- Aperçu élève depuis le carnet
+
 ## [2.4.0] — Vue personnelle enseignant
 
 ### Ajouté

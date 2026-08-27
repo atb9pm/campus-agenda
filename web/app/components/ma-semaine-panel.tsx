@@ -10,11 +10,14 @@ import {
   type TeacherSetupConfig,
 } from "@campus/features/teacher-setup";
 
+import type { TeacherClassSetup } from "@campus/features/teacher-setup";
+
 interface MaSemainePanelProps {
   config: TeacherSetupConfig;
   schoolWeeks: SchoolWeek[];
   selectedSchoolWeekNumber: number;
   onSelectSchoolWeek: (weekNumber: number) => void;
+  onOpenClass: (classSetup: TeacherClassSetup) => void;
 }
 
 function formatSchoolWeekHeading(week: SchoolWeek): string {
@@ -27,6 +30,7 @@ export function MaSemainePanel({
   schoolWeeks,
   selectedSchoolWeekNumber,
   onSelectSchoolWeek,
+  onOpenClass,
 }: MaSemainePanelProps) {
   const activeClasses = useMemo(
     () => config.classes.filter((entry) => entry.name.trim()),
@@ -87,7 +91,12 @@ export function MaSemainePanel({
               </header>
               <div className="ma-semaine-class-grid">
                 {group.classes.map((entry) => (
-                  <article className="ma-semaine-class-card" key={entry.id}>
+                  <button
+                    type="button"
+                    className="ma-semaine-class-card"
+                    key={entry.id}
+                    onClick={() => onOpenClass(entry)}
+                  >
                     <div className="ma-semaine-class-icon" aria-hidden="true">
                       {entry.icon}
                     </div>
@@ -105,7 +114,7 @@ export function MaSemainePanel({
                         <p className="ma-semaine-no-branches">Aucune branche saisie</p>
                       )}
                     </div>
-                  </article>
+                  </button>
                 ))}
               </div>
             </section>
