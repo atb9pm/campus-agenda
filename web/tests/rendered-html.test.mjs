@@ -64,6 +64,10 @@ test("keeps the validated teacher essentials and social preview", async () => {
   assert.match(page, /ClassNotebookPanel/);
   assert.match(page, /ConfigurationPanel/);
   assert.match(page, /AdministrationPanel/);
+  assert.match(page, /mobile-tab-bar/);
+  assert.match(page, /data-student-tab/);
+  assert.match(page, /Navigation enseignant/);
+  assert.match(page, /Navigation élève/);
   assert.match(page, /enterStudentWithCode/);
   assert.match(page, /fetchApiSession/);
   assert.match(page, /loginStudentApi/);
