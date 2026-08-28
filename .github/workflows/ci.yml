@@ -40,6 +40,7 @@ jobs:
             ../tests/sqlite-store.test.ts \
             ../tests/teacher.test.ts \
             ../tests/teacher-setup.test.ts \
+            ../tests/class-notebook.test.ts \
             ../tests/school-catalog.test.ts \
             ../tests/school-days.test.ts \
             ../tests/teacher-accounts.test.ts \

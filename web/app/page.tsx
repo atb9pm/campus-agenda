@@ -52,10 +52,12 @@ import {
   fetchAgendaItems,
   fetchApiSession,
   fetchSchoolCalendar,
+  fetchTeacherNotesApi,
   fetchTeacherSetupApi,
   loginStudentApi,
   loginTeacherApi,
   logoutApiSession,
+  saveTeacherNotesApi,
   saveTeacherSetupApi,
   updateAgendaItemApi,
   type ApiTeacherSession,
@@ -75,10 +77,12 @@ import {
   type TeacherClassSetup,
 } from "@campus/features/teacher-setup";
 import {
+  clearNotesFromBrowser,
+  createEmptyNotesDocument,
   loadNotesFromBrowser,
+  peekNotesFromBrowser,
   resolveCatalogClassroomId,
   resolveDefaultSubjectId,
-  saveNotesToBrowser,
   weekdayToCourseDayIndex,
   type ClassNotesDocument,
 } from "@campus/features/class-notebook";
@@ -173,7 +177,7 @@ export default function Home() {
   const [openNotebookClassId, setOpenNotebookClassId] = useState<string | null>(null);
   const [notebookCenterWeek, setNotebookCenterWeek] = useState(selectedSchoolWeekNumber);
   const [classNotesDocument, setClassNotesDocument] = useState<ClassNotesDocument>(() =>
-    loadNotesFromBrowser(currentTeacherId),
+    createEmptyNotesDocument(),
   );
   const [pendingNotebookControl, setPendingNotebookControl] = useState<{
     classroomId: string;
@@ -183,6 +187,8 @@ export default function Home() {
     title: string;
   } | null>(null);
   const [classNotesReady, setClassNotesReady] = useState(false);
+  /** Évite d'écrire sur le serveur juste après un chargement / une migration. */
+  const skipClassNotesSaveRef = useRef(false);
 
   async function applyTeacherSession(session: ApiTeacherSession) {
     // Mot de passe provisoire : rien d'autre n'est accessible avant le changement.
@@ -281,15 +287,75 @@ export default function Home() {
   }, [currentTeacherId, teacherAuthenticated, teacherSetup, teacherSetupReady]);
 
   useEffect(() => {
-    setClassNotesDocument(loadNotesFromBrowser(currentTeacherId));
-    setClassNotesReady(true);
-  }, [currentTeacherId]);
+    if (!teacherAuthenticated) {
+      setClassNotesReady(false);
+      return;
+    }
+
+    let cancelled = false;
+    setClassNotesReady(false);
+
+    async function loadClassNotes() {
+      const fallback = () =>
+        peekNotesFromBrowser(currentTeacherId) ??
+        loadNotesFromBrowser(currentTeacherId);
+
+      try {
+        const remote = await fetchTeacherNotesApi();
+        if (cancelled) return;
+
+        if (remote) {
+          skipClassNotesSaveRef.current = true;
+          setClassNotesDocument(remote);
+          clearNotesFromBrowser(currentTeacherId);
+          setClassNotesReady(true);
+          return;
+        }
+
+        const local = peekNotesFromBrowser(currentTeacherId);
+        if (local) {
+          const saved = await saveTeacherNotesApi(local);
+          if (cancelled) return;
+          skipClassNotesSaveRef.current = true;
+          setClassNotesDocument(saved);
+          clearNotesFromBrowser(currentTeacherId);
+          setClassNotesReady(true);
+          return;
+        }
+
+        skipClassNotesSaveRef.current = true;
+        setClassNotesDocument(createEmptyNotesDocument());
+        setClassNotesReady(true);
+      } catch {
+        if (cancelled) return;
+        skipClassNotesSaveRef.current = true;
+        setClassNotesDocument(fallback());
+        setClassNotesReady(true);
+      }
+    }
+
+    void loadClassNotes();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTeacherId, teacherAuthenticated]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
-    if (!classNotesReady) return;
-    saveNotesToBrowser(currentTeacherId, classNotesDocument);
-  }, [classNotesDocument, classNotesReady, currentTeacherId]);
+    if (!teacherAuthenticated || !classNotesReady) return;
+    if (skipClassNotesSaveRef.current) {
+      skipClassNotesSaveRef.current = false;
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void saveTeacherNotesApi(classNotesDocument).catch(() => {
+        // Les notes restent en mémoire ; nouvel essai au prochain changement.
+      });
+    }, 400);
+
+    return () => window.clearTimeout(timer);
+  }, [classNotesDocument, classNotesReady, currentTeacherId, teacherAuthenticated]);
 
   useEffect(() => {
     let cancelled = false;

@@ -28,6 +28,9 @@ import { describeBootstrapOutcome, ensureTeacherAccountBootstrap } from "./teach
 import { getMemoryTeacherSetupStore, MemoryTeacherSetupStore } from "./memory-teacher-setup-store.ts";
 import { SqlTeacherSetupStore } from "./sql/sql-teacher-setup-store.ts";
 import type { TeacherSetupStore } from "./teacher-setup-types.ts";
+import { getMemoryTeacherNotesStore, MemoryTeacherNotesStore } from "./memory-teacher-notes-store.ts";
+import { SqlTeacherNotesStore } from "./sql/sql-teacher-notes-store.ts";
+import type { TeacherNotesStore } from "./teacher-notes-types.ts";
 import { setActiveSchoolWeekEntries } from "../../features/calendar/active-calendar.ts";
 
 export { APP_VERSION } from "../app-version.ts";
@@ -41,6 +44,7 @@ interface ResolvedStore {
   schoolCatalogStore: SchoolCatalogStore;
   teacherAccountStore: TeacherAccountStore;
   teacherSetupStore: TeacherSetupStore;
+  teacherNotesStore: TeacherNotesStore;
   kind: StoreKind;
   classroomExists: (classroomId: string) => Promise<boolean>;
 }
@@ -65,6 +69,7 @@ async function prepareSqlDatabase(
   schoolCatalogStore: SqlSchoolCatalogStore;
   teacherAccountStore: SqlTeacherAccountStore;
   teacherSetupStore: SqlTeacherSetupStore;
+  teacherNotesStore: SqlTeacherNotesStore;
 }> {
   await applyMigrations(db);
   if (!(await isDatabaseSeeded(db))) {
@@ -81,6 +86,7 @@ async function prepareSqlDatabase(
     schoolCatalogStore,
     teacherAccountStore,
     teacherSetupStore: new SqlTeacherSetupStore(db),
+    teacherNotesStore: new SqlTeacherNotesStore(db),
   };
 }
 
@@ -89,6 +95,7 @@ async function prepareMemoryStores(): Promise<{
   schoolCatalogStore: MemorySchoolCatalogStore;
   teacherAccountStore: MemoryTeacherAccountStore;
   teacherSetupStore: MemoryTeacherSetupStore;
+  teacherNotesStore: MemoryTeacherNotesStore;
 }> {
   const weeks = await hydrateMemorySchoolCalendar();
   setActiveSchoolWeekEntries(weeks);
@@ -101,13 +108,19 @@ async function prepareMemoryStores(): Promise<{
     schoolCatalogStore,
     teacherAccountStore,
     teacherSetupStore: getMemoryTeacherSetupStore(),
+    teacherNotesStore: getMemoryTeacherNotesStore(),
   };
 }
 
 async function createStore(): Promise<ResolvedStore> {
   if (process.env.CAMPUS_STORE === "memory") {
-    const { schoolYearStore, schoolCatalogStore, teacherAccountStore, teacherSetupStore } =
-      await prepareMemoryStores();
+    const {
+      schoolYearStore,
+      schoolCatalogStore,
+      teacherAccountStore,
+      teacherSetupStore,
+      teacherNotesStore,
+    } = await prepareMemoryStores();
     return {
       store: getMemoryAgendaStore(),
       templateStore: getMemoryTemplateStore(),
@@ -117,6 +130,7 @@ async function createStore(): Promise<ResolvedStore> {
       schoolCatalogStore,
       teacherAccountStore,
       teacherSetupStore,
+      teacherNotesStore,
       kind: "memory",
       classroomExists: memoryClassroomExists,
     };
@@ -124,8 +138,13 @@ async function createStore(): Promise<ResolvedStore> {
 
   if (process.env.CAMPUS_STORE === "sqlite" || process.env.CAMPUS_SQLITE_PATH) {
     const sqlite = createNodeSqliteDatabase(process.env.CAMPUS_SQLITE_PATH ?? ":memory:");
-    const { schoolYearStore, schoolCatalogStore, teacherAccountStore, teacherSetupStore } =
-      await prepareSqlDatabase(sqlite);
+    const {
+      schoolYearStore,
+      schoolCatalogStore,
+      teacherAccountStore,
+      teacherSetupStore,
+      teacherNotesStore,
+    } = await prepareSqlDatabase(sqlite);
     const store = new SqlAgendaStore(sqlite);
     return {
       store,
@@ -136,6 +155,7 @@ async function createStore(): Promise<ResolvedStore> {
       schoolCatalogStore,
       teacherAccountStore,
       teacherSetupStore,
+      teacherNotesStore,
       kind: "sqlite",
       classroomExists: (classroomId) => classroomExistsInDatabase(sqlite, classroomId),
     };
@@ -145,8 +165,13 @@ async function createStore(): Promise<ResolvedStore> {
     const { env } = await import("cloudflare:workers") as { env: { CAMPUS_DB?: D1Database } };
     if (env.CAMPUS_DB) {
       const db = wrapD1Database(env.CAMPUS_DB);
-      const { schoolYearStore, schoolCatalogStore, teacherAccountStore, teacherSetupStore } =
-        await prepareSqlDatabase(db);
+      const {
+        schoolYearStore,
+        schoolCatalogStore,
+        teacherAccountStore,
+        teacherSetupStore,
+        teacherNotesStore,
+      } = await prepareSqlDatabase(db);
       const store = new SqlAgendaStore(db);
       return {
         store,
@@ -157,6 +182,7 @@ async function createStore(): Promise<ResolvedStore> {
         schoolCatalogStore,
         teacherAccountStore,
         teacherSetupStore,
+        teacherNotesStore,
         kind: "d1",
         classroomExists: (classroomId) => classroomExistsInDatabase(db, classroomId),
       };
@@ -165,8 +191,13 @@ async function createStore(): Promise<ResolvedStore> {
     // Hors worker Cloudflare : repli mémoire.
   }
 
-  const { schoolYearStore, schoolCatalogStore, teacherAccountStore, teacherSetupStore } =
-    await prepareMemoryStores();
+  const {
+    schoolYearStore,
+    schoolCatalogStore,
+    teacherAccountStore,
+    teacherSetupStore,
+    teacherNotesStore,
+  } = await prepareMemoryStores();
   return {
     store: getMemoryAgendaStore(),
     templateStore: getMemoryTemplateStore(),
@@ -176,6 +207,7 @@ async function createStore(): Promise<ResolvedStore> {
     schoolCatalogStore,
     teacherAccountStore,
     teacherSetupStore,
+    teacherNotesStore,
     kind: "memory",
     classroomExists: memoryClassroomExists,
   };
@@ -227,6 +259,10 @@ export async function getTeacherAccountStore(): Promise<TeacherAccountStore> {
 
 export async function getTeacherSetupStore(): Promise<TeacherSetupStore> {
   return (await resolveAgendaStore()).teacherSetupStore;
+}
+
+export async function getTeacherNotesStore(): Promise<TeacherNotesStore> {
+  return (await resolveAgendaStore()).teacherNotesStore;
 }
 
 export async function getStoreKind(): Promise<StoreKind> {
