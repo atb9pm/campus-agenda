@@ -566,4 +566,83 @@ button { color: inherit; }
   .controls-panel { margin-right: 16px; margin-left: 16px; }
 }
 
+/* Navigation mobile (enseignant + élève) — barre d'onglets fixe en bas. */
+.mobile-tab-bar { display: none; }
+.mobile-only { display: none; }
+.student-history-panel { margin-top: 18px; padding: 22px 24px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: var(--shadow); }
+.student-history-panel h2 { margin: 0 0 12px; color: var(--navy); font-size: 14px; letter-spacing: .08em; text-transform: uppercase; }
+.student-history-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.student-history-list button, .student-history-current {
+  width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px;
+  background: #fbfcfe; color: var(--navy); font-size: 12px; font-weight: 700; text-align: left; cursor: pointer;
+}
+.student-history-current { margin-bottom: 10px; border-color: #b8cce8; background: #f1f6fd; }
+.student-history-empty { margin: 0; color: #7b879c; font-size: 11px; }
+
+@media (max-width: 760px) {
+  .desktop-only { display: none !important; }
+  .has-mobile-tabs .technical-main,
+  .has-mobile-tabs .student-course-day-main {
+    padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .mobile-tab-bar {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 2px;
+    padding: 8px 6px calc(8px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 -8px 28px rgba(6, 24, 61, 0.08);
+  }
+  .mobile-tab-bar button {
+    display: grid;
+    justify-items: center;
+    gap: 4px;
+    min-width: 0;
+    padding: 8px 4px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #516582;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .02em;
+    cursor: pointer;
+  }
+  .mobile-tab-bar button span {
+    font-size: 16px;
+    line-height: 1;
+    color: #30558f;
+  }
+  .mobile-tab-bar button.active {
+    color: var(--navy);
+    background: #eef3fb;
+  }
+  .mobile-tab-bar button.active span { color: var(--blue); }
+
+  /* Vue élève : un panneau à la fois sur mobile. */
+  .student-app[data-student-tab] .student-mobile-panel { display: none; }
+  .student-app[data-student-tab="cours"] .student-mobile-panel[data-panel="cours"],
+  .student-app[data-student-tab="controles"] .student-mobile-panel[data-panel="controles"],
+  .student-app[data-student-tab="historique"] .student-mobile-panel[data-panel="historique"] {
+    display: block;
+  }
+
+  .student-course-day-header { margin-bottom: 16px; }
+  .student-course-day-main { padding: 18px 16px 24px; }
+  .student-course-day-card,
+  .student-upcoming-tests,
+  .student-history-panel { padding: 18px 16px; border-radius: 12px; }
+  .student-course-day-card h1 { font-size: 26px; }
+}
+
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
+

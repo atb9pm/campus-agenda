@@ -2,6 +2,21 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.12.0] — Navigation mobile enseignant et élève
+
+### Ajouté
+
+- **Barre d'onglets mobile** (largeur ≤ 760 px) pour l'espace enseignant : Ma semaine,
+  Configuration, Administration (si admin), Espace élève, Déconnexion.
+- **Navigation mobile élève** : Cours, Contrôles, Passés, Sortir — adaptée à l'usage
+  smartphone (un panneau à la fois).
+- Liste dédiée des cours précédents sur mobile (plus uniquement un menu desktop).
+
+### Corrigé
+
+- Sur téléphone, la barre latérale était masquée : un administrateur ne pouvait plus
+  ouvrir Administration. La barre d'onglets rétablit cet accès.
+
 ## [2.11.0] — Notes de carnet persistées
 
 ### Ajouté

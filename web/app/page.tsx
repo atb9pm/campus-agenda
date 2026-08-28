@@ -166,6 +166,8 @@ export default function Home() {
   const [passwordChangeError, setPasswordChangeError] = useState("");
   const [studentCourseDayKey, setStudentCourseDayKey] = useState<string | null>(null);
   const [studentHistoryOpen, setStudentHistoryOpen] = useState(false);
+  /** Onglet mobile élève : cours du jour, contrôles, historique. */
+  const [studentMobileTab, setStudentMobileTab] = useState<"cours" | "controles" | "historique">("cours");
   const [schoolWeeks, setSchoolWeeks] = useState<SchoolWeek[]>(() => buildSchoolWeeks());
   const [controlAlert, setControlAlert] = useState<ThirdTestAlert | null>(null);
   const [teacherSetup, setTeacherSetup] = useState<TeacherSetupConfig>(() =>
@@ -804,14 +806,14 @@ export default function Home() {
 
   if (isStudentView && studentSession) {
     return (
-      <div className="mechanical-app student-app student-course-day-app">
+      <div className="mechanical-app student-app student-course-day-app has-mobile-tabs" data-student-tab={studentMobileTab}>
         <main className="student-course-day-main" id="main-content">
           <header className="student-course-day-header">
             <div className="student-course-day-brand">
               <BrandEmblem />
               <span><strong>CAMPUS</strong><small>AGENDA</small></span>
             </div>
-            <div className="student-course-day-actions">
+            <div className="student-course-day-actions desktop-only">
               <div className="student-history-anchor">
                 <button
                   type="button"
@@ -856,7 +858,11 @@ export default function Home() {
             </div>
           </header>
 
-          <section className="student-course-day-card" aria-labelledby="student-course-day-title">
+          <section
+            className="student-course-day-card student-mobile-panel"
+            data-panel="cours"
+            aria-labelledby="student-course-day-title"
+          >
             <p className="eyebrow">{selectedClassroom.name} · {studentSession.label}</p>
             <p className="student-week-label">{formatSchoolWeekLabel(studentDisplayCourseDay)}</p>
             <h1 id="student-course-day-title">{formatCourseDayHeading(studentDisplayCourseDay)}</h1>
@@ -889,7 +895,11 @@ export default function Home() {
             )}
           </section>
 
-          <section className="student-upcoming-tests" aria-labelledby="student-upcoming-tests-title">
+          <section
+            className="student-upcoming-tests student-mobile-panel"
+            data-panel="controles"
+            aria-labelledby="student-upcoming-tests-title"
+          >
             <h2 id="student-upcoming-tests-title">Contrôles à venir</h2>
             {studentUpcomingTests.length ? (
               <ol className="student-upcoming-tests-list">
@@ -907,8 +917,78 @@ export default function Home() {
             )}
           </section>
 
+          <section
+            className="student-history-panel student-mobile-panel mobile-only"
+            data-panel="historique"
+            aria-labelledby="student-history-title"
+          >
+            <h2 id="student-history-title">Cours précédents</h2>
+            {!studentFollowingCourseDay && (
+              <button
+                type="button"
+                className="student-history-current"
+                onClick={() => {
+                  setStudentCourseDayKey(null);
+                  setStudentMobileTab("cours");
+                }}
+              >
+                Revenir au prochain cours
+              </button>
+            )}
+            {studentPreviousCourseDays.length ? (
+              <ul className="student-history-list">
+                {studentPreviousCourseDays.map((slot) => (
+                  <li key={courseDayKey(slot)}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStudentCourseDayKey(courseDayKey(slot));
+                        setStudentMobileTab("cours");
+                      }}
+                    >
+                      {formatCourseDayMenuLabel(slot)}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="student-history-empty">Aucun cours précédent disponible.</p>
+            )}
+          </section>
+
           <p className="prototype-label">CONSULTATION ÉLÈVE · CAMPUS AGENDA {APP_VERSION}</p>
         </main>
+
+        <nav className="mobile-tab-bar" aria-label="Navigation élève">
+          <button
+            type="button"
+            className={studentMobileTab === "cours" ? "active" : ""}
+            onClick={() => setStudentMobileTab("cours")}
+          >
+            <span aria-hidden="true">▣</span>
+            Cours
+          </button>
+          <button
+            type="button"
+            className={studentMobileTab === "controles" ? "active" : ""}
+            onClick={() => setStudentMobileTab("controles")}
+          >
+            <span aria-hidden="true">✓</span>
+            Contrôles
+          </button>
+          <button
+            type="button"
+            className={studentMobileTab === "historique" ? "active" : ""}
+            onClick={() => setStudentMobileTab("historique")}
+          >
+            <span aria-hidden="true">↺</span>
+            Passés
+          </button>
+          <button type="button" onClick={exitStudentMode}>
+            <span aria-hidden="true">↪</span>
+            {studentEntry === "teacher-preview" ? "Quitter" : "Sortir"}
+          </button>
+        </nav>
 
         {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
       </div>
@@ -916,7 +996,7 @@ export default function Home() {
   }
 
   return (
-    <div className="mechanical-app">
+    <div className="mechanical-app has-mobile-tabs">
       <aside className="technical-sidebar">
         <div className="brand-lockup">
           <BrandEmblem />
@@ -1009,7 +1089,30 @@ export default function Home() {
         <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA {APP_VERSION}</p>
       </main>
 
-      {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
+      
+      <nav className="mobile-tab-bar" aria-label="Navigation enseignant">
+        {teacherNavSectionsForRole(teacherIsAdmin).map((section) => (
+          <button
+            key={section}
+            type="button"
+            className={activeSection === section ? "active" : ""}
+            onClick={() => navigate(section)}
+          >
+            <span aria-hidden="true">{TEACHER_NAV_ICONS[section]}</span>
+            {TEACHER_NAV_LABELS[section]}
+          </button>
+        ))}
+        <button type="button" onClick={() => setStudentCodeModalOpen(true)}>
+          <span aria-hidden="true">👤</span>
+          Élève
+        </button>
+        <button type="button" onClick={logoutTeacher}>
+          <span aria-hidden="true">↪</span>
+          Sortir
+        </button>
+      </nav>
+
+{notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
 
       {studentCodeModalOpen && (
         <div className="technical-modal-backdrop">
