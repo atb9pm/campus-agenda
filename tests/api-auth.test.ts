@@ -8,6 +8,8 @@ import { resetMemoryAgendaStore, getMemoryAgendaStore } from "../src/lib/persist
 import { DEMO_CURRENT_TEACHER_ID } from "../src/features/classes/index.ts";
 
 process.env.AUTH_SECRET ??= "test-secret-api-phase-07";
+// Le mot de passe de démonstration est refusé par défaut : les tests l'autorisent.
+process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
 
 test("phase 0.7 — flux élève : session signée puis lecture agenda", async () => {
   resetMemoryAgendaStore();

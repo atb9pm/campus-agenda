@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 process.env.AUTH_SECRET ??= "test-secret-e2e-phase-08";
+// Les comptes de démonstration n'ont pas de mot de passe personnel : le parcours
+// E2E autorise explicitement l'empreinte héritée `campus-demo`.
+process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
 
 const env = {
   ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
@@ -172,6 +175,85 @@ test("phase 1.0 — E2E rate limit sur connexion enseignant", async () => {
       process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER = previous;
     }
   }
+});
+
+test("comptes enseignant — E2E création, mot de passe provisoire, première connexion", async () => {
+  const clientIp = "198.51.100.42";
+  const jsonHeaders = { "Content-Type": "application/json", "cf-connecting-ip": clientIp };
+
+  const adminLogin = await request("/api/auth/teacher", {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify({ initials: "ChF", password: "campus-demo" }),
+  });
+  assert.equal(adminLogin.status, 200);
+  const adminPayload = await adminLogin.json();
+  assert.equal(adminPayload.session.isAdmin, true);
+  const adminCookie = extractCookie(adminLogin);
+
+  const initials = `Zz${(Date.now() % 1000).toString().padStart(3, "0")}`;
+  const createResponse = await request("/api/admin/teachers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: adminCookie },
+    body: JSON.stringify({ displayName: "Compte E2E", initials }),
+  });
+  assert.equal(createResponse.status, 200);
+  const created = await createResponse.json();
+  assert.equal(created.ok, true);
+  assert.equal(created.teacher.mustChangePassword, true);
+  assert.ok(created.temporaryPassword.length >= 10);
+
+  const listResponse = await request("/api/admin/teachers", { headers: { cookie: adminCookie } });
+  const list = await listResponse.json();
+  assert.ok(list.teachers.some((teacher) => teacher.id === created.teacher.id));
+
+  const firstLogin = await request("/api/auth/teacher", {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify({ initials, password: created.temporaryPassword }),
+  });
+  assert.equal(firstLogin.status, 200);
+  const firstPayload = await firstLogin.json();
+  assert.equal(firstPayload.session.mustChangePassword, true);
+  const newCookie = extractCookie(firstLogin);
+
+  // Mot de passe provisoire : aucune autre route enseignant n'est accessible.
+  const blocked = await request("/api/library/templates", { headers: { cookie: newCookie } });
+  assert.equal(blocked.status, 403);
+  const blockedPayload = await blocked.json();
+  assert.equal(blockedPayload.passwordChangeRequired, true);
+
+  const weakChange = await request("/api/auth/teacher/password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: newCookie, "cf-connecting-ip": clientIp },
+    body: JSON.stringify({ currentPassword: created.temporaryPassword, nextPassword: "court" }),
+  });
+  assert.equal(weakChange.status, 400);
+
+  const change = await request("/api/auth/teacher/password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: newCookie, "cf-connecting-ip": clientIp },
+    body: JSON.stringify({ currentPassword: created.temporaryPassword, nextPassword: "Atelier-2027" }),
+  });
+  assert.equal(change.status, 200);
+
+  const sessionResponse = await request("/api/auth/session", { headers: { cookie: newCookie } });
+  const sessionPayload = await sessionResponse.json();
+  assert.equal(sessionPayload.session.mustChangePassword, false);
+
+  const relogin = await request("/api/auth/teacher", {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify({ initials, password: "Atelier-2027" }),
+  });
+  assert.equal(relogin.status, 200);
+  assert.equal((await relogin.json()).session.mustChangePassword, false);
+
+  // Un enseignant simple ne gère pas les comptes.
+  const forbidden = await request("/api/admin/teachers", {
+    headers: { cookie: extractCookie(relogin) },
+  });
+  assert.equal(forbidden.status, 403);
 });
 
 test("phase 2.0 — E2E calendrier scolaire et liste admin", async () => {

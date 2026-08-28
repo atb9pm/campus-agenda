@@ -26,6 +26,8 @@ test("server-renders the single entry page, student tab first", async () => {
   assert.match(html, /Code de classe/);
   assert.match(html, /Enseignant/);
   assert.doesNotMatch(html, /Site verrouillé/);
+  // Aucun mot de passe ne doit être publié dans le HTML rendu.
+  assert.doesNotMatch(html, /campus-demo/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 
@@ -72,6 +74,8 @@ test("keeps the validated teacher essentials and social preview", async () => {
   assert.match(page, /canModifyPublication/);
   assert.match(page, /LoginPanel/);
   assert.match(page, /submitTeacherLogin/);
+  assert.match(page, /PasswordChangePanel/);
+  assert.match(page, /changeTeacherPasswordApi/);
   assert.doesNotMatch(page, /DEMO_TEACHER_PASSWORD/);
   assert.match(page, /DEMO_CATALOG/);
   assert.match(page, /brand-emblem-image/);

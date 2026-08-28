@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+// Le mot de passe de démonstration est refusé par défaut : les tests l'autorisent.
+process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
+
 import { createNodeSqliteDatabase } from "../src/lib/persistence/sql/adapters.ts";
 import { applyMigrations } from "../src/lib/persistence/sql/migrate.ts";
 import { seedDemoDatabase } from "../src/lib/persistence/sql/seed.ts";

@@ -2,6 +2,43 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.9.0] — Comptes enseignant réels
+
+### Ajouté
+
+- **Mots de passe hachés (PBKDF2-SHA-256, 210 000 itérations, sel aléatoire)** : plus aucun
+  mot de passe ni empreinte lisible en base.
+- **Gestion des enseignants** dans Administration : création d'un compte (nom + initiales,
+  administrateur ou non) avec **mot de passe provisoire affiché une seule fois à l'écran**,
+  à transmettre de vive voix, et réinitialisation à la demande.
+- **Gestion des accès** : rôle administrateur et activation/désactivation d'un compte.
+  Un administrateur actif doit toujours rester, et personne ne peut se retirer son propre accès.
+- **Changement de mot de passe obligatoire à la première connexion** : tant qu'un mot de passe
+  provisoire est en place, seule cette page est accessible (garde-fou côté serveur également).
+- **Amorçage de l'accès administrateur** : `CAMPUS_ADMIN_PASSWORD` (avec `CAMPUS_ADMIN_INITIALS`,
+  `ChF` par défaut), sinon mot de passe provisoire tiré au hasard et inscrit dans les journaux
+  du serveur. Un mot de passe déjà choisi n'est jamais écrasé.
+- Migration `0010_teacher_accounts` : `is_active`, `must_change_password`, `password_updated_at`.
+- API `GET/POST /api/admin/teachers`, `PATCH /api/admin/teachers/:id`,
+  `POST /api/admin/teachers/:id/password` et `POST /api/auth/teacher/password`.
+
+### Modifié
+
+- **Le mot de passe de démonstration `campus-demo` est refusé par défaut**, y compris en
+  production. Il faut `CAMPUS_ALLOW_DEMO_PASSWORD=1` (aperçu local et tests uniquement).
+- La page de connexion **n'affiche plus aucun mot de passe** ; en cas d'oubli, l'administrateur
+  génère un mot de passe provisoire.
+- Politique de mot de passe : au moins 10 caractères, une lettre et un chiffre.
+- Le nom affiché et les initiales viennent désormais de la base, plus du catalogue de démonstration.
+- Limitation de débit dédiée au changement de mot de passe (10 tentatives par minute).
+
+### Notes
+
+- Les comptes de démonstration existants conservent leur empreinte héritée : en production ils
+  ne peuvent plus se connecter tant qu'un administrateur ne leur a pas donné un mot de passe.
+- Le mot de passe provisoire n'est **jamais** stocké en clair et n'est renvoyé qu'une seule fois,
+  dans la réponse à la création ou à la réinitialisation.
+
 ## [2.8.0] — Porte d'entrée unique
 
 ### Ajouté

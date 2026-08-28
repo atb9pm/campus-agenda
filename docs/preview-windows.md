@@ -43,8 +43,13 @@ Test rapide : http://127.0.0.1:5173/api/health → `{"ok":true,...}`
 
 ## Connexion démo
 
-- Compte : `teacher-chf` (François Cheseaux · ChF)
+- Initiales : `ChF` (François Cheseaux)
 - Mot de passe : `campus-demo` (espaces avant/après acceptés)
+
+Ce mot de passe hérité n'existe **que** pour la démonstration : il est refusé partout
+sauf si `CAMPUS_ALLOW_DEMO_PASSWORD=1`, que le script d'aperçu local pose lui-même.
+En production, l'accès administrateur passe par `CAMPUS_ADMIN_PASSWORD` ou par le mot
+de passe provisoire inscrit dans les journaux du serveur.
 
 Si la connexion échoue avec « Trop de tentatives », arrêtez le serveur (Ctrl+C), relancez `pnpm.cmd run preview:fresh` et réessayez. La prévisualisation locale désactive le rate limit automatiquement.
 

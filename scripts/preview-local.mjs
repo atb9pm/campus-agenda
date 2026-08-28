@@ -27,6 +27,9 @@ process.env.CAMPUS_STORE ??= "memory";
 process.env.AUTH_SECRET ??= "dev-secret";
 // Évite le blocage 429 après plusieurs essais ratés en prévisualisation locale.
 process.env.CAMPUS_DISABLE_RATE_LIMIT ??= "1";
+// Comptes de démonstration : l'empreinte héritée `campus-demo` est refusée
+// partout ailleurs, l'aperçu local l'autorise explicitement.
+process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
 
 function isAddrInUse(error) {
   return Boolean(error && typeof error === "object" && error.code === "EADDRINUSE");
