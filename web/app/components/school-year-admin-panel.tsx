@@ -12,6 +12,7 @@ import {
   type SchoolYearPreview,
   type SchoolYearSummary,
 } from "../../lib/api-client.ts";
+import { ActiveYearPlanPanel } from "./active-year-plan-panel.tsx";
 
 const STATUS_LABELS: Record<SchoolYearSummary["status"], string> = {
   active: "Active",
@@ -140,26 +141,7 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
       {error && <p className="school-year-error" role="alert">{error}</p>}
 
       {!loading && activeCalendar && (
-        <article className="school-year-card">
-          <header>
-            <span className="eyebrow">ANNÉE ACTIVE</span>
-            <h3>{activeCalendar.label}</h3>
-          </header>
-          <p className="school-year-meta">
-            <strong>{activeCalendar.weeks.length}</strong> semaines A/B configurées en base.
-          </p>
-          {activeCalendar.weeks.length > 0 && (
-            <ul className="school-year-week-snapshot">
-              {[activeCalendar.weeks[0], activeCalendar.weeks[1], activeCalendar.weeks[37]]
-                .filter(Boolean)
-                .map((week) => (
-                  <li key={week.number}>
-                    {formatWeekLabel(week)} · {formatMondayLabel(week.monday)}
-                  </li>
-                ))}
-            </ul>
-          )}
-        </article>
+        <ActiveYearPlanPanel onCalendarUpdated={onCalendarUpdated} onNotice={onNotice} />
       )}
 
       <article className="school-year-card">

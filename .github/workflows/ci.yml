@@ -39,10 +39,12 @@ jobs:
             ../tests/teacher.test.ts \
             ../tests/teacher-setup.test.ts \
             ../tests/school-catalog.test.ts \
+            ../tests/school-days.test.ts \
             ../tests/school-calendar.test.ts \
             ../tests/publications.test.ts \
             ../tests/student.test.ts \
-            ../tests/api-auth.test.ts
+            ../tests/api-auth.test.ts \
+            ../tests/multi-year-operations.test.ts
 
       - name: Build production
         working-directory: web

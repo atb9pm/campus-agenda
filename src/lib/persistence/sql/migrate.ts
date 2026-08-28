@@ -31,7 +31,7 @@ async function resolveMigrationsRoot(): Promise<string> {
 
 export async function applyMigrations(db: SqlDatabase): Promise<void> {
   const migrationsRoot = await resolveMigrationsRoot();
-  const migrationFiles = ["0001_initial.sql", "0002_school_week.sql", "0003_school_year.sql", "0004_teacher_admin.sql", "0005_publication_templates.sql", "0006_timetable.sql", "0007_membership_validity.sql", "0008_school_catalog.sql"];
+  const migrationFiles = ["0001_initial.sql", "0002_school_week.sql", "0003_school_year.sql", "0004_teacher_admin.sql", "0005_publication_templates.sql", "0006_timetable.sql", "0007_membership_validity.sql", "0008_school_catalog.sql", "0009_school_day_exceptions.sql"];
   for (const fileName of migrationFiles) {
     const migrationPath = path.join(migrationsRoot, fileName);
     const sql = await readFile(migrationPath, "utf8");

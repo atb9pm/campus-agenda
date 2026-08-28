@@ -2,6 +2,27 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.7.0] — Plan de l'année visible et corrigeable
+
+### Ajouté
+
+- **Plan complet de l'année active** dans Administration : les 38 semaines avec type A/B
+  et lundi de référence, corrigeables à la main quand la lecture du PDF s'est trompée.
+- **Grille des jours** (lundi–vendredi) avec état de chaque jour : jour de classe,
+  sans cours, vacances. Clic sur un jour pour le corriger et le nommer.
+- **Fêtes valaisannes calculées** : Lundi de Pâques, Ascension, Lundi de Pentecôte,
+  Fête-Dieu, Assomption, Toussaint, Immaculée Conception, Saint-Joseph, Noël, Nouvel An.
+  Proposition automatique, l'administrateur garde le dernier mot.
+- Migration `0009_school_day_exceptions` : seules les corrections manuelles sont stockées.
+- API `GET/PATCH /api/admin/school-year/active-plan` et `PATCH .../active-plan/days`.
+
+### Notes
+
+- Les publications restent attachées au **numéro** de semaine : corriger une date ou un
+  type A/B ne déplace ni ne supprime aucune publication.
+- Les contrôles de cohérence (date non lundi, alternance rompue, doublon) sont
+  **signalés sans bloquer** l'enregistrement, les vacances cassant légitimement l'alternance.
+
 ## [2.6.1] — Déploiement Infomaniak en un clic
 
 ### Ajouté
