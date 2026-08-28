@@ -4,6 +4,7 @@ import {
   checkInMemoryRateLimit,
   readClientKey,
   resolveAuthRateLimit,
+  type AuthRateLimitScope,
 } from "@campus/lib/security/rate-limit.ts";
 
 import { jsonResponse } from "./api.ts";
@@ -21,7 +22,13 @@ async function getAuthRateLimiter(): Promise<RateLimitBinding | null> {
   }
 }
 
-function rateLimitResponse(request: Request, scope: "teacher" | "student"): Response {
+const RATE_LIMIT_ROUTES: Record<AuthRateLimitScope, string> = {
+  teacher: "/api/auth/teacher",
+  student: "/api/auth/student",
+  "teacher-password": "/api/auth/teacher/password",
+};
+
+function rateLimitResponse(request: Request, scope: AuthRateLimitScope): Response {
   const requestId = readRequestId(request);
   const headers = new Headers({
     "Content-Type": "application/json",
@@ -30,7 +37,7 @@ function rateLimitResponse(request: Request, scope: "teacher" | "student"): Resp
   attachRequestId(headers, requestId);
   logApiEvent({
     requestId,
-    route: `/api/auth/${scope}`,
+    route: RATE_LIMIT_ROUTES[scope],
     method: "POST",
     status: 429,
     durationMs: 0,
@@ -43,7 +50,7 @@ function rateLimitResponse(request: Request, scope: "teacher" | "student"): Resp
 
 export async function enforceAuthRateLimit(
   request: Request,
-  scope: "teacher" | "student",
+  scope: AuthRateLimitScope,
 ): Promise<Response | null> {
   if (process.env.CAMPUS_DISABLE_RATE_LIMIT === "1") {
     return null;

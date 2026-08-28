@@ -70,6 +70,43 @@ Exemple (à personnaliser) :
 cd web && AUTH_SECRET=K7mP2xQ9vL4nR8wT6yU3zA1bC5dE0fGHjKlMnPqRsTuVwXyZ CAMPUS_STORE=sqlite npm run start:infomaniak
 ```
 
+### Premier mot de passe administrateur
+
+Le mot de passe de démonstration `campus-demo` est **refusé** en production : aucun
+compte ne peut s'en servir. Deux façons d'obtenir le premier accès administrateur.
+
+**Choisir soi-même le mot de passe** — ajouter `CAMPUS_ADMIN_PASSWORD` (et au besoin
+`CAMPUS_ADMIN_INITIALS`, `ChF` par défaut) à la commande de lancement :
+
+```bash
+cd web && AUTH_SECRET=… CAMPUS_STORE=sqlite CAMPUS_ADMIN_INITIALS=ChF CAMPUS_ADMIN_PASSWORD=Direction-2027 npm run start:infomaniak
+```
+
+Il n'est appliqué que si le compte n'a **pas encore** de mot de passe personnel :
+un mot de passe choisi dans l'application n'est jamais écrasé au redémarrage.
+Retirez la variable de la commande une fois le mot de passe défini dans l'application.
+
+**Laisser le serveur en tirer un** — sans variable, un mot de passe provisoire est
+généré au démarrage et inscrit dans les journaux Node.js du Manager :
+
+```
+==================== CAMPUS AGENDA — ACCÈS ADMINISTRATEUR ====================
+  Initiales        : ChF
+  Mot de passe     : K7QP-M3ZR-T9WD
+```
+
+Dans les deux cas, l'application impose un changement de mot de passe à la première
+connexion, puis les comptes suivants se créent depuis **Administration → Gestion des
+enseignants** (mot de passe provisoire affiché à l'écran, à transmettre de vive voix).
+
+| Variable | Rôle |
+|---|---|
+| `AUTH_SECRET` | Signature des sessions (obligatoire) |
+| `CAMPUS_STORE=sqlite` | Persistance sur disque |
+| `CAMPUS_ADMIN_INITIALS` | Compte administrateur visé par l'amorçage (`ChF` par défaut) |
+| `CAMPUS_ADMIN_PASSWORD` | Mot de passe d'amorçage, appliqué une seule fois |
+| `CAMPUS_ALLOW_DEMO_PASSWORD` | **À ne pas définir en production** : rouvrirait `campus-demo` |
+
 ## Déploiement manuel (première fois)
 
 1. Branche Git du site = `main`
@@ -194,9 +231,10 @@ Attendu :
 
 Page d'entrée unique, onglet **Élève** par défaut : code de classe (ex. `eleve-ma2`).
 
-Onglet **Enseignant** : initiales (ex. `ChF`) + mot de passe démo **`campus-demo`**.
-L'accès administrateur n'est pas une porte séparée : le menu Administration apparaît
-automatiquement pour un compte marqué administrateur.
+Onglet **Enseignant** : initiales (ex. `ChF`) + mot de passe personnel (voir
+« Premier mot de passe administrateur »). L'accès administrateur n'est pas une porte
+séparée : le menu Administration apparaît automatiquement pour un compte marqué
+administrateur.
 
 ## Erreurs courantes
 
@@ -205,6 +243,7 @@ automatiquement pour un compte marqué administrateur.
 | `EROFS … corepack … /usr/local/bin/pnpm` | `corepack enable` interdit | Build/lancement **sans** corepack, avec **npm** |
 | `pnpm: command not found` | pnpm non installé globalement | Utiliser `npm` |
 | `AUTH_SECRET requis` | Secret absent | Mettre `AUTH_SECRET=…` dans la commande de lancement |
+| « Initiales ou mot de passe incorrect » avec `campus-demo` | Comportement voulu : le mot de passe démo est refusé en production | Utiliser le mot de passe d'amorçage (voir « Premier mot de passe administrateur ») |
 | Site en maintenance | Mode maintenance ON | **Gérer** → désactiver maintenance |
 | Build OK mais Run échoue | Ancienne commande avec corepack | Remplacer la commande de lancement |
 | Deploy GitHub : SSH refused | Clé ou hôte incorrect | Vérifier secrets SSH |

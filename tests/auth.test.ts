@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+// Le mot de passe de démonstration est refusé par défaut : les tests l'autorisent.
+process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
+
 import { canReadClassroomAgenda } from "../src/lib/auth/permissions.ts";
 import { buildSessionCookie, createSessionToken, parseSessionToken, readSessionTokenFromRequest } from "../src/lib/auth/session.ts";
 import { DEMO_TEACHER_PASSWORD, isDemoTeacherPassword } from "../src/lib/auth/config.ts";

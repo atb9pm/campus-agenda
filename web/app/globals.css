@@ -455,6 +455,17 @@ button { color: inherit; }
 .admin-catalog-list button { padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: #f8fafc; color: var(--navy); font-size: 9px; font-weight: 700; cursor: pointer; }
 .admin-error, .admin-loading, .admin-placeholder { margin: 0 38px 12px; color: #516582; font-size: 12px; }
 .admin-error { color: #b42318; font-weight: 700; }
+.admin-panel-block .admin-error, .admin-panel-block .admin-loading { margin: 0 0 12px; }
+.admin-checkbox { display: flex !important; align-items: center; gap: 8px; color: #516582; font-size: 10px; letter-spacing: 0; text-transform: none; }
+.admin-checkbox input { min-width: 0; }
+.admin-teacher-list li { grid-template-columns: 70px minmax(120px, 1fr) auto auto auto auto; }
+.admin-teacher-list button:disabled { opacity: .45; cursor: not-allowed; }
+.admin-secret { margin-bottom: 18px; padding: 16px 18px; border: 1px solid var(--navy); border-radius: 10px; background: #f8fbff; }
+.admin-secret-title { margin: 0 0 8px; color: #516582; font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.admin-secret-value { margin: 0 0 10px; color: var(--navy); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 22px; font-weight: 700; letter-spacing: .12em; }
+.admin-secret-hint { margin: 0 0 12px; color: #516582; font-size: 11px; line-height: 1.5; }
+.admin-secret button { padding: 8px 12px; border: 1px solid var(--navy); border-radius: 8px; color: #fff; background: var(--navy); font-size: 9px; font-weight: 800; cursor: pointer; }
+.login-secondary-action { margin-top: 16px; padding: 0; border: 0; color: var(--blue); background: transparent; font-family: inherit; font-size: 10px; font-weight: 800; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .config-week-table-wrap { overflow-x: auto; }
 .config-week-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .config-week-table th, .config-week-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; }
@@ -547,7 +558,7 @@ button { color: inherit; }
   .school-year-admin { padding-right: 16px; padding-left: 16px; }
   .config-classes-editor, .config-week-plan, .ma-semaine-week-banner, .ma-semaine-days, .ma-semaine-empty, .ma-semaine-plan-hint, .class-notebook-toolbar, .class-notebook-week-controls, .class-notebook-grid, .class-notebook-warning, .class-notebook-clipboard-hint { margin-right: 16px; margin-left: 16px; }
   .admin-workspace .admin-tabs, .admin-panel-block, .admin-error, .admin-loading, .admin-placeholder { margin-right: 16px; margin-left: 16px; }
-  .admin-catalog-list li { grid-template-columns: 1fr; }
+  .admin-catalog-list li, .admin-teacher-list li { grid-template-columns: 1fr; }
   .day-grid-head, .day-grid-row { grid-template-columns: 48px repeat(5, minmax(0, 1fr)); }
   .day-cell-label { display: none; }
   .class-notebook-grid { grid-template-columns: 1fr !important; }

@@ -31,7 +31,18 @@ async function resolveMigrationsRoot(): Promise<string> {
 
 export async function applyMigrations(db: SqlDatabase): Promise<void> {
   const migrationsRoot = await resolveMigrationsRoot();
-  const migrationFiles = ["0001_initial.sql", "0002_school_week.sql", "0003_school_year.sql", "0004_teacher_admin.sql", "0005_publication_templates.sql", "0006_timetable.sql", "0007_membership_validity.sql", "0008_school_catalog.sql", "0009_school_day_exceptions.sql"];
+  const migrationFiles = [
+    "0001_initial.sql",
+    "0002_school_week.sql",
+    "0003_school_year.sql",
+    "0004_teacher_admin.sql",
+    "0005_publication_templates.sql",
+    "0006_timetable.sql",
+    "0007_membership_validity.sql",
+    "0008_school_catalog.sql",
+    "0009_school_day_exceptions.sql",
+    "0010_teacher_accounts.sql",
+  ];
   for (const fileName of migrationFiles) {
     const migrationPath = path.join(migrationsRoot, fileName);
     const sql = await readFile(migrationPath, "utf8");
@@ -45,18 +56,9 @@ export async function applyMigrations(db: SqlDatabase): Promise<void> {
         await db.exec(`${statement};`);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        if (fileName === "0002_school_week.sql" && message.includes("duplicate column name")) {
-          continue;
-        }
-        if (fileName === "0004_teacher_admin.sql" && message.includes("duplicate column name")) {
-          continue;
-        }
-        if (fileName === "0005_publication_templates.sql" && message.includes("duplicate column name")) {
-          continue;
-        }
-        if (fileName === "0007_membership_validity.sql" && message.includes("duplicate column name")) {
-          continue;
-        }
+        // `ALTER TABLE ... ADD COLUMN` est rejoué à chaque démarrage : la colonne
+        // déjà présente n'est pas une erreur de migration.
+        if (message.includes("duplicate column name")) continue;
         throw error;
       }
     }

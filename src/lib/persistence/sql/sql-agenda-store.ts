@@ -1,8 +1,7 @@
 import { createPublication, deletePublication, updatePublication } from "../../../features/agenda/publications.ts";
-import { isDemoTeacherPassword } from "../../auth/config.ts";
+import { verifyPassword } from "../../auth/password.ts";
 import type { AgendaMutationResult, AgendaStore, CreateAgendaInput } from "../types.ts";
 import type { PrototypeAgendaItem } from "../../../features/agenda/demo-items.ts";
-import { DEMO_PASSWORD_HASH } from "./seed.ts";
 import type { AgendaItemRow, SqlDatabase, StudentAccessRow } from "./types.ts";
 
 const AGENDA_ITEM_COLUMNS =
@@ -171,10 +170,11 @@ export class SqlAgendaStore implements AgendaStore {
 
   async teacherIsAdmin(teacherId: string): Promise<boolean> {
     const row = await this.db
-      .prepare("SELECT is_admin FROM teachers WHERE id = ? LIMIT 1")
+      .prepare("SELECT is_admin, is_active FROM teachers WHERE id = ? LIMIT 1")
       .bind(teacherId)
-      .first<{ is_admin: number }>();
-    return Boolean(row?.is_admin);
+      .first<{ is_admin: number; is_active: number | null }>();
+    if (!row?.is_admin) return false;
+    return row.is_active === null ? true : Boolean(row.is_active);
   }
 
   async resolveStudentAccess(label: string) {
@@ -197,12 +197,13 @@ export class SqlAgendaStore implements AgendaStore {
   }
 
   async verifyTeacherCredentials(teacherId: string, password: string): Promise<boolean> {
-    if (!isDemoTeacherPassword(password)) return false;
     const row = await this.db
-      .prepare("SELECT 1 AS ok FROM teachers WHERE id = ? AND password_hash = ? LIMIT 1")
-      .bind(teacherId, DEMO_PASSWORD_HASH)
-      .first<{ ok: number }>();
-    return Boolean(row);
+      .prepare("SELECT password_hash, is_active FROM teachers WHERE id = ? LIMIT 1")
+      .bind(teacherId)
+      .first<{ password_hash: string; is_active: number | null }>();
+    if (!row) return false;
+    if (row.is_active !== null && !row.is_active) return false;
+    return verifyPassword(password, row.password_hash);
   }
 
   async exportAllItems(): Promise<PrototypeAgendaItem[]> {

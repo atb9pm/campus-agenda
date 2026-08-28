@@ -4,11 +4,13 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import type { SchoolBranchRecord, SchoolClassRecord } from "@campus/features/school-catalog";
 import { SchoolYearAdminPanel } from "./school-year-admin-panel.tsx";
+import { TeacherAccountsPanel } from "./teacher-accounts-panel.tsx";
 import type { SchoolCalendarWeek } from "../../lib/api-client.ts";
 
 type AdminTab = "classes" | "branches" | "teachers" | "access" | "weeks";
 
 interface AdministrationPanelProps {
+  currentTeacherId: string;
   onCalendarUpdated: (weeks: SchoolCalendarWeek[]) => void;
   onNotice: (message: string) => void;
 }
@@ -40,7 +42,11 @@ async function fetchCatalog(activeOnly = false) {
   };
 }
 
-export function AdministrationPanel({ onCalendarUpdated, onNotice }: AdministrationPanelProps) {
+export function AdministrationPanel({
+  currentTeacherId,
+  onCalendarUpdated,
+  onNotice,
+}: AdministrationPanelProps) {
   const [tab, setTab] = useState<AdminTab>("classes");
   const [classes, setClasses] = useState<SchoolClassRecord[]>([]);
   const [branches, setBranches] = useState<SchoolBranchRecord[]>([]);
@@ -253,19 +259,11 @@ export function AdministrationPanel({ onCalendarUpdated, onNotice }: Administrat
       ) : null}
 
       {tab === "teachers" ? (
-        <div className="admin-panel-block">
-          <h3>Gestion des enseignants</h3>
-          <p className="admin-placeholder">Prochaine étape : création des comptes enseignant (nom, e-mail, statut).</p>
-        </div>
+        <TeacherAccountsPanel mode="accounts" currentTeacherId={currentTeacherId} onNotice={onNotice} />
       ) : null}
 
       {tab === "access" ? (
-        <div className="admin-panel-block">
-          <h3>Gestion des accès</h3>
-          <p className="admin-placeholder">
-            Prochaine étape : attribution des rôles Administrateur / Enseignant (contrôle serveur déjà en place).
-          </p>
-        </div>
+        <TeacherAccountsPanel mode="roles" currentTeacherId={currentTeacherId} onNotice={onNotice} />
       ) : null}
 
       {tab === "weeks" ? (

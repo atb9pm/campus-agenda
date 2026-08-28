@@ -29,11 +29,24 @@ export {
   getSchoolCatalogStore,
   getSchoolYearStore,
   getStoreKind,
+  getTeacherAccountStore,
   resetStoreFactory,
   resolveAgendaStore,
 } from "./store-factory.ts";
 export type { SchoolYearStore } from "./school-year-types.ts";
 export type { SchoolCatalogStore } from "./school-catalog-types.ts";
+export type { TeacherAccountStore } from "./teacher-account-types.ts";
+export {
+  MemoryTeacherAccountStore,
+  getMemoryTeacherAccountStore,
+  resetMemoryTeacherAccountStore,
+} from "./memory-teacher-account-store.ts";
+export { SqlTeacherAccountStore } from "./sql/sql-teacher-account-store.ts";
+export {
+  describeBootstrapOutcome,
+  ensureTeacherAccountBootstrap,
+  type BootstrapOutcome,
+} from "./teacher-account-bootstrap.ts";
 export { MemorySchoolYearStore, resetMemorySchoolYearStore } from "./memory-school-year-store.ts";
 export { SqlSchoolYearStore } from "./sql/sql-school-year-store.ts";
 export { createNodeSqliteDatabase } from "./sql/adapters.ts";

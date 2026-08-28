@@ -6,6 +6,8 @@ import test from "node:test";
 
 process.env.CAMPUS_STORE ??= "memory";
 process.env.AUTH_SECRET ??= "dev-secret";
+// L'aperçu utilise les comptes de démonstration : empreinte héritée autorisée.
+process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
 
 const webRoot = fileURLToPath(new URL("..", import.meta.url));
 
@@ -30,7 +32,9 @@ test("preview vinext sert HTML, JS et login enseignant", async (t) => {
   const htmlResponse = await fetch(origin);
   assert.equal(htmlResponse.status, 200);
   const html = await htmlResponse.text();
-  assert.match(html, /Connexion/);
+  // Porte d'entrée unique : l'onglet élève est rendu côté serveur.
+  assert.match(html, /Mon agenda de classe/);
+  assert.match(html, /Enseignant/);
   assert.doesNotMatch(html, /Chargement de la session/);
 
   const chunks = [...html.matchAll(/\/_next\/static\/[^"]+\.(?:js|css)/g)].map((match) => match[0]);

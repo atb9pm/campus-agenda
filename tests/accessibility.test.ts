@@ -3,12 +3,13 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("phase 0.8 — structure d'accessibilité de base", async () => {
-  const [page, layout, css, loginPanel, schoolYearPanel] = await Promise.all([
+  const [page, layout, css, loginPanel, schoolYearPanel, passwordPanel] = await Promise.all([
     readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../web/app/components/login-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/components/school-year-admin-panel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/components/password-change-panel.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.match(layout, /lang="fr"/);
@@ -35,6 +36,15 @@ test("phase 0.8 — structure d'accessibilité de base", async () => {
   assert.doesNotMatch(loginPanel, /autoFocus/);
   assert.doesNotMatch(page, /site-gate-title/);
   assert.doesNotMatch(page, /campus-accueil/);
+
+  // Aucun mot de passe n'est plus annoncé à l'écran de connexion.
+  assert.doesNotMatch(loginPanel, /campus-demo/);
+
+  // Première connexion : écran de changement de mot de passe étiqueté.
+  assert.match(passwordPanel, /id="main-content"/);
+  assert.match(passwordPanel, /aria-labelledby="password-change-title"/);
+  assert.match(passwordPanel, /id="password-change-title"/);
+  assert.doesNotMatch(passwordPanel, /autoFocus/);
 
   assert.match(css, /\.skip-to-content/);
   assert.match(css, /\.teacher-login/);
