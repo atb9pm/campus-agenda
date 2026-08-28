@@ -35,8 +35,23 @@ jobs:
             ../tests/classes.test.ts \
             ../tests/auth.test.ts \
             ../tests/persistence.test.ts \
-            ../tests/sqlite-store.test.ts
+            ../tests/sqlite-store.test.ts \
+            ../tests/teacher.test.ts \
+            ../tests/teacher-setup.test.ts \
+            ../tests/school-catalog.test.ts \
+            ../tests/school-calendar.test.ts \
+            ../tests/publications.test.ts \
+            ../tests/student.test.ts \
+            ../tests/api-auth.test.ts
 
       - name: Build production
         working-directory: web
         run: npm run build
+
+      # Garde-fou déploiement : le rendu et les API doivent répondre sur le build
+      # réellement produit, sinon un merge « vert » casserait la prod.
+      - name: Tests de rendu et API sur le build
+        working-directory: web
+        run: |
+          CAMPUS_STORE=memory AUTH_SECRET=test-secret-ci \
+            node --test tests/rendered-html.test.mjs tests/e2e-api.test.mjs

@@ -30,14 +30,15 @@ Guide à jour pour un **site Node.js Infomaniak** avec persistance **SQLite**.
 
 ### Pourquoi un script plutôt qu'une longue commande
 
-La commande de build se règle **une seule fois**. Tout ce que fait le déploiement
-(récupération de `origin/main`, `npm ci`, build, empreinte de version) vit dans
-[`scripts/infomaniak-build.sh`](../scripts/infomaniak-build.sh) et évolue donc par
-Pull Request, sans jamais revenir dans le Manager.
+La commande se règle **une seule fois**. Le préfixe `git fetch … && git reset --hard …`
+amorce la mise à jour (il fonctionne même si le serveur est encore sur un vieux commit
+qui ne contient pas le script). Tout le reste du déploiement — installation, build,
+empreinte de version — vit dans [`scripts/infomaniak-build.sh`](../scripts/infomaniak-build.sh)
+et évolue donc par Pull Request, **sans jamais revenir dans le Manager**.
 
 Le script :
 
-1. se place à la racine du clone et fait `git fetch` + `git checkout -B main origin/main` + `git reset --hard`
+1. se place à la racine du clone, refait `git fetch` + `git checkout -B main origin/main` + `git reset --hard` (sans effet si déjà à jour)
 2. se **relance** dans un nouveau processus, pour appliquer la logique du code fraîchement récupéré
 3. installe (`npm ci`, repli `npm install`) et construit dans `web/`
 4. écrit `web/build-info.json` (commit, date) exposé par `/api/health`
