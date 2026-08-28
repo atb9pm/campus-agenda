@@ -48,12 +48,16 @@ export async function logoutApiSession(): Promise<void> {
   await fetch("/api/auth/session", { method: "DELETE", credentials: "include" });
 }
 
-export async function loginTeacherApi(teacherId: string, password: string): Promise<ApiTeacherSession> {
+export async function loginTeacherApi(
+  initials: string,
+  password: string,
+  remember = true,
+): Promise<ApiTeacherSession> {
   const response = await fetch("/api/auth/teacher", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ teacherId, password }),
+    body: JSON.stringify({ initials, password, remember }),
   });
   const payload = await parseJson<{ ok: boolean; reason?: string; session?: ApiTeacherSession }>(response);
   if (!response.ok || !payload.ok || !payload.session) {
@@ -62,12 +66,12 @@ export async function loginTeacherApi(teacherId: string, password: string): Prom
   return payload.session;
 }
 
-export async function loginStudentApi(code: string): Promise<ApiStudentSession> {
+export async function loginStudentApi(code: string, remember = true): Promise<ApiStudentSession> {
   const response = await fetch("/api/auth/student", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ code, remember }),
   });
   const payload = await parseJson<{ ok: boolean; reason?: string; session?: ApiStudentSession }>(response);
   if (!response.ok || !payload.ok || !payload.session) {

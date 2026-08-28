@@ -186,6 +186,16 @@ export class SqlAgendaStore implements AgendaStore {
     return { id: row.id, classroomId: row.classroom_id, label: row.label };
   }
 
+  async findTeacherIdByInitials(initials: string): Promise<string | undefined> {
+    const normalized = initials.trim();
+    if (!normalized) return undefined;
+    const row = await this.db
+      .prepare("SELECT id FROM teachers WHERE lower(initials) = lower(?) LIMIT 1")
+      .bind(normalized)
+      .first<{ id: string }>();
+    return row?.id;
+  }
+
   async verifyTeacherCredentials(teacherId: string, password: string): Promise<boolean> {
     if (!isDemoTeacherPassword(password)) return false;
     const row = await this.db

@@ -78,7 +78,11 @@ import {
   type SchoolCalendarWeek,
 } from "../lib/api-client.ts";
 import { APP_VERSION } from "@campus/lib/app-version";
-import { isSiteGatePassword, SITE_GATE_STORAGE_KEY } from "@campus/lib/auth/config";
+import {
+  LAST_STUDENT_CODE_KEY,
+  LAST_TEACHER_INITIALS_KEY,
+  writeStoredValue,
+} from "@campus/features/auth-entry";
 import {
   buildDefaultTeacherSetup,
   loadTeacherSetupFromBrowser,
@@ -96,6 +100,7 @@ import {
 } from "@campus/features/class-notebook";
 import { ConfigurationPanel } from "./components/configuration-panel.tsx";
 import { AdministrationPanel } from "./components/administration-panel.tsx";
+import { LoginPanel } from "./components/login-panel.tsx";
 import { ClassNotebookPanel } from "./components/class-notebook-panel.tsx";
 import { MaSemainePanel } from "./components/ma-semaine-panel.tsx";
 
@@ -193,8 +198,7 @@ export default function Home() {
   const [teacherIsAdmin, setTeacherIsAdmin] = useState(false);
   const [loginPending, setLoginPending] = useState(false);
   const [loginError, setLoginError] = useState("");
-  const [siteUnlocked, setSiteUnlocked] = useState(false);
-  const [siteGateError, setSiteGateError] = useState("");
+  const [studentLoginError, setStudentLoginError] = useState("");
   const [studentCourseDayKey, setStudentCourseDayKey] = useState<string | null>(null);
   const [studentHistoryOpen, setStudentHistoryOpen] = useState(false);
   const [schoolWeeks, setSchoolWeeks] = useState<SchoolWeek[]>(() => buildSchoolWeeks());
@@ -242,16 +246,6 @@ export default function Home() {
   }
 
   useEffect(() => {
-    try {
-      if (sessionStorage.getItem(SITE_GATE_STORAGE_KEY) === "1") {
-        setSiteUnlocked(true);
-      }
-    } catch {
-      // sessionStorage indisponible
-    }
-  }, []);
-
-  useEffect(() => {
     const stored = loadTeacherSetupFromBrowser(currentTeacherId);
     setTeacherSetup(stored ?? buildDefaultTeacherSetup(DEMO_CATALOG, currentTeacherId));
     setTeacherSetupReady(true);
@@ -271,22 +265,6 @@ export default function Home() {
     if (!classNotesReady) return;
     saveNotesToBrowser(currentTeacherId, classNotesDocument);
   }, [classNotesDocument, classNotesReady, currentTeacherId]);
-
-  function submitSiteGate(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const password = String(new FormData(event.currentTarget).get("sitePassword") || "");
-    if (!isSiteGatePassword(password)) {
-      setSiteGateError("Mot de passe incorrect.");
-      return;
-    }
-    try {
-      sessionStorage.setItem(SITE_GATE_STORAGE_KEY, "1");
-    } catch {
-      // sessionStorage indisponible
-    }
-    setSiteGateError("");
-    setSiteUnlocked(true);
-  }
 
   useEffect(() => {
     let cancelled = false;
@@ -551,13 +529,17 @@ export default function Home() {
 
   function enterStudentWithCode(code: string) {
     void (async () => {
+      setLoginPending(true);
+      setStudentLoginError("");
       try {
         const session = await loginStudentApi(code);
         const access = resolveStudentAccess(DEMO_CATALOG, code.trim());
         if (!access) {
+          setStudentLoginError("Code de classe inconnu.");
           showNotice("Code d'accès invalide. Utilisez un identifiant de démonstration.");
           return;
         }
+        writeStoredValue(LAST_STUDENT_CODE_KEY, code.trim().toLowerCase());
         setStudentSession(access);
         setSelectedClassroomId(session.classroomId);
         setStudentEntry("code");
@@ -569,7 +551,11 @@ export default function Home() {
         const loadedItems = await fetchAgendaItems(session.classroomId);
         setItems(loadedItems);
       } catch (error) {
-        showNotice(error instanceof Error ? error.message : "Connexion élève impossible.");
+        const message = error instanceof Error ? error.message : "Connexion élève impossible.";
+        setStudentLoginError(message);
+        showNotice(message);
+      } finally {
+        setLoginPending(false);
       }
     })();
   }
@@ -594,17 +580,13 @@ export default function Home() {
     })();
   }
 
-  function submitTeacherLogin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const teacherId = String(form.get("teacherId") || DEMO_CURRENT_TEACHER_ID);
-    const password = String(form.get("password") || "").trim();
-
+  function submitTeacherLogin(initials: string, password: string, remember: boolean) {
     void (async () => {
       setLoginPending(true);
       setLoginError("");
       try {
-        const session = await loginTeacherApi(teacherId, password);
+        const session = await loginTeacherApi(initials.trim(), password.trim(), remember);
+        writeStoredValue(LAST_TEACHER_INITIALS_KEY, session.initials);
         await applyTeacherSession(session);
       } catch (error) {
         setLoginError(error instanceof Error ? error.message : "Connexion enseignant impossible.");
@@ -969,80 +951,19 @@ export default function Home() {
   const myItemCount = classroomItems.filter((item) => item.authorTeacherId === currentTeacherId).length;
   const showAgendaTools = false;
 
-  if (!siteUnlocked) {
-    return (
-      <div className="teacher-login-shell">
-        <main className="teacher-login" id="main-content">
-          <div className="teacher-login-brand">
-            <BrandEmblem />
-            <span><strong>CAMPUS</strong><small>AGENDA</small></span>
-          </div>
-          <section className="teacher-login-card" aria-labelledby="site-gate-title">
-            <span className="eyebrow">ACCÈS RESTREINT</span>
-            <h1 id="site-gate-title">Site verrouillé</h1>
-            <p>Entrez le mot de passe d’accueil pour ouvrir Campus Agenda.</p>
-            <form onSubmit={submitSiteGate}>
-              <label>
-                Mot de passe d’accueil
-                <input name="sitePassword" type="password" autoComplete="current-password" required autoFocus />
-              </label>
-              <p className="teacher-login-hint">Mot de passe&nbsp;: <strong>campus-accueil</strong></p>
-              {siteGateError && <p className="teacher-login-error" role="alert">{siteGateError}</p>}
-              <button type="submit">Ouvrir le site</button>
-            </form>
-          </section>
-          <p className="prototype-label">TEST MISE À JOUR · CAMPUS AGENDA {APP_VERSION}</p>
-        </main>
-      </div>
-    );
-  }
-
   if (!teacherAuthenticated && !isStudentView) {
     return (
-      <div className="teacher-login-shell">
-        <main className="teacher-login" id="main-content">
-          <div className="teacher-login-brand">
-            <BrandEmblem />
-            <span><strong>CAMPUS</strong><small>AGENDA</small></span>
-          </div>
-          <section className="teacher-login-card" aria-labelledby="teacher-login-title">
-            <span className="eyebrow">ESPACE ENSEIGNANT</span>
-            <h1 id="teacher-login-title">Connexion</h1>
-            <p>Accédez à votre calendrier personnel et aux agendas de vos classes.</p>
-            <form onSubmit={submitTeacherLogin}>
-              <input type="hidden" name="teacherId" value={DEMO_CURRENT_TEACHER_ID} />
-              <label>
-                Mot de passe
-                <input name="password" type="password" autoComplete="current-password" required />
-              </label>
-              <p className="teacher-login-hint">Mot de passe de démonstration&nbsp;: <strong>campus-demo</strong></p>
-              {loginError && <p className="teacher-login-error" role="alert">{loginError}</p>}
-              <button type="submit" disabled={loginPending}>{loginPending ? "Connexion…" : "Se connecter"}</button>
-            </form>
-            <footer>
-              <button type="button" className="student-entry-link" onClick={() => setStudentCodeModalOpen(true)}>
-                Consulter l’agenda élève
-              </button>
-            </footer>
-          </section>
-          <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA {APP_VERSION}</p>
-        </main>
-
+      <>
+        <LoginPanel
+          appVersion={APP_VERSION}
+          pending={loginPending}
+          studentError={studentLoginError}
+          teacherError={loginError}
+          onStudentSubmit={enterStudentWithCode}
+          onTeacherSubmit={submitTeacherLogin}
+        />
         {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
-
-        {studentCodeModalOpen && (
-          <div className="technical-modal-backdrop">
-            <section className="technical-modal" role="dialog" aria-modal="true" aria-labelledby="student-code-title">
-              <header><div><span className="eyebrow">ESPACE ÉLÈVE</span><h2 id="student-code-title">Connexion anonyme</h2></div><button onClick={() => setStudentCodeModalOpen(false)}>×</button></header>
-              <form onSubmit={(event) => { event.preventDefault(); enterStudentWithCode(String(new FormData(event.currentTarget).get("code") || "")); }}>
-                <label>Identifiant de démonstration<input name="code" placeholder="eleve-test-001" required /></label>
-                <p className="modal-hint">Codes fictifs : <strong>eleve-test-001</strong> (2e TMA) ou <strong>eleve-test-002</strong> (1re TMA).</p>
-                <footer><button type="button" onClick={() => setStudentCodeModalOpen(false)}>Annuler</button><button type="submit">Consulter mon agenda</button></footer>
-              </form>
-            </section>
-          </div>
-        )}
-      </div>
+      </>
     );
   }
 

@@ -14,15 +14,18 @@ async function render() {
   );
 }
 
-test("server-renders the Campus Agenda site gate", async () => {
+test("server-renders the single entry page, student tab first", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
   assert.match(html, /Campus Agenda — Agenda scolaire partagé/);
-  assert.match(html, /Site verrouillé/);
   assert.match(html, /id="main-content"/);
+  assert.match(html, /Mon agenda de classe/);
+  assert.match(html, /Code de classe/);
+  assert.match(html, /Enseignant/);
+  assert.doesNotMatch(html, /Site verrouillé/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 
@@ -67,7 +70,7 @@ test("keeps the validated teacher essentials and social preview", async () => {
   assert.match(page, /loginStudentApi/);
   assert.match(page, /resolveDisplayCourseDay/);
   assert.match(page, /canModifyPublication/);
-  assert.match(page, /teacher-login/);
+  assert.match(page, /LoginPanel/);
   assert.match(page, /submitTeacherLogin/);
   assert.doesNotMatch(page, /DEMO_TEACHER_PASSWORD/);
   assert.match(page, /DEMO_CATALOG/);

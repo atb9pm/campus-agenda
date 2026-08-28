@@ -2,6 +2,28 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.8.0] — Porte d'entrée unique
+
+### Ajouté
+
+- **Page d'entrée à deux onglets** : **Élève** (par défaut) et **Enseignant**.
+- **Connexion enseignant par initiales** (`ChF`) au lieu d'un compte unique codé en dur.
+- **« Rester connecté sur cet appareil »** : session de 60 jours si la case est cochée,
+  8 heures sinon (postes partagés).
+- **Lien direct par classe** : `?classe=eleve-ma2` ouvre l'agenda sans rien saisir (QR code possible).
+- Code de classe et initiales **mémorisés sur l'appareil** pour éviter de les retaper.
+
+### Retiré
+
+- **Verrou d'accueil `campus-accueil`** : le code de classe et le mot de passe enseignant
+  suffisent, plus besoin de deux mots de passe pour un élève.
+
+### Notes
+
+- L'administrateur n'est **pas** une porte séparée : c'est un compte enseignant marqué
+  administrateur, dont le menu Administration apparaît après connexion.
+- Les codes élèves restent **par classe** et anonymes : aucune donnée personnelle.
+
 ## [2.7.0] — Plan de l'année visible et corrigeable
 
 ### Ajouté

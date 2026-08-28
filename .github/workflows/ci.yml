@@ -34,6 +34,8 @@ jobs:
             node --experimental-strip-types --test \
             ../tests/classes.test.ts \
             ../tests/auth.test.ts \
+            ../tests/auth-entry.test.ts \
+            ../tests/accessibility.test.ts \
             ../tests/persistence.test.ts \
             ../tests/sqlite-store.test.ts \
             ../tests/teacher.test.ts \

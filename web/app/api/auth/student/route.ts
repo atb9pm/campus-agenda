@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   const limited = await enforceAuthRateLimit(request, "student");
   if (limited) return limited;
 
-  const body = await request.json() as { code?: string };
+  const body = await request.json() as { code?: string; remember?: boolean };
   const code = String(body.code ?? "").trim();
   const store = await getStore();
   const access = await store.resolveStudentAccess(code);
@@ -34,5 +34,7 @@ export async function POST(request: Request) {
         classroomId: access.classroomId,
       },
     },
+    {},
+    body.remember !== false,
   );
 }
