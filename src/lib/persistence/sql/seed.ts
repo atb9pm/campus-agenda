@@ -1,10 +1,13 @@
 import { DEMO_PROTOTYPE_ITEMS } from "../../../features/agenda/demo-items.ts";
 import { DEMO_CATALOG, DEMO_CURRENT_TEACHER_ID } from "../../../features/classes/demo-data.ts";
-import { DEMO_TEACHER_PASSWORD } from "../../auth/config.ts";
+import { legacyDemoPasswordHash } from "../../auth/password.ts";
 import type { SqlDatabase } from "./types.ts";
 
-/** Hash documenté pour la démonstration — jamais un secret de production. */
-export const DEMO_PASSWORD_HASH = `demo:${DEMO_TEACHER_PASSWORD}`;
+/**
+ * Empreinte documentée de la démonstration : refusée en production, où
+ * l'amorçage installe un mot de passe administrateur réel.
+ */
+export const DEMO_PASSWORD_HASH = legacyDemoPasswordHash();
 
 export async function seedDemoDatabase(db: SqlDatabase): Promise<void> {
   for (const teacher of DEMO_CATALOG.teachers) {

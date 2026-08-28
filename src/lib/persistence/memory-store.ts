@@ -1,6 +1,6 @@
 import { DEMO_PROTOTYPE_ITEMS } from "../../features/agenda/demo-items.ts";
 import { createPublication, deletePublication, updatePublication } from "../../features/agenda/publications.ts";
-import { DEMO_CATALOG, DEMO_CURRENT_TEACHER_ID } from "../../features/classes/demo-data.ts";
+import { DEMO_CATALOG } from "../../features/classes/demo-data.ts";
 import {
   getClassroomById,
   getMembershipsForTeacher,
@@ -8,7 +8,7 @@ import {
 } from "../../features/classes/queries.ts";
 import { getMemoryMembershipsSnapshot } from "./memory-membership-store.ts";
 import { resolveStudentAccess } from "../../features/student/access.ts";
-import { isDemoTeacherPassword } from "../auth/config.ts";
+import { getMemoryTeacherAccountStore } from "./memory-teacher-account-store.ts";
 import type { AgendaMutationResult, AgendaStore, CreateAgendaInput } from "./types.ts";
 import type { PrototypeAgendaItem } from "../../features/agenda/demo-items.ts";
 
@@ -84,7 +84,8 @@ export class MemoryAgendaStore implements AgendaStore {
   }
 
   async teacherIsAdmin(teacherId: string): Promise<boolean> {
-    return teacherId === DEMO_CURRENT_TEACHER_ID;
+    const account = await getMemoryTeacherAccountStore().findAccount(teacherId);
+    return Boolean(account?.isAdmin && account.isActive);
   }
 
   async resolveStudentAccess(label: string) {
@@ -94,14 +95,12 @@ export class MemoryAgendaStore implements AgendaStore {
   }
 
   async findTeacherIdByInitials(initials: string): Promise<string | undefined> {
-    const normalized = initials.trim().toLowerCase();
-    if (!normalized) return undefined;
-    return DEMO_CATALOG.teachers.find((teacher) => teacher.initials.toLowerCase() === normalized)?.id;
+    const account = await getMemoryTeacherAccountStore().findAccountByInitials(initials);
+    return account?.id;
   }
 
   async verifyTeacherCredentials(teacherId: string, password: string): Promise<boolean> {
-    if (!isDemoTeacherPassword(password)) return false;
-    return Boolean(DEMO_CATALOG.teachers.find((teacher) => teacher.id === teacherId));
+    return getMemoryTeacherAccountStore().verifyCredentials(teacherId, password);
   }
 
   async exportAllItems(): Promise<PrototypeAgendaItem[]> {
