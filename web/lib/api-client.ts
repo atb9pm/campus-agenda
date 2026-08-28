@@ -1,5 +1,6 @@
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import type { TeacherAccountRecord } from "@campus/features/teacher-accounts";
+import type { TeacherSetupConfig } from "@campus/features/teacher-setup";
 import type { AgendaItemType } from "@campus/types/agenda";
 
 export type { TeacherAccountRecord };
@@ -85,6 +86,32 @@ export async function changeTeacherPasswordApi(
   if (!response.ok || !payload.ok) {
     throw new Error(payload.reason ?? "Changement de mot de passe impossible.");
   }
+}
+
+/** Null si aucune configuration n'a encore été enregistrée côté serveur. */
+export async function fetchTeacherSetupApi(): Promise<TeacherSetupConfig | null> {
+  const response = await fetch("/api/teacher/setup", { credentials: "include" });
+  const payload = await parseJson<{ ok: boolean; reason?: string; setup?: TeacherSetupConfig | null }>(
+    response,
+  );
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.reason ?? "Chargement de la configuration impossible.");
+  }
+  return payload.setup ?? null;
+}
+
+export async function saveTeacherSetupApi(setup: TeacherSetupConfig): Promise<TeacherSetupConfig> {
+  const response = await fetch("/api/teacher/setup", {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ setup }),
+  });
+  const payload = await parseJson<{ ok: boolean; reason?: string; setup?: TeacherSetupConfig }>(response);
+  if (!response.ok || !payload.ok || !payload.setup) {
+    throw new Error(payload.reason ?? "Enregistrement de la configuration impossible.");
+  }
+  return payload.setup;
 }
 
 export async function fetchTeacherAccounts(): Promise<TeacherAccountRecord[]> {

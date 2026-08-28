@@ -2,33 +2,49 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
-## [2.9.1] — Ménage dans la page principale
+## [2.10.1] — Ménage dans la page principale
 
 ### Retiré
 
-- **431 lignes de code mort** dans `web/app/page.tsx` (1353 → 922 lignes) : restes de la
-  grille d'agenda et du modal de publication remplacés par le carnet de classe en 2.5.0.
-- 27 variables et fonctions inutilisées : filtres d'agenda (branche, enseignant, jour, type),
-  `showAgendaTools`, `openAgenda`, `openSharedAgenda`, `openEditModal`, `isTodayCourseColumn`,
-  `removeItem`, `mergeDeployedItems`, `workload`, `busyTestDays`, `classSummaries`,
-  `myItemCount`, `shortDate`, `dayName`, `teacherLabel`, `HOURS`, `controlsPanel`…
+- **Code mort** dans `web/app/page.tsx` : restes de la grille d'agenda et du modal de
+  publication remplacés par le carnet de classe en 2.5.0 (environ 400 lignes).
+- Variables et fonctions inutilisées liées à l'ancienne grille (filtres, `showAgendaTools`,
+  modal d'édition, charge de travail, etc.).
 - Import `assertAgendaItemMutable` devenu inutile dans `POST /api/agenda`.
 
 ### Corrigé
 
-- **Tests fantômes** : `rendered-html` exigeait la présence de symboles morts
-  (`filterItemsForSchoolWeek`, `canModifyPublication`, menu d'ajout) et figeait donc le code
-  mort en place. Les assertions portent désormais sur le chemin réellement utilisé — le
-  carnet de classe — et interdisent le retour des restes retirés.
-- La vue élève affichait « CAMPUS AGENDA 1.2 » codé en dur ; elle utilise `APP_VERSION`.
-- Plus aucune variable inutilisée signalée par ESLint dans `web/` (46 → 15 avertissements,
-  les 15 restants étant le chargement initial des panneaux, motif volontaire).
+- **Tests fantômes** : `rendered-html` exigeait des symboles morts et figeait le code mort
+  en place. Les assertions portent désormais sur le carnet de classe et interdisent le
+  retour des restes retirés.
+- La vue élève affichait une version codée en dur ; elle utilise `APP_VERSION`.
+- Plus aucune variable inutilisée signalée par ESLint dans `web/` pour ce chemin.
 
 ### Notes
 
-- Aucun changement de comportement : tout le code retiré était inatteignable
-  (`showAgendaTools = false` depuis la 2.5.0, aucun appelant pour le modal de publication).
-- La coordination des contrôles (alerte du 3ᵉ contrôle) reste active via le carnet de classe.
+- Aucun changement de comportement : le code retiré était inatteignable.
+- La configuration enseignant reste persistée en SQLite (2.10.0).
+
+## [2.10.0] — Configuration enseignant persistée
+
+### Ajouté
+
+- **Configuration personnelle enseignant en SQLite** (classes, jour, branches, icône) :
+  suit le compte, plus le navigateur.
+- Migration `0011_teacher_setups` : une ligne JSON par enseignant.
+- API `GET` / `PUT /api/teacher/setup` (session enseignant requise).
+- **Migration unique** depuis `localStorage` si le serveur est vide, puis effacement
+  de la copie locale.
+
+### Modifié
+
+- L'onglet Configuration charge et enregistre désormais via l'API (debounce ~400 ms).
+- En cas d'indisponibilité réseau au chargement, repli temporaire sur la copie locale
+  ou les valeurs par défaut du catalogue.
+
+### Notes
+
+- Les notes de carnet restent en `localStorage` pour l'instant (passage serveur ultérieur).
 
 ## [2.9.0] — Comptes enseignant réels
 

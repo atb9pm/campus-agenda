@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DEMO_PROTOTYPE_ITEMS, type PrototypeAgendaItem } from "@campus/features/agenda";
 import {
   DEMO_CATALOG,
@@ -52,9 +52,11 @@ import {
   fetchAgendaItems,
   fetchApiSession,
   fetchSchoolCalendar,
+  fetchTeacherSetupApi,
   loginStudentApi,
   loginTeacherApi,
   logoutApiSession,
+  saveTeacherSetupApi,
   updateAgendaItemApi,
   type ApiTeacherSession,
   type SchoolCalendarWeek,
@@ -67,8 +69,8 @@ import {
 } from "@campus/features/auth-entry";
 import {
   buildDefaultTeacherSetup,
+  clearTeacherSetupFromBrowser,
   loadTeacherSetupFromBrowser,
-  saveTeacherSetupToBrowser,
   type TeacherSetupConfig,
   type TeacherClassSetup,
 } from "@campus/features/teacher-setup";
@@ -166,6 +168,8 @@ export default function Home() {
     buildDefaultTeacherSetup(DEMO_CATALOG, currentTeacherId),
   );
   const [teacherSetupReady, setTeacherSetupReady] = useState(false);
+  /** Évite d'écrire sur le serveur juste après un chargement / une migration. */
+  const skipTeacherSetupSaveRef = useRef(false);
   const [openNotebookClassId, setOpenNotebookClassId] = useState<string | null>(null);
   const [notebookCenterWeek, setNotebookCenterWeek] = useState(selectedSchoolWeekNumber);
   const [classNotesDocument, setClassNotesDocument] = useState<ClassNotesDocument>(() =>
@@ -207,15 +211,74 @@ export default function Home() {
   // notes ne peuvent être relues qu'après montage, donc dans un effet.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    const stored = loadTeacherSetupFromBrowser(currentTeacherId);
-    setTeacherSetup(stored ?? buildDefaultTeacherSetup(DEMO_CATALOG, currentTeacherId));
-    setTeacherSetupReady(true);
-  }, [currentTeacherId]);
+    if (!teacherAuthenticated) {
+      setTeacherSetupReady(false);
+      return;
+    }
+
+    let cancelled = false;
+    setTeacherSetupReady(false);
+
+    async function loadTeacherSetup() {
+      const fallback = () =>
+        loadTeacherSetupFromBrowser(currentTeacherId) ??
+        buildDefaultTeacherSetup(DEMO_CATALOG, currentTeacherId);
+
+      try {
+        const remote = await fetchTeacherSetupApi();
+        if (cancelled) return;
+
+        if (remote) {
+          skipTeacherSetupSaveRef.current = true;
+          setTeacherSetup(remote);
+          clearTeacherSetupFromBrowser(currentTeacherId);
+          setTeacherSetupReady(true);
+          return;
+        }
+
+        const local = loadTeacherSetupFromBrowser(currentTeacherId);
+        if (local) {
+          const saved = await saveTeacherSetupApi(local);
+          if (cancelled) return;
+          skipTeacherSetupSaveRef.current = true;
+          setTeacherSetup(saved);
+          clearTeacherSetupFromBrowser(currentTeacherId);
+          setTeacherSetupReady(true);
+          return;
+        }
+
+        skipTeacherSetupSaveRef.current = true;
+        setTeacherSetup(buildDefaultTeacherSetup(DEMO_CATALOG, currentTeacherId));
+        setTeacherSetupReady(true);
+      } catch {
+        if (cancelled) return;
+        skipTeacherSetupSaveRef.current = true;
+        setTeacherSetup(fallback());
+        setTeacherSetupReady(true);
+      }
+    }
+
+    void loadTeacherSetup();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTeacherId, teacherAuthenticated]);
 
   useEffect(() => {
-    if (!teacherSetupReady) return;
-    saveTeacherSetupToBrowser(currentTeacherId, teacherSetup);
-  }, [currentTeacherId, teacherSetup, teacherSetupReady]);
+    if (!teacherAuthenticated || !teacherSetupReady) return;
+    if (skipTeacherSetupSaveRef.current) {
+      skipTeacherSetupSaveRef.current = false;
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void saveTeacherSetupApi(teacherSetup).catch(() => {
+        // La config reste en mémoire ; nouvel essai au prochain changement.
+      });
+    }, 400);
+
+    return () => window.clearTimeout(timer);
+  }, [currentTeacherId, teacherAuthenticated, teacherSetup, teacherSetupReady]);
 
   useEffect(() => {
     setClassNotesDocument(loadNotesFromBrowser(currentTeacherId));
