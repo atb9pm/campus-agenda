@@ -18,9 +18,12 @@ import { MemoryMembershipStore } from "./memory-membership-store.ts";
 import { SqlMembershipStore } from "./sql/sql-membership-store.ts";
 import type { SchoolYearStore } from "./school-year-types.ts";
 import type { MembershipStore } from "./membership-types.ts";
+import type { SchoolCatalogStore } from "./school-catalog-types.ts";
+import { getMemorySchoolCatalogStore, MemorySchoolCatalogStore } from "./memory-school-catalog-store.ts";
+import { SqlSchoolCatalogStore } from "./sql/sql-school-catalog-store.ts";
 import { setActiveSchoolWeekEntries } from "../../features/calendar/active-calendar.ts";
 
-export const APP_VERSION = "2.3.0";
+export const APP_VERSION = "2.6.0";
 
 interface ResolvedStore {
   store: AgendaStore;
@@ -28,6 +31,7 @@ interface ResolvedStore {
   timetableStore: TimetableStore;
   schoolYearStore: SchoolYearStore;
   membershipStore: MembershipStore;
+  schoolCatalogStore: SchoolCatalogStore;
   kind: StoreKind;
   classroomExists: (classroomId: string) => Promise<boolean>;
 }
@@ -40,31 +44,39 @@ export function resetStoreFactory(): void {
 
 async function prepareSqlDatabase(
   db: Awaited<ReturnType<typeof createNodeSqliteDatabase>> | ReturnType<typeof wrapD1Database>,
-): Promise<SqlSchoolYearStore> {
+): Promise<{ schoolYearStore: SqlSchoolYearStore; schoolCatalogStore: SqlSchoolCatalogStore }> {
   await applyMigrations(db);
   if (!(await isDatabaseSeeded(db))) {
     await seedDemoDatabase(db);
   }
   const weeks = await hydrateActiveSchoolCalendar(db);
   setActiveSchoolWeekEntries(weeks);
-  return new SqlSchoolYearStore(db);
+  const schoolCatalogStore = new SqlSchoolCatalogStore(db);
+  await schoolCatalogStore.ensureSeeded();
+  return { schoolYearStore: new SqlSchoolYearStore(db), schoolCatalogStore };
 }
 
-async function prepareMemoryStores(): Promise<{ schoolYearStore: MemorySchoolYearStore }> {
+async function prepareMemoryStores(): Promise<{
+  schoolYearStore: MemorySchoolYearStore;
+  schoolCatalogStore: MemorySchoolCatalogStore;
+}> {
   const weeks = await hydrateMemorySchoolCalendar();
   setActiveSchoolWeekEntries(weeks);
-  return { schoolYearStore: new MemorySchoolYearStore() };
+  const schoolCatalogStore = getMemorySchoolCatalogStore();
+  await schoolCatalogStore.ensureSeeded();
+  return { schoolYearStore: new MemorySchoolYearStore(), schoolCatalogStore };
 }
 
 async function createStore(): Promise<ResolvedStore> {
   if (process.env.CAMPUS_STORE === "memory") {
-    const { schoolYearStore } = await prepareMemoryStores();
+    const { schoolYearStore, schoolCatalogStore } = await prepareMemoryStores();
     return {
       store: getMemoryAgendaStore(),
       templateStore: getMemoryTemplateStore(),
       timetableStore: getMemoryTimetableStore(),
       schoolYearStore,
       membershipStore: new MemoryMembershipStore(),
+      schoolCatalogStore,
       kind: "memory",
       classroomExists: memoryClassroomExists,
     };
@@ -72,7 +84,7 @@ async function createStore(): Promise<ResolvedStore> {
 
   if (process.env.CAMPUS_STORE === "sqlite" || process.env.CAMPUS_SQLITE_PATH) {
     const sqlite = createNodeSqliteDatabase(process.env.CAMPUS_SQLITE_PATH ?? ":memory:");
-    const schoolYearStore = await prepareSqlDatabase(sqlite);
+    const { schoolYearStore, schoolCatalogStore } = await prepareSqlDatabase(sqlite);
     const store = new SqlAgendaStore(sqlite);
     return {
       store,
@@ -80,6 +92,7 @@ async function createStore(): Promise<ResolvedStore> {
       timetableStore: new SqlTimetableStore(sqlite),
       schoolYearStore,
       membershipStore: new SqlMembershipStore(sqlite),
+      schoolCatalogStore,
       kind: "sqlite",
       classroomExists: (classroomId) => classroomExistsInDatabase(sqlite, classroomId),
     };
@@ -89,7 +102,7 @@ async function createStore(): Promise<ResolvedStore> {
     const { env } = await import("cloudflare:workers") as { env: { CAMPUS_DB?: D1Database } };
     if (env.CAMPUS_DB) {
       const db = wrapD1Database(env.CAMPUS_DB);
-      const schoolYearStore = await prepareSqlDatabase(db);
+      const { schoolYearStore, schoolCatalogStore } = await prepareSqlDatabase(db);
       const store = new SqlAgendaStore(db);
       return {
         store,
@@ -97,6 +110,7 @@ async function createStore(): Promise<ResolvedStore> {
         timetableStore: new SqlTimetableStore(db),
         schoolYearStore,
         membershipStore: new SqlMembershipStore(db),
+        schoolCatalogStore,
         kind: "d1",
         classroomExists: (classroomId) => classroomExistsInDatabase(db, classroomId),
       };
@@ -105,13 +119,14 @@ async function createStore(): Promise<ResolvedStore> {
     // Hors worker Cloudflare : repli mémoire.
   }
 
-  const { schoolYearStore } = await prepareMemoryStores();
+  const { schoolYearStore, schoolCatalogStore } = await prepareMemoryStores();
   return {
     store: getMemoryAgendaStore(),
     templateStore: getMemoryTemplateStore(),
     timetableStore: getMemoryTimetableStore(),
     schoolYearStore,
     membershipStore: new MemoryMembershipStore(),
+    schoolCatalogStore,
     kind: "memory",
     classroomExists: memoryClassroomExists,
   };
@@ -151,6 +166,10 @@ export async function getMembershipStore(): Promise<MembershipStore> {
 
 export async function getSchoolYearStore(): Promise<SchoolYearStore> {
   return (await resolveAgendaStore()).schoolYearStore;
+}
+
+export async function getSchoolCatalogStore(): Promise<SchoolCatalogStore> {
+  return (await resolveAgendaStore()).schoolCatalogStore;
 }
 
 export async function getStoreKind(): Promise<StoreKind> {

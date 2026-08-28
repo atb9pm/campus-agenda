@@ -9,7 +9,7 @@ import {
   readSessionTokenFromRequest,
   unauthorizedResponse,
 } from "@campus/lib/auth/index.ts";
-import { checkClassroomExists, getAgendaStore, getMembershipStore, getSchoolYearStore, getTemplateStore } from "@campus/lib/persistence/store-factory.ts";
+import { checkClassroomExists, getAgendaStore, getMembershipStore, getSchoolCatalogStore, getSchoolYearStore, getTemplateStore } from "@campus/lib/persistence/store-factory.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import { ARCHIVED_YEAR_READONLY_REASON, getArchivedYearIds, isArchivedYearItem } from "@campus/features/school-year/archived-readonly.ts";
 import type { AppSession } from "@campus/lib/persistence/types.ts";
@@ -48,6 +48,10 @@ export async function getTemplatesStore() {
 
 export async function getMembershipsStore() {
   return getMembershipStore();
+}
+
+export async function getCatalogStore() {
+  return getSchoolCatalogStore();
 }
 
 export async function getActiveSchoolYearId(): Promise<string | null> {
@@ -89,6 +93,16 @@ export async function requireTeacherSession(request: Request) {
     return { error: unauthorizedResponse() };
   }
   return { session, store: await getStore() };
+}
+
+export async function requireAdminSession(request: Request) {
+  const auth = await requireTeacherSession(request);
+  if ("error" in auth && auth.error) return auth;
+  const isAdmin = await auth.store!.teacherIsAdmin(auth.session!.teacherId);
+  if (!isAdmin) {
+    return { error: forbiddenResponse("Accès administrateur requis.") };
+  }
+  return auth;
 }
 
 export { forbiddenResponse, unauthorizedResponse };

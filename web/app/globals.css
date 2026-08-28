@@ -400,11 +400,29 @@ button { color: inherit; }
 .config-classes-editor, .config-week-plan { margin: 0 38px 24px; padding: 22px 24px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .config-class-list { display: grid; gap: 12px; }
 .config-class-row { display: grid; grid-template-columns: 72px repeat(3, minmax(120px, 1fr)) minmax(220px, 2fr) auto; gap: 10px; align-items: end; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #f8fbff; }
+.config-class-row-simple { grid-template-columns: repeat(3, minmax(140px, 1fr)) auto; background: #fff; }
 .config-field { display: grid; gap: 4px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8793a9; }
 .config-field input, .config-field select { padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); background: #fff; font-size: 11px; }
 .config-field-icon input { text-align: center; font-size: 18px; }
 .config-field-wide { grid-column: span 1; }
 .config-remove-class { padding: 9px 10px; border: 0; border-radius: 8px; color: #8b3a3a; background: #fdeeee; font-size: 9px; font-weight: 700; cursor: pointer; }
+.admin-workspace .admin-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 38px 18px; }
+.admin-workspace .admin-tabs button { padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: #fff; color: #516582; font-size: 10px; font-weight: 700; cursor: pointer; }
+.admin-workspace .admin-tabs button.active { color: #fff; background: var(--navy); border-color: var(--navy); }
+.admin-panel-block { margin: 0 38px 28px; padding: 22px 24px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.admin-panel-block .school-year-admin { padding: 0; }
+.admin-inline-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; }
+.admin-inline-form label { display: grid; gap: 4px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8793a9; }
+.admin-inline-form input { min-width: 140px; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); font-size: 11px; }
+.admin-catalog-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.admin-catalog-list li { display: grid; grid-template-columns: 100px 1fr auto auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.admin-catalog-list strong { color: var(--navy); font-size: 12px; }
+.admin-catalog-list span { color: #516582; font-size: 11px; }
+.admin-catalog-list .status-active { color: #027a48; font-weight: 700; }
+.admin-catalog-list .status-inactive { color: #98a2b3; font-weight: 700; }
+.admin-catalog-list button { padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: #f8fafc; color: var(--navy); font-size: 9px; font-weight: 700; cursor: pointer; }
+.admin-error, .admin-loading, .admin-placeholder { margin: 0 38px 12px; color: #516582; font-size: 12px; }
+.admin-error { color: #b42318; font-weight: 700; }
 .config-week-table-wrap { overflow-x: auto; }
 .config-week-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .config-week-table th, .config-week-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; }
@@ -496,8 +514,10 @@ button { color: inherit; }
   .modal-row { grid-template-columns: 1fr; }
   .school-year-admin { padding-right: 16px; padding-left: 16px; }
   .config-classes-editor, .config-week-plan, .ma-semaine-week-banner, .ma-semaine-days, .ma-semaine-empty, .ma-semaine-plan-hint, .class-notebook-toolbar, .class-notebook-week-controls, .class-notebook-grid, .class-notebook-warning, .class-notebook-clipboard-hint { margin-right: 16px; margin-left: 16px; }
+  .admin-workspace .admin-tabs, .admin-panel-block, .admin-error, .admin-loading, .admin-placeholder { margin-right: 16px; margin-left: 16px; }
+  .admin-catalog-list li { grid-template-columns: 1fr; }
   .class-notebook-grid { grid-template-columns: 1fr !important; }
-  .config-class-row { grid-template-columns: 1fr; }
+  .config-class-row, .config-class-row-simple { grid-template-columns: 1fr; }
   .controls-panel { margin-right: 16px; margin-left: 16px; }
 }
 

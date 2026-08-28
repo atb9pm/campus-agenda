@@ -1,23 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import type { SchoolWeek } from "@campus/features/calendar";
+import type { SchoolBranchRecord, SchoolClassRecord } from "@campus/features/school-catalog";
 import {
   createEmptyClassSetup,
-  formatBranchInput,
-  normalizeTeacherSetup,
-  parseBranchInput,
   WEEKDAY_LABELS,
   type TeacherClassSetup,
   type TeacherSetupConfig,
   type WeekdayIndex,
 } from "@campus/features/teacher-setup";
-import { MaSemaineWeekPlanPreview } from "./ma-semaine-panel.tsx";
 
 interface ConfigurationPanelProps {
   config: TeacherSetupConfig;
-  schoolWeeks: SchoolWeek[];
   onChange: (config: TeacherSetupConfig) => void;
   onReset: () => void;
   onNotice: (message: string) => void;
@@ -33,60 +28,97 @@ function updateClass(
 
 export function ConfigurationPanel({
   config,
-  schoolWeeks,
   onChange,
   onReset,
   onNotice,
 }: ConfigurationPanelProps) {
-  const [showWeekPlan, setShowWeekPlan] = useState(true);
+  const [schoolClasses, setSchoolClasses] = useState<SchoolClassRecord[]>([]);
+  const [schoolBranches, setSchoolBranches] = useState<SchoolBranchRecord[]>([]);
+  const [catalogError, setCatalogError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/admin/catalog?active=1", { credentials: "include" });
+        const payload = await response.json() as {
+          ok: boolean;
+          reason?: string;
+          classes?: SchoolClassRecord[];
+          branches?: SchoolBranchRecord[];
+        };
+        if (!response.ok || !payload.ok) {
+          throw new Error(payload.reason ?? "Référentiel indisponible.");
+        }
+        if (!cancelled) {
+          setSchoolClasses(payload.classes ?? []);
+          setSchoolBranches(payload.branches ?? []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setCatalogError(error instanceof Error ? error.message : "Référentiel indisponible.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const classCount = useMemo(
     () => config.classes.filter((entry) => entry.name.trim()).length,
     [config.classes],
   );
 
-  function commit(next: TeacherSetupConfig) {
-    onChange(normalizeTeacherSetup(next));
-  }
-
   function patchClass(classId: string, patch: Partial<TeacherClassSetup>) {
-    commit({ ...config, classes: updateClass(config.classes, classId, patch) });
+    onChange({ ...config, classes: updateClass(config.classes, classId, patch) });
   }
 
   function addClass() {
-    commit({
+    const firstClass = schoolClasses[0];
+    const firstBranch = schoolBranches[0];
+    const next = createEmptyClassSetup(config.classes.length);
+    onChange({
       ...config,
-      classes: [...config.classes, createEmptyClassSetup(config.classes.length)],
+      classes: [
+        ...config.classes,
+        {
+          ...next,
+          name: firstClass?.code ?? "",
+          programLabel: "",
+          icon: "•",
+          branchNames: firstBranch ? [firstBranch.label] : [],
+        },
+      ],
     });
-    onNotice("Nouvelle classe ajoutée.");
+    onNotice("Nouvelle affectation ajoutée.");
   }
 
   function removeClass(classId: string) {
-    commit({ ...config, classes: config.classes.filter((entry) => entry.id !== classId) });
-    onNotice("Classe retirée.");
+    onChange({ ...config, classes: config.classes.filter((entry) => entry.id !== classId) });
+    onNotice("Affectation retirée.");
   }
 
   return (
     <section className="teacher-workspace" aria-label="Configuration">
       <div className="workspace-intro">
-        <p className="eyebrow">PARAMÈTRES DE BASE</p>
+        <p className="eyebrow">PARAMÈTRES PERSONNELS</p>
         <h2>Configuration</h2>
-        <p>
-          Saisissez vos classes, le jour de cours, les branches enseignées, puis vérifiez le plan des semaines A
-          et B.
-        </p>
+        <p>Choisissez vos affectations dans le référentiel école : classe, jour de cours et branche.</p>
         <div className="config-summary-row">
           <span>
-            <strong>{classCount}</strong> classe{classCount > 1 ? "s" : ""} active{classCount > 1 ? "s" : ""}
+            <strong>{classCount}</strong> affectation{classCount > 1 ? "s" : ""}
           </span>
           <button type="button" className="workspace-action secondary" onClick={onReset}>
             Réinitialiser depuis le catalogue
           </button>
         </div>
+        {catalogError ? <p className="admin-error">{catalogError}</p> : null}
       </div>
 
-      <div className="config-classes-editor" aria-label="Classes et branches">
+      <div className="config-classes-editor" aria-label="Affectations">
         <header className="config-section-header">
-          <h3>Mes classes</h3>
+          <h3>Mes affectations</h3>
           <button type="button" className="workspace-action" onClick={addClass}>
             ＋ Ajouter une classe
           </button>
@@ -94,31 +126,29 @@ export function ConfigurationPanel({
 
         <div className="config-class-list">
           {config.classes.map((entry) => (
-            <article className="config-class-row" key={entry.id}>
-              <label className="config-field config-field-icon">
-                <span>Icône</span>
-                <input
-                  value={entry.icon}
-                  maxLength={2}
-                  onChange={(event) => patchClass(entry.id, { icon: event.target.value || "🔧" })}
-                />
-              </label>
-
+            <article className="config-class-row config-class-row-simple" key={entry.id}>
               <label className="config-field">
                 <span>Nom de la classe</span>
-                <input
+                <select
                   value={entry.name}
-                  placeholder="Ex. MA2, MMA3A…"
-                  onChange={(event) => patchClass(entry.id, { name: event.target.value })}
-                />
-              </label>
-
-              <label className="config-field">
-                <span>Filière</span>
-                <input
-                  value={entry.programLabel}
-                  onChange={(event) => patchClass(entry.id, { programLabel: event.target.value })}
-                />
+                  onChange={(event) =>
+                    patchClass(entry.id, {
+                      name: event.target.value,
+                      programLabel: "",
+                      icon: "•",
+                    })
+                  }
+                >
+                  <option value="">Choisir…</option>
+                  {schoolClasses.map((schoolClass) => (
+                    <option key={schoolClass.id} value={schoolClass.code}>
+                      {schoolClass.code}
+                    </option>
+                  ))}
+                  {entry.name && !schoolClasses.some((schoolClass) => schoolClass.code === entry.name) ? (
+                    <option value={entry.name}>{entry.name} (ancien)</option>
+                  ) : null}
+                </select>
               </label>
 
               <label className="config-field">
@@ -137,45 +167,40 @@ export function ConfigurationPanel({
                 </select>
               </label>
 
-              <label className="config-field config-field-wide">
-                <span>Branches (séparées par des virgules)</span>
-                <input
-                  value={formatBranchInput(entry.branchNames)}
-                  placeholder="Ex. Con. Prof I, BG"
+              <label className="config-field">
+                <span>Branche</span>
+                <select
+                  value={entry.branchNames[0] ?? ""}
                   onChange={(event) =>
-                    patchClass(entry.id, { branchNames: parseBranchInput(event.target.value) })
+                    patchClass(entry.id, {
+                      branchNames: event.target.value ? [event.target.value] : [],
+                    })
                   }
-                />
+                >
+                  <option value="">Choisir…</option>
+                  {schoolBranches.map((branch) => (
+                    <option key={branch.id} value={branch.label}>
+                      {branch.label}
+                    </option>
+                  ))}
+                  {entry.branchNames[0] &&
+                  !schoolBranches.some((branch) => branch.label === entry.branchNames[0]) ? (
+                    <option value={entry.branchNames[0]}>{entry.branchNames[0]} (ancien)</option>
+                  ) : null}
+                </select>
               </label>
 
               <button
                 type="button"
                 className="config-remove-class"
                 onClick={() => removeClass(entry.id)}
-                aria-label={`Retirer ${entry.name || "cette classe"}`}
+                aria-label={`Retirer ${entry.name || "cette affectation"}`}
               >
                 Retirer
               </button>
             </article>
           ))}
         </div>
-      </div>
-
-      <div className="config-week-plan" aria-label="Plan des semaines A et B">
-        <header className="config-section-header">
-          <div>
-            <h3>Plan des semaines A et B</h3>
-            <p>Vérifiez la succession A/B et les jours de cours TMA (lundi en semaine A, lundi + jeudi en B).</p>
-          </div>
-          <button
-            type="button"
-            className="workspace-action secondary"
-            onClick={() => setShowWeekPlan((current) => !current)}
-          >
-            {showWeekPlan ? "Masquer" : "Afficher"}
-          </button>
-        </header>
-        {showWeekPlan && <MaSemaineWeekPlanPreview schoolWeeks={schoolWeeks} />}
       </div>
     </section>
   );

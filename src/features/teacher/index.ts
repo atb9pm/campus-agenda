@@ -3,6 +3,7 @@ export {
   TEACHER_NAV_LABELS,
   TEACHER_NAV_SECTIONS,
   DEFAULT_TEACHER_NAV_SECTION,
+  teacherNavSectionsForRole,
   type TeacherNavSection,
 } from "./navigation.ts";
 export {

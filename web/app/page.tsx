@@ -22,6 +22,7 @@ import {
   TEACHER_NAV_LABELS,
   TEACHER_NAV_SECTIONS,
   DEFAULT_TEACHER_NAV_SECTION,
+  teacherNavSectionsForRole,
   filterItemsForAgendaView,
   getTeacherClassSummaries,
   type TeacherAgendaView,
@@ -93,6 +94,7 @@ import {
   type ClassNotesDocument,
 } from "@campus/features/class-notebook";
 import { ConfigurationPanel } from "./components/configuration-panel.tsx";
+import { AdministrationPanel } from "./components/administration-panel.tsx";
 import { ClassNotebookPanel } from "./components/class-notebook-panel.tsx";
 import { MaSemainePanel } from "./components/ma-semaine-panel.tsx";
 
@@ -107,7 +109,7 @@ const TYPE_LABELS: Record<AgendaItemType, string> = {
 
 const ALL_SUBJECTS_FILTER = "Toutes les branches";
 const HOURS = Array.from({ length: 10 }, (_, index) => index + 8);
-const APP_VERSION = "2.5.0";
+const APP_VERSION = "2.6.0";
 
 async function loadTeacherAgendaItems(classroomIds: string[]): Promise<PrototypeAgendaItem[]> {
   const batches = await Promise.all(classroomIds.map((classroomId) => fetchAgendaItems(classroomId)));
@@ -139,6 +141,7 @@ function sectionTitle(activeSection: TeacherNavSection, isStudentView: boolean, 
   if (isStudentView) return "Mon agenda";
   if (notebookClassName) return `Carnet · ${notebookClassName}`;
   if (activeSection === "ma-semaine") return "Ma semaine";
+  if (activeSection === "administration") return "Administration";
   return "Configuration";
 }
 
@@ -150,7 +153,10 @@ function sectionDescription(activeSection: TeacherNavSection, isStudentView: boo
   if (activeSection === "ma-semaine") {
     return "Vos classes par jour de cours, avec les branches que vous avez définies.";
   }
-  return "Classes, branches, jours de cours et vérification du plan A/B.";
+  if (activeSection === "administration") {
+    return "Référentiel école : classes, branches, accès et plan des semaines A/B.";
+  }
+  return "Affectations personnelles : classe, jour de cours et branche.";
 }
 
 export default function Home() {
@@ -1162,7 +1168,7 @@ export default function Home() {
         </div>
 
         <nav aria-label="Navigation principale">
-          {TEACHER_NAV_SECTIONS.map((section) => (
+          {teacherNavSectionsForRole(teacherIsAdmin).map((section) => (
             <button
               key={section}
               className={activeSection === section ? "active" : ""}
@@ -1209,8 +1215,7 @@ export default function Home() {
                 )}
               </div>
             )}
-            <button className="round-action" aria-label="Notifications">♧<i /></button>
-            <span className="profile-disc">{currentTeacher?.initials ?? "FC"}</span>
+            <button className="profile-disc" aria-label="Profil enseignant">{currentTeacher?.initials ?? "FC"}</button>
           </div>
         </header>
 
@@ -1249,9 +1254,15 @@ export default function Home() {
         {activeSection === "configuration" && (
           <ConfigurationPanel
             config={teacherSetup}
-            schoolWeeks={schoolWeeksMemo}
             onChange={setTeacherSetup}
             onReset={resetTeacherSetup}
+            onNotice={showNotice}
+          />
+        )}
+
+        {activeSection === "administration" && teacherIsAdmin && (
+          <AdministrationPanel
+            onCalendarUpdated={applySchoolCalendarWeeks}
             onNotice={showNotice}
           />
         )}

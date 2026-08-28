@@ -11,13 +11,16 @@ import {
 import {
   DEFAULT_TEACHER_NAV_SECTION,
   TEACHER_NAV_SECTIONS,
+  teacherNavSectionsForRole,
   createDefaultWorkspace,
   openClassAgenda,
 } from "../src/features/teacher/index.ts";
 
-test("navigation simplifiée — deux sections essentielles", () => {
-  assert.deepEqual([...TEACHER_NAV_SECTIONS], ["ma-semaine", "configuration"]);
+test("navigation — sections enseignant + administration admin", () => {
+  assert.deepEqual([...TEACHER_NAV_SECTIONS], ["ma-semaine", "configuration", "administration"]);
   assert.equal(DEFAULT_TEACHER_NAV_SECTION, "ma-semaine");
+  assert.deepEqual(teacherNavSectionsForRole(false), ["ma-semaine", "configuration"]);
+  assert.ok(teacherNavSectionsForRole(true).includes("administration"));
 });
 
 test("workspace — ouverture classe retourne sur Ma semaine", () => {
