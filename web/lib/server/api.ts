@@ -9,7 +9,7 @@ import {
   readSessionTokenFromRequest,
   unauthorizedResponse,
 } from "@campus/lib/auth/index.ts";
-import { checkClassroomExists, getAgendaStore, getMembershipStore, getSchoolCatalogStore, getSchoolYearStore, getTemplateStore } from "@campus/lib/persistence/store-factory.ts";
+import { checkClassroomExists, getAgendaStore, getMembershipStore, getSchoolCatalogStore, getSchoolYearStore, getTeacherAccountStore, getTemplateStore } from "@campus/lib/persistence/store-factory.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import { ARCHIVED_YEAR_READONLY_REASON, getArchivedYearIds, isArchivedYearItem } from "@campus/features/school-year/archived-readonly.ts";
 import type { AppSession } from "@campus/lib/persistence/types.ts";
@@ -59,6 +59,14 @@ export async function getCatalogStore() {
   return getSchoolCatalogStore();
 }
 
+export async function getTeacherAccountsStore() {
+  return getTeacherAccountStore();
+}
+
+/** Message unique côté client pour déclencher l'écran de changement obligatoire. */
+export const PASSWORD_CHANGE_REQUIRED_REASON =
+  "Changement de mot de passe requis avant d'utiliser Campus Agenda.";
+
 export async function getActiveSchoolYearId(): Promise<string | null> {
   const schoolYearStore = await getSchoolYearStore();
   const active = await schoolYearStore.getActiveSchoolYear();
@@ -92,12 +100,35 @@ export async function requireClassroomReadAccess(request: Request, classroomId: 
   return { session, store };
 }
 
-export async function requireTeacherSession(request: Request) {
+/** Session enseignant sans contrôle du mot de passe provisoire. */
+async function requireTeacherIdentity(request: Request) {
   const session = await getRequestSession(request);
   if (!canMutateAgenda(session)) {
     return { error: unauthorizedResponse() };
   }
   return { session, store: await getStore() };
+}
+
+export async function requireTeacherSession(request: Request) {
+  const auth = await requireTeacherIdentity(request);
+  if ("error" in auth && auth.error) return auth;
+
+  // Un mot de passe provisoire ne donne accès qu'à son propre changement.
+  const accounts = await getTeacherAccountsStore();
+  if (await accounts.mustChangePassword(auth.session!.teacherId)) {
+    return {
+      error: jsonResponse(
+        { ok: false, reason: PASSWORD_CHANGE_REQUIRED_REASON, passwordChangeRequired: true },
+        { status: 403 },
+      ),
+    };
+  }
+  return auth;
+}
+
+/** Utilisée par la route de changement de mot de passe uniquement. */
+export async function requireTeacherSessionAllowingPasswordChange(request: Request) {
+  return requireTeacherIdentity(request);
 }
 
 export async function requireAdminSession(request: Request) {

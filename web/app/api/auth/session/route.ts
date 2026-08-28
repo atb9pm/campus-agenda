@@ -1,5 +1,6 @@
 import {
   getRequestSession,
+  getTeacherAccountsStore,
   jsonResponse,
   logoutResponse,
 } from "../../../../lib/server/api.ts";
@@ -15,7 +16,9 @@ export async function GET(request: Request) {
   }
 
   if (session.kind === "teacher") {
-    const teacher = getTeacherById(DEMO_CATALOG, session.teacherId);
+    const accounts = await getTeacherAccountsStore();
+    const account = await accounts.findAccount(session.teacherId);
+    const fallback = getTeacherById(DEMO_CATALOG, session.teacherId);
     const store = await getAgendaStore();
     const isAdmin = await store.teacherIsAdmin(session.teacherId);
     return jsonResponse({
@@ -23,9 +26,10 @@ export async function GET(request: Request) {
       session: {
         kind: "teacher",
         teacherId: session.teacherId,
-        displayName: teacher?.displayName ?? "Enseignant · démo",
-        initials: teacher?.initials ?? "??",
+        displayName: account?.displayName ?? fallback?.displayName ?? "Enseignant · démo",
+        initials: account?.initials ?? fallback?.initials ?? "??",
         isAdmin,
+        mustChangePassword: Boolean(account?.mustChangePassword),
       },
     });
   }

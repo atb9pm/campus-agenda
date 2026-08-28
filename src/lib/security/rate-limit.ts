@@ -1,6 +1,10 @@
 export const AUTH_RATE_LIMIT_WINDOW_MS = 60_000;
 export const AUTH_TEACHER_LIMIT = 10;
 export const AUTH_STUDENT_LIMIT = 20;
+export const AUTH_PASSWORD_CHANGE_LIMIT = 10;
+
+/** Portées limitées : connexion enseignant, connexion élève, changement de mot de passe. */
+export type AuthRateLimitScope = "teacher" | "student" | "teacher-password";
 
 const memoryBuckets = new Map<string, { count: number; resetAt: number }>();
 
@@ -10,17 +14,28 @@ export function readClientKey(request: Request): string {
     ?? "unknown";
 }
 
-export function buildAuthRateLimitKey(scope: "teacher" | "student", clientKey: string): string {
+export function buildAuthRateLimitKey(scope: AuthRateLimitScope, clientKey: string): string {
   return `auth:${scope}:${clientKey}`;
 }
 
-export function resolveAuthRateLimit(scope: "teacher" | "student"): number {
-  const envKey = scope === "teacher" ? "CAMPUS_AUTH_RATE_LIMIT_TEACHER" : "CAMPUS_AUTH_RATE_LIMIT_STUDENT";
-  const configured = Number(process.env[envKey]);
+const RATE_LIMIT_ENV_KEYS: Record<AuthRateLimitScope, string> = {
+  teacher: "CAMPUS_AUTH_RATE_LIMIT_TEACHER",
+  student: "CAMPUS_AUTH_RATE_LIMIT_STUDENT",
+  "teacher-password": "CAMPUS_AUTH_RATE_LIMIT_TEACHER_PASSWORD",
+};
+
+const RATE_LIMIT_DEFAULTS: Record<AuthRateLimitScope, number> = {
+  teacher: AUTH_TEACHER_LIMIT,
+  student: AUTH_STUDENT_LIMIT,
+  "teacher-password": AUTH_PASSWORD_CHANGE_LIMIT,
+};
+
+export function resolveAuthRateLimit(scope: AuthRateLimitScope): number {
+  const configured = Number(process.env[RATE_LIMIT_ENV_KEYS[scope]]);
   if (Number.isFinite(configured) && configured > 0) {
     return configured;
   }
-  return scope === "teacher" ? AUTH_TEACHER_LIMIT : AUTH_STUDENT_LIMIT;
+  return RATE_LIMIT_DEFAULTS[scope];
 }
 
 export function checkInMemoryRateLimit(

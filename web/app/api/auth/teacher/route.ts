@@ -1,6 +1,7 @@
 import { getTeacherById } from "@campus/features/classes/queries.ts";
 import { DEMO_CATALOG } from "@campus/features/classes/demo-data.ts";
 import {
+  getTeacherAccountsStore,
   jsonResponse,
   jsonWithSession,
 } from "../../../../lib/server/api.ts";
@@ -18,23 +19,28 @@ export async function POST(request: Request) {
     remember?: boolean;
   };
   const password = String(body.password ?? "").trim();
-  const store = await getStore();
 
   // Connexion par initiales (ChF) ; l'identifiant interne reste accepté pour les appels existants.
-  const initials = String(body.initials ?? "").trim();
-  const teacherId = initials
-    ? (await store.findTeacherIdByInitials(initials)) ?? ""
-    : String(body.teacherId ?? "").trim();
-
-  if (!teacherId || !(await store.verifyTeacherCredentials(teacherId, password))) {
-    return jsonResponse({ ok: false, reason: "Initiales ou mot de passe incorrect." }, { status: 401 });
+  const identifier = String(body.initials ?? "").trim() || String(body.teacherId ?? "").trim();
+  const accounts = await getTeacherAccountsStore();
+  const outcome = await accounts.authenticate(identifier, password);
+  if (!outcome.ok || !outcome.teacherId) {
+    return jsonResponse(
+      { ok: false, reason: outcome.reason ?? "Initiales ou mot de passe incorrect." },
+      { status: 401 },
+    );
   }
 
-  const teacher = getTeacherById(DEMO_CATALOG, teacherId);
-  if (!teacher) {
+  const teacherId = outcome.teacherId;
+  const account = await accounts.findAccount(teacherId);
+  const fallback = getTeacherById(DEMO_CATALOG, teacherId);
+  const displayName = account?.displayName ?? fallback?.displayName;
+  const initials = account?.initials ?? fallback?.initials;
+  if (!displayName || !initials) {
     return jsonResponse({ ok: false, reason: "Enseignant introuvable." }, { status: 404 });
   }
 
+  const store = await getStore();
   const isAdmin = await store.teacherIsAdmin(teacherId);
 
   return jsonWithSession(
@@ -44,9 +50,10 @@ export async function POST(request: Request) {
       session: {
         kind: "teacher",
         teacherId,
-        displayName: teacher.displayName,
-        initials: teacher.initials,
+        displayName,
+        initials,
         isAdmin,
+        mustChangePassword: Boolean(outcome.mustChangePassword),
       },
     },
     {},
