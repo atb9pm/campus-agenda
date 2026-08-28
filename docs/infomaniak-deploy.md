@@ -21,7 +21,7 @@ Guide à jour pour un **site Node.js Infomaniak** avec persistance **SQLite**.
 |---|---|
 | **Dossier d'exécution** | `.` (racine du dépôt cloné) |
 | **Version Node.js** | 22 LTS (ou 24) |
-| **Commande de build** | `bash scripts/infomaniak-build.sh` |
+| **Commande de build** | `git fetch origin main && git reset --hard origin/main && bash scripts/infomaniak-build.sh` |
 | **Commande de lancement** | voir ci-dessous |
 | **Port** | `3000` (Infomaniak remplace via `PORT`) |
 
