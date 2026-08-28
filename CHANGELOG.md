@@ -2,6 +2,19 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.6.0] — Administration référentiel école
+
+### Ajouté
+
+- Zone **Administration** (admins uniquement) : classes, branches, plan A/B, placeholders enseignants/accès.
+- Migration `0008_school_catalog` + seed (MA1…MA4, MACAM2/4 ; Moteur, Électricité, Transmission, Châssis).
+- Soft-désactivation des classes/branches (jamais de suppression dure).
+
+### Modifié
+
+- **Configuration** enseignant : 3 listes déroulantes (classe / jour / branche) depuis le référentiel actif.
+- Plan des semaines A/B déplacé hors Configuration vers Administration.
+
 ## [2.5.0] — Carnet de classe (maquette validée)
 
 ### Ajouté
