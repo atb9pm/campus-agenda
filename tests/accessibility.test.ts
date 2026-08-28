@@ -17,10 +17,10 @@ test("phase 0.8 — structure d'accessibilité de base", async () => {
   assert.match(page, /id="main-content"/);
   assert.match(page, /aria-modal="true"/);
   assert.match(page, /aria-labelledby="student-code-title"/);
-  assert.match(page, /aria-labelledby="modal-title"/);
+  assert.match(page, /aria-labelledby="control-alert-title"/);
   assert.match(page, /aria-label="Navigation principale"/);
   assert.match(page, /role="dialog"/);
-  assert.match(page, /closeModalOnEscape/);
+  assert.match(page, /closeOnEscape/);
   assert.doesNotMatch(page, /Compte&nbsp;: <strong>\{currentTeacher/);
   assert.doesNotMatch(page, /François Cheseaux \(ChF\)/);
 

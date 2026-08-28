@@ -2,6 +2,34 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.9.1] — Ménage dans la page principale
+
+### Retiré
+
+- **431 lignes de code mort** dans `web/app/page.tsx` (1353 → 922 lignes) : restes de la
+  grille d'agenda et du modal de publication remplacés par le carnet de classe en 2.5.0.
+- 27 variables et fonctions inutilisées : filtres d'agenda (branche, enseignant, jour, type),
+  `showAgendaTools`, `openAgenda`, `openSharedAgenda`, `openEditModal`, `isTodayCourseColumn`,
+  `removeItem`, `mergeDeployedItems`, `workload`, `busyTestDays`, `classSummaries`,
+  `myItemCount`, `shortDate`, `dayName`, `teacherLabel`, `HOURS`, `controlsPanel`…
+- Import `assertAgendaItemMutable` devenu inutile dans `POST /api/agenda`.
+
+### Corrigé
+
+- **Tests fantômes** : `rendered-html` exigeait la présence de symboles morts
+  (`filterItemsForSchoolWeek`, `canModifyPublication`, menu d'ajout) et figeait donc le code
+  mort en place. Les assertions portent désormais sur le chemin réellement utilisé — le
+  carnet de classe — et interdisent le retour des restes retirés.
+- La vue élève affichait « CAMPUS AGENDA 1.2 » codé en dur ; elle utilise `APP_VERSION`.
+- Plus aucune variable inutilisée signalée par ESLint dans `web/` (46 → 15 avertissements,
+  les 15 restants étant le chargement initial des panneaux, motif volontaire).
+
+### Notes
+
+- Aucun changement de comportement : tout le code retiré était inatteignable
+  (`showAgendaTools = false` depuis la 2.5.0, aucun appelant pour le modal de publication).
+- La coordination des contrôles (alerte du 3ᵉ contrôle) reste active via le carnet de classe.
+
 ## [2.9.0] — Comptes enseignant réels
 
 ### Ajouté

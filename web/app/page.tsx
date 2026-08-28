@@ -1,31 +1,20 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ALL_FILTER, applySharedAgendaFilters, buildClassWorkloadSummary, canModifyPublication, DEMO_PROTOTYPE_ITEMS, filterItemsForSchoolWeek, WORKLOAD_LEVEL_LABELS, type PrototypeAgendaItem } from "@campus/features/agenda";
+import { useEffect, useMemo, useState } from "react";
+import { DEMO_PROTOTYPE_ITEMS, type PrototypeAgendaItem } from "@campus/features/agenda";
 import {
   DEMO_CATALOG,
   DEMO_CURRENT_TEACHER_ID,
-  countBranchesInClassroom,
-  countTeachersInClassroom,
   getClassroomById,
   getClassroomsForTeacher,
-  getSubjectById,
   getSubjectsForClassroom,
-  getSubjectsForTeacherInClassroom,
   getTeacherById,
-  getTeachersInClassroom,
-  teacherTeachesSubject,
 } from "@campus/features/classes";
 import {
-  DEFAULT_TEACHER_AGENDA_VIEW,
   TEACHER_NAV_ICONS,
   TEACHER_NAV_LABELS,
-  TEACHER_NAV_SECTIONS,
   DEFAULT_TEACHER_NAV_SECTION,
   teacherNavSectionsForRole,
-  filterItemsForAgendaView,
-  getTeacherClassSummaries,
-  type TeacherAgendaView,
   type TeacherNavSection,
 } from "@campus/features/teacher";
 import {
@@ -41,24 +30,18 @@ import {
   buildSchoolWeeks,
   buildSchoolWeeksFromEntries,
   courseDayKey,
-  findSchoolWeekByNumber,
   findSchoolWeekForDate,
   formatCourseDayHeading,
   formatCourseDayMenuLabel,
   formatSchoolWeekLabel,
-  formatSchoolWeekOptionLabel,
-  getCourseDayOptionsForSchoolWeek,
   listPreviousCourseDays,
   resolveDisplayCourseDay,
   type CourseDaySlot,
   type SchoolWeek,
 } from "@campus/features/calendar";
 import {
-  courseDaysWithMultipleTests,
   evaluateThirdTestAlert,
-  listClassTestsForSchoolWeek,
   listUpcomingTestsForClass,
-  listUpcomingTestsForTeacher,
   type ThirdTestAlert,
 } from "@campus/features/evaluations";
 import type { AgendaItemType } from "@campus/types/agenda";
@@ -72,8 +55,6 @@ import {
   loginStudentApi,
   loginTeacherApi,
   logoutApiSession,
-  savePublicationToLibrary,
-  syncTemplateFromPublication,
   updateAgendaItemApi,
   type ApiTeacherSession,
   type SchoolCalendarWeek,
@@ -115,9 +96,6 @@ const TYPE_LABELS: Record<AgendaItemType, string> = {
   INFORMATION: "Information",
 };
 
-const ALL_SUBJECTS_FILTER = "Toutes les branches";
-const HOURS = Array.from({ length: 10 }, (_, index) => index + 8);
-
 async function loadTeacherAgendaItems(classroomIds: string[]): Promise<PrototypeAgendaItem[]> {
   const batches = await Promise.all(classroomIds.map((classroomId) => fetchAgendaItems(classroomId)));
   const merged = new Map<number, PrototypeAgendaItem>();
@@ -127,21 +105,8 @@ async function loadTeacherAgendaItems(classroomIds: string[]): Promise<Prototype
   return [...merged.values()].sort((left, right) => left.id - right.id);
 }
 
-function shortDate(date: Date) {
-  return new Intl.DateTimeFormat("fr-CH", { day: "numeric", month: "short" }).format(date).replace(".", "");
-}
-
-function dayName(date: Date) {
-  return new Intl.DateTimeFormat("fr-CH", { weekday: "short" }).format(date).replace(".", "").toUpperCase();
-}
-
 function BrandEmblem() {
   return <span className="brand-emblem-image" aria-hidden="true">CA</span>;
-}
-
-function teacherLabel(teacherId: string, currentTeacherId: string) {
-  if (teacherId === currentTeacherId) return "Vous · compte démo";
-  return getTeacherById(DEMO_CATALOG, teacherId)?.displayName ?? "Enseignant · démo";
 }
 
 function sectionTitle(activeSection: TeacherNavSection, isStudentView: boolean, notebookClassName?: string) {
@@ -177,24 +142,14 @@ export default function Home() {
 
   const [activeSection, setActiveSection] = useState<TeacherNavSection>(DEFAULT_TEACHER_NAV_SECTION);
   const [selectedClassroomId, setSelectedClassroomId] = useState(defaultClassroomId);
-  const [classPickerOpen, setClassPickerOpen] = useState(false);
   const [appMode, setAppMode] = useState<AppMode>("teacher");
   const [studentSession, setStudentSession] = useState<StudentAccess | null>(null);
   const [studentEntry, setStudentEntry] = useState<StudentEntry | null>(null);
   const [studentCodeModalOpen, setStudentCodeModalOpen] = useState(false);
-  const [agendaView, setAgendaView] = useState<TeacherAgendaView>(DEFAULT_TEACHER_AGENDA_VIEW);
-  const [typeFilter, setTypeFilter] = useState<AgendaItemType | "ALL">("ALL");
-  const [subjectFilter, setSubjectFilter] = useState(ALL_SUBJECTS_FILTER);
-  const [teacherFilter, setTeacherFilter] = useState<string | typeof ALL_FILTER>(ALL_FILTER);
-  const [dayFilter, setDayFilter] = useState<number | typeof ALL_FILTER>(ALL_FILTER);
   const [selectedSchoolWeekNumber, setSelectedSchoolWeekNumber] = useState(
     () => findSchoolWeekForDate(new Date()).number,
   );
-  const [publishSchoolWeekNumber, setPublishSchoolWeekNumber] = useState(selectedSchoolWeekNumber);
   const [items, setItems] = useState<PrototypeAgendaItem[]>(DEMO_PROTOTYPE_ITEMS);
-  const [addMenuOpen, setAddMenuOpen] = useState(false);
-  const [modalType, setModalType] = useState<AgendaItemType | null>(null);
-  const [editingItem, setEditingItem] = useState<PrototypeAgendaItem | null>(null);
   const [notice, setNotice] = useState("");
   const [teacherAuthenticated, setTeacherAuthenticated] = useState(false);
   const [teacherIsAdmin, setTeacherIsAdmin] = useState(false);
@@ -207,14 +162,6 @@ export default function Home() {
   const [studentHistoryOpen, setStudentHistoryOpen] = useState(false);
   const [schoolWeeks, setSchoolWeeks] = useState<SchoolWeek[]>(() => buildSchoolWeeks());
   const [controlAlert, setControlAlert] = useState<ThirdTestAlert | null>(null);
-  const [controlsPanel, setControlsPanel] = useState<null | "class" | "mine">(null);
-  const [pendingPublish, setPendingPublish] = useState<{
-    title: string;
-    detail: string;
-    subjectId: string;
-    schoolWeekNumber: number;
-    day: number;
-  } | null>(null);
   const [teacherSetup, setTeacherSetup] = useState<TeacherSetupConfig>(() =>
     buildDefaultTeacherSetup(DEMO_CATALOG, currentTeacherId),
   );
@@ -256,6 +203,9 @@ export default function Home() {
     }
   }
 
+  // Le stockage local n'existe pas au rendu serveur : la configuration et les
+  // notes ne peuvent être relues qu'après montage, donc dans un effet.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const stored = loadTeacherSetupFromBrowser(currentTeacherId);
     setTeacherSetup(stored ?? buildDefaultTeacherSetup(DEMO_CATALOG, currentTeacherId));
@@ -271,6 +221,7 @@ export default function Home() {
     setClassNotesDocument(loadNotesFromBrowser(currentTeacherId));
     setClassNotesReady(true);
   }, [currentTeacherId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     if (!classNotesReady) return;
@@ -338,25 +289,8 @@ export default function Home() {
 
   const isStudentView = appMode === "student" && studentSession !== null;
   const studentClassroom = studentSession ? getStudentClassroom(DEMO_CATALOG, studentSession) : null;
-  const activeClassroomId = isStudentView ? studentSession!.classroomId : selectedClassroomId;
 
   const selectedClassroom = (isStudentView ? studentClassroom : getClassroomById(DEMO_CATALOG, selectedClassroomId)) ?? DEMO_CATALOG.classrooms[0];
-  const classSummaries = useMemo(
-    () => getTeacherClassSummaries(DEMO_CATALOG, currentTeacherId, items),
-    [currentTeacherId, items],
-  );
-  const classroomSubjects = useMemo(
-    () => getSubjectsForClassroom(DEMO_CATALOG, activeClassroomId),
-    [activeClassroomId],
-  );
-  const publishableSubjects = useMemo(
-    () => getSubjectsForTeacherInClassroom(DEMO_CATALOG, currentTeacherId, selectedClassroomId),
-    [currentTeacherId, selectedClassroomId],
-  );
-  const subjectFilterOptions = useMemo(
-    () => [ALL_SUBJECTS_FILTER, ...classroomSubjects.map((subject) => subject.name)],
-    [classroomSubjects],
-  );
 
   const schoolWeeksMemo = schoolWeeks;
   const openNotebookClass = useMemo(
@@ -393,37 +327,6 @@ export default function Home() {
       : !notebookSubjectId
         ? "Aucune branche enseignée trouvée pour publier."
         : undefined;
-  const selectedSchoolWeek = useMemo(
-    () => findSchoolWeekByNumber(selectedSchoolWeekNumber, schoolWeeksMemo),
-    [selectedSchoolWeekNumber, schoolWeeksMemo],
-  );
-
-  const days = useMemo(() => {
-    const monday = new Date(selectedSchoolWeek.monday);
-    return Array.from({ length: 5 }, (_, index) => {
-      const date = new Date(monday);
-      date.setDate(monday.getDate() + index);
-      return date;
-    });
-  }, [selectedSchoolWeek]);
-
-  const publishCourseDayOptions = useMemo(
-    () => getCourseDayOptionsForSchoolWeek(publishSchoolWeekNumber, schoolWeeksMemo),
-    [publishSchoolWeekNumber, schoolWeeksMemo],
-  );
-
-  const agendaBaseItems = filterItemsForAgendaView(
-    items,
-    activeClassroomId,
-    currentTeacherId,
-    isStudentView ? "class" : agendaView,
-  );
-  const classroomItems = items.filter((item) => item.classroomId === activeClassroomId);
-  const classroomTeachers = useMemo(
-    () => getTeachersInClassroom(DEMO_CATALOG, activeClassroomId),
-    [activeClassroomId],
-  );
-  const showSharedInsights = !isStudentView && (agendaView === "class");
 
   const studentAutoCourseDay = useMemo(
     () => resolveDisplayCourseDay(new Date(), schoolWeeksMemo),
@@ -463,30 +366,6 @@ export default function Home() {
     [studentDisplayCourseDay, studentAutoCourseDay],
   );
 
-  const teacherVisibleItems = useMemo(
-    () => applySharedAgendaFilters(agendaBaseItems, DEMO_CATALOG, {
-      subjectName: subjectFilter === ALL_SUBJECTS_FILTER ? ALL_FILTER : subjectFilter,
-      type: typeFilter,
-      teacherId: teacherFilter,
-      day: dayFilter,
-      weekOffset: 0,
-      schoolWeekNumber: selectedSchoolWeekNumber,
-    }),
-    [agendaBaseItems, subjectFilter, typeFilter, teacherFilter, dayFilter, selectedSchoolWeekNumber],
-  );
-
-  const visibleItems = isStudentView ? [] : teacherVisibleItems;
-
-  const workload = useMemo(
-    () => (showSharedInsights ? buildClassWorkloadSummary(items, DEMO_CATALOG, activeClassroomId, selectedSchoolWeekNumber) : null),
-    [showSharedInsights, items, activeClassroomId, selectedSchoolWeekNumber],
-  );
-
-  const busyTestDays = useMemo(
-    () => courseDaysWithMultipleTests(items, activeClassroomId, selectedSchoolWeekNumber),
-    [items, activeClassroomId, selectedSchoolWeekNumber],
-  );
-
   const studentUpcomingTests = useMemo(() => {
     if (!studentSession) return [];
     return listUpcomingTestsForClass(
@@ -498,30 +377,8 @@ export default function Home() {
     );
   }, [studentSession, items, studentAutoCourseDay, schoolWeeksMemo]);
 
-  const classTestsForWeek = useMemo(
-    () => listClassTestsForSchoolWeek(items, DEMO_CATALOG, activeClassroomId, selectedSchoolWeekNumber, schoolWeeksMemo),
-    [items, activeClassroomId, selectedSchoolWeekNumber, schoolWeeksMemo],
-  );
-
-  const myUpcomingTests = useMemo(
-    () => listUpcomingTestsForTeacher(items, DEMO_CATALOG, currentTeacherId, new Date(), schoolWeeksMemo),
-    [items, currentTeacherId, schoolWeeksMemo],
-  );
-
-  function resetAgendaFilters() {
-    setSubjectFilter(ALL_SUBJECTS_FILTER);
-    setTeacherFilter(ALL_FILTER);
-    setDayFilter(ALL_FILTER);
-    setTypeFilter("ALL");
+  function resetSelectedWeek() {
     setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date(), schoolWeeksMemo).number);
-  }
-
-  function isTodayCourseColumn(date: Date) {
-    const slot = resolveDisplayCourseDay(new Date(), schoolWeeksMemo);
-    return selectedSchoolWeekNumber === slot.schoolWeekNumber
-      && date.getFullYear() === slot.date.getFullYear()
-      && date.getMonth() === slot.date.getMonth()
-      && date.getDate() === slot.date.getDate();
   }
 
   function enterTeacherPreview() {
@@ -535,7 +392,7 @@ export default function Home() {
     setAppMode("student");
     setStudentCourseDayKey(null);
     setStudentHistoryOpen(false);
-    resetAgendaFilters();
+    resetSelectedWeek();
   }
 
   function enterStudentWithCode(code: string) {
@@ -558,7 +415,7 @@ export default function Home() {
         setStudentCourseDayKey(null);
         setStudentHistoryOpen(false);
         setStudentCodeModalOpen(false);
-        resetAgendaFilters();
+        resetSelectedWeek();
         const loadedItems = await fetchAgendaItems(session.classroomId);
         setItems(loadedItems);
       } catch (error) {
@@ -579,7 +436,6 @@ export default function Home() {
         setStudentSession(null);
         setStudentEntry(null);
         setActiveSection("ma-semaine");
-        setAgendaView("class");
         return;
       }
 
@@ -636,28 +492,6 @@ export default function Home() {
     })();
   }
 
-  function openAgenda(classroomId: string) {
-    setSelectedClassroomId(classroomId);
-    setActiveSection("ma-semaine");
-    setAgendaView(DEFAULT_TEACHER_AGENDA_VIEW);
-    setClassPickerOpen(false);
-    setSubjectFilter(ALL_SUBJECTS_FILTER);
-    setTeacherFilter(ALL_FILTER);
-    setDayFilter(ALL_FILTER);
-    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date(), schoolWeeksMemo).number);
-  }
-
-  function openSharedAgenda(classroomId: string) {
-    setSelectedClassroomId(classroomId);
-    setActiveSection("ma-semaine");
-    setAgendaView("class");
-    setClassPickerOpen(false);
-    setSubjectFilter(ALL_SUBJECTS_FILTER);
-    setTeacherFilter(ALL_FILTER);
-    setDayFilter(ALL_FILTER);
-    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date(), schoolWeeksMemo).number);
-  }
-
   function navigate(section: TeacherNavSection) {
     setActiveSection(section);
   }
@@ -676,41 +510,20 @@ export default function Home() {
     setSchoolWeeks(buildSchoolWeeksFromEntries(weeks));
   }
 
-  function openCreateModal(type: AgendaItemType) {
-    setEditingItem(null);
-    setModalType(type);
-    setPublishSchoolWeekNumber(selectedSchoolWeekNumber);
-    setAddMenuOpen(false);
-  }
-
-  function openEditModal(item: PrototypeAgendaItem) {
-    setEditingItem(item);
-    setModalType(item.type);
-    setPublishSchoolWeekNumber(item.schoolWeekNumber);
-  }
-
-  function closeModal() {
-    setModalType(null);
-    setEditingItem(null);
+  function dismissControlAlert() {
     setControlAlert(null);
-    setPendingPublish(null);
+    setPendingNotebookControl(null);
   }
 
   useEffect(() => {
-    function closeModalOnEscape(event: KeyboardEvent) {
+    function closeOnEscape(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
       if (studentCodeModalOpen) setStudentCodeModalOpen(false);
-      if (modalType) closeModal();
-      if (controlAlert) {
-        setControlAlert(null);
-        setPendingPublish(null);
-      }
-      if (addMenuOpen) setAddMenuOpen(false);
-      if (classPickerOpen) setClassPickerOpen(false);
+      if (controlAlert) dismissControlAlert();
     }
-    window.addEventListener("keydown", closeModalOnEscape);
-    return () => window.removeEventListener("keydown", closeModalOnEscape);
-  }, [studentCodeModalOpen, modalType, addMenuOpen, classPickerOpen]);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [studentCodeModalOpen, controlAlert]);
 
   function logoutTeacher() {
     void (async () => {
@@ -723,127 +536,12 @@ export default function Home() {
     })();
   }
 
-  async function performPublish(input: {
-    title: string;
-    detail: string;
-    subjectId: string;
-    schoolWeekNumber: number;
-    day: number;
-    type: AgendaItemType;
-    editing?: PrototypeAgendaItem | null;
-  }) {
-    const subject = getSubjectById(DEMO_CATALOG, input.subjectId);
-    if (!subject || !teacherTeachesSubject(DEMO_CATALOG, currentTeacherId, selectedClassroomId, subject.id)) {
-      return;
-    }
-
-    if (input.editing) {
-      const updated = await updateAgendaItemApi(input.editing.id, {
-        title: input.title,
-        detail: input.detail,
-        day: input.day,
-        hour: 8,
-        subjectId: subject.id,
-        schoolWeekNumber: input.schoolWeekNumber,
-      });
-      setItems((previous) => previous.map((item) => (item.id === updated.id ? updated : item)));
-      closeModal();
-      showNotice(`${TYPE_LABELS[input.editing.type]} modifié.`);
-      return;
-    }
-
-    const created = await createAgendaItemApi({
-      classroomId: selectedClassroomId,
-      subjectId: subject.id,
-      day: input.day,
-      hour: 8,
-      weekOffset: 0,
-      schoolWeekNumber: input.schoolWeekNumber,
-      type: input.type,
-      title: input.title,
-      detail: input.detail,
-    });
-    setItems((previous) => [...previous, created]);
-    setSelectedSchoolWeekNumber(input.schoolWeekNumber);
-    setAgendaView(DEFAULT_TEACHER_AGENDA_VIEW);
-    closeModal();
-    setActiveSection("ma-semaine");
-    showNotice(`${TYPE_LABELS[input.type]} ajouté à ${selectedClassroom.name}.`);
-  }
-
-  function submitItem(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!modalType) return;
-    const form = new FormData(event.currentTarget);
-    const title = String(form.get("title") || "").trim();
-    if (!title) return;
-
-    const subjectName = String(form.get("subject") || publishableSubjects[0]?.name || "Moteur");
-    const subject = classroomSubjects.find((entry) => entry.name === subjectName) ?? publishableSubjects[0];
-    if (!subject || !teacherTeachesSubject(DEMO_CATALOG, currentTeacherId, selectedClassroomId, subject.id)) {
-      return;
-    }
-
-    const schoolWeekNumber = Number(form.get("schoolWeekNumber") || selectedSchoolWeekNumber);
-    const day = Number(form.get("courseDay") || publishCourseDayOptions[0]?.dayIndex || 0);
-    const detail = String(form.get("detail") || "").trim() || "Aucune précision";
-
-    const publishInput = {
-      title,
-      detail,
-      subjectId: subject.id,
-      schoolWeekNumber,
-      day,
-      type: modalType,
-      editing: editingItem,
-    };
-
-    if (modalType === "TEST") {
-      const alert = evaluateThirdTestAlert(items, DEMO_CATALOG, {
-        classroomId: selectedClassroomId,
-        type: "TEST",
-        courseDay: { schoolWeekNumber, dayIndex: day },
-        excludeItemId: editingItem?.id,
-      });
-      if (alert.triggered) {
-        setControlAlert(alert);
-        setPendingPublish({ title, detail, subjectId: subject.id, schoolWeekNumber, day });
-        return;
-      }
-    }
-
+  function confirmControlDespiteAlert() {
+    if (!pendingNotebookControl) return;
     void (async () => {
       try {
-        await performPublish(publishInput);
-      } catch (error) {
-        showNotice(error instanceof Error ? error.message : "Publication impossible.");
-      }
-    })();
-  }
-
-  function confirmPublishDespiteAlert() {
-    if (pendingNotebookControl) {
-      void (async () => {
-        try {
-          await performNotebookControl(pendingNotebookControl);
-          setControlAlert(null);
-          setPendingNotebookControl(null);
-        } catch (error) {
-          showNotice(error instanceof Error ? error.message : "Publication impossible.");
-        }
-      })();
-      return;
-    }
-    if (!modalType || !pendingPublish) return;
-    void (async () => {
-      try {
-        await performPublish({
-          ...pendingPublish,
-          type: modalType,
-          editing: editingItem,
-        });
-        setControlAlert(null);
-        setPendingPublish(null);
+        await performNotebookControl(pendingNotebookControl);
+        dismissControlAlert();
       } catch (error) {
         showNotice(error instanceof Error ? error.message : "Publication impossible.");
       }
@@ -941,55 +639,6 @@ export default function Home() {
       ...input,
     });
   }
-
-  function mergeDeployedItems(created: PrototypeAgendaItem[]) {
-    setItems((previous) => {
-      const merged = new Map(previous.map((item) => [item.id, item]));
-      for (const item of created) merged.set(item.id, item);
-      return [...merged.values()].sort((left, right) => left.id - right.id);
-    });
-  }
-
-  async function saveCurrentItemToLibrary() {
-    if (!editingItem) return;
-    try {
-      const { template, item } = await savePublicationToLibrary(editingItem.id);
-      setItems((previous) => previous.map((entry) => (entry.id === item.id ? item : entry)));
-      setEditingItem(item);
-      showNotice(`Modèle « ${template.title} » enregistré dans la bibliothèque.`);
-    } catch (error) {
-      showNotice(error instanceof Error ? error.message : "Enregistrement impossible.");
-    }
-  }
-
-  async function syncCurrentItemToTemplate() {
-    if (!editingItem?.templateId) return;
-    try {
-      const template = await syncTemplateFromPublication(editingItem.id);
-      showNotice(`Modèle « ${template.title} » mis à jour depuis cette publication.`);
-    } catch (error) {
-      showNotice(error instanceof Error ? error.message : "Mise à jour du modèle impossible.");
-    }
-  }
-
-  function removeItem(item: PrototypeAgendaItem) {
-    if (!canModifyPublication(item, currentTeacherId)) {
-      showNotice("Seul l'auteur peut supprimer cet élément.");
-      return;
-    }
-    void (async () => {
-      try {
-        await deleteAgendaItemApi(item.id);
-        setItems((previous) => previous.filter((entry) => entry.id !== item.id));
-        showNotice(`${TYPE_LABELS[item.type]} supprimé.`);
-      } catch (error) {
-        showNotice(error instanceof Error ? error.message : "Suppression impossible.");
-      }
-    })();
-  }
-
-  const myItemCount = classroomItems.filter((item) => item.authorTeacherId === currentTeacherId).length;
-  const showAgendaTools = false;
 
   if (passwordChange) {
     return (
@@ -1129,7 +778,7 @@ export default function Home() {
             )}
           </section>
 
-          <p className="prototype-label">CONSULTATION ÉLÈVE · CAMPUS AGENDA 1.2</p>
+          <p className="prototype-label">CONSULTATION ÉLÈVE · CAMPUS AGENDA {APP_VERSION}</p>
         </main>
 
         {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
@@ -1175,24 +824,6 @@ export default function Home() {
             <p>{sectionDescription(activeSection, false, Boolean(openNotebookClass))}</p>
           </div>
           <div className="header-actions">
-            {showAgendaTools && (
-              <button className="student-preview" onClick={enterTeacherPreview}>Aperçu élève</button>
-            )}
-            {showAgendaTools && (
-              <div className="add-anchor">
-                <button className="navy-add" onClick={() => setAddMenuOpen((current) => !current)} aria-expanded={addMenuOpen} aria-haspopup="menu">＋ <span>Ajouter</span>⌄</button>
-                {addMenuOpen && (
-                  <div className="technical-add-menu" role="menu" aria-label="Types de publication">
-                    {(["HOMEWORK", "TEST", "INFORMATION"] as AgendaItemType[]).map((type) => (
-                      <button key={type} role="menuitem" onClick={() => openCreateModal(type)}>
-                        <span className={`type-icon ${type.toLowerCase()}`}>{type === "HOMEWORK" ? "D" : type === "TEST" ? "C" : "i"}</span>
-                        <span><strong>{TYPE_LABELS[type]}</strong><small>{type === "HOMEWORK" ? "Travail à réaliser" : type === "TEST" ? "Évaluation planifiée" : "Message pour la classe"}</small></span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
             <button className="profile-disc" aria-label="Profil enseignant">{currentTeacher?.initials ?? "FC"}</button>
           </div>
         </header>
@@ -1272,7 +903,7 @@ export default function Home() {
                 <span className="eyebrow">COORDINATION</span>
                 <h2 id="control-alert-title">3 contrôles ce jour de cours</h2>
               </div>
-              <button type="button" onClick={() => { setControlAlert(null); setPendingPublish(null); setPendingNotebookControl(null); }}>×</button>
+              <button type="button" onClick={dismissControlAlert}>×</button>
             </header>
             <p>Cette publication porterait à <strong>3 contrôles</strong> le même jour de cours pour la classe. Les collègues ont déjà planifié :</p>
             <ul className="control-alert-list">
@@ -1284,67 +915,9 @@ export default function Home() {
               ))}
             </ul>
             <footer className="control-alert-actions">
-              <button type="button" onClick={() => { setControlAlert(null); setPendingPublish(null); setPendingNotebookControl(null); }}>Modifier la date</button>
-              <button type="button" className="confirm-anyway" onClick={confirmPublishDespiteAlert}>Publier quand même</button>
+              <button type="button" onClick={dismissControlAlert}>Modifier la date</button>
+              <button type="button" className="confirm-anyway" onClick={confirmControlDespiteAlert}>Publier quand même</button>
             </footer>
-          </section>
-        </div>
-      )}
-
-      {modalType && (
-        <div className="technical-modal-backdrop">
-          <section className="technical-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-            <header><div><span className="eyebrow">{editingItem ? "MODIFIER" : "NOUVEL ÉLÉMENT"}</span><h2 id="modal-title">{editingItem ? `Modifier le ${TYPE_LABELS[modalType].toLowerCase()}` : `Ajouter un ${TYPE_LABELS[modalType].toLowerCase()}`}</h2></div><button onClick={closeModal}>×</button></header>
-            <form key={editingItem?.id ?? `create-${modalType}-${publishSchoolWeekNumber}`} onSubmit={submitItem}>
-              <label>Titre<input name="title" placeholder="Titre visible par la classe" defaultValue={editingItem?.title ?? ""} required /></label>
-              <div className="modal-row">
-                <label>
-                  Semaine scolaire
-                  <select
-                    name="schoolWeekNumber"
-                    value={publishSchoolWeekNumber}
-                    onChange={(event) => setPublishSchoolWeekNumber(Number(event.target.value))}
-                  >
-                    {schoolWeeksMemo.map((week) => (
-                      <option key={week.number} value={week.number}>{formatSchoolWeekOptionLabel(week)}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Branche
-                  <select name="subject" defaultValue={getSubjectById(DEMO_CATALOG, editingItem?.subjectId ?? publishableSubjects[0]?.id ?? "")?.name ?? publishableSubjects[0]?.name ?? "Moteur"}>
-                    {publishableSubjects.map((subject) => <option key={subject.id}>{subject.name}</option>)}
-                  </select>
-                </label>
-                <label>
-                  Jour de cours
-                  <select name="courseDay" defaultValue={String(editingItem?.day ?? publishCourseDayOptions[0]?.dayIndex ?? 0)}>
-                    {publishCourseDayOptions.map((option) => (
-                      <option key={option.dayIndex} value={option.dayIndex}>{option.label}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <p className="modal-hint">Semaine A : lundi · Semaine B : lundi et jeudi.</p>
-              <label>Consigne<textarea name="detail" rows={3} placeholder="Ajoutez une indication utile…" defaultValue={editingItem?.detail ?? ""} /></label>
-              {editingItem && canModifyPublication(editingItem, currentTeacherId) ? (
-                <div className="modal-library-actions">
-                  {editingItem.templateId ? (
-                    <button type="button" className="secondary-library-action" onClick={() => void syncCurrentItemToTemplate()}>
-                      Mettre à jour le modèle
-                    </button>
-                  ) : (
-                    <button type="button" className="secondary-library-action" onClick={() => void saveCurrentItemToLibrary()}>
-                      Enregistrer dans la bibliothèque
-                    </button>
-                  )}
-                  {editingItem.templateId ? (
-                    <p className="modal-hint">Modifier cette publication n&apos;altère pas le modèle, sauf action explicite ci-dessus.</p>
-                  ) : null}
-                </div>
-              ) : null}
-              <footer><button type="button" onClick={closeModal}>Annuler</button><button type="submit">{editingItem ? "Enregistrer" : "Publier dans l’agenda"}</button></footer>
-            </form>
           </section>
         </div>
       )}

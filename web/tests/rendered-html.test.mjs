@@ -57,7 +57,6 @@ test("keeps the validated teacher essentials and social preview", async () => {
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
 
-  assert.match(page, /"HOMEWORK", "TEST", "INFORMATION"/);
   assert.match(page, /HOMEWORK: "Devoir"/);
   assert.match(page, /TEST: "Contrôle"/);
   assert.match(page, /INFORMATION: "Information"/);
@@ -67,11 +66,8 @@ test("keeps the validated teacher essentials and social preview", async () => {
   assert.match(page, /AdministrationPanel/);
   assert.match(page, /enterStudentWithCode/);
   assert.match(page, /fetchApiSession/);
-  assert.match(page, /createAgendaItemApi/);
-  assert.match(page, /filterItemsForSchoolWeek/);
   assert.match(page, /loginStudentApi/);
   assert.match(page, /resolveDisplayCourseDay/);
-  assert.match(page, /canModifyPublication/);
   assert.match(page, /LoginPanel/);
   assert.match(page, /submitTeacherLogin/);
   assert.match(page, /PasswordChangePanel/);
@@ -79,6 +75,19 @@ test("keeps the validated teacher essentials and social preview", async () => {
   assert.doesNotMatch(page, /DEMO_TEACHER_PASSWORD/);
   assert.match(page, /DEMO_CATALOG/);
   assert.match(page, /brand-emblem-image/);
+
+  // Publication et coordination passent uniquement par le carnet de classe.
+  assert.match(page, /notebookCreatePublication/);
+  assert.match(page, /notebookSaveControl/);
+  assert.match(page, /evaluateThirdTestAlert/);
+  assert.match(page, /createAgendaItemApi/);
+  assert.match(page, /updateAgendaItemApi/);
+  assert.match(page, /deleteAgendaItemApi/);
+
+  // Restes de la grille d'agenda retirée en 2.5.0 : ne doivent pas revenir.
+  assert.doesNotMatch(page, /showAgendaTools|openSharedAgenda|isTodayCourseColumn/);
+  assert.doesNotMatch(page, /setSubjectFilter|setTeacherFilter|setDayFilter|setTypeFilter/);
+  assert.doesNotMatch(page, /buildClassWorkloadSummary|WORKLOAD_LEVEL_LABELS/);
   assert.doesNotMatch(page, /src="\/og-v3\.png"/);
   assert.doesNotMatch(page, /blueprint-watermark|MechanicalEmblem/);
   assert.match(layout, /\/og-v3\.png/);

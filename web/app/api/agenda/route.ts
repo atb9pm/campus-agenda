@@ -1,6 +1,5 @@
 import { AGENDA_ITEM_TYPES } from "@campus/types/agenda.ts";
 import {
-  assertAgendaItemMutable,
   forbiddenResponse,
   getArchivedSchoolYearIds,
   jsonResponse,
