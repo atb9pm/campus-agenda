@@ -9,7 +9,14 @@ import {
   isAllowedPublicationType,
   updatePublication,
 } from "../src/features/agenda/publications.ts";
-import { DEMO_CURRENT_TEACHER_ID } from "../src/features/classes/index.ts";
+import { TEACHER_DEMO_ID } from "../src/features/classes/index.ts";
+
+/** Les publications de démonstration appartiennent au catalogue démo, pas au catalogue ChF. */
+function firstItemOfDemoTeacher(skip = 0) {
+  const item = DEMO_PROTOTYPE_ITEMS.filter((entry) => entry.authorTeacherId === TEACHER_DEMO_ID)[skip];
+  assert.ok(item, `publication de démonstration #${skip} introuvable`);
+  return item;
+}
 
 test("phase 0.4 — seuls Devoir, Contrôle et Information sont autorisés", () => {
   assert.equal(isAllowedPublicationType("HOMEWORK"), true);
@@ -19,8 +26,8 @@ test("phase 0.4 — seuls Devoir, Contrôle et Information sont autorisés", () 
 });
 
 test("phase 0.4 — seul l'auteur peut modifier ou supprimer", () => {
-  const item = DEMO_PROTOTYPE_ITEMS[2];
-  assert.equal(canModifyPublication(item, DEMO_CURRENT_TEACHER_ID), true);
+  const item = firstItemOfDemoTeacher();
+  assert.equal(canModifyPublication(item, TEACHER_DEMO_ID), true);
   assert.equal(canModifyPublication(item, "teacher-demo-martin"), false);
 
   const deniedUpdate = updatePublication(DEMO_PROTOTYPE_ITEMS, item.id, "teacher-demo-martin", {
@@ -37,7 +44,7 @@ test("phase 0.4 — création d'une publication valide", () => {
     id: 99,
     classroomId: "classe-demo-tma-2a",
     subjectId: "subject-demo-moteur-2a",
-    authorTeacherId: DEMO_CURRENT_TEACHER_ID,
+    authorTeacherId: TEACHER_DEMO_ID,
     day: 2,
     hour: 10,
     schoolWeekNumber: 12,
@@ -54,8 +61,8 @@ test("phase 0.4 — création d'une publication valide", () => {
 });
 
 test("phase 0.4 — modification par l'auteur", () => {
-  const item = DEMO_PROTOTYPE_ITEMS[2];
-  const result = updatePublication(DEMO_PROTOTYPE_ITEMS, item.id, DEMO_CURRENT_TEACHER_ID, {
+  const item = firstItemOfDemoTeacher();
+  const result = updatePublication(DEMO_PROTOTYPE_ITEMS, item.id, TEACHER_DEMO_ID, {
     title: "Injection électronique — mise à jour",
     detail: "Réviser les capteurs",
     hour: 14,
@@ -69,12 +76,12 @@ test("phase 0.4 — modification par l'auteur", () => {
   assert.equal(updated.title, "Injection électronique — mise à jour");
   assert.equal(updated.detail, "Réviser les capteurs");
   assert.equal(updated.hour, 14);
-  assert.equal(updated.authorTeacherId, DEMO_CURRENT_TEACHER_ID);
+  assert.equal(updated.authorTeacherId, TEACHER_DEMO_ID);
 });
 
 test("phase 0.4 — suppression par l'auteur", () => {
-  const item = DEMO_PROTOTYPE_ITEMS[4];
-  const result = deletePublication(DEMO_PROTOTYPE_ITEMS, item.id, DEMO_CURRENT_TEACHER_ID);
+  const item = firstItemOfDemoTeacher(1);
+  const result = deletePublication(DEMO_PROTOTYPE_ITEMS, item.id, TEACHER_DEMO_ID);
 
   assert.equal(result.ok, true);
   if (!result.ok) return;

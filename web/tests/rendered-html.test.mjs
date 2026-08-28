@@ -14,19 +14,38 @@ async function render() {
   );
 }
 
-test("server-renders the Campus Agenda prototype", async () => {
+test("server-renders the Campus Agenda site gate", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
   assert.match(html, /Campus Agenda — Agenda scolaire partagé/);
-  assert.match(html, /Connexion/);
+  assert.match(html, /Site verrouillé/);
   assert.match(html, /id="main-content"/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 
-test("keeps the validated publication menu and social preview", async () => {
+test("the rendered version matches the shared APP_VERSION", async () => {
+  const [page, sharedVersion, packageJson] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../../src/lib/app-version.ts", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8"),
+  ]);
+
+  // Une seule source de version, sinon /api/health et le pied de page divergent.
+  assert.match(page, /import \{ APP_VERSION \} from "@campus\/lib\/app-version"/);
+  assert.doesNotMatch(page, /const APP_VERSION\s*=/);
+
+  const version = sharedVersion.match(/APP_VERSION = "([^"]+)"/)?.[1];
+  assert.ok(version, "APP_VERSION introuvable dans src/lib/app-version.ts");
+  assert.equal(JSON.parse(packageJson).version, version);
+
+  const html = await (await render()).text();
+  assert.ok(html.includes(version), `la page doit afficher la version ${version}`);
+});
+
+test("keeps the validated teacher essentials and social preview", async () => {
   const [page, layout, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
@@ -37,27 +56,23 @@ test("keeps the validated publication menu and social preview", async () => {
   assert.match(page, /HOMEWORK: "Devoir"/);
   assert.match(page, /TEST: "Contrôle"/);
   assert.match(page, /INFORMATION: "Information"/);
+  assert.match(page, /MaSemainePanel/);
+  assert.match(page, /ClassNotebookPanel/);
+  assert.match(page, /ConfigurationPanel/);
+  assert.match(page, /AdministrationPanel/);
   assert.match(page, /enterStudentWithCode/);
   assert.match(page, /fetchApiSession/);
   assert.match(page, /createAgendaItemApi/);
-  assert.match(page, /publishSchoolWeekNumber/);
-  assert.match(page, /selectedSchoolWeekNumber/);
   assert.match(page, /filterItemsForSchoolWeek/);
   assert.match(page, /loginStudentApi/);
-  assert.match(page, /student-course-day-app/);
   assert.match(page, /resolveDisplayCourseDay/);
-  assert.match(page, /studentHistoryOpen/);
-  assert.match(page, /workload-panel/);
-  assert.match(page, /openSharedAgenda/);
   assert.match(page, /canModifyPublication/);
-  assert.match(page, /event-actions/);
   assert.match(page, /teacher-login/);
   assert.match(page, /submitTeacherLogin/);
   assert.doesNotMatch(page, /DEMO_TEACHER_PASSWORD/);
   assert.match(page, /DEMO_CATALOG/);
-  assert.match(page, /selectedClassroomId/);
-  assert.doesNotMatch(page, /src="\/og-v3\.png"/);
   assert.match(page, /brand-emblem-image/);
+  assert.doesNotMatch(page, /src="\/og-v3\.png"/);
   assert.doesNotMatch(page, /blueprint-watermark|MechanicalEmblem/);
   assert.match(layout, /\/og-v3\.png/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);

@@ -2,6 +2,20 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.6.1] — Déploiement Infomaniak en un clic
+
+### Ajouté
+
+- `scripts/infomaniak-build.sh` : commande de build **unique** à coller une seule fois
+  (`bash scripts/infomaniak-build.sh`). Elle récupère `origin/main`, réinstalle et rebuild.
+- Empreinte de déploiement `web/build-info.json` exposée par `/api/health`
+  (`commit`, `builtAt`) pour vérifier le code réellement servi.
+
+### Modifié
+
+- `APP_VERSION` centralisée dans `src/lib/app-version.ts` (plus de version dupliquée
+  entre l'API santé et le pied de page).
+
 ## [2.6.0] — Administration référentiel école
 
 ### Ajouté

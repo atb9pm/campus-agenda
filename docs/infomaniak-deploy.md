@@ -21,12 +21,33 @@ Guide à jour pour un **site Node.js Infomaniak** avec persistance **SQLite**.
 |---|---|
 | **Dossier d'exécution** | `.` (racine du dépôt cloné) |
 | **Version Node.js** | 22 LTS (ou 24) |
-| **Commande de build** | `git pull origin main && cd web && npm install && npm run build` |
+| **Commande de build** | `git fetch origin main && git reset --hard origin/main && bash scripts/infomaniak-build.sh` |
 | **Commande de lancement** | voir ci-dessous |
 | **Port** | `3000` (Infomaniak remplace via `PORT`) |
 
-> Le dossier d'exécution est la **racine du dépôt** (pas `web`) pour que `git pull` fonctionne.
-> Le build et le lancement se font dans `web/` via `cd web && …`.
+> Le dossier d'exécution est la **racine du dépôt** (pas `web`) pour que le script
+> puisse récupérer le code. Le build et le lancement se font dans `web/`.
+
+### Pourquoi un script plutôt qu'une longue commande
+
+La commande se règle **une seule fois**. Le préfixe `git fetch … && git reset --hard …`
+amorce la mise à jour (il fonctionne même si le serveur est encore sur un vieux commit
+qui ne contient pas le script). Tout le reste du déploiement — installation, build,
+empreinte de version — vit dans [`scripts/infomaniak-build.sh`](../scripts/infomaniak-build.sh)
+et évolue donc par Pull Request, **sans jamais revenir dans le Manager**.
+
+Le script :
+
+1. se place à la racine du clone, refait `git fetch` + `git checkout -B main origin/main` + `git reset --hard` (sans effet si déjà à jour)
+2. se **relance** dans un nouveau processus, pour appliquer la logique du code fraîchement récupéré
+3. installe (`npm ci`, repli `npm install`) et construit dans `web/`
+4. écrit `web/build-info.json` (commit, date) exposé par `/api/health`
+
+Cycle courant, sans SSH ni PowerShell :
+
+```
+Pull Request → CI verte → Merge sur main → bouton « Build » → bouton « Redémarrer »
+```
 
 ### Commande de lancement (avec secret)
 
@@ -153,8 +174,23 @@ https://campusagenda.ch/api/health
 Attendu :
 
 ```json
-{ "ok": true, "store": "sqlite" }
+{
+  "ok": true,
+  "version": "2.6.1",
+  "store": "sqlite",
+  "commit": "dc6b445",
+  "builtAt": "2026-08-28T14:10:00.000Z"
+}
 ```
+
+- `commit` doit correspondre au dernier commit de `main` sur GitHub.
+  S'il est plus ancien : le **Build** n'a pas été relancé.
+- `commit` à jour mais site inchangé : le **Redémarrage** manque.
+- `commit: null` : l'application tourne encore avec un build antérieur au script
+  (relancer **Build** une fois).
+- `store: "memory"` : la commande de **lancement** est incomplète — les données sont
+  perdues à chaque redémarrage. Utiliser exactement la commande de la section
+  « Commande de lancement ».
 
 Connexion enseignant : mot de passe démo **`campus-demo`**
 
@@ -171,6 +207,8 @@ Verrou d’accueil du site : mot de passe **`campus-accueil`** (écran « Site v
 | Build OK mais Run échoue | Ancienne commande avec corepack | Remplacer la commande de lancement |
 | Deploy GitHub : SSH refused | Clé ou hôte incorrect | Vérifier secrets SSH |
 | Deploy GitHub : build OK, site ancien | Redémarrage manquant | Mettre à jour cookies Manager ou **Run** manuel |
+| Build OK mais `/api/health` garde l'ancien `commit` | Build sans récupération Git | Commande de build = `bash scripts/infomaniak-build.sh` |
+| `n'est pas un dépôt Git` | Dossier d'exécution ≠ racine du clone | Mettre `.` comme dossier d'exécution |
 
 ## Ne plus utiliser
 
