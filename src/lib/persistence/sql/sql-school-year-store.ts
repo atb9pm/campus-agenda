@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
 import { SCHOOL_WEEK_MONDAYS } from "../../../features/calendar/school-week-dates.ts";
+import { setActiveSchoolWeekEntries } from "../../../features/calendar/active-calendar.ts";
+import type { SchoolDayException } from "../../../features/school-days/types.ts";
 import type { ParsedWeekPlan, SchoolWeekEntry, SchoolYearRecord, SchoolYearWithWeeks } from "../../../features/school-year/types.ts";
 import { schoolYearBoundsFromLabel } from "../../../features/school-year/week-plan-logic.ts";
 import type { SchoolYearStore } from "../school-year-types.ts";
@@ -150,6 +152,62 @@ export class SqlSchoolYearStore implements SchoolYearStore {
 
     await this.insertWeeks(id, weeks);
     return this.getSchoolYearById(id);
+  }
+
+  async replaceSchoolYearWeeks(id: string, weeks: SchoolWeekEntry[]): Promise<SchoolYearWithWeeks> {
+    const target = await this.getSchoolYearById(id);
+    if (!target) {
+      throw new Error("Année scolaire introuvable.");
+    }
+
+    await this.db.prepare("DELETE FROM school_weeks WHERE school_year_id = ?").bind(id).run();
+    await this.insertWeeks(id, [...weeks].sort((left, right) => left.number - right.number));
+
+    const updated = (await this.getSchoolYearById(id))!;
+    if (updated.status === "active") {
+      setActiveSchoolWeekEntries(updated.weeks);
+    }
+    return updated;
+  }
+
+  async listDayExceptions(schoolYearId: string): Promise<SchoolDayException[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT day_date, day_state, label FROM school_day_exceptions
+         WHERE school_year_id = ? ORDER BY day_date`,
+      )
+      .bind(schoolYearId)
+      .all<{ day_date: string; day_state: string; label: string | null }>();
+    return (results ?? []).map((row) => ({
+      date: row.day_date,
+      state: row.day_state as SchoolDayException["state"],
+      label: row.label,
+    }));
+  }
+
+  async setDayException(
+    schoolYearId: string,
+    date: string,
+    exception: { state: SchoolDayException["state"]; label: string | null } | null,
+  ): Promise<SchoolDayException[]> {
+    if (!exception) {
+      await this.db
+        .prepare("DELETE FROM school_day_exceptions WHERE school_year_id = ? AND day_date = ?")
+        .bind(schoolYearId, date)
+        .run();
+      return this.listDayExceptions(schoolYearId);
+    }
+
+    await this.db
+      .prepare(
+        `INSERT INTO school_day_exceptions (school_year_id, day_date, day_state, label, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (school_year_id, day_date)
+         DO UPDATE SET day_state = excluded.day_state, label = excluded.label, updated_at = excluded.updated_at`,
+      )
+      .bind(schoolYearId, date, exception.state, exception.label, new Date().toISOString())
+      .run();
+    return this.listDayExceptions(schoolYearId);
   }
 
   private async loadWeeks(schoolYearId: string): Promise<SchoolWeekEntry[]> {

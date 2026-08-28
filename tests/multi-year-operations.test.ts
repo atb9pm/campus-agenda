@@ -147,7 +147,7 @@ test("phase 2.3 — nouvelle publication conserve l'auteur d'origine sur l'histo
   const replacementOutcome = replaceTeacherMemberships(getMemoryMembershipsSnapshot(), {
     classroomId: "classe-demo-tma-2a",
     outgoingTeacherId: "teacher-demo-martin",
-    incomingTeacherId: DEMO_CURRENT_TEACHER_ID,
+    incomingTeacherId: TEACHER_DEMO_ID,
     subjectIds: ["subject-demo-moteur-2a"],
     effectiveAt: "2026-09-01T00:00:00.000Z",
   });
@@ -158,7 +158,7 @@ test("phase 2.3 — nouvelle publication conserve l'auteur d'origine sur l'histo
   const fresh = await store.createAgendaItem({
     classroomId: "classe-demo-tma-2a",
     subjectId: "subject-demo-moteur-2a",
-    authorTeacherId: DEMO_CURRENT_TEACHER_ID,
+    authorTeacherId: TEACHER_DEMO_ID,
     day: 0,
     hour: 8,
     weekOffset: 0,
@@ -170,6 +170,6 @@ test("phase 2.3 — nouvelle publication conserve l'auteur d'origine sur l'histo
   });
 
   assert.equal(historical.authorTeacherId, "teacher-demo-martin");
-  assert.equal(fresh.authorTeacherId, DEMO_CURRENT_TEACHER_ID);
+  assert.equal(fresh.authorTeacherId, TEACHER_DEMO_ID);
   resetMemoryMembershipStore();
 });
