@@ -1,4 +1,17 @@
-export { DEMO_TEACHER_PASSWORD, getAuthSecret, isDemoTeacherPassword } from "./config.ts";
+export { getAuthSecret } from "./config.ts";
+export {
+  checkPasswordStrength,
+  DEMO_TEACHER_PASSWORD,
+  demoPasswordAllowed,
+  generateTemporaryPassword,
+  hashPassword,
+  isDemoTeacherPassword,
+  isLegacyDemoHash,
+  isUsablePasswordHash,
+  legacyDemoPasswordHash,
+  MIN_PASSWORD_LENGTH,
+  verifyPassword,
+} from "./password.ts";
 export {
   buildSessionCookie,
   clearSessionCookie,

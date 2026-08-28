@@ -1,9 +1,4 @@
-/** Mot de passe de démonstration documenté — ne jamais utiliser en production. */
-export const DEMO_TEACHER_PASSWORD = "campus-demo";
-
-export function isDemoTeacherPassword(password: string): boolean {
-  return password.trim() === DEMO_TEACHER_PASSWORD;
-}
+export { DEMO_TEACHER_PASSWORD, isDemoTeacherPassword } from "./password.ts";
 
 export function getAuthSecret(): string {
   const secret = process.env.AUTH_SECRET?.trim();
