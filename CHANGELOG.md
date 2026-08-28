@@ -2,6 +2,29 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.10.1] — Ménage dans la page principale
+
+### Retiré
+
+- **Code mort** dans `web/app/page.tsx` : restes de la grille d'agenda et du modal de
+  publication remplacés par le carnet de classe en 2.5.0 (environ 400 lignes).
+- Variables et fonctions inutilisées liées à l'ancienne grille (filtres, `showAgendaTools`,
+  modal d'édition, charge de travail, etc.).
+- Import `assertAgendaItemMutable` devenu inutile dans `POST /api/agenda`.
+
+### Corrigé
+
+- **Tests fantômes** : `rendered-html` exigeait des symboles morts et figeait le code mort
+  en place. Les assertions portent désormais sur le carnet de classe et interdisent le
+  retour des restes retirés.
+- La vue élève affichait une version codée en dur ; elle utilise `APP_VERSION`.
+- Plus aucune variable inutilisée signalée par ESLint dans `web/` pour ce chemin.
+
+### Notes
+
+- Aucun changement de comportement : le code retiré était inatteignable.
+- La configuration enseignant reste persistée en SQLite (2.10.0).
+
 ## [2.10.0] — Configuration enseignant persistée
 
 ### Ajouté
