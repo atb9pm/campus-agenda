@@ -42,3 +42,31 @@ export function saveTeacherSetupToBrowser(teacherId: string, config: TeacherSetu
     // localStorage indisponible
   }
 }
+
+/** Efface la copie locale après migration réussie vers le serveur. */
+export function clearTeacherSetupFromBrowser(teacherId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(teacherSetupStorageKey(teacherId));
+  } catch {
+    // localStorage indisponible
+  }
+}
+
+/** Vérifie qu'un payload HTTP ressemble à une configuration enseignant. */
+export function isTeacherSetupPayload(value: unknown): value is TeacherSetupConfig {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as TeacherSetupConfig;
+  if (candidate.version !== 1 || !Array.isArray(candidate.classes)) return false;
+  return candidate.classes.every(
+    (entry) =>
+      entry &&
+      typeof entry === "object" &&
+      typeof entry.id === "string" &&
+      typeof entry.name === "string" &&
+      typeof entry.programLabel === "string" &&
+      typeof entry.dayOfWeek === "number" &&
+      Array.isArray(entry.branchNames) &&
+      typeof entry.icon === "string",
+  );
+}

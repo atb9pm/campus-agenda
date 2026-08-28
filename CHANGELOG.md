@@ -2,6 +2,27 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.10.0] — Configuration enseignant persistée
+
+### Ajouté
+
+- **Configuration personnelle enseignant en SQLite** (classes, jour, branches, icône) :
+  suit le compte, plus le navigateur.
+- Migration `0011_teacher_setups` : une ligne JSON par enseignant.
+- API `GET` / `PUT /api/teacher/setup` (session enseignant requise).
+- **Migration unique** depuis `localStorage` si le serveur est vide, puis effacement
+  de la copie locale.
+
+### Modifié
+
+- L'onglet Configuration charge et enregistre désormais via l'API (debounce ~400 ms).
+- En cas d'indisponibilité réseau au chargement, repli temporaire sur la copie locale
+  ou les valeurs par défaut du catalogue.
+
+### Notes
+
+- Les notes de carnet restent en `localStorage` pour l'instant (passage serveur ultérieur).
+
 ## [2.9.0] — Comptes enseignant réels
 
 ### Ajouté

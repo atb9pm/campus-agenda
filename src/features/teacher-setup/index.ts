@@ -14,6 +14,8 @@ export {
   type SchoolWeekPlanRow,
 } from "./queries.ts";
 export {
+  clearTeacherSetupFromBrowser,
+  isTeacherSetupPayload,
   loadTeacherSetupFromBrowser,
   parseStoredTeacherSetup,
   saveTeacherSetupToBrowser,
