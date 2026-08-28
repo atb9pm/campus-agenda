@@ -41,3 +41,6 @@ Thumbs.db
 # Contexte local synchronisé par Codex (hors produit)
 /sources/
 /AGENTS.md
+
+# Cache TypeScript incrémental
+*.tsbuildinfo
