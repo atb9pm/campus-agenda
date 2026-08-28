@@ -259,6 +259,12 @@ button { color: inherit; }
 .teacher-login-card form > button[type="submit"]:disabled { opacity: .65; cursor: wait; }
 .teacher-login-card footer { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
 .student-entry-link { padding: 0; border: 0; color: var(--blue); background: transparent; font-size: 10px; font-weight: 800; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.login-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 22px; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: #f8fafc; }
+.login-tabs button { padding: 9px 10px; border: 0; border-radius: 6px; color: #52627f; background: transparent; font-family: inherit; font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; cursor: pointer; }
+.login-tabs button.active { color: #fff; background: var(--navy); }
+.login-tabs button:not(.active):hover { color: var(--navy); background: #eef2f7; }
+.login-remember { display: flex !important; align-items: center; gap: 8px; color: #445a7c; font-size: 10px; font-weight: 700; letter-spacing: 0; text-transform: none; }
+.login-remember input[type="checkbox"] { width: auto; margin: 0; padding: 0; }
 .teacher-login-shell .prototype-label { margin: 0; text-align: center; }
 
 .student-course-day-app { min-height: 100vh; background: var(--canvas); }

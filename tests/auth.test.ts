@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { canReadClassroomAgenda } from "../src/lib/auth/permissions.ts";
 import { buildSessionCookie, createSessionToken, parseSessionToken, readSessionTokenFromRequest } from "../src/lib/auth/session.ts";
-import { DEMO_TEACHER_PASSWORD, isDemoTeacherPassword, isSiteGatePassword, SITE_GATE_PASSWORD } from "../src/lib/auth/config.ts";
+import { DEMO_TEACHER_PASSWORD, isDemoTeacherPassword } from "../src/lib/auth/config.ts";
 import { getMemoryAgendaStore, resetMemoryAgendaStore } from "../src/lib/persistence/memory-store.ts";
 import { DEMO_CURRENT_TEACHER_ID } from "../src/features/classes/index.ts";
 
@@ -42,10 +42,10 @@ test("phase 0.7 — mot de passe de démonstration documenté", () => {
   assert.equal(isDemoTeacherPassword("secret-réel"), false);
 });
 
-test("verrou d'accueil — mot de passe campus-accueil", () => {
-  assert.equal(isSiteGatePassword(SITE_GATE_PASSWORD), true);
-  assert.equal(isSiteGatePassword(" campus-accueil "), true);
-  assert.equal(isSiteGatePassword("campus-demo"), false);
+test("porte d'entrée unique — plus de verrou d'accueil séparé", async () => {
+  const config = await import("../src/lib/auth/config.ts");
+  assert.equal("isSiteGatePassword" in config, false);
+  assert.equal("SITE_GATE_PASSWORD" in config, false);
 });
 
 test("phase 0.7 — store mémoire contrôle l'accès enseignant", async () => {

@@ -3,10 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("phase 0.8 — structure d'accessibilité de base", async () => {
-  const [page, layout, css, schoolYearPanel] = await Promise.all([
+  const [page, layout, css, loginPanel, schoolYearPanel] = await Promise.all([
     readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/components/login-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/components/school-year-admin-panel.tsx", import.meta.url), "utf8"),
   ]);
 
@@ -15,29 +16,35 @@ test("phase 0.8 — structure d'accessibilité de base", async () => {
   assert.match(page, /id="main-content"/);
   assert.match(page, /aria-modal="true"/);
   assert.match(page, /aria-labelledby="student-code-title"/);
-  assert.match(page, /aria-labelledby="teacher-login-title"/);
-  assert.doesNotMatch(page, /Compte&nbsp;: <strong>\{currentTeacher/);
-  assert.doesNotMatch(page, /François Cheseaux \(ChF\)/);
-  assert.match(page, /aria-labelledby="site-gate-title"/);
-  assert.match(page, /id="site-gate-title"/);
-  assert.match(page, /campus-accueil/);
   assert.match(page, /aria-labelledby="modal-title"/);
   assert.match(page, /aria-label="Navigation principale"/);
   assert.match(page, /role="dialog"/);
   assert.match(page, /closeModalOnEscape/);
+  assert.doesNotMatch(page, /Compte&nbsp;: <strong>\{currentTeacher/);
+  assert.doesNotMatch(page, /François Cheseaux \(ChF\)/);
+
+  // Page d'entrée unique : onglets étiquetés, panneaux liés, pas de verrou séparé.
+  assert.match(loginPanel, /id="main-content"/);
+  assert.match(loginPanel, /role="tablist"/);
+  assert.match(loginPanel, /aria-label="Type de connexion"/);
+  assert.match(loginPanel, /aria-controls="login-panel-student"/);
+  assert.match(loginPanel, /aria-controls="login-panel-teacher"/);
+  assert.match(loginPanel, /aria-labelledby="login-tab-student"/);
+  assert.match(loginPanel, /aria-labelledby="login-tab-teacher"/);
+  assert.match(loginPanel, /id="login-title"/);
+  assert.doesNotMatch(loginPanel, /autoFocus/);
+  assert.doesNotMatch(page, /site-gate-title/);
+  assert.doesNotMatch(page, /campus-accueil/);
+
   assert.match(css, /\.skip-to-content/);
-  assert.match(page, /SchoolYearAdminPanel/);
-  assert.match(page, /PedagogicalLibraryPanel/);
-  assert.match(page, /TimetableImportPanel/);
-  assert.match(css, /\.timetable-import-panel/);
-  assert.match(page, /Enregistrer dans la bibliothèque/);
-  assert.match(css, /\.library-panel/);
+  assert.match(css, /\.teacher-login/);
+  assert.match(css, /\.login-tabs/);
+  assert.match(css, /\.login-remember/);
+  assert.match(page, /AdministrationPanel/);
+  assert.match(page, /MaSemainePanel/);
+  assert.match(page, /ClassNotebookPanel/);
   assert.match(schoolYearPanel, /aria-labelledby="school-year-admin-title"/);
   assert.match(schoolYearPanel, /id="school-year-admin-title"/);
   assert.match(css, /\.school-year-admin/);
-  assert.match(page, /aria-labelledby="control-alert-title"/);
-  assert.match(page, /Contrôles à venir/);
-  assert.match(css, /\.student-upcoming-tests/);
-  assert.match(css, /\.controls-panel/);
-  assert.match(css, /\.teacher-login/);
+  assert.match(css, /\.day-grid/);
 });

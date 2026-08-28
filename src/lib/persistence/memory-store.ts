@@ -93,6 +93,12 @@ export class MemoryAgendaStore implements AgendaStore {
     return { id: access.id, classroomId: access.classroomId, label: access.label };
   }
 
+  async findTeacherIdByInitials(initials: string): Promise<string | undefined> {
+    const normalized = initials.trim().toLowerCase();
+    if (!normalized) return undefined;
+    return DEMO_CATALOG.teachers.find((teacher) => teacher.initials.toLowerCase() === normalized)?.id;
+  }
+
   async verifyTeacherCredentials(teacherId: string, password: string): Promise<boolean> {
     if (!isDemoTeacherPassword(password)) return false;
     return Boolean(DEMO_CATALOG.teachers.find((teacher) => teacher.id === teacherId));

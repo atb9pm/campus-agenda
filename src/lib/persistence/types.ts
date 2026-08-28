@@ -57,6 +57,8 @@ export interface AgendaStore {
   teacherCanPublish(teacherId: string, classroomId: string, subjectId: string): Promise<boolean>;
   teacherIsAdmin(teacherId: string): Promise<boolean>;
   resolveStudentAccess(label: string): Promise<{ id: string; classroomId: string; label: string } | undefined>;
+  /** Connexion enseignant par initiales (ChF) : renvoie l'identifiant interne. */
+  findTeacherIdByInitials(initials: string): Promise<string | undefined>;
   verifyTeacherCredentials(teacherId: string, password: string): Promise<boolean>;
   exportAllItems(): Promise<PrototypeAgendaItem[]>;
   replaceAllItems(items: PrototypeAgendaItem[]): Promise<void>;

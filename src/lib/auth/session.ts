@@ -1,7 +1,15 @@
 import type { AppSession } from "../persistence/types.ts";
 import { getAuthSecret } from "./config.ts";
 
-const SESSION_TTL_MS = 1000 * 60 * 60 * 8;
+/** Session courte : poste partagé, salle de classe. */
+export const SESSION_TTL_MS = 1000 * 60 * 60 * 8;
+
+/** Session longue : « rester connecté sur cet appareil ». */
+export const REMEMBERED_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 60;
+
+export function sessionTtlMs(remember = false): number {
+  return remember ? REMEMBERED_SESSION_TTL_MS : SESSION_TTL_MS;
+}
 
 function encodeBase64Url(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes))
@@ -39,10 +47,10 @@ async function verifySignature(payload: string, signature: string): Promise<bool
   return crypto.subtle.verify("HMAC", key, decodeBase64Url(signature), new TextEncoder().encode(payload));
 }
 
-export async function createSessionToken(session: AppSession): Promise<string> {
+export async function createSessionToken(session: AppSession, remember = false): Promise<string> {
   const payload = encodeBase64Url(new TextEncoder().encode(JSON.stringify({
     ...session,
-    expiresAt: Date.now() + SESSION_TTL_MS,
+    expiresAt: Date.now() + sessionTtlMs(remember),
   })));
   const signature = await signPayload(payload);
   return `${payload}.${signature}`;
@@ -83,9 +91,10 @@ export function readSessionTokenFromRequest(request: Request): string | null {
   return match ? decodeURIComponent(match.slice(name.length)) : null;
 }
 
-export function buildSessionCookie(token: string): string {
+export function buildSessionCookie(token: string, remember = false): string {
   const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-  return `${getSessionCookieName()}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL_MS / 1000}${secure}`;
+  const maxAge = Math.floor(sessionTtlMs(remember) / 1000);
+  return `${getSessionCookieName()}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
 }
 
 export function clearSessionCookie(): string {

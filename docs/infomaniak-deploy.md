@@ -192,9 +192,11 @@ Attendu :
   perdues à chaque redémarrage. Utiliser exactement la commande de la section
   « Commande de lancement ».
 
-Connexion enseignant : mot de passe démo **`campus-demo`**
+Page d'entrée unique, onglet **Élève** par défaut : code de classe (ex. `eleve-ma2`).
 
-Verrou d’accueil du site : mot de passe **`campus-accueil`** (écran « Site verrouillé »).
+Onglet **Enseignant** : initiales (ex. `ChF`) + mot de passe démo **`campus-demo`**.
+L'accès administrateur n'est pas une porte séparée : le menu Administration apparaît
+automatiquement pour un compte marqué administrateur.
 
 ## Erreurs courantes
 

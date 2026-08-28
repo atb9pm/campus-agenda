@@ -18,10 +18,15 @@ export async function getRequestSession(request: Request): Promise<AppSession | 
   return parseSessionToken(readSessionTokenFromRequest(request));
 }
 
-export async function jsonWithSession(session: AppSession, body: unknown, init: ResponseInit = {}): Promise<Response> {
-  const token = await createSessionToken(session);
+export async function jsonWithSession(
+  session: AppSession,
+  body: unknown,
+  init: ResponseInit = {},
+  remember = false,
+): Promise<Response> {
+  const token = await createSessionToken(session, remember);
   const headers = new Headers(init.headers);
-  headers.append("Set-Cookie", buildSessionCookie(token));
+  headers.append("Set-Cookie", buildSessionCookie(token, remember));
   headers.set("Content-Type", "application/json");
   return new Response(JSON.stringify(body), { ...init, headers });
 }
