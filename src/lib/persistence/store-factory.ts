@@ -23,7 +23,7 @@ import { getMemorySchoolCatalogStore, MemorySchoolCatalogStore } from "./memory-
 import { SqlSchoolCatalogStore } from "./sql/sql-school-catalog-store.ts";
 import { setActiveSchoolWeekEntries } from "../../features/calendar/active-calendar.ts";
 
-export const APP_VERSION = "2.6.0";
+export { APP_VERSION } from "../app-version.ts";
 
 interface ResolvedStore {
   store: AgendaStore;

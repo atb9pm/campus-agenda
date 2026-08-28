@@ -25,6 +25,9 @@ build/
 coverage/
 .next/
 
+# Empreinte de déploiement générée au build
+web/build-info.json
+
 # Journaux, caches et outils locaux
 *.log
 .cache/

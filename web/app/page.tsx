@@ -77,6 +77,7 @@ import {
   type ApiTeacherSession,
   type SchoolCalendarWeek,
 } from "../lib/api-client.ts";
+import { APP_VERSION } from "@campus/lib/app-version";
 import { isSiteGatePassword, SITE_GATE_STORAGE_KEY } from "@campus/lib/auth/config";
 import {
   buildDefaultTeacherSetup,
@@ -109,7 +110,6 @@ const TYPE_LABELS: Record<AgendaItemType, string> = {
 
 const ALL_SUBJECTS_FILTER = "Toutes les branches";
 const HOURS = Array.from({ length: 10 }, (_, index) => index + 8);
-const APP_VERSION = "2.6.0";
 
 async function loadTeacherAgendaItems(classroomIds: string[]): Promise<PrototypeAgendaItem[]> {
   const batches = await Promise.all(classroomIds.map((classroomId) => fetchAgendaItems(classroomId)));
