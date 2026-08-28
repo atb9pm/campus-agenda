@@ -63,6 +63,7 @@ import {
 } from "@campus/features/evaluations";
 import type { AgendaItemType } from "@campus/types/agenda";
 import {
+  changeTeacherPasswordApi,
   createAgendaItemApi,
   deleteAgendaItemApi,
   fetchAgendaItems,
@@ -101,6 +102,7 @@ import {
 import { ConfigurationPanel } from "./components/configuration-panel.tsx";
 import { AdministrationPanel } from "./components/administration-panel.tsx";
 import { LoginPanel } from "./components/login-panel.tsx";
+import { PasswordChangePanel } from "./components/password-change-panel.tsx";
 import { ClassNotebookPanel } from "./components/class-notebook-panel.tsx";
 import { MaSemainePanel } from "./components/ma-semaine-panel.tsx";
 
@@ -199,6 +201,8 @@ export default function Home() {
   const [loginPending, setLoginPending] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [studentLoginError, setStudentLoginError] = useState("");
+  const [passwordChange, setPasswordChange] = useState<ApiTeacherSession | null>(null);
+  const [passwordChangeError, setPasswordChangeError] = useState("");
   const [studentCourseDayKey, setStudentCourseDayKey] = useState<string | null>(null);
   const [studentHistoryOpen, setStudentHistoryOpen] = useState(false);
   const [schoolWeeks, setSchoolWeeks] = useState<SchoolWeek[]>(() => buildSchoolWeeks());
@@ -230,6 +234,13 @@ export default function Home() {
   const [classNotesReady, setClassNotesReady] = useState(false);
 
   async function applyTeacherSession(session: ApiTeacherSession) {
+    // Mot de passe provisoire : rien d'autre n'est accessible avant le changement.
+    if (session.mustChangePassword) {
+      setPasswordChange(session);
+      setPasswordChangeError("");
+      return;
+    }
+    setPasswordChange(null);
     setCurrentTeacherId(session.teacherId);
     setTeacherIsAdmin(Boolean(session.isAdmin));
     setAppMode("teacher");
@@ -596,6 +607,35 @@ export default function Home() {
     })();
   }
 
+  function submitPasswordChange(currentPassword: string, nextPassword: string) {
+    const pendingSession = passwordChange;
+    if (!pendingSession) return;
+    void (async () => {
+      setLoginPending(true);
+      setPasswordChangeError("");
+      try {
+        await changeTeacherPasswordApi(currentPassword, nextPassword);
+        await applyTeacherSession({ ...pendingSession, mustChangePassword: false });
+        showNotice("Mot de passe enregistré.");
+      } catch (error) {
+        setPasswordChangeError(
+          error instanceof Error ? error.message : "Changement de mot de passe impossible.",
+        );
+      } finally {
+        setLoginPending(false);
+      }
+    })();
+  }
+
+  function cancelPasswordChange() {
+    void (async () => {
+      await logoutApiSession();
+      setPasswordChange(null);
+      setPasswordChangeError("");
+      setTeacherAuthenticated(false);
+    })();
+  }
+
   function openAgenda(classroomId: string) {
     setSelectedClassroomId(classroomId);
     setActiveSection("ma-semaine");
@@ -951,6 +991,23 @@ export default function Home() {
   const myItemCount = classroomItems.filter((item) => item.authorTeacherId === currentTeacherId).length;
   const showAgendaTools = false;
 
+  if (passwordChange) {
+    return (
+      <>
+        <PasswordChangePanel
+          appVersion={APP_VERSION}
+          displayName={passwordChange.displayName}
+          initials={passwordChange.initials}
+          pending={loginPending}
+          error={passwordChangeError}
+          onSubmit={submitPasswordChange}
+          onCancel={cancelPasswordChange}
+        />
+        {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
+      </>
+    );
+  }
+
   if (!teacherAuthenticated && !isStudentView) {
     return (
       <>
@@ -1183,6 +1240,7 @@ export default function Home() {
 
         {activeSection === "administration" && teacherIsAdmin && (
           <AdministrationPanel
+            currentTeacherId={currentTeacherId}
             onCalendarUpdated={applySchoolCalendarWeeks}
             onNotice={showNotice}
           />

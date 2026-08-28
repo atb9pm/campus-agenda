@@ -155,8 +155,8 @@ export function LoginPanel({
                   <span>Rester connecté sur cet appareil</span>
                 </label>
                 <p className="teacher-login-hint">
-                  Mot de passe de démonstration&nbsp;: <strong>campus-demo</strong>. Décochez la case sur un
-                  poste partagé.
+                  Décochez la case sur un poste partagé. Mot de passe oublié&nbsp;? L’administrateur en
+                  génère un nouveau, provisoire.
                 </p>
                 {teacherError && <p className="teacher-login-error" role="alert">{teacherError}</p>}
                 <button type="submit" disabled={pending}>

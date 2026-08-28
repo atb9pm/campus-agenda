@@ -1,5 +1,8 @@
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
+import type { TeacherAccountRecord } from "@campus/features/teacher-accounts";
 import type { AgendaItemType } from "@campus/types/agenda";
+
+export type { TeacherAccountRecord };
 
 export interface ApiTeacherSession {
   kind: "teacher";
@@ -7,6 +10,8 @@ export interface ApiTeacherSession {
   displayName: string;
   initials: string;
   isAdmin?: boolean;
+  /** Mot de passe provisoire : l'enseignant doit en choisir un avant tout usage. */
+  mustChangePassword?: boolean;
 }
 
 export interface ApiStudentSession {
@@ -64,6 +69,90 @@ export async function loginTeacherApi(
     throw new Error(payload.reason ?? "Connexion enseignant impossible.");
   }
   return payload.session;
+}
+
+export async function changeTeacherPasswordApi(
+  currentPassword: string,
+  nextPassword: string,
+): Promise<void> {
+  const response = await fetch("/api/auth/teacher/password", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ currentPassword, nextPassword }),
+  });
+  const payload = await parseJson<{ ok: boolean; reason?: string }>(response);
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.reason ?? "Changement de mot de passe impossible.");
+  }
+}
+
+export async function fetchTeacherAccounts(): Promise<TeacherAccountRecord[]> {
+  const response = await fetch("/api/admin/teachers", { credentials: "include" });
+  const payload = await parseJson<{ ok: boolean; reason?: string; teachers?: TeacherAccountRecord[] }>(response);
+  if (!response.ok || !payload.ok || !payload.teachers) {
+    throw new Error(payload.reason ?? "Chargement des comptes enseignant impossible.");
+  }
+  return payload.teachers;
+}
+
+export async function createTeacherAccountApi(input: {
+  displayName: string;
+  initials: string;
+  isAdmin: boolean;
+}): Promise<{ teacher: TeacherAccountRecord; temporaryPassword: string }> {
+  const response = await fetch("/api/admin/teachers", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    teacher?: TeacherAccountRecord;
+    temporaryPassword?: string;
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.teacher || !payload.temporaryPassword) {
+    throw new Error(payload.reason ?? "Création du compte impossible.");
+  }
+  return { teacher: payload.teacher, temporaryPassword: payload.temporaryPassword };
+}
+
+export async function updateTeacherAccountApi(
+  teacherId: string,
+  patch: { displayName?: string; initials?: string; isAdmin?: boolean; isActive?: boolean },
+): Promise<TeacherAccountRecord> {
+  const response = await fetch(`/api/admin/teachers/${encodeURIComponent(teacherId)}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  const payload = await parseJson<{ ok: boolean; reason?: string; teacher?: TeacherAccountRecord }>(response);
+  if (!response.ok || !payload.ok || !payload.teacher) {
+    throw new Error(payload.reason ?? "Mise à jour du compte impossible.");
+  }
+  return payload.teacher;
+}
+
+export async function resetTeacherPasswordApi(
+  teacherId: string,
+): Promise<{ teacher: TeacherAccountRecord; temporaryPassword: string }> {
+  const response = await fetch(`/api/admin/teachers/${encodeURIComponent(teacherId)}/password`, {
+    method: "POST",
+    credentials: "include",
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    teacher?: TeacherAccountRecord;
+    temporaryPassword?: string;
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.teacher || !payload.temporaryPassword) {
+    throw new Error(payload.reason ?? "Réinitialisation impossible.");
+  }
+  return { teacher: payload.teacher, temporaryPassword: payload.temporaryPassword };
 }
 
 export async function loginStudentApi(code: string, remember = true): Promise<ApiStudentSession> {
