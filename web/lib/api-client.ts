@@ -1,6 +1,7 @@
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import type { TeacherAccountRecord } from "@campus/features/teacher-accounts";
 import type { TeacherSetupConfig } from "@campus/features/teacher-setup";
+import type { ClassNotesDocument } from "@campus/features/class-notebook";
 import type { AgendaItemType } from "@campus/types/agenda";
 
 export type { TeacherAccountRecord };
@@ -112,6 +113,32 @@ export async function saveTeacherSetupApi(setup: TeacherSetupConfig): Promise<Te
     throw new Error(payload.reason ?? "Enregistrement de la configuration impossible.");
   }
   return payload.setup;
+}
+
+/** Null si aucun document de notes n'a encore été enregistré côté serveur. */
+export async function fetchTeacherNotesApi(): Promise<ClassNotesDocument | null> {
+  const response = await fetch("/api/teacher/notes", { credentials: "include" });
+  const payload = await parseJson<{ ok: boolean; reason?: string; notes?: ClassNotesDocument | null }>(
+    response,
+  );
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.reason ?? "Chargement des notes impossible.");
+  }
+  return payload.notes ?? null;
+}
+
+export async function saveTeacherNotesApi(notes: ClassNotesDocument): Promise<ClassNotesDocument> {
+  const response = await fetch("/api/teacher/notes", {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ notes }),
+  });
+  const payload = await parseJson<{ ok: boolean; reason?: string; notes?: ClassNotesDocument }>(response);
+  if (!response.ok || !payload.ok || !payload.notes) {
+    throw new Error(payload.reason ?? "Enregistrement des notes impossible.");
+  }
+  return payload.notes;
 }
 
 export async function fetchTeacherAccounts(): Promise<TeacherAccountRecord[]> {

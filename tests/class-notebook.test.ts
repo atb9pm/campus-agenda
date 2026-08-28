@@ -5,10 +5,21 @@ import { buildSchoolWeeks } from "../src/features/calendar/index.ts";
 import {
   appendWeekNote,
   clampWeekDisplayCount,
+  isClassNotesPayload,
   moveWeekNote,
+  normalizeClassNotes,
   visibleSchoolWeeks,
   weekNotesKey,
 } from "../src/features/class-notebook/index.ts";
+import { TEACHER_CHF_ID } from "../src/features/classes/index.ts";
+import {
+  getMemoryTeacherNotesStore,
+  resetMemoryTeacherNotesStore,
+} from "../src/lib/persistence/memory-teacher-notes-store.ts";
+import { createNodeSqliteDatabase } from "../src/lib/persistence/sql/adapters.ts";
+import { applyMigrations } from "../src/lib/persistence/sql/migrate.ts";
+import { seedDemoDatabase } from "../src/lib/persistence/sql/seed.ts";
+import { SqlTeacherNotesStore } from "../src/lib/persistence/sql/sql-teacher-notes-store.ts";
 
 test("class notebook — affichage 3 semaines centré", () => {
   const weeks = buildSchoolWeeks();
@@ -34,4 +45,71 @@ test("class notebook — notes prof déplaçables entre semaines", () => {
   document = moveWeekNote(document, key10, key11, noteId!);
   assert.equal(document.weeks[key10]?.length ?? 0, 0);
   assert.equal(document.weeks[key11]?.[0]?.text, "Prévoir démo");
+});
+
+test("class notebook — validation et normalisation de payload HTTP", () => {
+  assert.equal(isClassNotesPayload(null), false);
+  assert.equal(isClassNotesPayload({ version: 1, weeks: {} }), true);
+  assert.equal(
+    isClassNotesPayload({
+      version: 1,
+      weeks: { "classe-a:1": [{ id: "n1", text: "ok" }] },
+    }),
+    true,
+  );
+  assert.equal(
+    isClassNotesPayload({
+      version: 1,
+      weeks: { "classe-a:1": [{ id: "n1", text: 42 }] },
+    }),
+    false,
+  );
+
+  const normalized = normalizeClassNotes({
+    version: 1,
+    weeks: {
+      "classe-a:1": [
+        { id: "n1", text: "  Garder  " },
+        { id: "n2", text: "   " },
+      ],
+    },
+  });
+  assert.deepEqual(normalized.weeks["classe-a:1"], [{ id: "n1", text: "Garder" }]);
+});
+
+test("class notebook — store mémoire get/save", async () => {
+  resetMemoryTeacherNotesStore();
+  const store = getMemoryTeacherNotesStore();
+  assert.equal(await store.getNotes(TEACHER_CHF_ID), null);
+
+  const document = appendWeekNote({ version: 1, weeks: {} }, "classe-chf-ma2:12", "Révision");
+  const saved = await store.saveNotes(TEACHER_CHF_ID, document);
+  assert.equal(saved.weeks["classe-chf-ma2:12"]?.[0]?.text, "Révision");
+  assert.deepEqual(await store.getNotes(TEACHER_CHF_ID), saved);
+});
+
+test("class notebook — store SQLite migration et persistance", async () => {
+  const db = createNodeSqliteDatabase(":memory:");
+  await applyMigrations(db);
+  await seedDemoDatabase(db);
+  const store = new SqlTeacherNotesStore(db);
+
+  assert.equal(await store.getNotes(TEACHER_CHF_ID), null);
+
+  const document = appendWeekNote({ version: 1, weeks: {} }, "classe-chf-ma2:3", "Atelier freins");
+  const saved = await store.saveNotes(TEACHER_CHF_ID, document);
+  assert.deepEqual(await store.getNotes(TEACHER_CHF_ID), saved);
+
+  await store.saveNotes(TEACHER_CHF_ID, {
+    version: 1,
+    weeks: {
+      "classe-chf-ma2:3": [{ id: "note-1", text: "  Mis à jour  " }],
+      "classe-chf-ma2:4": [{ id: "note-2", text: "" }],
+    },
+  });
+  const again = await store.getNotes(TEACHER_CHF_ID);
+  assert.deepEqual(again?.weeks["classe-chf-ma2:3"], [{ id: "note-1", text: "Mis à jour" }]);
+  assert.equal(again?.weeks["classe-chf-ma2:4"], undefined);
+
+  db.close();
 });

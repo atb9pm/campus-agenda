@@ -39,6 +39,75 @@ export function saveNotesToBrowser(teacherId: string, document: ClassNotesDocume
   }
 }
 
+/** Efface la copie locale après migration réussie vers le serveur. */
+export function clearNotesFromBrowser(teacherId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(classNotesStorageKey(teacherId));
+  } catch {
+    // localStorage indisponible
+  }
+}
+
+/**
+ * Charge la copie locale uniquement si une entrée existe.
+ * Distingue « jamais enregistré » d'un document vide déjà créé.
+ */
+export function peekNotesFromBrowser(teacherId: string): ClassNotesDocument | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(classNotesStorageKey(teacherId));
+    if (raw === null) return null;
+    return parseStoredNotes(raw) ?? createEmptyNotesDocument();
+  } catch {
+    return null;
+  }
+}
+
+export function serializeClassNotes(document: ClassNotesDocument): string {
+  return JSON.stringify(document);
+}
+
+/** Nettoie textes vides et garantit la forme version 1. */
+export function normalizeClassNotes(document: ClassNotesDocument): ClassNotesDocument {
+  const weeks: ClassNotesDocument["weeks"] = {};
+  for (const [weekKey, notes] of Object.entries(document.weeks ?? {})) {
+    if (!Array.isArray(notes)) continue;
+    const cleaned = notes
+      .filter(
+        (note) =>
+          note &&
+          typeof note === "object" &&
+          typeof note.id === "string" &&
+          typeof note.text === "string" &&
+          note.text.trim().length > 0,
+      )
+      .map((note) => ({ id: note.id, text: note.text.trim() }));
+    if (cleaned.length) weeks[weekKey] = cleaned;
+  }
+  return { version: 1, weeks };
+}
+
+/** Vérifie qu'un payload HTTP ressemble à un document de notes. */
+export function isClassNotesPayload(value: unknown): value is ClassNotesDocument {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as ClassNotesDocument;
+  if (candidate.version !== 1 || !candidate.weeks || typeof candidate.weeks !== "object") {
+    return false;
+  }
+  return Object.values(candidate.weeks).every(
+    (notes) =>
+      Array.isArray(notes) &&
+      notes.every(
+        (note) =>
+          note &&
+          typeof note === "object" &&
+          typeof note.id === "string" &&
+          typeof note.text === "string",
+      ),
+  );
+}
+
 export function listWeekNotes(
   document: ClassNotesDocument,
   weekKey: string,

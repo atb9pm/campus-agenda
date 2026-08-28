@@ -9,7 +9,7 @@ import {
   readSessionTokenFromRequest,
   unauthorizedResponse,
 } from "@campus/lib/auth/index.ts";
-import { checkClassroomExists, getAgendaStore, getMembershipStore, getSchoolCatalogStore, getSchoolYearStore, getTeacherAccountStore, getTeacherSetupStore, getTemplateStore } from "@campus/lib/persistence/store-factory.ts";
+import { checkClassroomExists, getAgendaStore, getMembershipStore, getSchoolCatalogStore, getSchoolYearStore, getTeacherAccountStore, getTeacherNotesStore as resolveTeacherNotesStore, getTeacherSetupStore, getTemplateStore } from "@campus/lib/persistence/store-factory.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import { ARCHIVED_YEAR_READONLY_REASON, getArchivedYearIds, isArchivedYearItem } from "@campus/features/school-year/archived-readonly.ts";
 import type { AppSession } from "@campus/lib/persistence/types.ts";
@@ -65,6 +65,10 @@ export async function getTeacherAccountsStore() {
 
 export async function getTeacherSetupsStore() {
   return getTeacherSetupStore();
+}
+
+export async function getTeacherNotesStore() {
+  return resolveTeacherNotesStore();
 }
 
 /** Message unique côté client pour déclencher l'écran de changement obligatoire. */

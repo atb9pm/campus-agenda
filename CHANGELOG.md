@@ -2,6 +2,22 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.11.0] — Notes de carnet persistées
+
+### Ajouté
+
+- **Notes de carnet enseignant en SQLite** : suivent le compte, plus le navigateur.
+- Migration `0012_teacher_notes` : un document JSON par enseignant.
+- API `GET` / `PUT /api/teacher/notes` (session enseignant requise).
+- **Migration unique** depuis `localStorage` si le serveur est vide, puis effacement
+  de la copie locale.
+
+### Modifié
+
+- Le carnet de classe charge et enregistre désormais via l'API (debounce ~400 ms).
+- En cas d'indisponibilité réseau au chargement, repli temporaire sur la copie locale
+  ou un document vide.
+
 ## [2.10.1] — Ménage dans la page principale
 
 ### Retiré

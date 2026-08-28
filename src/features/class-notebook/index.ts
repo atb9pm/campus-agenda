@@ -7,12 +7,18 @@ export {
 export {
   appendWeekNote,
   classNotesStorageKey,
+  clearNotesFromBrowser,
   createEmptyNotesDocument,
+  isClassNotesPayload,
   loadNotesFromBrowser,
   listWeekNotes,
   moveWeekNote,
+  normalizeClassNotes,
+  parseStoredNotes,
+  peekNotesFromBrowser,
   removeWeekNote,
   saveNotesToBrowser,
+  serializeClassNotes,
 } from "./notes-storage.ts";
 export {
   clampWeekDisplayCount,
