@@ -23,7 +23,7 @@ import {
   isUsablePasswordHash,
   verifyPassword,
 } from "../../auth/password.ts";
-import type { TeacherAccountStore } from "../teacher-account-types.ts";
+import type { TeacherAccountBackupEntry, TeacherAccountStore } from "../teacher-account-types.ts";
 import type { SqlDatabase } from "./types.ts";
 
 interface TeacherRow {
@@ -231,5 +231,54 @@ export class SqlTeacherAccountStore implements TeacherAccountStore {
   async mustChangePassword(teacherId: string): Promise<boolean> {
     const row = await this.row(teacherId);
     return Boolean(row?.must_change_password);
+  }
+
+  async exportAllAccounts(): Promise<TeacherAccountBackupEntry[]> {
+    const rows = await this.rows();
+    return rows
+      .slice()
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((row) => ({
+        id: row.id,
+        displayName: row.display_name,
+        initials: row.initials,
+        isAdmin: Boolean(row.is_admin),
+        isActive: row.is_active === null ? true : Boolean(row.is_active),
+        mustChangePassword: Boolean(row.must_change_password),
+        passwordHash: row.password_hash,
+        createdAt: row.created_at,
+        passwordUpdatedAt: row.password_updated_at,
+      }));
+  }
+
+  async replaceAllAccounts(entries: TeacherAccountBackupEntry[]): Promise<void> {
+    for (const entry of entries) {
+      await this.db
+        .prepare(
+          `INSERT INTO teachers
+            (id, display_name, initials, password_hash, is_admin, is_active, must_change_password, created_at, password_updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), ?)
+           ON CONFLICT(id) DO UPDATE SET
+             display_name = excluded.display_name,
+             initials = excluded.initials,
+             password_hash = excluded.password_hash,
+             is_admin = excluded.is_admin,
+             is_active = excluded.is_active,
+             must_change_password = excluded.must_change_password,
+             password_updated_at = excluded.password_updated_at`,
+        )
+        .bind(
+          entry.id,
+          entry.displayName,
+          entry.initials,
+          entry.passwordHash,
+          entry.isAdmin ? 1 : 0,
+          entry.isActive ? 1 : 0,
+          entry.mustChangePassword ? 1 : 0,
+          entry.createdAt,
+          entry.passwordUpdatedAt,
+        )
+        .run();
+    }
   }
 }

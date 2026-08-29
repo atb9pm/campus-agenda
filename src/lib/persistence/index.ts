@@ -17,6 +17,7 @@ export {
 } from "./memory-store.ts";
 export {
   BACKUP_FORMAT_VERSION,
+  BACKUP_FORMAT_VERSION_V2,
   LEGACY_BACKUP_FORMAT_VERSION,
   exportAgendaSnapshot,
   restoreAgendaSnapshot,
@@ -26,6 +27,7 @@ export {
 } from "./backup.ts";
 export type { TeacherSetupBackupEntry } from "./teacher-setup-types.ts";
 export type { TeacherNotesBackupEntry } from "./teacher-notes-types.ts";
+export type { TeacherAccountBackupEntry } from "./teacher-account-types.ts";
 export {
   APP_VERSION,
   checkClassroomExists,

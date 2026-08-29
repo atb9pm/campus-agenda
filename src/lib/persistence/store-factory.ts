@@ -280,6 +280,7 @@ export async function exportStoreSnapshot(): Promise<AgendaBackupSnapshot> {
     agenda: resolved.store,
     teacherSetups: resolved.teacherSetupStore,
     teacherNotes: resolved.teacherNotesStore,
+    teacherAccounts: resolved.teacherAccountStore,
   });
 }
 
@@ -290,6 +291,7 @@ export async function restoreStoreSnapshot(payload: unknown): Promise<BackupRest
       agenda: resolved.store,
       teacherSetups: resolved.teacherSetupStore,
       teacherNotes: resolved.teacherNotesStore,
+      teacherAccounts: resolved.teacherAccountStore,
     },
     payload,
   );

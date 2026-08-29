@@ -2,6 +2,21 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.14.0] — Sauvegarde comptes enseignant (backup v3)
+
+### Ajouté
+
+- **Backup format v3** : l'export admin inclut aussi les **comptes enseignant**
+  (métadonnées + empreintes de mots de passe PBKDF2 — jamais le mot de passe en clair).
+- Restauration des comptes via `POST /api/admin/restore` (upsert, sans supprimer les
+  enseignants absents du fichier pour respecter les contraintes FK).
+
+### Modifié
+
+- Les sauvegardes **v1** (agenda) et **v2** (agenda + configs + notes) restent acceptées :
+  les comptes ne sont alors pas modifiés.
+- Compteurs `teacherAccountCount` / `restoredTeacherAccounts` dans l'export et la réponse.
+
 ## [2.13.0] — Sauvegarde configs et notes enseignant
 
 ### Ajouté

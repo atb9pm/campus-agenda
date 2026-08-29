@@ -92,11 +92,15 @@ GET /api/admin/backup
 POST /api/admin/restore
 ```
 
-Le format **v2** inclut l'agenda, les configurations enseignant (`teacher_setups`)
-et les notes de carnet (`teacher_notes`). Les sauvegardes **v1** (agenda seul)
-restent restaurables : configs et notes ne sont alors pas modifiées.
+Le format **v3** inclut l'agenda, les configurations enseignant (`teacher_setups`),
+les notes de carnet (`teacher_notes`) et les **comptes enseignant** (empreintes
+hachées, jamais le mot de passe en clair).
 
-Les comptes enseignants (mots de passe) ne font pas partie de l'export.
+Les sauvegardes **v2** (sans comptes) et **v1** (agenda seul) restent restaurables :
+les parties absentes du fichier ne sont alors pas modifiées.
+
+Le fichier JSON de sauvegarde est sensible (empreintes) : le garder privé
+(ordinateur local ou espace Infomaniak), jamais sur GitHub.
 
 > Ne jamais versionner les exports dans Git.
 
