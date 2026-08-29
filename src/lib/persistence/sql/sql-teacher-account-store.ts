@@ -36,10 +36,12 @@ interface TeacherRow {
   must_change_password: number | null;
   created_at: string | null;
   password_updated_at: string | null;
+  archived_at: string | null;
+  last_login_at: string | null;
 }
 
 const TEACHER_COLUMNS =
-  "id, display_name, initials, password_hash, is_admin, is_active, must_change_password, created_at, password_updated_at";
+  "id, display_name, initials, password_hash, is_admin, is_active, must_change_password, created_at, password_updated_at, archived_at, last_login_at";
 
 function toRecord(row: TeacherRow): TeacherAccountRecord {
   return {
@@ -48,6 +50,9 @@ function toRecord(row: TeacherRow): TeacherAccountRecord {
     initials: row.initials,
     isAdmin: Boolean(row.is_admin),
     isActive: row.is_active === null ? true : Boolean(row.is_active),
+    isArchived: row.archived_at !== null,
+    archivedAt: row.archived_at,
+    lastLoginAt: row.last_login_at,
     mustChangePassword: Boolean(row.must_change_password),
     hasPassword: isUsablePasswordHash(row.password_hash),
     createdAt: row.created_at,
@@ -148,7 +153,11 @@ export class SqlTeacherAccountStore implements TeacherAccountStore {
       if (displayName.length < 2) return { ok: false, reason: "Le nom affiché est requis.", status: 400 };
     }
 
-    if (patch.isAdmin !== undefined || patch.isActive !== undefined) {
+    if (
+      patch.isAdmin !== undefined
+      || patch.isActive !== undefined
+      || patch.isArchived !== undefined
+    ) {
       const records = (await this.rows()).map(toRecord);
       if (wouldRemoveLastAdmin(records, teacherId, patch)) {
         return { ok: false, reason: "Au moins un administrateur actif doit rester.", status: 400 };
@@ -156,11 +165,22 @@ export class SqlTeacherAccountStore implements TeacherAccountStore {
     }
 
     const isAdmin = patch.isAdmin ?? Boolean(row.is_admin);
-    const isActive = patch.isActive ?? (row.is_active === null ? true : Boolean(row.is_active));
+    let isActive = patch.isActive ?? (row.is_active === null ? true : Boolean(row.is_active));
+    let archivedAt = row.archived_at;
+    if (patch.isArchived === true) {
+      archivedAt = row.archived_at ?? new Date().toISOString();
+      isActive = false;
+    } else if (patch.isArchived === false) {
+      archivedAt = null;
+    }
 
     await this.db
-      .prepare("UPDATE teachers SET display_name = ?, initials = ?, is_admin = ?, is_active = ? WHERE id = ?")
-      .bind(displayName, initials, isAdmin ? 1 : 0, isActive ? 1 : 0, teacherId)
+      .prepare(
+        `UPDATE teachers
+         SET display_name = ?, initials = ?, is_admin = ?, is_active = ?, archived_at = ?
+         WHERE id = ?`,
+      )
+      .bind(displayName, initials, isAdmin ? 1 : 0, isActive ? 1 : 0, archivedAt, teacherId)
       .run();
 
     const updated = await this.row(teacherId);
@@ -222,9 +242,16 @@ export class SqlTeacherAccountStore implements TeacherAccountStore {
     if (!(await verifyPassword(password, row.password_hash))) {
       return { ok: false, reason: "Initiales ou mot de passe incorrect." };
     }
+    if (row.archived_at !== null) {
+      return { ok: false, reason: "Ce compte est archivé. Contactez l'administrateur." };
+    }
     if (row.is_active !== null && !row.is_active) {
       return { ok: false, reason: "Ce compte est désactivé. Contactez l'administrateur." };
     }
+    await this.db
+      .prepare("UPDATE teachers SET last_login_at = datetime('now') WHERE id = ?")
+      .bind(row.id)
+      .run();
     return { ok: true, teacherId: row.id, mustChangePassword: Boolean(row.must_change_password) };
   }
 

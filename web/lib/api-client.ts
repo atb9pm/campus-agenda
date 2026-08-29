@@ -175,7 +175,13 @@ export async function createTeacherAccountApi(input: {
 
 export async function updateTeacherAccountApi(
   teacherId: string,
-  patch: { displayName?: string; initials?: string; isAdmin?: boolean; isActive?: boolean },
+  patch: {
+    displayName?: string;
+    initials?: string;
+    isAdmin?: boolean;
+    isActive?: boolean;
+    isArchived?: boolean;
+  },
 ): Promise<TeacherAccountRecord> {
   const response = await fetch(`/api/admin/teachers/${encodeURIComponent(teacherId)}`, {
     method: "PATCH",

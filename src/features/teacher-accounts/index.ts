@@ -8,7 +8,9 @@ export {
 export {
   buildTeacherId,
   checkAccountInput,
+  formatLastLoginAt,
   initialsKey,
+  isUsableAdmin,
   normalizeDisplayName,
   normalizeInitials,
   sameInitials,

@@ -10,6 +10,7 @@ import {
   checkPasswordStrength,
   MIN_PASSWORD_LENGTH,
   normalizeInitials,
+  formatLastLoginAt,
   sortAccounts,
   wouldRemoveLastAdmin,
   type TeacherAccountRecord,
@@ -193,6 +194,9 @@ test("comptes — tri : actifs d'abord puis ordre alphabétique", () => {
     initials: "ZZ",
     isAdmin: false,
     isActive: true,
+    isArchived: false,
+    archivedAt: null,
+    lastLoginAt: null,
     mustChangePassword: false,
     hasPassword: true,
     createdAt: null,
@@ -297,4 +301,43 @@ test("amorçage — sans variable : mot de passe provisoire journalisé", async 
     else process.env.CAMPUS_ALLOW_DEMO_PASSWORD = previousDemo;
     if (previousPassword !== undefined) process.env.CAMPUS_ADMIN_PASSWORD = previousPassword;
   }
+});
+
+
+test("comptes — archivage refuse la connexion et dernier login est enregistré", async () => {
+  const store = freshStore();
+  const created = await store.createAccount({ displayName: "Paul Archive", initials: "ArP" });
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+
+  const before = await store.authenticate("ArP", created.temporaryPassword);
+  assert.equal(before.ok, true);
+  const afterLogin = await store.findAccount(created.account.id);
+  assert.ok(afterLogin?.lastLoginAt);
+
+  const archived = await store.updateAccount(created.account.id, { isArchived: true });
+  assert.equal(archived.ok, true);
+  assert.equal(archived.ok && archived.account.isArchived, true);
+  assert.equal(archived.ok && archived.account.isActive, false);
+
+  const blocked = await store.authenticate("ArP", created.temporaryPassword);
+  assert.equal(blocked.ok, false);
+
+  const restored = await store.updateAccount(created.account.id, { isArchived: false, isActive: true });
+  assert.equal(restored.ok, true);
+  assert.equal((await store.authenticate("ArP", created.temporaryPassword)).ok, true);
+});
+
+test("comptes — impossible d'archiver le dernier administrateur actif", async () => {
+  const store = freshStore();
+  const accounts = await store.listAccounts();
+  const admin = accounts.find((account) => account.isAdmin && account.isActive && !account.isArchived);
+  assert.ok(admin);
+  const result = await store.updateAccount(admin!.id, { isArchived: true });
+  assert.equal(result.ok, false);
+});
+
+test("formatLastLoginAt — jamais connecté ou date locale", () => {
+  assert.equal(formatLastLoginAt(null), "Jamais connecté");
+  assert.match(formatLastLoginAt("2026-08-29T10:15:00.000Z"), /\d{2}\.\d{2}\.\d{2}.+\d{2}:\d{2}/);
 });

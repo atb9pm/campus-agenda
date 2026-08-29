@@ -42,27 +42,54 @@ export function checkAccountInput(displayName: string, initials: string): Accoun
   return { ok: true };
 }
 
+function accountListRank(account: TeacherAccountRecord): number {
+  if (account.isArchived) return 2;
+  if (!account.isActive) return 1;
+  return 0;
+}
+
 export function sortAccounts(accounts: TeacherAccountRecord[]): TeacherAccountRecord[] {
   return [...accounts].sort((left, right) => {
-    if (left.isActive !== right.isActive) return left.isActive ? -1 : 1;
+    const rankDelta = accountListRank(left) - accountListRank(right);
+    if (rankDelta !== 0) return rankDelta;
     return left.displayName.localeCompare(right.displayName, "fr");
   });
 }
 
+/** Un administrateur encore capable de se connecter. */
+export function isUsableAdmin(account: TeacherAccountRecord): boolean {
+  return account.isAdmin && account.isActive && !account.isArchived;
+}
+
 /**
  * Garde-fou anti-verrouillage : il doit toujours rester un administrateur actif
- * capable de se connecter.
+ * (non archivé) capable de se connecter.
  */
 export function wouldRemoveLastAdmin(
   accounts: TeacherAccountRecord[],
   targetId: string,
-  patch: { isAdmin?: boolean; isActive?: boolean },
+  patch: { isAdmin?: boolean; isActive?: boolean; isArchived?: boolean },
 ): boolean {
   const stillAdmin = (account: TeacherAccountRecord) => {
-    if (account.id !== targetId) return account.isAdmin && account.isActive;
-    const isAdmin = patch.isAdmin ?? account.isAdmin;
-    const isActive = patch.isActive ?? account.isActive;
-    return isAdmin && isActive;
+    if (account.id !== targetId) return isUsableAdmin(account);
+    const next: TeacherAccountRecord = {
+      ...account,
+      isAdmin: patch.isAdmin ?? account.isAdmin,
+      isActive: patch.isActive ?? account.isActive,
+      isArchived: patch.isArchived ?? account.isArchived,
+    };
+    return isUsableAdmin(next);
   };
   return !accounts.some(stillAdmin);
+}
+
+/** Affichage admin : date/heure locale CH, ou message si jamais connecté. */
+export function formatLastLoginAt(lastLoginAt: string | null, now = new Date()): string {
+  if (!lastLoginAt) return "Jamais connecté";
+  const parsed = new Date(lastLoginAt);
+  if (Number.isNaN(parsed.getTime())) return "Jamais connecté";
+  return new Intl.DateTimeFormat("fr-CH", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(parsed);
 }
