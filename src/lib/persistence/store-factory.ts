@@ -274,10 +274,23 @@ export async function checkClassroomExists(classroomId: string): Promise<boolean
   return resolved.classroomExists(classroomId);
 }
 
-export async function exportStoreSnapshot(store: AgendaStore): Promise<AgendaBackupSnapshot> {
-  return exportAgendaSnapshot(store);
+export async function exportStoreSnapshot(): Promise<AgendaBackupSnapshot> {
+  const resolved = await resolveAgendaStore();
+  return exportAgendaSnapshot({
+    agenda: resolved.store,
+    teacherSetups: resolved.teacherSetupStore,
+    teacherNotes: resolved.teacherNotesStore,
+  });
 }
 
-export async function restoreStoreSnapshot(store: AgendaStore, payload: unknown): Promise<BackupRestoreResult> {
-  return restoreAgendaSnapshot(store, payload);
+export async function restoreStoreSnapshot(payload: unknown): Promise<BackupRestoreResult> {
+  const resolved = await resolveAgendaStore();
+  return restoreAgendaSnapshot(
+    {
+      agenda: resolved.store,
+      teacherSetups: resolved.teacherSetupStore,
+      teacherNotes: resolved.teacherNotesStore,
+    },
+    payload,
+  );
 }

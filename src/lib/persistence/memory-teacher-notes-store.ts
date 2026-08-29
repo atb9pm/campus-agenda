@@ -1,6 +1,6 @@
 import { normalizeClassNotes } from "../../features/class-notebook/notes-storage.ts";
 import type { ClassNotesDocument } from "../../features/class-notebook/types.ts";
-import type { TeacherNotesStore } from "./teacher-notes-types.ts";
+import type { TeacherNotesBackupEntry, TeacherNotesStore } from "./teacher-notes-types.ts";
 
 export class MemoryTeacherNotesStore implements TeacherNotesStore {
   private readonly notes = new Map<string, ClassNotesDocument>();
@@ -14,6 +14,22 @@ export class MemoryTeacherNotesStore implements TeacherNotesStore {
     const normalized = normalizeClassNotes(document);
     this.notes.set(teacherId, structuredClone(normalized));
     return structuredClone(normalized);
+  }
+
+  async exportAllNotes(): Promise<TeacherNotesBackupEntry[]> {
+    return [...this.notes.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([teacherId, document]) => ({
+        teacherId,
+        document: structuredClone(document),
+      }));
+  }
+
+  async replaceAllNotes(entries: TeacherNotesBackupEntry[]): Promise<void> {
+    this.notes.clear();
+    for (const entry of entries) {
+      this.notes.set(entry.teacherId, structuredClone(normalizeClassNotes(entry.document)));
+    }
   }
 }
 

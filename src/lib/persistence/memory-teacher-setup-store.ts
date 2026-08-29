@@ -1,6 +1,6 @@
 import { normalizeTeacherSetup } from "../../features/teacher-setup/queries.ts";
 import type { TeacherSetupConfig } from "../../features/teacher-setup/types.ts";
-import type { TeacherSetupStore } from "./teacher-setup-types.ts";
+import type { TeacherSetupBackupEntry, TeacherSetupStore } from "./teacher-setup-types.ts";
 
 export class MemoryTeacherSetupStore implements TeacherSetupStore {
   private readonly setups = new Map<string, TeacherSetupConfig>();
@@ -14,6 +14,22 @@ export class MemoryTeacherSetupStore implements TeacherSetupStore {
     const normalized = normalizeTeacherSetup(config);
     this.setups.set(teacherId, structuredClone(normalized));
     return structuredClone(normalized);
+  }
+
+  async exportAllSetups(): Promise<TeacherSetupBackupEntry[]> {
+    return [...this.setups.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([teacherId, config]) => ({
+        teacherId,
+        config: structuredClone(config),
+      }));
+  }
+
+  async replaceAllSetups(entries: TeacherSetupBackupEntry[]): Promise<void> {
+    this.setups.clear();
+    for (const entry of entries) {
+      this.setups.set(entry.teacherId, structuredClone(normalizeTeacherSetup(entry.config)));
+    }
   }
 }
 
