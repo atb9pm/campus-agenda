@@ -25,7 +25,7 @@ import {
   legacyDemoPasswordHash,
   verifyPassword,
 } from "../auth/password.ts";
-import type { TeacherAccountStore } from "./teacher-account-types.ts";
+import type { TeacherAccountBackupEntry, TeacherAccountStore } from "./teacher-account-types.ts";
 
 interface MemoryAccount {
   id: string;
@@ -239,6 +239,54 @@ export class MemoryTeacherAccountStore implements TeacherAccountStore {
 
   async mustChangePassword(teacherId: string): Promise<boolean> {
     return Boolean(this.find(teacherId)?.mustChangePassword);
+  }
+
+  async exportAllAccounts(): Promise<TeacherAccountBackupEntry[]> {
+    this.ensureSeeded();
+    return [...this.accounts]
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((account) => ({
+        id: account.id,
+        displayName: account.displayName,
+        initials: account.initials,
+        isAdmin: account.isAdmin,
+        isActive: account.isActive,
+        mustChangePassword: account.mustChangePassword,
+        passwordHash: account.passwordHash,
+        createdAt: account.createdAt,
+        passwordUpdatedAt: account.passwordUpdatedAt,
+      }));
+  }
+
+  async replaceAllAccounts(entries: TeacherAccountBackupEntry[]): Promise<void> {
+    this.ensureSeeded();
+    for (const entry of entries) {
+      const existing = this.accounts.find((account) => account.id === entry.id);
+      if (existing) {
+        existing.displayName = entry.displayName;
+        existing.initials = entry.initials;
+        existing.isAdmin = entry.isAdmin;
+        existing.isActive = entry.isActive;
+        existing.mustChangePassword = entry.mustChangePassword;
+        existing.passwordHash = entry.passwordHash;
+        existing.createdAt = entry.createdAt ?? existing.createdAt;
+        existing.passwordUpdatedAt = entry.passwordUpdatedAt;
+      } else {
+        this.accounts.push({
+          id: entry.id,
+          displayName: entry.displayName,
+          initials: entry.initials,
+          isAdmin: entry.isAdmin,
+          isActive: entry.isActive,
+          archivedAt: null,
+          lastLoginAt: null,
+          mustChangePassword: entry.mustChangePassword,
+          passwordHash: entry.passwordHash,
+          createdAt: entry.createdAt ?? new Date().toISOString(),
+          passwordUpdatedAt: entry.passwordUpdatedAt,
+        });
+      }
+    }
   }
 
   /** Vérification héritée utilisée par le store agenda mémoire. */
