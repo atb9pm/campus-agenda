@@ -1,6 +1,7 @@
 import { restoreAgendaSnapshot } from "@campus/lib/persistence/backup.ts";
 import { logOperationalEvent, logOperationalWarning } from "@campus/lib/observability/index.ts";
 import {
+  getTeacherAccountsStore,
   getTeacherNotesStore,
   getTeacherSetupsStore,
   jsonResponse,
@@ -12,9 +13,10 @@ async function handlePost(request: Request) {
   const auth = await requireTeacherSession(request);
   if ("error" in auth && auth.error) return auth.error;
 
-  const [teacherSetups, teacherNotes] = await Promise.all([
+  const [teacherSetups, teacherNotes, teacherAccounts] = await Promise.all([
     getTeacherSetupsStore(),
     getTeacherNotesStore(),
+    getTeacherAccountsStore(),
   ]);
 
   const body = await request.json() as { snapshot?: unknown };
@@ -23,6 +25,7 @@ async function handlePost(request: Request) {
       agenda: auth.store!,
       teacherSetups,
       teacherNotes,
+      teacherAccounts,
     },
     body.snapshot,
   );
@@ -36,7 +39,9 @@ async function handlePost(request: Request) {
     itemCount: result.itemCount,
     teacherSetupCount: result.teacherSetupCount,
     teacherNotesCount: result.teacherNotesCount,
+    teacherAccountCount: result.teacherAccountCount,
     restoredTeacherData: result.restoredTeacherData,
+    restoredTeacherAccounts: result.restoredTeacherAccounts,
     teacherId: auth.session!.teacherId,
   });
 
@@ -45,7 +50,9 @@ async function handlePost(request: Request) {
     itemCount: result.itemCount,
     teacherSetupCount: result.teacherSetupCount,
     teacherNotesCount: result.teacherNotesCount,
+    teacherAccountCount: result.teacherAccountCount,
     restoredTeacherData: result.restoredTeacherData,
+    restoredTeacherAccounts: result.restoredTeacherAccounts,
   });
 }
 
