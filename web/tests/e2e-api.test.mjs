@@ -75,7 +75,10 @@ test("phase 0.8 — E2E enseignant publie puis élève consulte", async () => {
   });
   assert.equal(backupResponse.status, 200);
   const backupPayload = await backupResponse.json();
+  assert.equal(backupPayload.snapshot.version, 2);
   assert.ok(backupPayload.snapshot.itemCount >= 1);
+  assert.ok(Array.isArray(backupPayload.snapshot.teacherSetups));
+  assert.ok(Array.isArray(backupPayload.snapshot.teacherNotes));
 
   const studentLogin = await request("/api/auth/student", {
     method: "POST",

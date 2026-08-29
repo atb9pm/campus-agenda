@@ -1,7 +1,7 @@
 import { normalizeTeacherSetup } from "../../../features/teacher-setup/queries.ts";
 import { parseStoredTeacherSetup, serializeTeacherSetup } from "../../../features/teacher-setup/storage.ts";
 import type { TeacherSetupConfig } from "../../../features/teacher-setup/types.ts";
-import type { TeacherSetupStore } from "../teacher-setup-types.ts";
+import type { TeacherSetupBackupEntry, TeacherSetupStore } from "../teacher-setup-types.ts";
 import type { SqlDatabase } from "./types.ts";
 
 export class SqlTeacherSetupStore implements TeacherSetupStore {
@@ -34,5 +34,37 @@ export class SqlTeacherSetupStore implements TeacherSetupStore {
       .bind(teacherId, serializeTeacherSetup(normalized))
       .run();
     return normalized;
+  }
+
+  async exportAllSetups(): Promise<TeacherSetupBackupEntry[]> {
+    const { results } = await this.db
+      .prepare("SELECT teacher_id, config_json FROM teacher_setups ORDER BY teacher_id")
+      .bind()
+      .all<{ teacher_id: string; config_json: string }>();
+
+    const entries: TeacherSetupBackupEntry[] = [];
+    for (const row of results) {
+      const parsed = parseStoredTeacherSetup(row.config_json);
+      if (!parsed) continue;
+      entries.push({
+        teacherId: row.teacher_id,
+        config: normalizeTeacherSetup(parsed),
+      });
+    }
+    return entries;
+  }
+
+  async replaceAllSetups(entries: TeacherSetupBackupEntry[]): Promise<void> {
+    await this.db.exec("DELETE FROM teacher_setups");
+    for (const entry of entries) {
+      const normalized = normalizeTeacherSetup(entry.config);
+      await this.db
+        .prepare(
+          `INSERT INTO teacher_setups (teacher_id, config_json, updated_at)
+           VALUES (?, ?, datetime('now'))`,
+        )
+        .bind(entry.teacherId, serializeTeacherSetup(normalized))
+        .run();
+    }
   }
 }

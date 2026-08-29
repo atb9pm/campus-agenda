@@ -2,6 +2,21 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.13.0] — Sauvegarde configs et notes enseignant
+
+### Ajouté
+
+- **Backup format v2** : l'export admin inclut aussi `teacher_setups` (configuration)
+  et `teacher_notes` (notes de carnet), en plus des publications d'agenda.
+- Restauration complète de ces trois ensembles via `POST /api/admin/restore`.
+
+### Modifié
+
+- Les sauvegardes **v1** (agenda seul) restent acceptées : à la restauration, les
+  configs et notes déjà présentes ne sont pas touchées.
+- Compteurs `teacherSetupCount` / `teacherNotesCount` dans l'export et la réponse
+  de restauration.
+
 ## [2.12.0] — Navigation mobile enseignant et élève
 
 ### Ajouté
