@@ -2,6 +2,21 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.14.0] — Gestion des accès : lisibilité, édition, archivage, dernier login
+
+### Ajouté
+
+- **Édition** du nom affiché et des initiales depuis la gestion des enseignants / accès.
+- **Archivage** des comptes enseignant (hors liste courante, connexion refusée), avec
+  onglet Archives et garde-fou sur le dernier administrateur actif.
+- **Dernière connexion** affichée sur chaque compte (enregistrée à chaque login réussi).
+- Migration `0013_teacher_access_meta` : colonnes `archived_at` et `last_login_at`.
+
+### Modifié
+
+- Liste des accès plus lisible : cartes séparées, badges statut/rôle/mot de passe,
+  **vert** si actif, **rouge** si désactivé ou archivé.
+
 ## [2.13.0] — Sauvegarde configs et notes enseignant
 
 ### Ajouté

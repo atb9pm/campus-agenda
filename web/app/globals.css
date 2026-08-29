@@ -460,6 +460,34 @@ button { color: inherit; }
 .admin-checkbox input { min-width: 0; }
 .admin-teacher-list li { grid-template-columns: 70px minmax(120px, 1fr) auto auto auto auto; }
 .admin-teacher-list button:disabled { opacity: .45; cursor: not-allowed; }
+
+.admin-teacher-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.admin-teacher-toolbar button { padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: #fff; color: #516582; font-size: 10px; font-weight: 700; cursor: pointer; }
+.admin-teacher-toolbar button.is-selected { color: #fff; background: var(--navy); border-color: var(--navy); }
+.admin-teacher-access-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.admin-teacher-card { display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(160px, 1fr) auto; gap: 14px; align-items: start; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.admin-teacher-card.is-active { border-color: #abefc6; background: linear-gradient(180deg, #f6fef9, #fff); }
+.admin-teacher-card.is-inactive { border-color: #fecdca; background: linear-gradient(180deg, #fff5f5, #fff); }
+.admin-teacher-card.is-archived { border-color: #d0d5dd; background: #f8fafc; opacity: .92; }
+.admin-teacher-identity { display: flex; gap: 12px; align-items: flex-start; }
+.admin-teacher-initials { display: inline-flex; min-width: 42px; justify-content: center; padding: 6px 8px; border-radius: 8px; color: var(--navy); background: #eef4fd; font-size: 12px; }
+.admin-teacher-name { margin: 0; color: var(--navy); font-size: 13px; font-weight: 700; }
+.admin-teacher-login-meta { margin: 4px 0 0; color: #667085; font-size: 11px; }
+.admin-teacher-badges { display: flex; flex-wrap: wrap; gap: 6px; align-content: flex-start; }
+.badge-status, .badge-role, .badge-password { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; }
+.badge-status.is-on { color: #027a48; background: #dcfae6; }
+.badge-status.is-off { color: #b42318; background: #fee4e2; }
+.badge-role { color: #344054; background: #f2f4f7; }
+.badge-role.is-admin { color: #175cd3; background: #eff8ff; }
+.badge-password { color: #6941c6; background: #f4ebff; }
+.admin-teacher-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.admin-teacher-actions button, .admin-teacher-edit-actions button { padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: #f8fafc; color: var(--navy); font-size: 9px; font-weight: 700; cursor: pointer; }
+.admin-teacher-actions button:disabled { opacity: .45; cursor: not-allowed; }
+.admin-teacher-edit-form { display: grid; gap: 8px; width: 100%; }
+.admin-teacher-edit-form label { display: grid; gap: 4px; color: #8793a9; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.admin-teacher-edit-form input { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); font-size: 11px; }
+.admin-teacher-edit-actions { display: flex; gap: 6px; }
+
 .admin-secret { margin-bottom: 18px; padding: 16px 18px; border: 1px solid var(--navy); border-radius: 10px; background: #f8fbff; }
 .admin-secret-title { margin: 0 0 8px; color: #516582; font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .admin-secret-value { margin: 0 0 10px; color: var(--navy); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 22px; font-weight: 700; letter-spacing: .12em; }
@@ -559,6 +587,8 @@ button { color: inherit; }
   .config-classes-editor, .config-week-plan, .ma-semaine-week-banner, .ma-semaine-days, .ma-semaine-empty, .ma-semaine-plan-hint, .class-notebook-toolbar, .class-notebook-week-controls, .class-notebook-grid, .class-notebook-warning, .class-notebook-clipboard-hint { margin-right: 16px; margin-left: 16px; }
   .admin-workspace .admin-tabs, .admin-panel-block, .admin-error, .admin-loading, .admin-placeholder { margin-right: 16px; margin-left: 16px; }
   .admin-catalog-list li, .admin-teacher-list li { grid-template-columns: 1fr; }
+  .admin-teacher-card { grid-template-columns: 1fr; }
+  .admin-teacher-actions { justify-content: flex-start; }
   .day-grid-head, .day-grid-row { grid-template-columns: 48px repeat(5, minmax(0, 1fr)); }
   .day-cell-label { display: none; }
   .class-notebook-grid { grid-template-columns: 1fr !important; }

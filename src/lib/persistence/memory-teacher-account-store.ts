@@ -33,6 +33,8 @@ interface MemoryAccount {
   initials: string;
   isAdmin: boolean;
   isActive: boolean;
+  archivedAt: string | null;
+  lastLoginAt: string | null;
   mustChangePassword: boolean;
   passwordHash: string;
   createdAt: string;
@@ -46,6 +48,9 @@ function toRecord(account: MemoryAccount): TeacherAccountRecord {
     initials: account.initials,
     isAdmin: account.isAdmin,
     isActive: account.isActive,
+    isArchived: account.archivedAt !== null,
+    archivedAt: account.archivedAt,
+    lastLoginAt: account.lastLoginAt,
     mustChangePassword: account.mustChangePassword,
     hasPassword: isUsablePasswordHash(account.passwordHash),
     createdAt: account.createdAt,
@@ -66,6 +71,8 @@ export class MemoryTeacherAccountStore implements TeacherAccountStore {
       initials: teacher.initials,
       isAdmin: teacher.id === DEMO_CURRENT_TEACHER_ID,
       isActive: true,
+      archivedAt: null,
+      lastLoginAt: null,
       mustChangePassword: false,
       passwordHash: legacyDemoPasswordHash(),
       createdAt: now,
@@ -115,6 +122,8 @@ export class MemoryTeacherAccountStore implements TeacherAccountStore {
       initials,
       isAdmin: input.isAdmin ?? false,
       isActive: true,
+      archivedAt: null,
+      lastLoginAt: null,
       mustChangePassword: true,
       passwordHash: await hashPassword(temporaryPassword),
       createdAt: now,
@@ -146,13 +155,25 @@ export class MemoryTeacherAccountStore implements TeacherAccountStore {
       account.displayName = displayName;
     }
 
-    if (patch.isAdmin !== undefined || patch.isActive !== undefined) {
+    if (
+      patch.isAdmin !== undefined
+      || patch.isActive !== undefined
+      || patch.isArchived !== undefined
+    ) {
       const records = this.accounts.map(toRecord);
       if (wouldRemoveLastAdmin(records, teacherId, patch)) {
         return { ok: false, reason: "Au moins un administrateur actif doit rester.", status: 400 };
       }
       if (patch.isAdmin !== undefined) account.isAdmin = patch.isAdmin;
       if (patch.isActive !== undefined) account.isActive = patch.isActive;
+      if (patch.isArchived !== undefined) {
+        if (patch.isArchived) {
+          account.archivedAt = account.archivedAt ?? new Date().toISOString();
+          account.isActive = false;
+        } else {
+          account.archivedAt = null;
+        }
+      }
     }
 
     return { ok: true, account: toRecord(account) };
@@ -206,9 +227,13 @@ export class MemoryTeacherAccountStore implements TeacherAccountStore {
     if (!(await verifyPassword(password, account.passwordHash))) {
       return { ok: false, reason: "Initiales ou mot de passe incorrect." };
     }
+    if (account.archivedAt !== null) {
+      return { ok: false, reason: "Ce compte est archivé. Contactez l'administrateur." };
+    }
     if (!account.isActive) {
       return { ok: false, reason: "Ce compte est désactivé. Contactez l'administrateur." };
     }
+    account.lastLoginAt = new Date().toISOString();
     return { ok: true, teacherId: account.id, mustChangePassword: account.mustChangePassword };
   }
 
@@ -219,7 +244,7 @@ export class MemoryTeacherAccountStore implements TeacherAccountStore {
   /** Vérification héritée utilisée par le store agenda mémoire. */
   async verifyCredentials(teacherId: string, password: string): Promise<boolean> {
     const account = this.find(teacherId);
-    if (!account || !account.isActive) return false;
+    if (!account || !account.isActive || account.archivedAt !== null) return false;
     return verifyPassword(password, account.passwordHash);
   }
 }

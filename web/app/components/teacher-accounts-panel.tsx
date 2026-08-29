@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
+import { formatLastLoginAt } from "@campus/features/teacher-accounts/index.ts";
 import {
   createTeacherAccountApi,
   fetchTeacherAccounts,
@@ -24,6 +25,24 @@ interface RevealedPassword {
   password: string;
 }
 
+interface EditDraft {
+  teacherId: string;
+  displayName: string;
+  initials: string;
+}
+
+function passwordLabel(account: TeacherAccountRecord): string {
+  if (account.mustChangePassword) return "Mot de passe provisoire";
+  if (account.hasPassword) return "Mot de passe personnel";
+  return "Sans mot de passe";
+}
+
+function accountCardClass(account: TeacherAccountRecord): string {
+  if (account.isArchived) return "admin-teacher-card is-archived";
+  if (!account.isActive) return "admin-teacher-card is-inactive";
+  return "admin-teacher-card is-active";
+}
+
 export function TeacherAccountsPanel({ mode, currentTeacherId, onNotice }: TeacherAccountsPanelProps) {
   const [accounts, setAccounts] = useState<TeacherAccountRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,6 +51,8 @@ export function TeacherAccountsPanel({ mode, currentTeacherId, onNotice }: Teach
   const [initials, setInitials] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [revealed, setRevealed] = useState<RevealedPassword | null>(null);
+  const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -49,6 +70,16 @@ export function TeacherAccountsPanel({ mode, currentTeacherId, onNotice }: Teach
     void refresh();
   }, [refresh]);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  const archivedCount = useMemo(
+    () => accounts.filter((account) => account.isArchived).length,
+    [accounts],
+  );
+
+  const visibleAccounts = useMemo(
+    () => accounts.filter((account) => (showArchived ? account.isArchived : !account.isArchived)),
+    [accounts, showArchived],
+  );
 
   async function submitAccount(event: FormEvent) {
     event.preventDefault();
@@ -90,14 +121,41 @@ export function TeacherAccountsPanel({ mode, currentTeacherId, onNotice }: Teach
 
   async function patchAccount(
     account: TeacherAccountRecord,
-    patch: { isAdmin?: boolean; isActive?: boolean },
+    patch: {
+      displayName?: string;
+      initials?: string;
+      isAdmin?: boolean;
+      isActive?: boolean;
+      isArchived?: boolean;
+    },
   ) {
     setError("");
     try {
       await updateTeacherAccountApi(account.id, patch);
+      if (patch.isArchived === true) onNotice(`Compte ${account.initials} archivé.`);
+      if (patch.isArchived === false) onNotice(`Compte ${account.initials} désarchivé.`);
       await refresh();
     } catch (patchError) {
       setError(patchError instanceof Error ? patchError.message : "Mise à jour impossible.");
+    }
+  }
+
+  async function saveEdit(event: FormEvent) {
+    event.preventDefault();
+    if (!editDraft) return;
+    const account = accounts.find((entry) => entry.id === editDraft.teacherId);
+    if (!account) return;
+    setError("");
+    try {
+      await updateTeacherAccountApi(account.id, {
+        displayName: editDraft.displayName,
+        initials: editDraft.initials,
+      });
+      onNotice(`Compte ${editDraft.initials.trim() || account.initials} mis à jour.`);
+      setEditDraft(null);
+      await refresh();
+    } catch (editError) {
+      setError(editError instanceof Error ? editError.message : "Modification impossible.");
     }
   }
 
@@ -109,7 +167,7 @@ export function TeacherAccountsPanel({ mode, currentTeacherId, onNotice }: Teach
           <p>
             {mode === "accounts"
               ? "Créez un compte par enseignant. Le mot de passe provisoire s’affiche une seule fois : notez-le et transmettez-le de vive voix."
-              : "Rôle administrateur et activation des comptes. Un administrateur actif doit toujours rester."}
+              : "Rôle administrateur, activation et archivage. Un administrateur actif doit toujours rester."}
           </p>
         </div>
       </header>
@@ -160,49 +218,144 @@ export function TeacherAccountsPanel({ mode, currentTeacherId, onNotice }: Teach
       ) : null}
 
       {!loading ? (
-        <ul className="admin-catalog-list admin-teacher-list">
-          {accounts.map((account) => (
-            <li key={account.id}>
-              <strong>{account.initials}</strong>
-              <span>{account.displayName}</span>
-              <span className={account.isActive ? "status-active" : "status-inactive"}>
-                {account.isActive ? "Actif" : "Désactivé"}
-              </span>
-              <span className={account.isAdmin ? "status-active" : "status-inactive"}>
-                {account.isAdmin ? "Administrateur" : "Enseignant"}
-              </span>
-              <span className={account.mustChangePassword ? "status-inactive" : "status-active"}>
-                {account.mustChangePassword
-                  ? "Mot de passe provisoire"
-                  : account.hasPassword
-                    ? "Mot de passe personnel"
-                    : "Sans mot de passe"}
-              </span>
-              {mode === "accounts" ? (
-                <button type="button" onClick={() => void resetPassword(account)}>
-                  Réinitialiser le mot de passe
-                </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    disabled={account.id === currentTeacherId}
-                    onClick={() => void patchAccount(account, { isAdmin: !account.isAdmin })}
-                  >
-                    {account.isAdmin ? "Retirer l’administration" : "Nommer administrateur"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={account.id === currentTeacherId}
-                    onClick={() => void patchAccount(account, { isActive: !account.isActive })}
-                  >
-                    {account.isActive ? "Désactiver" : "Réactiver"}
-                  </button>
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
+        <>
+          <div className="admin-teacher-toolbar">
+            <button
+              type="button"
+              className={!showArchived ? "is-selected" : undefined}
+              onClick={() => setShowArchived(false)}
+            >
+              Comptes ({accounts.length - archivedCount})
+            </button>
+            <button
+              type="button"
+              className={showArchived ? "is-selected" : undefined}
+              onClick={() => setShowArchived(true)}
+            >
+              Archives ({archivedCount})
+            </button>
+          </div>
+
+          {visibleAccounts.length === 0 ? (
+            <p className="admin-loading">
+              {showArchived ? "Aucun compte archivé." : "Aucun compte dans cette liste."}
+            </p>
+          ) : (
+            <ul className="admin-teacher-access-list">
+              {visibleAccounts.map((account) => {
+                const editing = editDraft?.teacherId === account.id;
+                return (
+                  <li key={account.id} className={accountCardClass(account)}>
+                    <div className="admin-teacher-identity">
+                      <strong className="admin-teacher-initials">{account.initials}</strong>
+                      {editing && editDraft ? (
+                        <form className="admin-teacher-edit-form" onSubmit={(event) => void saveEdit(event)}>
+                          <label>
+                            Nom
+                            <input
+                              value={editDraft.displayName}
+                              onChange={(event) =>
+                                setEditDraft({ ...editDraft, displayName: event.target.value })
+                              }
+                              required
+                            />
+                          </label>
+                          <label>
+                            Initiales
+                            <input
+                              value={editDraft.initials}
+                              onChange={(event) =>
+                                setEditDraft({ ...editDraft, initials: event.target.value })
+                              }
+                              autoCapitalize="none"
+                              spellCheck={false}
+                              required
+                            />
+                          </label>
+                          <div className="admin-teacher-edit-actions">
+                            <button type="submit">Enregistrer</button>
+                            <button type="button" onClick={() => setEditDraft(null)}>Annuler</button>
+                          </div>
+                        </form>
+                      ) : (
+                        <div>
+                          <p className="admin-teacher-name">{account.displayName}</p>
+                          <p className="admin-teacher-login-meta">
+                            Dernière connexion&nbsp;: {formatLastLoginAt(account.lastLoginAt)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="admin-teacher-badges" aria-label="État du compte">
+                      <span
+                        className={
+                          account.isArchived || !account.isActive
+                            ? "badge-status is-off"
+                            : "badge-status is-on"
+                        }
+                      >
+                        {account.isArchived ? "Archivé" : account.isActive ? "Actif" : "Désactivé"}
+                      </span>
+                      <span className={account.isAdmin ? "badge-role is-admin" : "badge-role"}>
+                        {account.isAdmin ? "Administrateur" : "Enseignant"}
+                      </span>
+                      <span className="badge-password">{passwordLabel(account)}</span>
+                    </div>
+
+                    <div className="admin-teacher-actions">
+                      {!editing ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditDraft({
+                              teacherId: account.id,
+                              displayName: account.displayName,
+                              initials: account.initials,
+                            })
+                          }
+                        >
+                          Modifier
+                        </button>
+                      ) : null}
+
+                      {mode === "accounts" ? (
+                        <button type="button" onClick={() => void resetPassword(account)}>
+                          Réinitialiser le mot de passe
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            disabled={account.id === currentTeacherId || account.isArchived}
+                            onClick={() => void patchAccount(account, { isAdmin: !account.isAdmin })}
+                          >
+                            {account.isAdmin ? "Retirer l’administration" : "Nommer administrateur"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={account.id === currentTeacherId || account.isArchived}
+                            onClick={() => void patchAccount(account, { isActive: !account.isActive })}
+                          >
+                            {account.isActive ? "Désactiver" : "Réactiver"}
+                          </button>
+                        </>
+                      )}
+
+                      <button
+                        type="button"
+                        disabled={account.id === currentTeacherId}
+                        onClick={() => void patchAccount(account, { isArchived: !account.isArchived })}
+                      >
+                        {account.isArchived ? "Désarchiver" : "Archiver"}
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </>
       ) : null}
     </div>
   );

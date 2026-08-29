@@ -5,6 +5,12 @@ export interface TeacherAccountRecord {
   initials: string;
   isAdmin: boolean;
   isActive: boolean;
+  /** Compte mis de côté (hors liste courante, connexion refusée). */
+  isArchived: boolean;
+  /** Horodatage d'archivage, null si non archivé. */
+  archivedAt: string | null;
+  /** Dernière connexion réussie, null si jamais observée. */
+  lastLoginAt: string | null;
   /** Le compte doit choisir un mot de passe personnel avant toute autre action. */
   mustChangePassword: boolean;
   /** Vrai dès qu'un mot de passe personnel haché est enregistré. */
@@ -24,6 +30,7 @@ export interface TeacherAccountPatch {
   initials?: string;
   isAdmin?: boolean;
   isActive?: boolean;
+  isArchived?: boolean;
 }
 
 /** Création ou réinitialisation : le mot de passe provisoire n'est montré qu'une fois. */

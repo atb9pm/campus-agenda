@@ -15,11 +15,15 @@ async function handlePatch(request: Request, context: { params: Promise<{ id: st
     initials?: string;
     isAdmin?: boolean;
     isActive?: boolean;
+    isArchived?: boolean;
   };
 
-  // Se retirer soi-même l'administration ou se désactiver couperait l'accès.
+  // Se retirer soi-même l'administration, se désactiver ou s'archiver couperait l'accès.
   const selfId = auth.session!.teacherId;
-  if (id === selfId && (body.isAdmin === false || body.isActive === false)) {
+  if (
+    id === selfId
+    && (body.isAdmin === false || body.isActive === false || body.isArchived === true)
+  ) {
     return jsonResponse(
       { ok: false, reason: "Vous ne pouvez pas retirer votre propre accès administrateur." },
       { status: 400 },
@@ -32,6 +36,7 @@ async function handlePatch(request: Request, context: { params: Promise<{ id: st
     initials: body.initials,
     isAdmin: body.isAdmin,
     isActive: body.isActive,
+    isArchived: body.isArchived,
   });
   if (!result.ok) {
     return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
