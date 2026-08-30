@@ -40,6 +40,15 @@ test("school catalog — filtre actif seulement", () => {
   assert.equal(listActiveSchoolBranches(branches).length, branches.length - 1);
 });
 
+test("school catalog — branche archivée exclue de la liste active", () => {
+  const branches = buildDefaultSchoolBranches();
+  branches[0]!.isArchived = true;
+  branches[0]!.archivedAt = "2026-08-30T10:00:00.000Z";
+  const active = listActiveSchoolBranches(branches);
+  assert.equal(active.length, branches.length - 1);
+  assert.ok(active.every((entry) => !entry.isArchived));
+});
+
 test("school catalog — store mémoire seed + soft deactivate", async () => {
   resetMemorySchoolCatalogStore();
   const store = getMemorySchoolCatalogStore();
@@ -54,7 +63,34 @@ test("school catalog — store mémoire seed + soft deactivate", async () => {
 
   const created = await store.createBranch({ code: "DIAG", label: "Diagnostic" });
   assert.equal(created.label, "Diagnostic");
+  assert.equal(created.isArchived, false);
+  assert.equal(created.archivedAt, null);
   assert.ok((await store.listBranches()).some((entry) => entry.id === created.id));
+});
+
+test("school catalog — édition et archivage de branche", async () => {
+  resetMemorySchoolCatalogStore();
+  const store = getMemorySchoolCatalogStore();
+  const [first] = await store.listBranches();
+  assert.ok(first);
+
+  const renamed = await store.updateBranch(first.id, { label: "Moteur thermique", code: "MOTEUR_THERMIQUE" });
+  assert.ok(renamed);
+  assert.equal(renamed.label, "Moteur thermique");
+  assert.equal(renamed.code, "MOTEUR_THERMIQUE");
+
+  const archived = await store.updateBranch(first.id, { isArchived: true });
+  assert.ok(archived);
+  assert.equal(archived.isArchived, true);
+  assert.ok(archived.archivedAt);
+
+  const active = listActiveSchoolBranches(await store.listBranches());
+  assert.ok(!active.some((entry) => entry.id === first.id));
+
+  const restored = await store.updateBranch(first.id, { isArchived: false });
+  assert.ok(restored);
+  assert.equal(restored.isArchived, false);
+  assert.equal(restored.archivedAt, null);
 });
 
 test("navigation — Administration réservée aux admins", () => {

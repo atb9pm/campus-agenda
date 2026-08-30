@@ -13,6 +13,9 @@ export interface SchoolBranchRecord {
   label: string;
   sortOrder: number;
   isActive: boolean;
+  /** Dérivé de `archivedAt` : true si la branche est hors liste courante. */
+  isArchived: boolean;
+  archivedAt: string | null;
 }
 
 export interface SchoolClassInput {
@@ -28,4 +31,5 @@ export interface SchoolBranchInput {
   label: string;
   sortOrder?: number;
   isActive?: boolean;
+  isArchived?: boolean;
 }
