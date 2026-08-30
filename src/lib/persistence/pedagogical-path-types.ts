@@ -19,4 +19,5 @@ export interface AnnualCourseNotesStore {
   deleteNote(id: string): Promise<boolean>;
   /** Efface uniquement les notes importées (héritées) pour le cours courant. */
   deleteInheritedNotes(filter: AnnualCourseNoteFilter): Promise<number>;
+  countByContextId(contextId: string): Promise<number>;
 }

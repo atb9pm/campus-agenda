@@ -28,6 +28,11 @@ export interface SchoolBranchRecord {
   /** Dérivé de `archivedAt` : true si la branche est hors liste courante. */
   isArchived: boolean;
   archivedAt: string | null;
+  /**
+   * TECHNICAL | GENERAL. Null = à configurer (legacy).
+   * Ce n'est PAS un troisième type.
+   */
+  teachingType: "TECHNICAL" | "GENERAL" | null;
 }
 
 export interface SchoolClassInput {
@@ -47,4 +52,5 @@ export interface SchoolBranchInput {
   sortOrder?: number;
   isActive?: boolean;
   isArchived?: boolean;
+  teachingType?: "TECHNICAL" | "GENERAL" | null;
 }

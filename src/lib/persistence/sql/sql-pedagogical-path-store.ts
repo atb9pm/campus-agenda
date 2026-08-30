@@ -199,4 +199,12 @@ export class SqlAnnualCourseNotesStore implements AnnualCourseNotesStore {
       .run();
     return result.meta?.changes ?? 0;
   }
+
+  async countByContextId(contextId: string): Promise<number> {
+    const row = await this.db
+      .prepare("SELECT COUNT(*) AS count FROM annual_course_notes WHERE context_id = ?")
+      .bind(contextId)
+      .first<{ count: number }>();
+    return Number(row?.count ?? 0);
+  }
 }

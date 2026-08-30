@@ -38,10 +38,11 @@ interface TeacherRow {
   password_updated_at: string | null;
   archived_at: string | null;
   last_login_at: string | null;
+  teaching_type: string | null;
 }
 
 const TEACHER_COLUMNS =
-  "id, display_name, initials, password_hash, is_admin, is_active, must_change_password, created_at, password_updated_at, archived_at, last_login_at";
+  "id, display_name, initials, password_hash, is_admin, is_active, must_change_password, created_at, password_updated_at, archived_at, last_login_at, teaching_type";
 
 function toRecord(row: TeacherRow): TeacherAccountRecord {
   return {
@@ -57,6 +58,9 @@ function toRecord(row: TeacherRow): TeacherAccountRecord {
     hasPassword: isUsablePasswordHash(row.password_hash),
     createdAt: row.created_at,
     passwordUpdatedAt: row.password_updated_at,
+    teachingType: row.teaching_type === "TECHNICAL" || row.teaching_type === "GENERAL"
+      ? row.teaching_type
+      : null,
   };
 }
 
@@ -106,6 +110,13 @@ export class SqlTeacherAccountStore implements TeacherAccountStore {
   async createAccount(input: TeacherAccountInput): Promise<TeacherAccountSecretResult> {
     const check = checkAccountInput(input.displayName, input.initials);
     if (!check.ok) return { ok: false, reason: check.reason, status: 400 };
+    if (
+      input.teachingType !== undefined &&
+      input.teachingType !== "TECHNICAL" &&
+      input.teachingType !== "GENERAL"
+    ) {
+      return { ok: false, reason: "Le type d'enseignement doit être TECHNICAL ou GENERAL.", status: 400 };
+    }
 
     const initials = normalizeInitials(input.initials);
     if (await this.rowByInitials(initials)) {
@@ -120,10 +131,17 @@ export class SqlTeacherAccountStore implements TeacherAccountStore {
     await this.db
       .prepare(
         `INSERT INTO teachers
-          (id, display_name, initials, password_hash, is_admin, is_active, must_change_password, password_updated_at)
-         VALUES (?, ?, ?, ?, ?, 1, 1, datetime('now'))`,
+          (id, display_name, initials, password_hash, is_admin, is_active, must_change_password, password_updated_at, teaching_type)
+         VALUES (?, ?, ?, ?, ?, 1, 1, datetime('now'), ?)`,
       )
-      .bind(teacherId, normalizeDisplayName(input.displayName), initials, passwordHash, input.isAdmin ? 1 : 0)
+      .bind(
+        teacherId,
+        normalizeDisplayName(input.displayName),
+        initials,
+        passwordHash,
+        input.isAdmin ? 1 : 0,
+        input.teachingType ?? null,
+      )
       .run();
 
     const created = await this.row(teacherId);
@@ -174,13 +192,26 @@ export class SqlTeacherAccountStore implements TeacherAccountStore {
       archivedAt = null;
     }
 
+    const teachingType =
+      patch.teachingType === undefined
+        ? row.teaching_type
+        : patch.teachingType;
+    if (
+      teachingType !== null &&
+      teachingType !== undefined &&
+      teachingType !== "TECHNICAL" &&
+      teachingType !== "GENERAL"
+    ) {
+      return { ok: false, reason: "Le type d'enseignement doit être TECHNICAL ou GENERAL.", status: 400 };
+    }
+
     await this.db
       .prepare(
         `UPDATE teachers
-         SET display_name = ?, initials = ?, is_admin = ?, is_active = ?, archived_at = ?
+         SET display_name = ?, initials = ?, is_admin = ?, is_active = ?, archived_at = ?, teaching_type = ?
          WHERE id = ?`,
       )
-      .bind(displayName, initials, isAdmin ? 1 : 0, isActive ? 1 : 0, archivedAt, teacherId)
+      .bind(displayName, initials, isAdmin ? 1 : 0, isActive ? 1 : 0, archivedAt, teachingType ?? null, teacherId)
       .run();
 
     const updated = await this.row(teacherId);

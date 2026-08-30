@@ -4,6 +4,10 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { formatLastLoginAt } from "@campus/features/teacher-accounts/index.ts";
 import {
+  TEACHER_TEACHING_TYPE_LABELS,
+  type TeachingType,
+} from "@campus/features/teaching-types/index.ts";
+import {
   createTeacherAccountApi,
   fetchTeacherAccounts,
   resetTeacherPasswordApi,
@@ -12,8 +16,6 @@ import {
 } from "../../lib/api-client.ts";
 
 interface TeacherAccountsPanelProps {
-  /** « accounts » : création et mots de passe. « roles » : administrateur et activation. */
-  mode: "accounts" | "roles";
   currentTeacherId: string;
   onNotice: (message: string) => void;
 }
@@ -43,12 +45,17 @@ function accountCardClass(account: TeacherAccountRecord): string {
   return "admin-teacher-card is-active";
 }
 
-export function TeacherAccountsPanel({ mode, currentTeacherId, onNotice }: TeacherAccountsPanelProps) {
+function teacherTypeLabel(type: TeachingType | null): string {
+  return type ? TEACHER_TEACHING_TYPE_LABELS[type] : "Type à configurer";
+}
+
+export function TeacherAccountsPanel({ currentTeacherId, onNotice }: TeacherAccountsPanelProps) {
   const [accounts, setAccounts] = useState<TeacherAccountRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [initials, setInitials] = useState("");
+  const [teachingType, setTeachingType] = useState<TeachingType>("TECHNICAL");
   const [isAdmin, setIsAdmin] = useState(false);
   const [revealed, setRevealed] = useState<RevealedPassword | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
@@ -85,9 +92,10 @@ export function TeacherAccountsPanel({ mode, currentTeacherId, onNotice }: Teach
     event.preventDefault();
     setError("");
     try {
-      const created = await createTeacherAccountApi({ displayName, initials, isAdmin });
+      const created = await createTeacherAccountApi({ displayName, initials, teachingType, isAdmin });
       setDisplayName("");
       setInitials("");
+      setTeachingType("TECHNICAL");
       setIsAdmin(false);
       setRevealed({
         teacherId: created.teacher.id,
@@ -127,6 +135,7 @@ export function TeacherAccountsPanel({ mode, currentTeacherId, onNotice }: Teach
       isAdmin?: boolean;
       isActive?: boolean;
       isArchived?: boolean;
+      teachingType?: TeachingType | null;
     },
   ) {
     setError("");
@@ -163,11 +172,11 @@ export function TeacherAccountsPanel({ mode, currentTeacherId, onNotice }: Teach
     <div className="admin-panel-block">
       <header className="config-section-header">
         <div>
-          <h3>{mode === "accounts" ? "Gestion des enseignants" : "Gestion des accès"}</h3>
+          <h3>Enseignants</h3>
           <p>
-            {mode === "accounts"
-              ? "Créez un compte par enseignant. Le mot de passe provisoire s’affiche une seule fois : notez-le et transmettez-le de vive voix."
-              : "Rôle administrateur, activation et archivage. Un administrateur actif doit toujours rester."}
+            Création des comptes, type d’enseignement, administrateur, activation et archivage.
+            Le mot de passe provisoire s’affiche une seule fois : notez-le et transmettez-le de vive voix.
+            Une préférence personnelle d’affichage dans le setup n’est pas un droit de sécurité.
           </p>
         </div>
       </header>
@@ -175,35 +184,44 @@ export function TeacherAccountsPanel({ mode, currentTeacherId, onNotice }: Teach
       {error ? <p className="admin-error">{error}</p> : null}
       {loading ? <p className="admin-loading">Chargement…</p> : null}
 
-      {mode === "accounts" ? (
-        <form className="admin-inline-form" onSubmit={(event) => void submitAccount(event)}>
-          <label>
-            Nom affiché
-            <input
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              placeholder="Marie Dupont"
-              required
-            />
-          </label>
-          <label>
-            Initiales
-            <input
-              value={initials}
-              onChange={(event) => setInitials(event.target.value)}
-              placeholder="DuM"
-              autoCapitalize="none"
-              spellCheck={false}
-              required
-            />
-          </label>
-          <label className="admin-checkbox">
-            <input type="checkbox" checked={isAdmin} onChange={(event) => setIsAdmin(event.target.checked)} />
-            <span>Administrateur</span>
-          </label>
-          <button type="submit" className="workspace-action">Créer le compte</button>
-        </form>
-      ) : null}
+      <form className="admin-inline-form" onSubmit={(event) => void submitAccount(event)}>
+        <label>
+          Nom
+          <input
+            value={displayName}
+            onChange={(event) => setDisplayName(event.target.value)}
+            placeholder="François Dupont"
+            required
+          />
+        </label>
+        <label>
+          Initiales
+          <input
+            value={initials}
+            onChange={(event) => setInitials(event.target.value)}
+            placeholder="FD"
+            autoCapitalize="none"
+            spellCheck={false}
+            required
+          />
+        </label>
+        <label>
+          Type d’enseignement
+          <select
+            value={teachingType}
+            onChange={(event) => setTeachingType(event.target.value as TeachingType)}
+            required
+          >
+            <option value="TECHNICAL">Professeur technique</option>
+            <option value="GENERAL">Professeur de branche générale</option>
+          </select>
+        </label>
+        <label className="admin-checkbox">
+          <input type="checkbox" checked={isAdmin} onChange={(event) => setIsAdmin(event.target.checked)} />
+          <span>Administrateur</span>
+        </label>
+        <button type="submit" className="workspace-action">Créer le compte</button>
+      </form>
 
       {revealed ? (
         <div className="admin-secret" role="status">
@@ -281,6 +299,9 @@ export function TeacherAccountsPanel({ mode, currentTeacherId, onNotice }: Teach
                         <div>
                           <p className="admin-teacher-name">{account.displayName}</p>
                           <p className="admin-teacher-login-meta">
+                            {teacherTypeLabel(account.teachingType)}
+                          </p>
+                          <p className="admin-teacher-login-meta">
                             Dernière connexion&nbsp;: {formatLastLoginAt(account.lastLoginAt)}
                           </p>
                         </div>
@@ -299,6 +320,9 @@ export function TeacherAccountsPanel({ mode, currentTeacherId, onNotice }: Teach
                       </span>
                       <span className={account.isAdmin ? "badge-role is-admin" : "badge-role"}>
                         {account.isAdmin ? "Administrateur" : "Enseignant"}
+                      </span>
+                      <span className={account.teachingType ? "badge-role" : "badge-status is-off"}>
+                        {teacherTypeLabel(account.teachingType)}
                       </span>
                       <span className="badge-password">{passwordLabel(account)}</span>
                     </div>
@@ -319,28 +343,39 @@ export function TeacherAccountsPanel({ mode, currentTeacherId, onNotice }: Teach
                         </button>
                       ) : null}
 
-                      {mode === "accounts" ? (
-                        <button type="button" onClick={() => void resetPassword(account)}>
-                          Réinitialiser le mot de passe
-                        </button>
-                      ) : (
+                      <button type="button" onClick={() => void resetPassword(account)}>
+                        Réinitialiser le mot de passe
+                      </button>
+                      {!account.teachingType ? (
                         <>
                           <button
                             type="button"
-                            disabled={account.id === currentTeacherId || account.isArchived}
-                            onClick={() => void patchAccount(account, { isAdmin: !account.isAdmin })}
+                            onClick={() => void patchAccount(account, { teachingType: "TECHNICAL" })}
                           >
-                            {account.isAdmin ? "Retirer l’administration" : "Nommer administrateur"}
+                            Professeur technique
                           </button>
                           <button
                             type="button"
-                            disabled={account.id === currentTeacherId || account.isArchived}
-                            onClick={() => void patchAccount(account, { isActive: !account.isActive })}
+                            onClick={() => void patchAccount(account, { teachingType: "GENERAL" })}
                           >
-                            {account.isActive ? "Désactiver" : "Réactiver"}
+                            Professeur de branche générale
                           </button>
                         </>
-                      )}
+                      ) : null}
+                      <button
+                        type="button"
+                        disabled={account.id === currentTeacherId || account.isArchived}
+                        onClick={() => void patchAccount(account, { isAdmin: !account.isAdmin })}
+                      >
+                        {account.isAdmin ? "Retirer l’administration" : "Nommer administrateur"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={account.id === currentTeacherId || account.isArchived}
+                        onClick={() => void patchAccount(account, { isActive: !account.isActive })}
+                      >
+                        {account.isActive ? "Désactiver" : "Réactiver"}
+                      </button>
 
                       <button
                         type="button"

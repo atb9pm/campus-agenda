@@ -31,6 +31,12 @@ function createId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function parseStoredTeachingType(value: unknown): "TECHNICAL" | "GENERAL" | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (value === "TECHNICAL" || value === "GENERAL") return value;
+  throw new Error("Le type de la branche doit être TECHNICAL ou GENERAL.");
+}
+
 export class MemorySchoolCatalogStore implements SchoolCatalogStore {
   private classes: SchoolClassRecord[] = [];
   private branches: SchoolBranchRecord[] = [];
@@ -154,6 +160,7 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
       adminCode: this.nextAdminCode("BR"),
       isArchived: archivedAt !== null,
       archivedAt,
+      teachingType: parseStoredTeachingType(input.teachingType),
     };
     this.branches.push(record);
     return record;
@@ -175,6 +182,8 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
       isActive: patch.isActive ?? current.isActive,
       isArchived: archivedAt !== null,
       archivedAt,
+      teachingType:
+        patch.teachingType !== undefined ? parseStoredTeachingType(patch.teachingType) : current.teachingType,
     };
     this.branches[index] = next;
     return next;
@@ -327,6 +336,17 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
     await this.ensureSeeded();
     const index = this.contexts.findIndex((entry) => entry.id === id);
     if (index < 0) return { ok: false, reason: "Contexte pédagogique introuvable." };
+    const { contextDeleteBlockers } = await import("../../features/school-catalog/ctx-guards.ts");
+    const { getMemoryPedagogicalPathStore, getMemoryAnnualCourseNotesStore } = await import(
+      "./memory-pedagogical-path-store.ts"
+    );
+    const hasPath = (await getMemoryPedagogicalPathStore().getPathByContextId(id)) !== null;
+    const noteCount = await getMemoryAnnualCourseNotesStore().countByContextId(id);
+    const blocker = contextDeleteBlockers({
+      hasPedagogicalPath: hasPath,
+      hasAnnualNotes: noteCount > 0,
+    });
+    if (blocker) return { ok: false, reason: blocker };
     this.contexts.splice(index, 1);
     return { ok: true, value: { id } };
   }

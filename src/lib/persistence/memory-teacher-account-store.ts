@@ -39,6 +39,7 @@ interface MemoryAccount {
   passwordHash: string;
   createdAt: string;
   passwordUpdatedAt: string | null;
+  teachingType: "TECHNICAL" | "GENERAL" | null;
 }
 
 function toRecord(account: MemoryAccount): TeacherAccountRecord {
@@ -55,6 +56,7 @@ function toRecord(account: MemoryAccount): TeacherAccountRecord {
     hasPassword: isUsablePasswordHash(account.passwordHash),
     createdAt: account.createdAt,
     passwordUpdatedAt: account.passwordUpdatedAt,
+    teachingType: account.teachingType,
   };
 }
 
@@ -77,6 +79,7 @@ export class MemoryTeacherAccountStore implements TeacherAccountStore {
       passwordHash: legacyDemoPasswordHash(),
       createdAt: now,
       passwordUpdatedAt: null,
+      teachingType: null,
     }));
     this.seeded = true;
   }
@@ -114,6 +117,14 @@ export class MemoryTeacherAccountStore implements TeacherAccountStore {
       return { ok: false, reason: `Les initiales ${initials} sont déjà utilisées.`, status: 409 };
     }
 
+    if (
+      input.teachingType !== undefined &&
+      input.teachingType !== "TECHNICAL" &&
+      input.teachingType !== "GENERAL"
+    ) {
+      return { ok: false, reason: "Le type d'enseignement doit être TECHNICAL ou GENERAL.", status: 400 };
+    }
+
     const temporaryPassword = generateTemporaryPassword();
     const now = new Date().toISOString();
     const account: MemoryAccount = {
@@ -128,6 +139,7 @@ export class MemoryTeacherAccountStore implements TeacherAccountStore {
       passwordHash: await hashPassword(temporaryPassword),
       createdAt: now,
       passwordUpdatedAt: now,
+      teachingType: input.teachingType ?? null,
     };
     this.accounts.push(account);
     return { ok: true, account: toRecord(account), temporaryPassword };
@@ -153,6 +165,13 @@ export class MemoryTeacherAccountStore implements TeacherAccountStore {
       const displayName = normalizeDisplayName(patch.displayName);
       if (displayName.length < 2) return { ok: false, reason: "Le nom affiché est requis.", status: 400 };
       account.displayName = displayName;
+    }
+
+    if (patch.teachingType !== undefined) {
+      if (patch.teachingType !== null && patch.teachingType !== "TECHNICAL" && patch.teachingType !== "GENERAL") {
+        return { ok: false, reason: "Le type d'enseignement doit être TECHNICAL ou GENERAL.", status: 400 };
+      }
+      account.teachingType = patch.teachingType;
     }
 
     if (
@@ -284,6 +303,7 @@ export class MemoryTeacherAccountStore implements TeacherAccountStore {
           passwordHash: entry.passwordHash,
           createdAt: entry.createdAt ?? new Date().toISOString(),
           passwordUpdatedAt: entry.passwordUpdatedAt,
+          teachingType: null,
         });
       }
     }

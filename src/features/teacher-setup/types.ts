@@ -10,6 +10,11 @@ export interface TeacherClassSetup {
   icon: string;
 }
 
+/**
+ * Préférence d'affichage personnelle.
+ * Ce n'est PAS une autorisation : le professeur ne s'attribue pas
+ * une classe, une profession, une branche ou un CTX.
+ */
 export interface TeacherSetupConfig {
   version: 1;
   classes: TeacherClassSetup[];

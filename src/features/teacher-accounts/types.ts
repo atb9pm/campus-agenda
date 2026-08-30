@@ -17,12 +17,19 @@ export interface TeacherAccountRecord {
   hasPassword: boolean;
   createdAt: string | null;
   passwordUpdatedAt: string | null;
+  /**
+   * TECHNICAL | GENERAL. Null = à configurer (legacy / bootstrap).
+   * Ce n'est PAS un troisième type.
+   */
+  teachingType: "TECHNICAL" | "GENERAL" | null;
 }
 
 export interface TeacherAccountInput {
   displayName: string;
   initials: string;
   isAdmin?: boolean;
+  /** Absent = compatibilité bootstrap / legacy (null). L'API admin l'exige. */
+  teachingType?: "TECHNICAL" | "GENERAL";
 }
 
 export interface TeacherAccountPatch {
@@ -31,6 +38,7 @@ export interface TeacherAccountPatch {
   isAdmin?: boolean;
   isActive?: boolean;
   isArchived?: boolean;
+  teachingType?: "TECHNICAL" | "GENERAL" | null;
 }
 
 /** Création ou réinitialisation : le mot de passe provisoire n'est montré qu'une fois. */

@@ -1,5 +1,5 @@
 import { getSchoolCatalogStore, getSchoolYearStore } from "@campus/lib/persistence/store-factory.ts";
-import { resolveClassSchoolYearAttachment } from "@campus/features/school-catalog/index.ts";
+import { validateAdminClassCreate } from "@campus/features/school-catalog/index.ts";
 import { jsonResponse, requireAdminSession } from "../../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../../lib/server/observability.ts";
 
@@ -20,6 +20,7 @@ async function handlePatch(request: Request, context: { params: Promise<{ id: st
     professionId?: string | null;
     trainingYear?: number | null;
     durationYears?: number;
+    teachingType?: "TECHNICAL" | "GENERAL" | null;
   };
 
   if (
@@ -38,22 +39,29 @@ async function handlePatch(request: Request, context: { params: Promise<{ id: st
 
   if (body.kind === "class") {
     try {
-      if (body.schoolYearId !== undefined || body.schoolYearLabel !== undefined) {
-        const current = (await catalog.listClasses()).find((entry) => entry.id === id);
-        if (!current) return jsonResponse({ ok: false, reason: "Classe introuvable." }, { status: 404 });
-        const years = await getSchoolYearStore().then((store) => store.listSchoolYears());
-        const schoolYear = resolveClassSchoolYearAttachment({
-          schoolYearId:
-            body.schoolYearId !== undefined ? body.schoolYearId : current.schoolYearId,
-          schoolYearLabel:
-            body.schoolYearLabel !== undefined ? body.schoolYearLabel : current.schoolYearLabel,
+      const pedagogyTouched =
+        body.schoolYearId !== undefined ||
+        body.professionId !== undefined ||
+        body.trainingYear !== undefined;
+      if (pedagogyTouched) {
+        const [years, professions] = await Promise.all([
+          getSchoolYearStore().then((store) => store.listSchoolYears()),
+          catalog.listProfessions(),
+        ]);
+        const structured = validateAdminClassCreate({
+          schoolYearId: body.schoolYearId,
+          professionId: body.professionId,
+          trainingYear: body.trainingYear,
           years,
+          professions,
         });
-        if (!schoolYear.ok) {
-          return jsonResponse({ ok: false, reason: schoolYear.reason }, { status: 400 });
+        if (!structured.ok) {
+          return jsonResponse({ ok: false, reason: structured.reason }, { status: 400 });
         }
-        body.schoolYearId = schoolYear.value.schoolYearId;
-        body.schoolYearLabel = schoolYear.value.schoolYearLabel;
+        body.schoolYearId = structured.value.schoolYearId;
+        body.schoolYearLabel = structured.value.schoolYearLabel;
+        body.professionId = structured.value.professionId;
+        body.trainingYear = structured.value.trainingYear;
       }
       const updated = await catalog.updateClass(id, body);
       if (!updated) return jsonResponse({ ok: false, reason: "Classe introuvable." }, { status: 404 });

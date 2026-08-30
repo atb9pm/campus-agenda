@@ -201,6 +201,7 @@ test("comptes — tri : actifs d'abord puis ordre alphabétique", () => {
     hasPassword: true,
     createdAt: null,
     passwordUpdatedAt: null,
+    teachingType: null,
   };
   const sorted = sortAccounts([
     { ...base, id: "c", displayName: "Inactif", isActive: false },

@@ -48,6 +48,7 @@ export function buildDefaultSchoolBranches(): SchoolBranchRecord[] {
       adminCode: `BR-${String(index + 1).padStart(4, "0")}`,
       isArchived: false,
       archivedAt: null,
+      teachingType: null,
     };
   });
 }
