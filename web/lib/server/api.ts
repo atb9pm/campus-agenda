@@ -9,7 +9,7 @@ import {
   readSessionTokenFromRequest,
   unauthorizedResponse,
 } from "@campus/lib/auth/index.ts";
-import { checkClassroomExists, getAgendaStore, getMembershipStore, getSchoolCatalogStore, getSchoolYearStore, getTeacherAccountStore, getTeacherNotesStore as resolveTeacherNotesStore, getTeacherSetupStore, getTemplateStore, resolveClassroomSubjectNames } from "@campus/lib/persistence/store-factory.ts";
+import { checkClassroomExists, getAgendaStore, getAnnualCourseNotesStore, getMembershipStore, getPedagogicalPathStore, getSchoolCatalogStore, getSchoolYearStore, getTeacherAccountStore, getTeacherNotesStore as resolveTeacherNotesStore, getTeacherSetupStore, getTemplateStore, resolveClassroomSubjectNames } from "@campus/lib/persistence/store-factory.ts";
 import { evaluateAgendaBranchForClass } from "@campus/features/school-catalog/index.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import { ARCHIVED_YEAR_READONLY_REASON, getArchivedYearIds, isArchivedYearItem } from "@campus/features/school-year/archived-readonly.ts";
@@ -70,6 +70,14 @@ export async function getTeacherSetupsStore() {
 
 export async function getTeacherNotesStore() {
   return resolveTeacherNotesStore();
+}
+
+export async function getPathStore() {
+  return getPedagogicalPathStore();
+}
+
+export async function getCourseNotesStore() {
+  return getAnnualCourseNotesStore();
 }
 
 /** Message unique côté client pour déclencher l'écran de changement obligatoire. */

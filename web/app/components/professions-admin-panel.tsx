@@ -9,6 +9,7 @@ import type {
   SchoolProfessionRecord,
 } from "@campus/features/school-catalog";
 import { trainingYearsForDuration } from "@campus/features/school-catalog";
+import { PedagogicalPathPanel } from "./pedagogical-path-panel.tsx";
 
 interface ProfessionsAdminPanelProps {
   onNotice: (message: string) => void;
@@ -76,6 +77,11 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
   const [showArchived, setShowArchived] = useState(false);
   const [editDraft, setEditDraft] = useState<ProfessionEditDraft | null>(null);
   const [assignDraft, setAssignDraft] = useState<YearAssignDraft>({});
+  const [pathEditor, setPathEditor] = useState<{
+    contextId: string;
+    adminCode: string;
+    branchLabel: string;
+  } | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -518,12 +524,26 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
                                       </span>
                                       <span className="admin-admin-code">{context.adminCode}</span>
                                     </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => void removeContext(context)}
-                                    >
-                                      Retirer
-                                    </button>
+                                    <div className="admin-profession-context-actions">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setPathEditor({
+                                            contextId: context.id,
+                                            adminCode: context.adminCode,
+                                            branchLabel: branch?.label ?? context.branchId,
+                                          })
+                                        }
+                                      >
+                                        Parcours
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => void removeContext(context)}
+                                      >
+                                        Retirer
+                                      </button>
+                                    </div>
                                   </li>
                                 );
                               })}
@@ -568,6 +588,16 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
           })}
         </ul>
       )}
+
+      {pathEditor ? (
+        <PedagogicalPathPanel
+          contextId={pathEditor.contextId}
+          adminCode={pathEditor.adminCode}
+          branchLabel={pathEditor.branchLabel}
+          onNotice={onNotice}
+          onClose={() => setPathEditor(null)}
+        />
+      ) : null}
     </div>
   );
 }
