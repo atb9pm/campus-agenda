@@ -2,6 +2,57 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.21.0] — Cours annuels et attribution sécurisée des enseignants
+
+### Architecture
+
+S’appuie sur le référentiel de **2.20.0** (PR #48). N’ajoute pas de second
+catalogue ni de second `TeachingType`.
+
+```
+Catalogue des branches
+→ Profession → Année de formation → CTX
+→ Classe structurée
+→ AnnualCourse (année + classe + CTX)
+→ TeacherCourseAssignment
+```
+
+Le cours reste. Les enseignants changent. Les données pédagogiques appartiennent
+au cours, pas au professeur.
+
+### Ajouté
+
+- `AnnualCourse` unique (`schoolYearId` + `classId` + `contextId`).
+- `TeacherCourseAssignment` daté : Titulaire / Coenseignant / Remplaçant.
+- Un seul PRIMARY **par période** ; remplacements temporaires successifs non chevauchants autorisés.
+- Sémantique temporelle : `validFrom` inclusif, `validTo` inclusif, `endedAt` = clôture exclusive (un `endedAt` futur laisse l’attribution active).
+- Remplacement définitif planifié : titulaire actuel jusqu’à T, successeur à partir de T ; validations avant toute mutation.
+- Aucune nouvelle attribution sur un cours archivé (y compris remplacement temporaire).
+- Premier enseignant (y compris forçage TeachingType) toujours PRIMARY.
+- REPLACEMENT uniquement via l’action temporaire (validFrom + validTo).
+- Branche `teachingType` null : nouvelle attribution interdite.
+- Agenda : cours structuré archivé refuse la publication (pas de fallback Membership).
+- Audit `teacher_course_assignment_events`.
+- Migration additive `0019_annual_courses_teacher_assignments`
+  (sans rejouer `teaching_type` déjà créé en 0018).
+- Onglet administration **Attributions des cours** (les cinq onglets de #48 inchangés).
+- Colonne additive `annual_course_notes.annual_course_id` (backfill seulement si
+  année + classe + CTX correspondent).
+- Garde-fou CTX étendu : un CTX avec un AnnualCourse ne peut plus être supprimé.
+- `teacherCanAccessAnnualCourse` ; Agenda utilise l’attribution si le cours est
+  résolu, sinon Membership (legacy).
+
+### Compatibilité
+
+- Membership conservé comme repli.
+- teacher-setup = préférence d’affichage, pas une autorisation (#48).
+- Enseignant `teachingType = null` lisible, non attribuable tant que non configuré.
+- Classes / CTX / notes / parcours PR46 conservés.
+
+### Non inclus
+
+- Moteur de projection séance → date, récupération N→N+1, jours fériés.
+
 ## [2.20.0] — Administration : référentiel pédagogique cohérent
 
 ### Architecture

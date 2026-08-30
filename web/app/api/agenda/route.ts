@@ -7,6 +7,7 @@ import {
   requireClassroomReadAccess,
   requireTeacherSession,
   getActiveSchoolYearId,
+  authorizeTeacherAgendaPublish,
 } from "../../../lib/server/api.ts";
 
 export async function GET(request: Request) {
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
     return jsonResponse({ ok: false, reason: "Données de publication invalides." }, { status: 400 });
   }
 
-  if (!(await auth.store!.teacherCanPublish(auth.session!.teacherId, classroomId, subjectId))) {
+  if (!(await authorizeTeacherAgendaPublish(auth.session!.teacherId, classroomId, subjectId, auth.store!))) {
     return forbiddenResponse("Vous ne pouvez pas publier dans cette branche.");
   }
 

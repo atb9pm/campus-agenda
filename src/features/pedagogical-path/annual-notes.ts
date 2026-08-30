@@ -34,6 +34,11 @@ export interface AnnualCourseNote {
   sourceNoteId: string | null;
   sourceSchoolYearId: string | null;
   inheritedAt: string | null;
+  /**
+   * Résolution additive vers AnnualCourse lorsque le cours existe.
+   * Null = pas encore rattaché (compatibilité PR46).
+   */
+  annualCourseId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -48,6 +53,7 @@ export interface AnnualCourseNoteInput {
   sourceNoteId?: string | null;
   sourceSchoolYearId?: string | null;
   inheritedAt?: string | null;
+  annualCourseId?: string | null;
 }
 
 export interface AnnualCourseNoteFilter {
@@ -97,6 +103,7 @@ export function createAnnualCourseNote(
       sourceNoteId: input.sourceNoteId ?? null,
       sourceSchoolYearId: input.sourceSchoolYearId ?? null,
       inheritedAt: input.inheritedAt ?? null,
+      annualCourseId: input.annualCourseId ?? null,
       createdAt,
       updatedAt: createdAt,
     },
@@ -132,6 +139,7 @@ export function copyNoteToNewYear(
     sourceNoteId: source.id,
     sourceSchoolYearId: source.schoolYearId,
     inheritedAt,
+    annualCourseId: null,
     createdAt: inheritedAt,
     updatedAt: inheritedAt,
   };

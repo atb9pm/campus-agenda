@@ -786,9 +786,14 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       .prepare("SELECT COUNT(*) AS count FROM annual_course_notes WHERE context_id = ?")
       .bind(id)
       .first<{ count: number }>();
+    const courseRow = await this.db
+      .prepare("SELECT COUNT(*) AS count FROM annual_courses WHERE context_id = ?")
+      .bind(id)
+      .first<{ count: number }>();
     const blocker = contextDeleteBlockers({
       hasPedagogicalPath: Boolean(pathRow),
       hasAnnualNotes: Number(noteRow?.count ?? 0) > 0,
+      hasAnnualCourse: Number(courseRow?.count ?? 0) > 0,
     });
     if (blocker) return { ok: false, reason: blocker };
     try {
@@ -796,7 +801,16 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes("CTX used") || message.includes("archive instead")) {
-        return { ok: false, reason: blocker ?? contextDeleteBlockers({ hasPedagogicalPath: true, hasAnnualNotes: false })! };
+        return {
+          ok: false,
+          reason:
+            blocker ??
+            contextDeleteBlockers({
+              hasPedagogicalPath: true,
+              hasAnnualNotes: false,
+              hasAnnualCourse: true,
+            })!,
+        };
       }
       throw error;
     }

@@ -195,6 +195,13 @@ export class MemoryTeacherAccountStore implements TeacherAccountStore {
       }
     }
 
+    if (patch.teachingType !== undefined) {
+      if (patch.teachingType !== null && patch.teachingType !== "TECHNICAL" && patch.teachingType !== "GENERAL") {
+        return { ok: false, reason: "Type d'enseignement invalide.", status: 400 };
+      }
+      account.teachingType = patch.teachingType;
+    }
+
     return { ok: true, account: toRecord(account) };
   }
 

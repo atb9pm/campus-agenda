@@ -340,11 +340,14 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
     const { getMemoryPedagogicalPathStore, getMemoryAnnualCourseNotesStore } = await import(
       "./memory-pedagogical-path-store.ts"
     );
+    const { getMemoryAnnualCourseStore } = await import("./memory-annual-course-store.ts");
     const hasPath = (await getMemoryPedagogicalPathStore().getPathByContextId(id)) !== null;
     const noteCount = await getMemoryAnnualCourseNotesStore().countByContextId(id);
+    const courses = await getMemoryAnnualCourseStore().listCoursesByContextId(id);
     const blocker = contextDeleteBlockers({
       hasPedagogicalPath: hasPath,
       hasAnnualNotes: noteCount > 0,
+      hasAnnualCourse: courses.length > 0,
     });
     if (blocker) return { ok: false, reason: blocker };
     this.contexts.splice(index, 1);
