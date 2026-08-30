@@ -32,6 +32,7 @@ type AnnualNoteRow = {
   source_note_id: string | null;
   source_school_year_id: string | null;
   inherited_at: string | null;
+  annual_course_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -48,6 +49,7 @@ function mapAnnualNote(row: AnnualNoteRow): AnnualCourseNote {
     sourceNoteId: row.source_note_id,
     sourceSchoolYearId: row.source_school_year_id,
     inheritedAt: row.inherited_at,
+    annualCourseId: row.annual_course_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -159,8 +161,8 @@ export class SqlAnnualCourseNotesStore implements AnnualCourseNotesStore {
         `INSERT INTO annual_course_notes (
            id, school_year_id, class_id, context_id, reference_session_id,
            author_teacher_id, text, source_note_id, source_school_year_id,
-           inherited_at, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           inherited_at, annual_course_id, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         note.id,
@@ -173,6 +175,7 @@ export class SqlAnnualCourseNotesStore implements AnnualCourseNotesStore {
         note.sourceNoteId,
         note.sourceSchoolYearId,
         note.inheritedAt,
+        note.annualCourseId,
         note.createdAt,
         note.updatedAt,
       )
@@ -206,5 +209,18 @@ export class SqlAnnualCourseNotesStore implements AnnualCourseNotesStore {
       .bind(contextId)
       .first<{ count: number }>();
     return Number(row?.count ?? 0);
+  }
+
+  async attachAnnualCourseId(filter: AnnualCourseNoteFilter, annualCourseId: string): Promise<number> {
+    const result = await this.db
+      .prepare(
+        `UPDATE annual_course_notes
+         SET annual_course_id = ?
+         WHERE school_year_id = ? AND class_id = ? AND context_id = ?
+           AND annual_course_id IS NULL`,
+      )
+      .bind(annualCourseId, filter.schoolYearId, filter.classId, filter.contextId)
+      .run();
+    return result.meta?.changes ?? 0;
   }
 }

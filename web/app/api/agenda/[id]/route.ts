@@ -4,6 +4,7 @@ import {
   forbiddenResponse,
   jsonResponse,
   requireTeacherSession,
+  authorizeTeacherAgendaPublish,
 } from "../../../../lib/server/api.ts";
 
 interface RouteContext {
@@ -33,7 +34,15 @@ export async function PATCH(request: Request, context: RouteContext) {
   const archivedBlock = await assertAgendaItemMutable(existing);
   if (archivedBlock) return archivedBlock;
 
-  if (existing && !(await auth.store!.teacherCanPublish(auth.session!.teacherId, existing.classroomId, body.subjectId ?? existing.subjectId))) {
+  if (
+    existing &&
+    !(await authorizeTeacherAgendaPublish(
+      auth.session!.teacherId,
+      existing.classroomId,
+      body.subjectId ?? existing.subjectId,
+      auth.store!,
+    ))
+  ) {
     return forbiddenResponse("Branche non autorisée.");
   }
 

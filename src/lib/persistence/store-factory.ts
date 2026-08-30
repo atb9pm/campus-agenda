@@ -40,6 +40,9 @@ import {
 } from "./memory-pedagogical-path-store.ts";
 import { SqlAnnualCourseNotesStore, SqlPedagogicalPathStore } from "./sql/sql-pedagogical-path-store.ts";
 import type { AnnualCourseNotesStore, PedagogicalPathStore } from "./pedagogical-path-types.ts";
+import type { AnnualCourseStore } from "./annual-course-types.ts";
+import { getMemoryAnnualCourseStore, MemoryAnnualCourseStore } from "./memory-annual-course-store.ts";
+import { SqlAnnualCourseStore } from "./sql/sql-annual-course-store.ts";
 
 import { setActiveSchoolWeekEntries } from "../../features/calendar/active-calendar.ts";
 
@@ -57,6 +60,7 @@ interface ResolvedStore {
   teacherNotesStore: TeacherNotesStore;
   pedagogicalPathStore: PedagogicalPathStore;
   annualCourseNotesStore: AnnualCourseNotesStore;
+  annualCourseStore: AnnualCourseStore;
   kind: StoreKind;
   classroomExists: (classroomId: string) => Promise<boolean>;
   resolveClassroomSubjectNames: (
@@ -88,6 +92,7 @@ async function prepareSqlDatabase(
   teacherNotesStore: SqlTeacherNotesStore;
   pedagogicalPathStore: SqlPedagogicalPathStore;
   annualCourseNotesStore: SqlAnnualCourseNotesStore;
+  annualCourseStore: SqlAnnualCourseStore;
 }> {
   await applyMigrations(db);
   if (!(await isDatabaseSeeded(db))) {
@@ -109,6 +114,7 @@ async function prepareSqlDatabase(
     teacherNotesStore: new SqlTeacherNotesStore(db),
     pedagogicalPathStore: new SqlPedagogicalPathStore(db),
     annualCourseNotesStore: new SqlAnnualCourseNotesStore(db),
+    annualCourseStore: new SqlAnnualCourseStore(db),
   };
 }
 
@@ -120,6 +126,7 @@ async function prepareMemoryStores(): Promise<{
   teacherNotesStore: MemoryTeacherNotesStore;
   pedagogicalPathStore: MemoryPedagogicalPathStore;
   annualCourseNotesStore: MemoryAnnualCourseNotesStore;
+  annualCourseStore: MemoryAnnualCourseStore;
 }> {
   const weeks = await hydrateMemorySchoolCalendar();
   setActiveSchoolWeekEntries(weeks);
@@ -138,6 +145,7 @@ async function prepareMemoryStores(): Promise<{
     teacherNotesStore: getMemoryTeacherNotesStore(),
     pedagogicalPathStore: getMemoryPedagogicalPathStore(),
     annualCourseNotesStore: getMemoryAnnualCourseNotesStore(),
+    annualCourseStore: getMemoryAnnualCourseStore(),
   };
 }
 
@@ -151,6 +159,7 @@ async function createStore(): Promise<ResolvedStore> {
       teacherNotesStore,
       pedagogicalPathStore,
       annualCourseNotesStore,
+      annualCourseStore,
     } = await prepareMemoryStores();
     return {
       store: getMemoryAgendaStore(),
@@ -164,6 +173,7 @@ async function createStore(): Promise<ResolvedStore> {
       teacherNotesStore,
       pedagogicalPathStore,
       annualCourseNotesStore,
+      annualCourseStore,
       kind: "memory",
       classroomExists: memoryClassroomExists,
       resolveClassroomSubjectNames: memoryResolveClassroomSubjectNames,
@@ -180,6 +190,7 @@ async function createStore(): Promise<ResolvedStore> {
       teacherNotesStore,
       pedagogicalPathStore,
       annualCourseNotesStore,
+      annualCourseStore,
     } = await prepareSqlDatabase(sqlite);
     const store = new SqlAgendaStore(sqlite);
     return {
@@ -194,6 +205,7 @@ async function createStore(): Promise<ResolvedStore> {
       teacherNotesStore,
       pedagogicalPathStore,
       annualCourseNotesStore,
+      annualCourseStore,
       kind: "sqlite",
       classroomExists: (classroomId) => classroomExistsInDatabase(sqlite, classroomId),
       resolveClassroomSubjectNames: (classroomId, subjectId) =>
@@ -213,6 +225,7 @@ async function createStore(): Promise<ResolvedStore> {
         teacherNotesStore,
         pedagogicalPathStore,
         annualCourseNotesStore,
+        annualCourseStore,
       } = await prepareSqlDatabase(db);
       const store = new SqlAgendaStore(db);
       return {
@@ -227,6 +240,7 @@ async function createStore(): Promise<ResolvedStore> {
         teacherNotesStore,
         pedagogicalPathStore,
         annualCourseNotesStore,
+        annualCourseStore,
         kind: "d1",
         classroomExists: (classroomId) => classroomExistsInDatabase(db, classroomId),
         resolveClassroomSubjectNames: (classroomId, subjectId) =>
@@ -245,6 +259,7 @@ async function createStore(): Promise<ResolvedStore> {
     teacherNotesStore,
     pedagogicalPathStore,
     annualCourseNotesStore,
+    annualCourseStore,
   } = await prepareMemoryStores();
   return {
     store: getMemoryAgendaStore(),
@@ -258,6 +273,7 @@ async function createStore(): Promise<ResolvedStore> {
     teacherNotesStore,
     pedagogicalPathStore,
     annualCourseNotesStore,
+    annualCourseStore,
     kind: "memory",
     classroomExists: memoryClassroomExists,
     resolveClassroomSubjectNames: memoryResolveClassroomSubjectNames,
@@ -322,6 +338,10 @@ export async function getPedagogicalPathStore(): Promise<PedagogicalPathStore> {
 
 export async function getAnnualCourseNotesStore(): Promise<AnnualCourseNotesStore> {
   return (await resolveAgendaStore()).annualCourseNotesStore;
+}
+
+export async function getAnnualCourseStore(): Promise<AnnualCourseStore> {
+  return (await resolveAgendaStore()).annualCourseStore;
 }
 
 

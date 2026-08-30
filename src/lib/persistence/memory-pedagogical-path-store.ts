@@ -86,6 +86,19 @@ export class MemoryAnnualCourseNotesStore implements AnnualCourseNotesStore {
   async countByContextId(contextId: string): Promise<number> {
     return [...this.notes.values()].filter((note) => note.contextId === contextId).length;
   }
+
+  async attachAnnualCourseId(filter: AnnualCourseNoteFilter, annualCourseId: string): Promise<number> {
+    let updated = 0;
+    for (const note of this.notes.values()) {
+      if (note.schoolYearId !== filter.schoolYearId) continue;
+      if (note.classId !== filter.classId) continue;
+      if (note.contextId !== filter.contextId) continue;
+      if (note.annualCourseId) continue;
+      note.annualCourseId = annualCourseId;
+      updated += 1;
+    }
+    return updated;
+  }
 }
 
 let memoryPathStore: MemoryPedagogicalPathStore | null = null;

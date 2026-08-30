@@ -38,6 +38,7 @@ export {
   getTeacherAccountStore,
   getTeacherNotesStore,
   getTeacherSetupStore,
+  getAnnualCourseStore,
   resetStoreFactory,
   resolveAgendaStore,
 } from "./store-factory.ts";

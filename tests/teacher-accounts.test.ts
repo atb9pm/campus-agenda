@@ -104,9 +104,26 @@ test("comptes — règles d'initiales et d'identifiant", () => {
   assert.equal(buildTeacherId("DuM", ["teacher-dum"]), "teacher-dum-2");
 });
 
+test("comptes — type d'enseignement obligatoire à la création, legacy null conservé", async () => {
+  const store = freshStore();
+  const missing = await store.createAccount({ displayName: "Sans Type", initials: "StX" } as never);
+  assert.equal(missing.ok, false);
+  const created = await store.createAccount({
+    displayName: "Marie Dupont",
+    initials: "TyM",
+    teachingType: "TECHNICAL",
+  });
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+  assert.equal(created.account.teachingType, "TECHNICAL");
+  const legacy = (await store.listAccounts()).find((account) => account.teachingType === null);
+  assert.ok(legacy);
+  assert.equal(legacy.teachingType, null);
+});
+
 test("comptes — création avec mot de passe provisoire à usage unique", async () => {
   const store = freshStore();
-  const created = await store.createAccount({ displayName: "Marie Dupont", initials: "DuM" });
+  const created = await store.createAccount({ displayName: "Marie Dupont", initials: "DuM", teachingType: "TECHNICAL" });
   assert.equal(created.ok, true);
   if (!created.ok) return;
 
@@ -121,13 +138,13 @@ test("comptes — création avec mot de passe provisoire à usage unique", async
   assert.equal(await store.mustChangePassword(created.account.id), true);
 
   // Les mêmes initiales ne peuvent pas être réattribuées.
-  const duplicate = await store.createAccount({ displayName: "Marc Dumas", initials: "dum" });
+  const duplicate = await store.createAccount({ displayName: "Marc Dumas", initials: "dum", teachingType: "GENERAL" });
   assert.equal(duplicate.ok, false);
 });
 
 test("comptes — changement de mot de passe par l'enseignant", async () => {
   const store = freshStore();
-  const created = await store.createAccount({ displayName: "Marie Dupont", initials: "DuM" });
+  const created = await store.createAccount({ displayName: "Marie Dupont", initials: "DuM", teachingType: "TECHNICAL" });
   assert.ok(created.ok);
   if (!created.ok) return;
 
@@ -150,7 +167,7 @@ test("comptes — changement de mot de passe par l'enseignant", async () => {
 
 test("comptes — réinitialisation administrateur et désactivation", async () => {
   const store = freshStore();
-  const created = await store.createAccount({ displayName: "Marie Dupont", initials: "DuM" });
+  const created = await store.createAccount({ displayName: "Marie Dupont", initials: "DuM", teachingType: "TECHNICAL" });
   assert.ok(created.ok);
   if (!created.ok) return;
   await store.changeOwnPassword(created.account.id, created.temporaryPassword, "Atelier-2027");
@@ -228,6 +245,7 @@ test("comptes SQLite — migration, création et vérification des identifiants"
     displayName: "Marie Dupont",
     initials: "DuM",
     isAdmin: false,
+    teachingType: "TECHNICAL",
   });
   assert.ok(created.ok);
   if (!created.ok) return;
@@ -307,7 +325,7 @@ test("amorçage — sans variable : mot de passe provisoire journalisé", async 
 
 test("comptes — archivage refuse la connexion et dernier login est enregistré", async () => {
   const store = freshStore();
-  const created = await store.createAccount({ displayName: "Paul Archive", initials: "ArP" });
+  const created = await store.createAccount({ displayName: "Paul Archive", initials: "ArP", teachingType: "GENERAL" });
   assert.equal(created.ok, true);
   if (!created.ok) return;
 
@@ -348,6 +366,7 @@ test("comptes SQLite — last_login_at en ISO 8601 UTC explicite", async () => {
     displayName: "Lucie Horloge",
     initials: "HoL",
     isAdmin: false,
+    teachingType: "GENERAL",
   });
   assert.ok(created.ok);
   if (!created.ok) return;

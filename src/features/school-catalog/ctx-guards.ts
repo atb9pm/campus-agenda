@@ -4,7 +4,10 @@ export const CTX_IN_USE_DELETE_REASON =
 export function contextDeleteBlockers(options: {
   hasPedagogicalPath: boolean;
   hasAnnualNotes: boolean;
+  hasAnnualCourse?: boolean;
 }): string | null {
-  if (!options.hasPedagogicalPath && !options.hasAnnualNotes) return null;
+  if (!options.hasPedagogicalPath && !options.hasAnnualNotes && !options.hasAnnualCourse) {
+    return null;
+  }
   return CTX_IN_USE_DELETE_REASON;
 }

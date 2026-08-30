@@ -9,7 +9,9 @@ import {
   readSessionTokenFromRequest,
   unauthorizedResponse,
 } from "@campus/lib/auth/index.ts";
-import { checkClassroomExists, getAgendaStore, getAnnualCourseNotesStore, getMembershipStore, getPedagogicalPathStore, getSchoolCatalogStore, getSchoolYearStore, getTeacherAccountStore, getTeacherNotesStore as resolveTeacherNotesStore, getTeacherSetupStore, getTemplateStore, resolveClassroomSubjectNames } from "@campus/lib/persistence/store-factory.ts";
+import { checkClassroomExists, getAgendaStore, getAnnualCourseNotesStore, getAnnualCourseStore, getMembershipStore, getPedagogicalPathStore, getSchoolCatalogStore, getSchoolYearStore, getTeacherAccountStore, getTeacherNotesStore as resolveTeacherNotesStore, getTeacherSetupStore, getTemplateStore, resolveClassroomSubjectNames } from "@campus/lib/persistence/store-factory.ts";
+import { resolveAnnualCourseForPublication, teacherCanAccessAnnualCourse } from "@campus/features/annual-courses/index.ts";
+import type { AnnualCourseServiceDeps } from "@campus/features/annual-courses/index.ts";
 import { evaluateAgendaBranchForClass } from "@campus/features/school-catalog/index.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import { ARCHIVED_YEAR_READONLY_REASON, getArchivedYearIds, isArchivedYearItem } from "@campus/features/school-year/archived-readonly.ts";
@@ -78,6 +80,56 @@ export async function getPathStore() {
 
 export async function getCourseNotesStore() {
   return getAnnualCourseNotesStore();
+}
+
+export async function getCourseStore() {
+  return getAnnualCourseStore();
+}
+
+export async function getAnnualCourseServiceDeps(): Promise<AnnualCourseServiceDeps> {
+  const [courses, catalog, years, teachers, notes] = await Promise.all([
+    getAnnualCourseStore(),
+    getSchoolCatalogStore(),
+    getSchoolYearStore(),
+    getTeacherAccountStore(),
+    getAnnualCourseNotesStore(),
+  ]);
+  return { courses, catalog, years, teachers, notes };
+}
+
+export async function authorizeTeacherAgendaPublish(
+  teacherId: string,
+  classroomId: string,
+  subjectId: string,
+  store: { teacherCanPublish(teacherId: string, classroomId: string, subjectId: string): Promise<boolean> },
+): Promise<boolean> {
+  const names = await resolveClassroomSubjectNames(classroomId, subjectId);
+  const catalog = await getSchoolCatalogStore();
+  await catalog.ensureSeeded();
+  const [classes, branches, contexts, courses, assignments, teacher] = await Promise.all([
+    catalog.listClasses(),
+    catalog.listBranches(),
+    catalog.listContexts(),
+    getAnnualCourseStore().then((entry) => entry.listCourses()),
+    getAnnualCourseStore().then((entry) => entry.listAssignments()),
+    getTeacherAccountStore().then((entry) => entry.findAccount(teacherId)),
+  ]);
+  const resolved = resolveAnnualCourseForPublication({
+    classroomName: names.classroomName,
+    subjectName: names.subjectName,
+    classes,
+    branches,
+    contexts,
+    courses,
+  });
+  if (resolved) {
+    return teacherCanAccessAnnualCourse({
+      teacher,
+      course: resolved.course,
+      assignments,
+    });
+  }
+  return store.teacherCanPublish(teacherId, classroomId, subjectId);
 }
 
 /** Message unique côté client pour déclencher l'écran de changement obligatoire. */
