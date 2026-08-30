@@ -4,7 +4,7 @@ import {
   normalizeClassCodePrefix,
   type StructuredClassDraft,
 } from "./class-codes.ts";
-import { assertClassCodeAvailable } from "./class-uniqueness.ts";
+import { assertClassCodeAvailable, assertStructuredGroupAvailable } from "./class-uniqueness.ts";
 import type {
   PedagogicalContextRecord,
   PedagogyMutationResult,
@@ -118,13 +118,34 @@ export function validateStructuredClassBatch(options: {
   });
   if (!drafts.ok) return drafts;
 
+  const pending = options.classes.slice();
   for (const draft of drafts.value) {
     const available = assertClassCodeAvailable({
       code: draft.code,
       schoolYearId: structured.value.schoolYearId,
-      classes: options.classes,
+      classes: pending,
     });
     if (!available.ok) return available;
+    const group = assertStructuredGroupAvailable({
+      schoolYearId: structured.value.schoolYearId,
+      professionId: structured.value.professionId,
+      trainingYear: structured.value.trainingYear,
+      parallelCode: draft.parallelCode,
+      classes: pending,
+    });
+    if (!group.ok) return group;
+    pending.push({
+      id: `pending-${draft.code}`,
+      code: draft.code,
+      label: draft.label,
+      sortOrder: 0,
+      isActive: true,
+      schoolYearId: structured.value.schoolYearId,
+      schoolYearLabel: structured.value.schoolYearLabel,
+      professionId: structured.value.professionId,
+      trainingYear: structured.value.trainingYear,
+      parallelCode: draft.parallelCode,
+    });
   }
 
   const codes = drafts.value.map((draft) => draft.code);
@@ -165,11 +186,30 @@ export interface StructuredClassWriter {
   listClasses(): Promise<SchoolClassRecord[]>;
   listProfessions(): Promise<SchoolProfessionRecord[]>;
   listContexts(): Promise<PedagogicalContextRecord[]>;
-  createClass(input: SchoolClassInput): Promise<SchoolClassRecord>;
+  createClassesBatch(inputs: SchoolClassInput[]): Promise<SchoolClassRecord[]>;
+}
+
+export function parseStructuredClassesRequest(body: {
+  organization?: unknown;
+  parallelCodes?: unknown;
+}): PedagogyMutationResult<{ organization: "unique" | "parallel"; parallelCodes?: string[] }> {
+  if (body.organization !== "unique" && body.organization !== "parallel") {
+    return { ok: false, reason: "L'organisation doit être « unique » ou « parallel »." };
+  }
+  if (body.organization === "parallel") {
+    if (
+      !Array.isArray(body.parallelCodes) ||
+      body.parallelCodes.some((entry) => typeof entry !== "string")
+    ) {
+      return { ok: false, reason: "parallelCodes doit être un tableau de chaînes." };
+    }
+    return { ok: true, value: { organization: "parallel", parallelCodes: body.parallelCodes } };
+  }
+  return { ok: true, value: { organization: "unique" } };
 }
 
 /**
- * Valide le lot entier puis crée toutes les classes (aucune écriture partielle).
+ * Valide le lot entier puis persiste toutes les classes en une opération atomique.
  */
 export async function createStructuredClasses(
   catalog: StructuredClassWriter,
@@ -193,14 +233,10 @@ export async function createStructuredClasses(
   if (!validated.ok) return validated;
 
   const inputs = structuredDraftsToInputs(validated.value, classes.length + 1);
-  const created: SchoolClassRecord[] = [];
   try {
-    for (const input of inputs) {
-      created.push(await catalog.createClass(input));
-    }
+    return { ok: true, value: await catalog.createClassesBatch(inputs) };
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Création des classes impossible.";
     return { ok: false, reason };
   }
-  return { ok: true, value: created };
 }

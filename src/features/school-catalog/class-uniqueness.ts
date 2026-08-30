@@ -34,6 +34,51 @@ export function assertClassCodeAvailable(options: {
   };
 }
 
+export function isStructuredClassKey(entry: {
+  schoolYearId: string | null;
+  professionId: string | null;
+  trainingYear: number | null;
+}): boolean {
+  return Boolean(entry.schoolYearId && entry.professionId && entry.trainingYear !== null);
+}
+
+/**
+ * Unicité structurelle pour la récupération future (CTX + parallelCode).
+ * Legacy (année / profession / année de formation manquante) : non concerné.
+ */
+export function assertStructuredGroupAvailable(options: {
+  schoolYearId: string | null;
+  professionId: string | null;
+  trainingYear: number | null;
+  parallelCode: string | null;
+  classes: SchoolClassRecord[];
+  excludeId?: string;
+}): PedagogyMutationResult<true> {
+  if (!isStructuredClassKey(options)) return { ok: true, value: true };
+
+  const clash = options.classes.find((entry) => {
+    if (options.excludeId && entry.id === options.excludeId) return false;
+    if (!isStructuredClassKey(entry)) return false;
+    if (entry.schoolYearId !== options.schoolYearId) return false;
+    if (entry.professionId !== options.professionId) return false;
+    if (entry.trainingYear !== options.trainingYear) return false;
+    if (options.parallelCode === null) return entry.parallelCode === null;
+    return entry.parallelCode === options.parallelCode;
+  });
+  if (!clash) return { ok: true, value: true };
+  if (options.parallelCode === null) {
+    return {
+      ok: false,
+      reason:
+        "Une classe unique existe déjà pour cette profession et cette année de formation.",
+    };
+  }
+  return {
+    ok: false,
+    reason: `Le groupe ${options.parallelCode} existe déjà pour cette profession et cette année scolaire.`,
+  };
+}
+
 export function assertProfessionPrefixAvailable(options: {
   prefix: string;
   professions: Array<{ id: string; classCodePrefix: string | null }>;

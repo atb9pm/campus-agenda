@@ -2,8 +2,7 @@
 -- unicite annuelle du code de classe (meme code possible d une annee a l autre).
 -- Recree school_classes pour retirer UNIQUE(code) inline (SQLite).
 -- Conserve toutes les colonnes et tous les IDs. Pas de ON DELETE CASCADE.
--- Idempotente : ALTER ADD est ignore si la colonne existe.
--- La recopie inclut parallel_code apres le premier passage.
+-- Le bloc CAMPUS:BEGIN/END ONCE n est execute qu une seule fois.
 
 ALTER TABLE school_professions ADD COLUMN class_code_prefix TEXT;
 
@@ -13,6 +12,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_school_professions_class_code_prefix
 
 ALTER TABLE school_classes ADD COLUMN parallel_code TEXT;
 
+-- CAMPUS:BEGIN ONCE 0020_school_class_structure.sql
 DROP TABLE IF EXISTS school_classes_structure_0020;
 
 CREATE TABLE school_classes_structure_0020 (
@@ -43,6 +43,7 @@ FROM school_classes;
 DROP TABLE school_classes;
 
 ALTER TABLE school_classes_structure_0020 RENAME TO school_classes;
+-- CAMPUS:END ONCE 0020_school_class_structure.sql
 
 CREATE INDEX IF NOT EXISTS idx_school_classes_code
   ON school_classes (code);
@@ -60,3 +61,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_school_classes_year_code
 CREATE UNIQUE INDEX IF NOT EXISTS idx_school_classes_legacy_code
   ON school_classes (code)
   WHERE school_year_id IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_school_classes_structured_parallel
+  ON school_classes (school_year_id, profession_id, training_year, parallel_code)
+  WHERE school_year_id IS NOT NULL
+    AND profession_id IS NOT NULL
+    AND training_year IS NOT NULL
+    AND parallel_code IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_school_classes_structured_unique
+  ON school_classes (school_year_id, profession_id, training_year)
+  WHERE school_year_id IS NOT NULL
+    AND profession_id IS NOT NULL
+    AND training_year IS NOT NULL
+    AND parallel_code IS NULL;

@@ -8,6 +8,7 @@ import {
   buildClassLabel,
   createStructuredClasses,
   normalizeClassCodePrefix,
+  parseStructuredClassesRequest,
   resolveSchoolClass,
   trainingYearsForDuration,
   validateStructuredClassBatch,
@@ -569,5 +570,260 @@ test("SQLite — 0001→0019→0020 puis applyMigrations rejoué, classes legacy
   assert.equal(resolved2026?.schoolClass.id, first.id);
   assert.equal(resolved2027?.schoolClass.id, second.id);
 
+  db.close();
+});
+
+test("API — organization invalide non convertie en unique, parallelCodes typé", () => {
+  assert.equal(parseStructuredClassesRequest({}).ok, false);
+  assert.equal(parseStructuredClassesRequest({ organization: "mixte" }).ok, false);
+  assert.equal(parseStructuredClassesRequest({ organization: "unique" }).ok, true);
+  assert.equal(parseStructuredClassesRequest({ organization: "parallel" }).ok, false);
+  assert.equal(parseStructuredClassesRequest({ organization: "parallel", parallelCodes: "A" }).ok, false);
+  assert.equal(parseStructuredClassesRequest({ organization: "parallel", parallelCodes: [1] }).ok, false);
+  const ok = parseStructuredClassesRequest({ organization: "parallel", parallelCodes: ["A", "B"] });
+  assert.equal(ok.ok, true);
+  if (ok.ok) assert.deepEqual(ok.value.parallelCodes, ["A", "B"]);
+});
+
+test("groupes — A/B/C ok, deux A refusés même avec codes différents, A ok sur une autre année", async () => {
+  const { store, profession } = await professionWithPlan();
+  const first = await createStructuredClasses(store, {
+    years: [YEAR_2026, YEAR_2027],
+    input: {
+      schoolYearId: YEAR_2026.id,
+      professionId: profession.id,
+      trainingYear: 1,
+      organization: "parallel",
+      parallelCodes: ["A", "B", "C"],
+    },
+  });
+  assert.equal(first.ok, true);
+
+  await assert.rejects(
+    () =>
+      store.createClass({
+        code: "MMX1A",
+        label: "MMX 1A",
+        schoolYearId: YEAR_2026.id,
+        schoolYearLabel: YEAR_2026.label,
+        professionId: profession.id,
+        trainingYear: 1,
+        parallelCode: "A",
+      }),
+    /groupe A/i,
+  );
+
+  const otherYear = await store.createClass({
+    code: "MMA1A",
+    label: "MMA 1A",
+    schoolYearId: YEAR_2027.id,
+    schoolYearLabel: YEAR_2027.label,
+    professionId: profession.id,
+    trainingYear: 1,
+    parallelCode: "A",
+  });
+  assert.equal(otherYear.parallelCode, "A");
+
+  const unique = await store.createClass({
+    code: "MMA2",
+    label: "MMA 2",
+    schoolYearId: YEAR_2026.id,
+    schoolYearLabel: YEAR_2026.label,
+    professionId: profession.id,
+    trainingYear: 2,
+    parallelCode: null,
+  });
+  assert.equal(unique.parallelCode, null);
+  await assert.rejects(
+    () =>
+      store.createClass({
+        code: "MMA2B",
+        label: "MMA 2B",
+        schoolYearId: YEAR_2026.id,
+        schoolYearLabel: YEAR_2026.label,
+        professionId: profession.id,
+        trainingYear: 2,
+        parallelCode: null,
+      }),
+    /classe unique/i,
+  );
+
+  const legacy = await store.createClass({
+    code: "LEGACYZ",
+    label: "LEGACYZ",
+    schoolYearId: null,
+    parallelCode: "A",
+  });
+  assert.equal(legacy.schoolYearId, null);
+});
+
+test("groupes — modifier le préfixe ne permet pas de recréer A en doublon", async () => {
+  const { store, profession } = await professionWithPlan();
+  await store.createClass({
+    code: "MMA1A",
+    label: "MMA 1A",
+    schoolYearId: YEAR_2026.id,
+    schoolYearLabel: YEAR_2026.label,
+    professionId: profession.id,
+    trainingYear: 1,
+    parallelCode: "A",
+  });
+  const updated = await store.updateProfession(profession.id, { classCodePrefix: "MM" });
+  assert.equal(updated.ok, true);
+  const duplicate = await createStructuredClasses(store, {
+    years: [YEAR_2026],
+    input: {
+      schoolYearId: YEAR_2026.id,
+      professionId: profession.id,
+      trainingYear: 1,
+      organization: "parallel",
+      parallelCodes: ["A", "B"],
+    },
+  });
+  assert.equal(duplicate.ok, false);
+  if (!duplicate.ok) assert.match(duplicate.reason, /groupe A/i);
+});
+
+test("batch atomique — échec au milieu, zéro classe du lot (Memory + SQL)", async () => {
+  const { store, profession } = await professionWithPlan();
+  const beforeIds = new Set((await store.listClasses()).map((entry) => entry.id));
+  await assert.rejects(
+    () =>
+      store.createClassesBatch([
+        {
+          code: "MMA1A",
+          label: "MMA 1A",
+          schoolYearId: YEAR_2026.id,
+          schoolYearLabel: YEAR_2026.label,
+          professionId: profession.id,
+          trainingYear: 1,
+          parallelCode: "A",
+        },
+        {
+          code: "MMA1B",
+          label: "MMA 1B",
+          schoolYearId: YEAR_2026.id,
+          schoolYearLabel: YEAR_2026.label,
+          professionId: profession.id,
+          trainingYear: 1,
+          parallelCode: "A",
+        },
+      ]),
+    /groupe A/i,
+  );
+  const afterMemory = await store.listClasses();
+  assert.deepEqual(
+    afterMemory.map((entry) => entry.id),
+    [...beforeIds],
+  );
+  assert.equal(afterMemory.some((entry) => entry.code === "MMA1A" && entry.schoolYearId === YEAR_2026.id), false);
+
+  const db = createNodeSqliteDatabase(":memory:");
+  await applyMigrations(db);
+  const catalog = new SqlSchoolCatalogStore(db);
+  await catalog.ensureSeeded();
+  const sqlProfession = await catalog.createProfession({
+    label: "Mécanicien en maintenance",
+    durationYears: 3,
+    classCodePrefix: "MMA",
+  });
+  const branches = await catalog.listBranches();
+  await catalog.createContext({
+    professionId: sqlProfession.id,
+    trainingYear: 1,
+    branchId: branches[0]!.id,
+  });
+  const beforeSql = new Set((await catalog.listClasses()).map((entry) => entry.id));
+  const originalBatch = db.batch.bind(db);
+  db.batch = async (statements) => {
+    db.db.exec("BEGIN");
+    try {
+      for (const [index, statement] of statements.entries()) {
+        if (index === 1) throw new Error("échec volontaire");
+        db.db.prepare(statement.sql).run(...statement.values);
+      }
+      db.db.exec("COMMIT");
+    } catch (error) {
+      db.db.exec("ROLLBACK");
+      throw error;
+    }
+  };
+  await assert.rejects(
+    () =>
+      catalog.createClassesBatch([
+        {
+          code: "MMA1A",
+          label: "MMA 1A",
+          schoolYearId: YEAR_2026.id,
+          schoolYearLabel: YEAR_2026.label,
+          professionId: sqlProfession.id,
+          trainingYear: 1,
+          parallelCode: "A",
+        },
+        {
+          code: "MMA1B",
+          label: "MMA 1B",
+          schoolYearId: YEAR_2026.id,
+          schoolYearLabel: YEAR_2026.label,
+          professionId: sqlProfession.id,
+          trainingYear: 1,
+          parallelCode: "B",
+        },
+        {
+          code: "MMA1C",
+          label: "MMA 1C",
+          schoolYearId: YEAR_2026.id,
+          schoolYearLabel: YEAR_2026.label,
+          professionId: sqlProfession.id,
+          trainingYear: 1,
+          parallelCode: "C",
+        },
+      ]),
+    /échec volontaire/,
+  );
+  db.batch = originalBatch;
+  const afterSql = await catalog.listClasses();
+  assert.deepEqual(
+    afterSql.map((entry) => entry.id).sort(),
+    [...beforeSql].sort(),
+  );
+  assert.equal(afterSql.some((entry) => entry.code === "MMA1A"), false);
+  db.close();
+});
+
+test("migration 0020 — replay ne reconstruit pas school_classes (colonne future conservée)", async () => {
+  const db = createNodeSqliteDatabase(":memory:");
+  await applyMigrations(db, { until: "0020_school_class_structure.sql" });
+  await db.exec("ALTER TABLE school_classes ADD COLUMN future_note TEXT;");
+  await db
+    .prepare(
+      `INSERT INTO school_classes (id, code, label, sort_order, is_active, future_note)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .bind("future-keep-1", "FUT1", "FUT1", 99, 1, "conserver-moi")
+    .run();
+  const before = await db
+    .prepare("SELECT id, future_note FROM school_classes WHERE id = ?")
+    .bind("future-keep-1")
+    .all<{ id: string; future_note: string }>();
+  assert.equal(before.results?.[0]?.future_note, "conserver-moi");
+
+  await applyMigrations(db);
+
+  const columns = await db
+    .prepare("PRAGMA table_info(school_classes)")
+    .bind()
+    .all<{ name: string }>();
+  assert.ok((columns.results ?? []).some((row) => row.name === "future_note"));
+  const after = await db
+    .prepare("SELECT future_note FROM school_classes WHERE id = ?")
+    .bind(before.results![0]!.id)
+    .first<{ future_note: string }>();
+  assert.equal(after?.future_note, "conserver-moi");
+  const recorded = await db
+    .prepare("SELECT filename FROM schema_migrations WHERE filename = ?")
+    .bind("0020_school_class_structure.sql")
+    .first<{ filename: string }>();
+  assert.equal(recorded?.filename, "0020_school_class_structure.sql");
   db.close();
 });

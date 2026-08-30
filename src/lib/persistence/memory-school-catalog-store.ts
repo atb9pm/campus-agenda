@@ -8,9 +8,11 @@ import {
   normalizeParallelCode,
   parseOptionalClassCodePrefix,
 } from "../../features/school-catalog/class-codes.ts";
+import { prepareClassRecords } from "../../features/school-catalog/class-prepare.ts";
 import {
   assertClassCodeAvailable,
   assertProfessionPrefixAvailable,
+  assertStructuredGroupAvailable,
 } from "../../features/school-catalog/class-uniqueness.ts";
 import {
   branchDeleteBlockers,
@@ -107,37 +109,22 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
   }
 
   async createClass(input: SchoolClassInput): Promise<SchoolClassRecord> {
+    const [record] = await this.createClassesBatch([input]);
+    return record!;
+  }
+
+  async createClassesBatch(inputs: SchoolClassInput[]): Promise<SchoolClassRecord[]> {
     await this.ensureSeeded();
-    const attachment = validateClassProfessionAttachment({
-      professionId: input.professionId ?? null,
-      trainingYear: input.trainingYear ?? null,
+    if (inputs.length === 0) return [];
+    const prepared = prepareClassRecords(inputs, {
       professions: this.professions,
-    });
-    if (!attachment.ok) throw new Error(attachment.reason);
-    const parallel = normalizeParallelCode(input.parallelCode ?? null);
-    if (!parallel.ok) throw new Error(parallel.reason);
-    const code = normalizeClassCode(input.code);
-    const schoolYearId = input.schoolYearId ?? null;
-    const available = assertClassCodeAvailable({
-      code,
-      schoolYearId,
       classes: this.classes,
+      createId: () => createId("school-class"),
+      sortOrderStart: this.classes.length + 1,
     });
-    if (!available.ok) throw new Error(available.reason);
-    const record: SchoolClassRecord = {
-      id: createId("school-class"),
-      code,
-      label: input.label.trim() || code,
-      sortOrder: input.sortOrder ?? this.classes.length + 1,
-      isActive: input.isActive ?? true,
-      schoolYearId,
-      schoolYearLabel: input.schoolYearLabel ?? null,
-      professionId: attachment.value.professionId,
-      trainingYear: attachment.value.trainingYear,
-      parallelCode: parallel.value,
-    };
-    this.classes.push(record);
-    return record;
+    if (!prepared.ok) throw new Error(prepared.reason);
+    this.classes = [...this.classes, ...prepared.value];
+    return prepared.value;
   }
 
   async updateClass(id: string, patch: Partial<SchoolClassInput>): Promise<SchoolClassRecord | null> {
@@ -165,6 +152,15 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
       excludeId: id,
     });
     if (!available.ok) throw new Error(available.reason);
+    const group = assertStructuredGroupAvailable({
+      schoolYearId: nextYearId,
+      professionId: attachment.value.professionId,
+      trainingYear: attachment.value.trainingYear,
+      parallelCode: parallel.value,
+      classes: this.classes,
+      excludeId: id,
+    });
+    if (!group.ok) throw new Error(group.reason);
     const next: SchoolClassRecord = {
       ...current,
       code: nextCode,

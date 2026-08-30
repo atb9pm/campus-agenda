@@ -2,6 +2,7 @@ import { getSchoolCatalogStore, getSchoolYearStore } from "@campus/lib/persisten
 import {
   createStructuredClasses,
   normalizeClassCodePrefix,
+  parseStructuredClassesRequest,
   validateAdminClassCreate,
 } from "@campus/features/school-catalog/index.ts";
 import {
@@ -110,6 +111,10 @@ async function handlePost(request: Request) {
     if (!body.schoolYearId || !body.professionId || body.trainingYear === undefined) {
       return jsonResponse({ ok: false, reason: "Données invalides." }, { status: 400 });
     }
+    const organization = parseStructuredClassesRequest(body);
+    if (!organization.ok) {
+      return jsonResponse({ ok: false, reason: organization.reason }, { status: 400 });
+    }
     const years = await getSchoolYearStore().then((store) => store.listSchoolYears());
     const created = await createStructuredClasses(catalog, {
       years,
@@ -117,8 +122,8 @@ async function handlePost(request: Request) {
         schoolYearId: body.schoolYearId,
         professionId: body.professionId,
         trainingYear: body.trainingYear,
-        organization: body.organization === "parallel" ? "parallel" : "unique",
-        parallelCodes: body.parallelCodes,
+        organization: organization.value.organization,
+        parallelCodes: organization.value.parallelCodes,
       },
     });
     if (!created.ok) {

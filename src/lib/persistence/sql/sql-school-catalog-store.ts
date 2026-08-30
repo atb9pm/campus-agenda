@@ -12,9 +12,11 @@ import {
   normalizeParallelCode,
   parseOptionalClassCodePrefix,
 } from "../../../features/school-catalog/class-codes.ts";
+import { prepareClassRecords } from "../../../features/school-catalog/class-prepare.ts";
 import {
   assertClassCodeAvailable,
   assertProfessionPrefixAvailable,
+  assertStructuredGroupAvailable,
 } from "../../../features/school-catalog/class-uniqueness.ts";
 import {
   branchDeleteBlockers,
@@ -399,59 +401,41 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
   }
 
   async createClass(input: SchoolClassInput): Promise<SchoolClassRecord> {
+    const [record] = await this.createClassesBatch([input]);
+    return record!;
+  }
+
+  async createClassesBatch(inputs: SchoolClassInput[]): Promise<SchoolClassRecord[]> {
     await this.ensureSeeded();
-    const attachment = validateClassProfessionAttachment({
-      professionId: input.professionId ?? null,
-      trainingYear: input.trainingYear ?? null,
-      professions: await this.listProfessions(),
+    if (inputs.length === 0) return [];
+    const [classes, professions] = await Promise.all([this.listClasses(), this.listProfessions()]);
+    const prepared = prepareClassRecords(inputs, {
+      professions,
+      classes,
+      createId: () => createId("school-class"),
+      sortOrderStart: classes.length + 1,
     });
-    if (!attachment.ok) throw new Error(attachment.reason);
-    const parallel = normalizeParallelCode(input.parallelCode ?? null);
-    if (!parallel.ok) throw new Error(parallel.reason);
-    const code = normalizeClassCode(input.code);
-    const schoolYearId = input.schoolYearId ?? null;
-    const available = assertClassCodeAvailable({
-      code,
-      schoolYearId,
-      classes: await this.listClasses(),
-    });
-    if (!available.ok) throw new Error(available.reason);
-    const count = await this.db
-      .prepare("SELECT COUNT(*) AS count FROM school_classes")
-      .bind()
-      .first<{ count: number }>();
-    const record: SchoolClassRecord = {
-      id: createId("school-class"),
-      code,
-      label: input.label.trim() || code,
-      sortOrder: input.sortOrder ?? Number(count?.count ?? 0) + 1,
-      isActive: input.isActive ?? true,
-      schoolYearId,
-      schoolYearLabel: input.schoolYearLabel ?? null,
-      professionId: attachment.value.professionId,
-      trainingYear: attachment.value.trainingYear,
-      parallelCode: parallel.value,
-    };
-    await this.db
-      .prepare(
-        `INSERT INTO school_classes
+    if (!prepared.ok) throw new Error(prepared.reason);
+    await this.db.batch(
+      prepared.value.map((record) => ({
+        sql: `INSERT INTO school_classes
            (id, code, label, sort_order, is_active, school_year_id, school_year_label, profession_id, training_year, parallel_code)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        record.id,
-        record.code,
-        record.label,
-        record.sortOrder,
-        record.isActive ? 1 : 0,
-        record.schoolYearId,
-        record.schoolYearLabel,
-        record.professionId,
-        record.trainingYear,
-        record.parallelCode,
-      )
-      .run();
-    return record;
+        values: [
+          record.id,
+          record.code,
+          record.label,
+          record.sortOrder,
+          record.isActive ? 1 : 0,
+          record.schoolYearId,
+          record.schoolYearLabel,
+          record.professionId,
+          record.trainingYear,
+          record.parallelCode,
+        ],
+      })),
+    );
+    return prepared.value;
   }
 
   async updateClass(id: string, patch: Partial<SchoolClassInput>): Promise<SchoolClassRecord | null> {
@@ -478,6 +462,15 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       excludeId: id,
     });
     if (!available.ok) throw new Error(available.reason);
+    const group = assertStructuredGroupAvailable({
+      schoolYearId: nextYearId,
+      professionId: attachment.value.professionId,
+      trainingYear: attachment.value.trainingYear,
+      parallelCode: parallel.value,
+      classes: await this.listClasses(),
+      excludeId: id,
+    });
+    if (!group.ok) throw new Error(group.reason);
     const next: SchoolClassRecord = {
       ...current,
       code: nextCode,

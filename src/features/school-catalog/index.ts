@@ -58,10 +58,15 @@ export {
   PARALLEL_GROUP_LETTERS,
 } from "./class-codes.ts";
 export { resolveSchoolClass } from "./class-resolve.ts";
-export { assertClassCodeAvailable, assertProfessionPrefixAvailable } from "./class-uniqueness.ts";
+export {
+  assertClassCodeAvailable,
+  assertProfessionPrefixAvailable,
+  assertStructuredGroupAvailable,
+} from "./class-uniqueness.ts";
 export {
   countActiveContextsForYear,
   createStructuredClasses,
+  parseStructuredClassesRequest,
   structuredDraftsToInputs,
   validateStructuredClassBatch,
   type StructuredClassBatchInput,
