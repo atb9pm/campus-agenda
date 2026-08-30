@@ -445,14 +445,40 @@ button { color: inherit; }
 .admin-panel-block .school-year-admin { padding: 0; }
 .admin-inline-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; }
 .admin-inline-form label { display: grid; gap: 4px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8793a9; }
-.admin-inline-form input { min-width: 140px; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); font-size: 11px; }
+.admin-inline-form input, .admin-inline-form select { min-width: 140px; padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); font-size: 11px; background: #fff; }
 .admin-catalog-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
 .admin-catalog-list li { display: grid; grid-template-columns: 100px 1fr auto auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.admin-catalog-list.admin-class-list li { grid-template-columns: 80px minmax(80px, .6fr) minmax(220px, 1.6fr) auto auto; align-items: start; }
 .admin-catalog-list strong { color: var(--navy); font-size: 12px; }
 .admin-catalog-list span { color: #516582; font-size: 11px; }
 .admin-catalog-list .status-active { color: #027a48; font-weight: 700; }
 .admin-catalog-list .status-inactive { color: #98a2b3; font-weight: 700; }
 .admin-catalog-list button { padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: #f8fafc; color: var(--navy); font-size: 9px; font-weight: 700; cursor: pointer; }
+.admin-class-pedagogy { display: grid; gap: 8px; }
+.admin-class-pedagogy label { display: grid; gap: 4px; color: #8793a9; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.admin-class-pedagogy select { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); background: #fff; font-size: 11px; }
+.admin-class-config-warn { color: #b54708; font-size: 10px; font-weight: 700; }
+.admin-class-config-ok { color: #027a48; font-size: 10px; font-weight: 700; }
+.admin-admin-code { margin: 4px 0 0; color: #98a2b3; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; letter-spacing: .04em; }
+.admin-code-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+.admin-code-row .admin-admin-code { margin: 0; }
+.admin-code-copy { padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: #f8fafc; color: #667085; font-size: 9px; font-weight: 700; cursor: pointer; }
+.admin-profession-card { grid-template-columns: minmax(180px, 1.2fr) minmax(120px, .7fr) auto; }
+.admin-profession-years { grid-column: 1 / -1; display: grid; gap: 10px; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
+.admin-profession-year { padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfe; }
+.admin-profession-year-header { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.admin-profession-year-header strong { color: var(--navy); font-size: 12px; }
+.admin-profession-year-header span { color: #667085; font-size: 10px; }
+.admin-profession-empty { margin: 0 0 8px; color: #98a2b3; font-size: 11px; }
+.admin-profession-assignments { margin: 0 0 10px; padding: 0; list-style: none; display: grid; gap: 6px; }
+.admin-profession-assignments li { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.admin-profession-assignments li > div { display: grid; gap: 2px; }
+.admin-profession-branch-label { color: var(--navy); font-size: 12px; font-weight: 700; }
+.admin-profession-assignments button, .admin-profession-assign button { padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: #f8fafc; color: var(--navy); font-size: 9px; font-weight: 700; cursor: pointer; }
+.admin-profession-assign { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.admin-profession-assign label { display: grid; gap: 4px; color: #8793a9; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.admin-profession-assign select { min-width: 180px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); background: #fff; font-size: 11px; }
+.admin-profession-assign button:disabled { opacity: .45; cursor: not-allowed; }
 .admin-error, .admin-loading, .admin-placeholder { margin: 0 38px 12px; color: #516582; font-size: 12px; }
 .admin-error { color: #b42318; font-weight: 700; }
 .admin-panel-block .admin-error, .admin-panel-block .admin-loading { margin: 0 0 12px; }
@@ -586,7 +612,7 @@ button { color: inherit; }
   .school-year-admin { padding-right: 16px; padding-left: 16px; }
   .config-classes-editor, .config-week-plan, .ma-semaine-week-banner, .ma-semaine-days, .ma-semaine-empty, .ma-semaine-plan-hint, .class-notebook-toolbar, .class-notebook-week-controls, .class-notebook-grid, .class-notebook-warning, .class-notebook-clipboard-hint { margin-right: 16px; margin-left: 16px; }
   .admin-workspace .admin-tabs, .admin-panel-block, .admin-error, .admin-loading, .admin-placeholder { margin-right: 16px; margin-left: 16px; }
-  .admin-catalog-list li, .admin-teacher-list li { grid-template-columns: 1fr; }
+  .admin-catalog-list li, .admin-catalog-list.admin-class-list li, .admin-teacher-list li { grid-template-columns: 1fr; }
   .admin-teacher-card { grid-template-columns: 1fr; }
   .admin-teacher-actions { justify-content: flex-start; }
   .day-grid-head, .day-grid-row { grid-template-columns: 48px repeat(5, minmax(0, 1fr)); }

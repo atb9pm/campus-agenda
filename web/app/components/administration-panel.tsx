@@ -2,12 +2,18 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-import type { SchoolBranchRecord, SchoolClassRecord } from "@campus/features/school-catalog";
+import type {
+  SchoolBranchRecord,
+  SchoolClassRecord,
+  SchoolProfessionRecord,
+} from "@campus/features/school-catalog";
+import { trainingYearsForDuration } from "@campus/features/school-catalog";
+import { ProfessionsAdminPanel } from "./professions-admin-panel.tsx";
 import { SchoolYearAdminPanel } from "./school-year-admin-panel.tsx";
 import { TeacherAccountsPanel } from "./teacher-accounts-panel.tsx";
 import type { SchoolCalendarWeek } from "../../lib/api-client.ts";
 
-type AdminTab = "classes" | "branches" | "teachers" | "access" | "weeks";
+type AdminTab = "classes" | "branches" | "professions" | "teachers" | "access" | "weeks";
 
 interface AdministrationPanelProps {
   currentTeacherId: string;
@@ -23,6 +29,7 @@ interface BranchEditDraft {
 const TAB_LABELS: Record<AdminTab, string> = {
   classes: "Paramétrage des classes",
   branches: "Paramétrage des branches",
+  professions: "Professions et branches",
   teachers: "Gestion des enseignants",
   access: "Gestion des accès",
   weeks: "Plan des semaines A/B",
@@ -51,6 +58,7 @@ async function fetchCatalog(activeOnly = false) {
     reason?: string;
     classes?: SchoolClassRecord[];
     branches?: SchoolBranchRecord[];
+    professions?: SchoolProfessionRecord[];
   };
   if (!response.ok || !payload.ok) {
     throw new Error(payload.reason ?? "Chargement du référentiel impossible.");
@@ -58,6 +66,7 @@ async function fetchCatalog(activeOnly = false) {
   return {
     classes: payload.classes ?? [],
     branches: payload.branches ?? [],
+    professions: payload.professions ?? [],
   };
 }
 
@@ -69,6 +78,7 @@ export function AdministrationPanel({
   const [tab, setTab] = useState<AdminTab>("classes");
   const [classes, setClasses] = useState<SchoolClassRecord[]>([]);
   const [branches, setBranches] = useState<SchoolBranchRecord[]>([]);
+  const [professions, setProfessions] = useState<SchoolProfessionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [classCode, setClassCode] = useState("");
@@ -84,6 +94,7 @@ export function AdministrationPanel({
       const catalog = await fetchCatalog(false);
       setClasses(catalog.classes);
       setBranches(catalog.branches);
+      setProfessions(catalog.professions);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Chargement impossible.");
     } finally {
@@ -104,6 +115,17 @@ export function AdministrationPanel({
     () => branches.filter((entry) => (showArchivedBranches ? entry.isArchived : !entry.isArchived)),
     [branches, showArchivedBranches],
   );
+
+  const activeProfessions = useMemo(
+    () => professions.filter((entry) => entry.isActive && !entry.isArchived),
+    [professions],
+  );
+
+  const professionById = useMemo(() => {
+    const map = new Map<string, SchoolProfessionRecord>();
+    for (const profession of professions) map.set(profession.id, profession);
+    return map;
+  }, [professions]);
 
   async function submitClass(event: FormEvent) {
     event.preventDefault();
@@ -166,6 +188,26 @@ export function AdministrationPanel({
       setError("Mise à jour impossible.");
       return;
     }
+    await refresh();
+  }
+
+  async function patchClassProfession(
+    entry: SchoolClassRecord,
+    patch: { professionId?: string | null; trainingYear?: number | null },
+  ) {
+    setError("");
+    const response = await fetch(`/api/admin/catalog/${entry.id}`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "class", ...patch }),
+    });
+    const payload = await response.json() as { ok: boolean; reason?: string };
+    if (!response.ok || !payload.ok) {
+      setError(payload.reason ?? "Mise à jour impossible.");
+      return;
+    }
+    onNotice(`Classe ${entry.code} mise à jour.`);
     await refresh();
   }
 
@@ -234,14 +276,17 @@ export function AdministrationPanel({
       </div>
 
       {error ? <p className="admin-error">{error}</p> : null}
-      {loading ? <p className="admin-loading">Chargement…</p> : null}
+      {loading && tab !== "professions" ? <p className="admin-loading">Chargement…</p> : null}
 
       {tab === "classes" && !loading ? (
         <div className="admin-panel-block">
           <header className="config-section-header">
             <div>
               <h3>Paramétrage des classes</h3>
-              <p>Liste officielle. Une classe inutilisée peut être désactivée (jamais supprimée).</p>
+              <p>
+                Liste officielle. Rattachez chaque classe à une profession et une année de formation.
+                Une classe inutilisée peut être désactivée (jamais supprimée).
+              </p>
             </div>
           </header>
           <form className="admin-inline-form" onSubmit={(event) => void submitClass(event)}>
@@ -255,19 +300,92 @@ export function AdministrationPanel({
             </label>
             <button type="submit" className="workspace-action">Ajouter</button>
           </form>
-          <ul className="admin-catalog-list">
-            {classes.map((entry) => (
-              <li key={entry.id}>
-                <strong>{entry.code}</strong>
-                <span>{entry.label}</span>
-                <span className={entry.isActive ? "status-active" : "status-inactive"}>
-                  {entry.isActive ? "Active" : "Inactive"}
-                </span>
-                <button type="button" onClick={() => void toggleClassActive(entry)}>
-                  {entry.isActive ? "Désactiver" : "Réactiver"}
-                </button>
-              </li>
-            ))}
+          <ul className="admin-catalog-list admin-class-list">
+            {classes.map((entry) => {
+              const linkedProfession = entry.professionId
+                ? professionById.get(entry.professionId) ?? null
+                : null;
+              const yearOptions = linkedProfession
+                ? trainingYearsForDuration(linkedProfession.durationYears)
+                : [];
+              const needsConfig = !entry.professionId || entry.trainingYear === null;
+              const selectableProfessions = activeProfessions.slice();
+              if (
+                linkedProfession &&
+                !selectableProfessions.some((profession) => profession.id === linkedProfession.id)
+              ) {
+                selectableProfessions.unshift(linkedProfession);
+              }
+              return (
+                <li key={entry.id}>
+                  <strong>{entry.code}</strong>
+                  <span>{entry.label}</span>
+                  <div className="admin-class-pedagogy">
+                    <label>
+                      Profession
+                      <select
+                        value={entry.professionId ?? ""}
+                        onChange={(event) => {
+                          const nextProfessionId = event.target.value || null;
+                          const nextProfession = nextProfessionId
+                            ? professionById.get(nextProfessionId)
+                            : null;
+                          const yearStillValid =
+                            nextProfession &&
+                            entry.trainingYear !== null &&
+                            entry.trainingYear >= 1 &&
+                            entry.trainingYear <= nextProfession.durationYears;
+                          void patchClassProfession(entry, {
+                            professionId: nextProfessionId,
+                            trainingYear: yearStillValid ? entry.trainingYear : null,
+                          });
+                        }}
+                      >
+                        <option value="">À configurer…</option>
+                        {selectableProfessions.map((profession) => (
+                          <option key={profession.id} value={profession.id}>
+                            {profession.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Année
+                      <select
+                        value={entry.trainingYear ?? ""}
+                        disabled={!entry.professionId}
+                        onChange={(event) => {
+                          const raw = event.target.value;
+                          void patchClassProfession(entry, {
+                            trainingYear: raw ? Number.parseInt(raw, 10) : null,
+                          });
+                        }}
+                      >
+                        <option value="">À configurer…</option>
+                        {yearOptions.map((year) => (
+                          <option key={year} value={year}>
+                            Année {year}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {needsConfig ? (
+                      <span className="admin-class-config-warn">Profession / année à configurer</span>
+                    ) : (
+                      <span className="admin-class-config-ok">
+                        {linkedProfession?.label ?? "Profession"} · année {entry.trainingYear}
+                      </span>
+                    )}
+                  </div>
+                  <span className={entry.isActive ? "status-active" : "status-inactive"}>
+                    {entry.isActive ? "Active" : "Inactive"}
+                  </span>
+                  <button type="button" onClick={() => void toggleClassActive(entry)}>
+                    {entry.isActive ? "Désactiver" : "Réactiver"}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}
@@ -354,6 +472,11 @@ export function AdministrationPanel({
                         <div>
                           <p className="admin-teacher-name">{entry.label}</p>
                           <p className="admin-teacher-login-meta">Code&nbsp;: {entry.code}</p>
+                          {entry.adminCode ? (
+                            <p className="admin-admin-code" title="Code administratif">
+                              {entry.adminCode}
+                            </p>
+                          ) : null}
                         </div>
                       )}
                     </div>
@@ -401,6 +524,10 @@ export function AdministrationPanel({
             </ul>
           )}
         </div>
+      ) : null}
+
+      {tab === "professions" ? (
+        <ProfessionsAdminPanel onNotice={onNotice} />
       ) : null}
 
       {tab === "teachers" ? (
