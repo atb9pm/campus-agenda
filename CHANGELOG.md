@@ -34,6 +34,8 @@ Prépare la récupération N → N+1 (`CTX + parallelCode`) sans l’implémente
 - Création de classes en lot atomique (`createClassesBatch` Memory + SQL).
 - Unicité structurelle `schoolYearId + professionId + trainingYear + parallelCode`.
 - Suivi `schema_migrations` : le rebuild 0020 n’est plus rejoué à chaque démarrage.
+- 0020 : pas d’index unique rétroactif sur les `parallelCode` NULL préexistants
+  (MA3A/MA3B). Les nouvelles classes uniques restent protégées par trigger.
 
 ### Compatibilité
 

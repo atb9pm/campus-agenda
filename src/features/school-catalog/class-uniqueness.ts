@@ -45,6 +45,9 @@ export function isStructuredClassKey(entry: {
 /**
  * Unicité structurelle pour la récupération future (CTX + parallelCode).
  * Legacy (année / profession / année de formation manquante) : non concerné.
+ *
+ * Les NULL pré-0020 coexistants (MA3A/MA3B) restent éditables. Seule une
+ * nouvelle écriture « classe unique » (création, ou passage à NULL) est refusée.
  */
 export function assertStructuredGroupAvailable(options: {
   schoolYearId: string | null;
@@ -53,8 +56,24 @@ export function assertStructuredGroupAvailable(options: {
   parallelCode: string | null;
   classes: SchoolClassRecord[];
   excludeId?: string;
+  previous?: {
+    schoolYearId: string | null;
+    professionId: string | null;
+    trainingYear: number | null;
+    parallelCode: string | null;
+  };
 }): PedagogyMutationResult<true> {
   if (!isStructuredClassKey(options)) return { ok: true, value: true };
+
+  const alreadyUniqueNull =
+    options.parallelCode === null &&
+    options.previous &&
+    isStructuredClassKey(options.previous) &&
+    options.previous.parallelCode === null &&
+    options.previous.schoolYearId === options.schoolYearId &&
+    options.previous.professionId === options.professionId &&
+    options.previous.trainingYear === options.trainingYear;
+  if (alreadyUniqueNull) return { ok: true, value: true };
 
   const clash = options.classes.find((entry) => {
     if (options.excludeId && entry.id === options.excludeId) return false;

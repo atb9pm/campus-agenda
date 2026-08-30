@@ -469,6 +469,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       parallelCode: parallel.value,
       classes: await this.listClasses(),
       excludeId: id,
+      previous: current,
     });
     if (!group.ok) throw new Error(group.reason);
     const next: SchoolClassRecord = {

@@ -69,9 +69,72 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_school_classes_structured_parallel
     AND training_year IS NOT NULL
     AND parallel_code IS NOT NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_school_classes_structured_unique
-  ON school_classes (school_year_id, profession_id, training_year)
-  WHERE school_year_id IS NOT NULL
-    AND profession_id IS NOT NULL
-    AND training_year IS NOT NULL
-    AND parallel_code IS NULL;
+-- Pas d index unique retroactif sur parallel_code NULL : deux classes
+-- pre-0020 deja structurees (MA3A / MA3B) recoivent NULL et doivent
+-- survivre pour que l admin renseigne A/B ensuite.
+DROP INDEX IF EXISTS idx_school_classes_structured_unique;
+
+DROP TRIGGER IF EXISTS school_classes_structured_unique_insert;
+DROP TRIGGER IF EXISTS school_classes_structured_unique_update;
+
+-- Nouvelles ecritures uniquement : au plus une vraie classe unique NULL.
+-- Les lignes deja NULL (meme annee / profession / annee de formation)
+-- restent valides et restantes editables.
+CREATE TRIGGER IF NOT EXISTS school_classes_structured_unique_insert
+BEFORE INSERT ON school_classes
+FOR EACH ROW
+WHEN NEW.school_year_id IS NOT NULL
+  AND NEW.profession_id IS NOT NULL
+  AND NEW.training_year IS NOT NULL
+  AND NEW.parallel_code IS NULL
+BEGIN
+  SELECT RAISE(
+    ABORT,
+    'Une classe unique existe déjà pour cette profession et cette année de formation.'
+  )
+  WHERE EXISTS (
+    SELECT 1 FROM school_classes AS existing
+    WHERE existing.id != NEW.id
+      AND existing.school_year_id IS NOT NULL
+      AND existing.profession_id IS NOT NULL
+      AND existing.training_year IS NOT NULL
+      AND existing.school_year_id = NEW.school_year_id
+      AND existing.profession_id = NEW.profession_id
+      AND existing.training_year = NEW.training_year
+      AND existing.parallel_code IS NULL
+  );
+END;
+
+CREATE TRIGGER IF NOT EXISTS school_classes_structured_unique_update
+BEFORE UPDATE ON school_classes
+FOR EACH ROW
+WHEN NEW.school_year_id IS NOT NULL
+  AND NEW.profession_id IS NOT NULL
+  AND NEW.training_year IS NOT NULL
+  AND NEW.parallel_code IS NULL
+  AND NOT (
+    OLD.school_year_id IS NOT NULL
+    AND OLD.profession_id IS NOT NULL
+    AND OLD.training_year IS NOT NULL
+    AND OLD.parallel_code IS NULL
+    AND OLD.school_year_id = NEW.school_year_id
+    AND OLD.profession_id = NEW.profession_id
+    AND OLD.training_year = NEW.training_year
+  )
+BEGIN
+  SELECT RAISE(
+    ABORT,
+    'Une classe unique existe déjà pour cette profession et cette année de formation.'
+  )
+  WHERE EXISTS (
+    SELECT 1 FROM school_classes AS existing
+    WHERE existing.id != NEW.id
+      AND existing.school_year_id IS NOT NULL
+      AND existing.profession_id IS NOT NULL
+      AND existing.training_year IS NOT NULL
+      AND existing.school_year_id = NEW.school_year_id
+      AND existing.profession_id = NEW.profession_id
+      AND existing.training_year = NEW.training_year
+      AND existing.parallel_code IS NULL
+  );
+END;

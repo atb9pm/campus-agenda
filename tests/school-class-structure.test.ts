@@ -791,6 +791,125 @@ test("batch atomique — échec au milieu, zéro classe du lot (Memory + SQL)", 
   db.close();
 });
 
+test("migration 0020 — deux classes structurées pré-0020 sans groupe restent NULL et éditables", async () => {
+  const db = createNodeSqliteDatabase(":memory:");
+  await applyMigrations(db, { until: "0019_annual_courses_teacher_assignments.sql" });
+
+  await db
+    .prepare(
+      `INSERT INTO school_professions (id, admin_code, label, duration_years, sort_order, is_active)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .bind("prof-ma", "PRF-0099", "Mécanicien automobile", 4, 1, 1)
+    .run();
+  await db
+    .prepare(
+      `INSERT INTO school_classes
+         (id, code, label, sort_order, is_active, school_year_label, profession_id, training_year, school_year_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind("class-ma3a", "MA3A", "MA3A", 1, 1, "2026-2027", "prof-ma", 3, "sy-2026")
+    .run();
+  await db
+    .prepare(
+      `INSERT INTO school_classes
+         (id, code, label, sort_order, is_active, school_year_label, profession_id, training_year, school_year_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind("class-ma3b", "MA3B", "MA3B", 2, 1, "2026-2027", "prof-ma", 3, "sy-2026")
+    .run();
+
+  await applyMigrations(db, { until: "0020_school_class_structure.sql" });
+
+  const uniqueIndex = await db
+    .prepare(
+      `SELECT name FROM sqlite_master
+       WHERE type = 'index' AND name = 'idx_school_classes_structured_unique'`,
+    )
+    .bind()
+    .first<{ name: string }>();
+  assert.equal(uniqueIndex, null);
+
+  const afterMigrate = await db
+    .prepare(
+      `SELECT id, code, parallel_code FROM school_classes
+       WHERE id IN (?, ?) ORDER BY code`,
+    )
+    .bind("class-ma3a", "class-ma3b")
+    .all<{ id: string; code: string; parallel_code: string | null }>();
+  assert.deepEqual(
+    (afterMigrate.results ?? []).map((row) => ({
+      id: row.id,
+      code: row.code,
+      parallelCode: row.parallel_code,
+    })),
+    [
+      { id: "class-ma3a", code: "MA3A", parallelCode: null },
+      { id: "class-ma3b", code: "MA3B", parallelCode: null },
+    ],
+  );
+
+  const catalog = new SqlSchoolCatalogStore(db);
+  await catalog.ensureSeeded();
+  await assert.rejects(
+    () =>
+      catalog.createClass({
+        code: "MA3",
+        label: "MA 3",
+        schoolYearId: "sy-2026",
+        schoolYearLabel: "2026-2027",
+        professionId: "prof-ma",
+        trainingYear: 3,
+        parallelCode: null,
+      }),
+    /classe unique/i,
+  );
+  const assignedA = await catalog.updateClass("class-ma3a", { parallelCode: "A" });
+  const assignedB = await catalog.updateClass("class-ma3b", { parallelCode: "B" });
+  assert.equal(assignedA?.parallelCode, "A");
+  assert.equal(assignedB?.parallelCode, "B");
+
+  await assert.rejects(
+    () =>
+      catalog.createClass({
+        code: "MAX3A",
+        label: "MAX 3A",
+        schoolYearId: "sy-2026",
+        schoolYearLabel: "2026-2027",
+        professionId: "prof-ma",
+        trainingYear: 3,
+        parallelCode: "A",
+      }),
+    /groupe A/i,
+  );
+
+  const unique = await catalog.createClass({
+    code: "MA3",
+    label: "MA 3",
+    schoolYearId: "sy-2026",
+    schoolYearLabel: "2026-2027",
+    professionId: "prof-ma",
+    trainingYear: 3,
+    parallelCode: null,
+  });
+  assert.equal(unique.parallelCode, null);
+  await assert.rejects(
+    () =>
+      catalog.createClass({
+        code: "MA3U",
+        label: "MA 3U",
+        schoolYearId: "sy-2026",
+        schoolYearLabel: "2026-2027",
+        professionId: "prof-ma",
+        trainingYear: 3,
+        parallelCode: null,
+      }),
+    /classe unique/i,
+  );
+
+  db.close();
+});
+
 test("migration 0020 — replay ne reconstruit pas school_classes (colonne future conservée)", async () => {
   const db = createNodeSqliteDatabase(":memory:");
   await applyMigrations(db, { until: "0020_school_class_structure.sql" });

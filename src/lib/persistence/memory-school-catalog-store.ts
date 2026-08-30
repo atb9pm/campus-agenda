@@ -159,6 +159,7 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
       parallelCode: parallel.value,
       classes: this.classes,
       excludeId: id,
+      previous: current,
     });
     if (!group.ok) throw new Error(group.reason);
     const next: SchoolClassRecord = {
