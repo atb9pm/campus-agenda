@@ -2,6 +2,25 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.17.0] — Professions : structure pédagogique et rattachement des branches
+
+### Ajouté
+
+- **Professions** administrables (nom, durée de formation) avec code permanent `PRF-xxxx`.
+- **Branches** enrichies d’un code permanent `BR-xxxx` (indépendant du libellé).
+- **Contextes pédagogiques** `CTX-xxxx` = profession + année de formation + branche
+  (unicité de la combinaison, fondation pour les futurs parcours réutilisables).
+- Rattachement des **classes** à une profession et une année de formation.
+- Filtrage des branches enseignant selon la classe (UI + API `?classId=`).
+- Archivage / suppression sécurisée (bloquée si dépendances ; pas de cascade destructive).
+- Migration `0015_professions_pedagogy`.
+- Onglet Administration « Professions et branches ».
+
+### Compatibilité
+
+- Classes sans profession/année restent utilisables (repli : toutes les branches actives).
+- Les IDs techniques survivent aux renommages ; les relations n’utilisent jamais le libellé.
+
 ## [2.16.0] — Branches : édition, archivage, couleurs actif/désactivé
 
 ### Ajouté

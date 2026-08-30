@@ -26,6 +26,8 @@ export function buildDefaultSchoolClasses(): SchoolClassRecord[] {
     sortOrder: index + 1,
     isActive: true,
     schoolYearLabel: "2026-2027",
+    professionId: null,
+    trainingYear: null,
   }));
 }
 
@@ -42,6 +44,7 @@ export function buildDefaultSchoolBranches(): SchoolBranchRecord[] {
       label,
       sortOrder: index + 1,
       isActive: true,
+      adminCode: `BR-${String(index + 1).padStart(4, "0")}`,
       isArchived: false,
       archivedAt: null,
     };

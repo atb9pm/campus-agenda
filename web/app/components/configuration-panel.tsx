@@ -33,7 +33,10 @@ export function ConfigurationPanel({
   onNotice,
 }: ConfigurationPanelProps) {
   const [schoolClasses, setSchoolClasses] = useState<SchoolClassRecord[]>([]);
-  const [schoolBranches, setSchoolBranches] = useState<SchoolBranchRecord[]>([]);
+  const [fallbackBranches, setFallbackBranches] = useState<SchoolBranchRecord[]>([]);
+  const [branchesByClassId, setBranchesByClassId] = useState<Record<string, SchoolBranchRecord[]>>(
+    {},
+  );
   const [catalogError, setCatalogError] = useState("");
 
   useEffect(() => {
@@ -41,7 +44,7 @@ export function ConfigurationPanel({
     void (async () => {
       try {
         const response = await fetch("/api/admin/catalog?active=1", { credentials: "include" });
-        const payload = await response.json() as {
+        const payload = (await response.json()) as {
           ok: boolean;
           reason?: string;
           classes?: SchoolClassRecord[];
@@ -52,7 +55,7 @@ export function ConfigurationPanel({
         }
         if (!cancelled) {
           setSchoolClasses(payload.classes ?? []);
-          setSchoolBranches(payload.branches ?? []);
+          setFallbackBranches(payload.branches ?? []);
         }
       } catch (error) {
         if (!cancelled) {
@@ -65,10 +68,62 @@ export function ConfigurationPanel({
     };
   }, []);
 
+  const selectedSchoolClassIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const entry of config.classes) {
+      const match = schoolClasses.find((schoolClass) => schoolClass.code === entry.name);
+      if (match) ids.add(match.id);
+    }
+    return [...ids].sort();
+  }, [config.classes, schoolClasses]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const missing = selectedSchoolClassIds.filter((id) => !(id in branchesByClassId));
+    if (missing.length === 0) return;
+
+    void (async () => {
+      const next: Record<string, SchoolBranchRecord[]> = {};
+      await Promise.all(
+        missing.map(async (classId) => {
+          try {
+            const response = await fetch(
+              `/api/admin/catalog?active=1&classId=${encodeURIComponent(classId)}`,
+              { credentials: "include" },
+            );
+            const payload = (await response.json()) as {
+              ok: boolean;
+              branches?: SchoolBranchRecord[];
+            };
+            if (response.ok && payload.ok) {
+              next[classId] = payload.branches ?? [];
+            }
+          } catch {
+            // repli sur la liste non filtrée
+          }
+        }),
+      );
+      if (!cancelled && Object.keys(next).length > 0) {
+        setBranchesByClassId((current) => ({ ...current, ...next }));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSchoolClassIds, branchesByClassId]);
+
   const classCount = useMemo(
     () => config.classes.filter((entry) => entry.name.trim()).length,
     [config.classes],
   );
+
+  function branchesForSchoolClass(schoolClass: SchoolClassRecord | undefined): SchoolBranchRecord[] {
+    if (schoolClass && schoolClass.id in branchesByClassId) {
+      return branchesByClassId[schoolClass.id] ?? fallbackBranches;
+    }
+    return fallbackBranches;
+  }
 
   function patchClass(classId: string, patch: Partial<TeacherClassSetup>) {
     onChange({ ...config, classes: updateClass(config.classes, classId, patch) });
@@ -76,7 +131,7 @@ export function ConfigurationPanel({
 
   function addClass() {
     const firstClass = schoolClasses[0];
-    const firstBranch = schoolBranches[0];
+    const firstBranch = branchesForSchoolClass(firstClass)[0];
     const next = createEmptyClassSetup(config.classes.length);
     onChange({
       ...config,
@@ -125,81 +180,86 @@ export function ConfigurationPanel({
         </header>
 
         <div className="config-class-list">
-          {config.classes.map((entry) => (
-            <article className="config-class-row config-class-row-simple" key={entry.id}>
-              <label className="config-field">
-                <span>Nom de la classe</span>
-                <select
-                  value={entry.name}
-                  onChange={(event) =>
-                    patchClass(entry.id, {
-                      name: event.target.value,
-                      programLabel: "",
-                      icon: "•",
-                    })
-                  }
-                >
-                  <option value="">Choisir…</option>
-                  {schoolClasses.map((schoolClass) => (
-                    <option key={schoolClass.id} value={schoolClass.code}>
-                      {schoolClass.code}
-                    </option>
-                  ))}
-                  {entry.name && !schoolClasses.some((schoolClass) => schoolClass.code === entry.name) ? (
-                    <option value={entry.name}>{entry.name} (ancien)</option>
-                  ) : null}
-                </select>
-              </label>
+          {config.classes.map((entry) => {
+            const schoolClass = schoolClasses.find((item) => item.code === entry.name);
+            const rowBranches = branchesForSchoolClass(schoolClass);
+            return (
+              <article className="config-class-row config-class-row-simple" key={entry.id}>
+                <label className="config-field">
+                  <span>Nom de la classe</span>
+                  <select
+                    value={entry.name}
+                    onChange={(event) =>
+                      patchClass(entry.id, {
+                        name: event.target.value,
+                        programLabel: "",
+                        icon: "•",
+                        branchNames: [],
+                      })
+                    }
+                  >
+                    <option value="">Choisir…</option>
+                    {schoolClasses.map((item) => (
+                      <option key={item.id} value={item.code}>
+                        {item.code}
+                      </option>
+                    ))}
+                    {entry.name && !schoolClasses.some((item) => item.code === entry.name) ? (
+                      <option value={entry.name}>{entry.name} (ancien)</option>
+                    ) : null}
+                  </select>
+                </label>
 
-              <label className="config-field">
-                <span>Jour de cours</span>
-                <select
-                  value={entry.dayOfWeek}
-                  onChange={(event) =>
-                    patchClass(entry.id, { dayOfWeek: Number(event.target.value) as WeekdayIndex })
-                  }
-                >
-                  {(Object.entries(WEEKDAY_LABELS) as Array<[string, string]>).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <label className="config-field">
+                  <span>Jour de cours</span>
+                  <select
+                    value={entry.dayOfWeek}
+                    onChange={(event) =>
+                      patchClass(entry.id, { dayOfWeek: Number(event.target.value) as WeekdayIndex })
+                    }
+                  >
+                    {(Object.entries(WEEKDAY_LABELS) as Array<[string, string]>).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-              <label className="config-field">
-                <span>Branche</span>
-                <select
-                  value={entry.branchNames[0] ?? ""}
-                  onChange={(event) =>
-                    patchClass(entry.id, {
-                      branchNames: event.target.value ? [event.target.value] : [],
-                    })
-                  }
-                >
-                  <option value="">Choisir…</option>
-                  {schoolBranches.map((branch) => (
-                    <option key={branch.id} value={branch.label}>
-                      {branch.label}
-                    </option>
-                  ))}
-                  {entry.branchNames[0] &&
-                  !schoolBranches.some((branch) => branch.label === entry.branchNames[0]) ? (
-                    <option value={entry.branchNames[0]}>{entry.branchNames[0]} (ancien)</option>
-                  ) : null}
-                </select>
-              </label>
+                <label className="config-field">
+                  <span>Branche</span>
+                  <select
+                    value={entry.branchNames[0] ?? ""}
+                    onChange={(event) =>
+                      patchClass(entry.id, {
+                        branchNames: event.target.value ? [event.target.value] : [],
+                      })
+                    }
+                  >
+                    <option value="">Choisir…</option>
+                    {rowBranches.map((branch) => (
+                      <option key={branch.id} value={branch.label}>
+                        {branch.label}
+                      </option>
+                    ))}
+                    {entry.branchNames[0] &&
+                    !rowBranches.some((branch) => branch.label === entry.branchNames[0]) ? (
+                      <option value={entry.branchNames[0]}>{entry.branchNames[0]} (ancien)</option>
+                    ) : null}
+                  </select>
+                </label>
 
-              <button
-                type="button"
-                className="config-remove-class"
-                onClick={() => removeClass(entry.id)}
-                aria-label={`Retirer ${entry.name || "cette affectation"}`}
-              >
-                Retirer
-              </button>
-            </article>
-          ))}
+                <button
+                  type="button"
+                  className="config-remove-class"
+                  onClick={() => removeClass(entry.id)}
+                  aria-label={`Retirer ${entry.name || "cette affectation"}`}
+                >
+                  Retirer
+                </button>
+              </article>
+            );
+          })}
         </div>
       </div>
     </section>
