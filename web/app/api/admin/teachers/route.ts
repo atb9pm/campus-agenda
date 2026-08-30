@@ -21,13 +21,22 @@ async function handlePost(request: Request) {
     displayName?: string;
     initials?: string;
     isAdmin?: boolean;
+    teachingType?: string;
   };
+
+  if (body.teachingType !== "TECHNICAL" && body.teachingType !== "GENERAL") {
+    return jsonResponse(
+      { ok: false, reason: "Le type d'enseignement (technique ou branche générale) est obligatoire." },
+      { status: 400 },
+    );
+  }
 
   const accounts = await getTeacherAccountsStore();
   const result = await accounts.createAccount({
     displayName: String(body.displayName ?? ""),
     initials: String(body.initials ?? ""),
     isAdmin: Boolean(body.isAdmin),
+    teachingType: body.teachingType,
   });
   if (!result.ok) {
     return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });

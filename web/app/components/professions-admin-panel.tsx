@@ -9,6 +9,7 @@ import type {
   SchoolProfessionRecord,
 } from "@campus/features/school-catalog";
 import { trainingYearsForDuration } from "@campus/features/school-catalog";
+import { BRANCH_TEACHING_TYPE_LABELS } from "@campus/features/teaching-types/index.ts";
 import { PedagogicalPathPanel } from "./pedagogical-path-panel.tsx";
 
 interface ProfessionsAdminPanelProps {
@@ -312,10 +313,11 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
     <div className="admin-panel-block">
       <header className="config-section-header">
         <div>
-          <h3>Professions et branches</h3>
+          <h3>Professions & plan de formation</h3>
           <p>
-            Définissez les professions, leur durée, puis rattachez les branches par année de
-            formation. Les codes PRF / CTX sont stables et peuvent être copiés pour le support.
+            Créez une profession, définissez sa durée, puis attribuez à chaque année de formation
+            les branches prévues dans le catalogue. Cette section est l’interface graphique du CTX
+            : profession + année de formation + branche.
           </p>
         </div>
       </header>
@@ -521,6 +523,9 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
                                     <div>
                                       <span className="admin-profession-branch-label">
                                         {branch?.label ?? context.branchId}
+                                        {branch?.teachingType
+                                          ? ` — ${BRANCH_TEACHING_TYPE_LABELS[branch.teachingType]}`
+                                          : ""}
                                       </span>
                                       <span className="admin-admin-code">{context.adminCode}</span>
                                     </div>
@@ -552,7 +557,7 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
 
                           <div className="admin-profession-assign">
                             <label>
-                              Affecter une branche
+                              Ajouter une branche
                               <select
                                 value={assignDraft[key] ?? ""}
                                 onChange={(event) =>
@@ -565,7 +570,9 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
                                 <option value="">Choisir…</option>
                                 {availableBranches.map((branch) => (
                                   <option key={branch.id} value={branch.id}>
-                                    {branch.label}
+                                    {branch.label} — {branch.teachingType
+                                      ? BRANCH_TEACHING_TYPE_LABELS[branch.teachingType]
+                                      : "Type à configurer"}
                                   </option>
                                 ))}
                               </select>
@@ -575,7 +582,7 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
                               disabled={!assignDraft[key]}
                               onClick={() => void assignBranch(entry.id, year)}
                             >
-                              Affecter
+                              Ajouter
                             </button>
                           </div>
                         </div>

@@ -82,6 +82,10 @@ export class MemoryAnnualCourseNotesStore implements AnnualCourseNotesStore {
     }
     return deleted;
   }
+
+  async countByContextId(contextId: string): Promise<number> {
+    return [...this.notes.values()].filter((note) => note.contextId === contextId).length;
+  }
 }
 
 let memoryPathStore: MemoryPedagogicalPathStore | null = null;

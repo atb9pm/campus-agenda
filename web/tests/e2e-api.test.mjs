@@ -196,10 +196,17 @@ test("comptes enseignant — E2E création, mot de passe provisoire, première c
   const adminCookie = extractCookie(adminLogin);
 
   const initials = `Zz${(Date.now() % 1000).toString().padStart(3, "0")}`;
+  const missingType = await request("/api/admin/teachers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: adminCookie },
+    body: JSON.stringify({ displayName: "Sans type", initials: `${initials}x` }),
+  });
+  assert.equal(missingType.status, 400);
+
   const createResponse = await request("/api/admin/teachers", {
     method: "POST",
     headers: { "Content-Type": "application/json", cookie: adminCookie },
-    body: JSON.stringify({ displayName: "Compte E2E", initials }),
+    body: JSON.stringify({ displayName: "Compte E2E", initials, teachingType: "TECHNICAL" }),
   });
   assert.equal(createResponse.status, 200);
   const created = await createResponse.json();

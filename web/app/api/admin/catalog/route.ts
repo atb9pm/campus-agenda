@@ -1,10 +1,11 @@
 import { getSchoolCatalogStore, getSchoolYearStore } from "@campus/lib/persistence/store-factory.ts";
-import { resolveClassSchoolYearAttachment } from "@campus/features/school-catalog/index.ts";
+import { validateAdminClassCreate } from "@campus/features/school-catalog/index.ts";
 import {
   listActiveSchoolBranches,
   listActiveSchoolClasses,
   listBranchesForClass,
 } from "@campus/features/school-catalog/index.ts";
+import { requireTeachingType } from "@campus/features/teaching-types/index.ts";
 import { jsonResponse, requireAdminSession, requireTeacherSession } from "../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../lib/server/observability.ts";
 
@@ -69,6 +70,7 @@ async function handlePost(request: Request) {
     trainingYear?: number | null;
     durationYears?: number;
     branchId?: string;
+    teachingType?: string | null;
   };
 
   const catalog = await getSchoolCatalogStore();
@@ -113,24 +115,29 @@ async function handlePost(request: Request) {
 
   if (body.kind === "class") {
     try {
-      const years = await getSchoolYearStore().then((store) => store.listSchoolYears());
-      const schoolYear = resolveClassSchoolYearAttachment({
-        schoolYearId: body.schoolYearId === undefined ? null : body.schoolYearId,
-        schoolYearLabel: body.schoolYearLabel ?? null,
+      const [years, professions] = await Promise.all([
+        getSchoolYearStore().then((store) => store.listSchoolYears()),
+        catalog.listProfessions(),
+      ]);
+      const structured = validateAdminClassCreate({
+        schoolYearId: body.schoolYearId,
+        professionId: body.professionId,
+        trainingYear: body.trainingYear,
         years,
+        professions,
       });
-      if (!schoolYear.ok) {
-        return jsonResponse({ ok: false, reason: schoolYear.reason }, { status: 400 });
+      if (!structured.ok) {
+        return jsonResponse({ ok: false, reason: structured.reason }, { status: 400 });
       }
       const created = await catalog.createClass({
         code: body.code,
         label: body.label,
         sortOrder: body.sortOrder,
         isActive: body.isActive,
-        schoolYearId: schoolYear.value.schoolYearId,
-        schoolYearLabel: schoolYear.value.schoolYearLabel,
-        professionId: body.professionId ?? null,
-        trainingYear: body.trainingYear ?? null,
+        schoolYearId: structured.value.schoolYearId,
+        schoolYearLabel: structured.value.schoolYearLabel,
+        professionId: structured.value.professionId,
+        trainingYear: structured.value.trainingYear,
       });
       return jsonResponse({ ok: true, class: created });
     } catch (error) {
@@ -139,11 +146,16 @@ async function handlePost(request: Request) {
     }
   }
 
+  const teachingType = requireTeachingType(body.teachingType);
+  if (!teachingType.ok) {
+    return jsonResponse({ ok: false, reason: teachingType.reason }, { status: 400 });
+  }
   const created = await catalog.createBranch({
     code: body.code,
     label: body.label,
     sortOrder: body.sortOrder,
     isActive: body.isActive,
+    teachingType: teachingType.value,
   });
   return jsonResponse({ ok: true, branch: created });
 }

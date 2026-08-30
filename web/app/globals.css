@@ -479,6 +479,20 @@ button { color: inherit; }
 .admin-profession-assign label { display: grid; gap: 4px; color: #8793a9; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .admin-profession-assign select { min-width: 180px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); background: #fff; font-size: 11px; }
 .admin-profession-assign button:disabled { opacity: .45; cursor: not-allowed; }
+.admin-planned-branches { margin: 8px 0 0; color: #344054; font-size: 12px; }
+.admin-planned-branches strong { color: var(--navy); }
+.admin-link-button {
+  display: inline;
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blue);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
 .admin-error, .admin-loading, .admin-placeholder { margin: 0 38px 12px; color: #516582; font-size: 12px; }
 .admin-error { color: #b42318; font-weight: 700; }
 .admin-panel-block .admin-error, .admin-panel-block .admin-loading { margin: 0 0 12px; }

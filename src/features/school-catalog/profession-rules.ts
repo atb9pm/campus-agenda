@@ -120,6 +120,35 @@ export function listBranchesForClass(options: {
   return activeBranches.filter((entry) => allowedIds.has(entry.id));
 }
 
+/**
+ * Branches prévues pour une classe structurée (admin).
+ * Aucun repli silencieux : sans profession/année ou sans CTX → liste vide.
+ */
+export function listPlannedBranchesForClass(options: {
+  schoolClass: SchoolClassRecord | null | undefined;
+  branches: SchoolBranchRecord[];
+  contexts: PedagogicalContextRecord[];
+}): SchoolBranchRecord[] {
+  const schoolClass = options.schoolClass;
+  if (!schoolClass?.professionId || schoolClass.trainingYear === null) {
+    return [];
+  }
+  const allowedIds = new Set(
+    options.contexts
+      .filter(
+        (entry) =>
+          !entry.isArchived &&
+          entry.isActive &&
+          entry.professionId === schoolClass.professionId &&
+          entry.trainingYear === schoolClass.trainingYear,
+      )
+      .map((entry) => entry.branchId),
+  );
+  return options.branches.filter(
+    (entry) => entry.isActive && !entry.isArchived && allowedIds.has(entry.id),
+  );
+}
+
 export function isBranchAllowedForClass(options: {
   schoolClass: SchoolClassRecord | null | undefined;
   branch: SchoolBranchRecord | null | undefined;

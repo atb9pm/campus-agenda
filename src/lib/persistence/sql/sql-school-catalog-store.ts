@@ -58,6 +58,12 @@ function mapClass(row: {
   };
 }
 
+function parseStoredTeachingType(value: unknown): "TECHNICAL" | "GENERAL" | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (value === "TECHNICAL" || value === "GENERAL") return value;
+  throw new Error("Le type de la branche doit être TECHNICAL ou GENERAL.");
+}
+
 function mapBranch(row: {
   id: string;
   code: string;
@@ -66,6 +72,7 @@ function mapBranch(row: {
   is_active: number;
   admin_code: string | null;
   archived_at: string | null;
+  teaching_type?: string | null;
 }): SchoolBranchRecord {
   return {
     id: row.id,
@@ -76,6 +83,9 @@ function mapBranch(row: {
     adminCode: row.admin_code ?? "",
     isArchived: row.archived_at !== null,
     archivedAt: row.archived_at,
+    teachingType: row.teaching_type === "TECHNICAL" || row.teaching_type === "GENERAL"
+      ? row.teaching_type
+      : null,
   };
 }
 
@@ -248,8 +258,8 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         await this.db
           .prepare(
             `INSERT INTO school_branches
-               (id, code, label, sort_order, is_active, admin_code, archived_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+               (id, code, label, sort_order, is_active, admin_code, archived_at, teaching_type)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             entry.id,
@@ -259,6 +269,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
             entry.isActive ? 1 : 0,
             entry.adminCode,
             entry.archivedAt,
+            entry.teachingType,
           )
           .run();
       }
@@ -314,7 +325,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
     await this.ensureSeeded();
     const rows = await this.db
       .prepare(
-        `SELECT id, code, label, sort_order, is_active, admin_code, archived_at
+        `SELECT id, code, label, sort_order, is_active, admin_code, archived_at, teaching_type
          FROM school_branches ORDER BY sort_order ASC, label ASC`,
       )
       .bind()
@@ -326,6 +337,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         is_active: number;
         admin_code: string | null;
         archived_at: string | null;
+        teaching_type: string | null;
       }>();
     return (rows.results ?? []).map(mapBranch);
   }
@@ -500,12 +512,13 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       adminCode: await this.nextAdminCode("BR"),
       isArchived: archivedAt !== null,
       archivedAt,
+      teachingType: parseStoredTeachingType(input.teachingType),
     };
     await this.db
       .prepare(
         `INSERT INTO school_branches
-           (id, code, label, sort_order, is_active, admin_code, archived_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           (id, code, label, sort_order, is_active, admin_code, archived_at, teaching_type)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         record.id,
@@ -515,6 +528,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         record.isActive ? 1 : 0,
         record.adminCode,
         record.archivedAt,
+        record.teachingType,
       )
       .run();
     return record;
@@ -538,14 +552,26 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       isActive: patch.isActive ?? current.isActive,
       isArchived: archivedAt !== null,
       archivedAt,
+      teachingType:
+        patch.teachingType !== undefined
+          ? parseStoredTeachingType(patch.teachingType)
+          : current.teachingType,
     };
     await this.db
       .prepare(
         `UPDATE school_branches
-         SET code = ?, label = ?, sort_order = ?, is_active = ?, archived_at = ?
+         SET code = ?, label = ?, sort_order = ?, is_active = ?, archived_at = ?, teaching_type = ?
          WHERE id = ?`,
       )
-      .bind(next.code, next.label, next.sortOrder, next.isActive ? 1 : 0, next.archivedAt, id)
+      .bind(
+        next.code,
+        next.label,
+        next.sortOrder,
+        next.isActive ? 1 : 0,
+        next.archivedAt,
+        next.teachingType,
+        id,
+      )
       .run();
     return next;
   }
@@ -751,7 +777,29 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
     await this.ensureSeeded();
     const current = (await this.listContexts()).find((entry) => entry.id === id);
     if (!current) return { ok: false, reason: "Contexte pédagogique introuvable." };
-    await this.db.prepare("DELETE FROM pedagogical_contexts WHERE id = ?").bind(id).run();
+    const { contextDeleteBlockers } = await import("../../../features/school-catalog/ctx-guards.ts");
+    const pathRow = await this.db
+      .prepare("SELECT 1 AS ok FROM pedagogical_paths WHERE context_id = ? LIMIT 1")
+      .bind(id)
+      .first<{ ok: number }>();
+    const noteRow = await this.db
+      .prepare("SELECT COUNT(*) AS count FROM annual_course_notes WHERE context_id = ?")
+      .bind(id)
+      .first<{ count: number }>();
+    const blocker = contextDeleteBlockers({
+      hasPedagogicalPath: Boolean(pathRow),
+      hasAnnualNotes: Number(noteRow?.count ?? 0) > 0,
+    });
+    if (blocker) return { ok: false, reason: blocker };
+    try {
+      await this.db.prepare("DELETE FROM pedagogical_contexts WHERE id = ?").bind(id).run();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes("CTX used") || message.includes("archive instead")) {
+        return { ok: false, reason: blocker ?? contextDeleteBlockers({ hasPedagogicalPath: true, hasAnnualNotes: false })! };
+      }
+      throw error;
+    }
     return { ok: true, value: { id } };
   }
 }

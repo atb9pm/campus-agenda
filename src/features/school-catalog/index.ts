@@ -15,6 +15,7 @@ export {
   evaluateAgendaBranchForClass,
   isBranchAllowedForClass,
   listBranchesForClass,
+  listPlannedBranchesForClass,
   professionDeleteBlockers,
   trainingYearsForDuration,
   validateClassProfessionAttachment,
@@ -42,6 +43,8 @@ export {
   resolveClassSchoolYearAttachment,
   type SchoolYearRef,
 } from "./school-year-attachment.ts";
+export { validateAdminClassCreate } from "./admin-class.ts";
+export { CTX_IN_USE_DELETE_REASON, contextDeleteBlockers } from "./ctx-guards.ts";
 export type {
   SchoolBranchInput,
   SchoolBranchRecord,

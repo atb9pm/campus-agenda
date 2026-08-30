@@ -2,6 +2,54 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.20.0] — Administration : référentiel pédagogique cohérent
+
+### Architecture
+
+Source de vérité inchangée :
+
+Catalogue des branches
+→ Profession
+→ Année de formation
+→ CTX = profession + année de formation + branche (`pedagogical_contexts`)
+→ Classe = année scolaire + profession + année de formation
+→ Branches prévues = CTX (aucun choix manuel sur la classe)
+
+Aucune table concurrente n’a été créée. `AnnualCourse` et l’attribution professeur/cours
+resteront une PR suivante (migration **0019+**).
+
+### Ajouté
+
+- Type d’enseignement partagé `TECHNICAL` | `GENERAL` (branches et enseignants).
+  `null` = à configurer (legacy / bootstrap uniquement).
+- Migration additive `0018_admin_referential_coherence` :
+  `school_branches.teaching_type`, `teacher_accounts` / `teachers.teaching_type`,
+  CHECK NULL ou TECHNICAL/GENERAL, trigger SQLite RESTRICT sur suppression de CTX
+  déjà lié à un parcours ou à des notes.
+- Garde-fou applicatif : un CTX avec `pedagogical_path` ou `annual_course_notes`
+  ne peut plus être supprimé définitivement (archivage possible, pas de CASCADE).
+
+### Interface administration
+
+Onglets : Classes · Catalogue des branches · Professions & plan de formation ·
+Enseignants · Plan des semaines A/B.
+
+- Plus d’onglet séparé « Gestion des accès » (logique admin / activation / archivage
+  regroupée dans Enseignants).
+- Classes : création en un bloc (année scolaire + profession + année de formation) ;
+  édition en brouillon local puis un seul PATCH ; branches prévues en lecture seule.
+- Catalogue : type obligatoire à la création ; renommage sans changer BR/ID.
+- Plan de formation : affectation de branches du catalogue à chaque année (CTX).
+  Le bouton **Parcours** (PR46) est conservé.
+
+### Compatibilité
+
+- Classes, branches et comptes existants restent lisibles avec des champs `null`.
+- Le store et les seeds peuvent encore créer des données incomplètes.
+- L’API / l’UI d’administration refusent les nouvelles données incomplètes.
+- Agenda, teacher-setup (préférence d’affichage, pas un droit) et parcours PR46
+  sont inchangés.
+
 ## [2.19.0] — Parcours pédagogique : modèle de référence par CTX
 
 ### Ajouté

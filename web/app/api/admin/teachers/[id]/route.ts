@@ -16,6 +16,7 @@ async function handlePatch(request: Request, context: { params: Promise<{ id: st
     isAdmin?: boolean;
     isActive?: boolean;
     isArchived?: boolean;
+    teachingType?: "TECHNICAL" | "GENERAL" | null;
   };
 
   // Se retirer soi-même l'administration, se désactiver ou s'archiver couperait l'accès.
@@ -37,6 +38,7 @@ async function handlePatch(request: Request, context: { params: Promise<{ id: st
     isAdmin: body.isAdmin,
     isActive: body.isActive,
     isArchived: body.isArchived,
+    teachingType: body.teachingType,
   });
   if (!result.ok) {
     return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });

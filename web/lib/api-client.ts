@@ -154,6 +154,7 @@ export async function createTeacherAccountApi(input: {
   displayName: string;
   initials: string;
   isAdmin: boolean;
+  teachingType: "TECHNICAL" | "GENERAL";
 }): Promise<{ teacher: TeacherAccountRecord; temporaryPassword: string }> {
   const response = await fetch("/api/admin/teachers", {
     method: "POST",
@@ -181,6 +182,7 @@ export async function updateTeacherAccountApi(
     isAdmin?: boolean;
     isActive?: boolean;
     isArchived?: boolean;
+    teachingType?: "TECHNICAL" | "GENERAL" | null;
   },
 ): Promise<TeacherAccountRecord> {
   const response = await fetch(`/api/admin/teachers/${encodeURIComponent(teacherId)}`, {

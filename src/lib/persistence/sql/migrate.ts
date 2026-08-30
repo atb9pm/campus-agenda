@@ -49,14 +49,12 @@ export async function applyMigrations(db: SqlDatabase): Promise<void> {
     "0015_professions_pedagogy.sql",
     "0016_class_school_year_id.sql",
     "0017_pedagogical_path.sql",
+    "0018_admin_referential_coherence.sql",
   ];
   for (const fileName of migrationFiles) {
     const migrationPath = path.join(migrationsRoot, fileName);
     const sql = await readFile(migrationPath, "utf8");
-    const statements = sql
-      .split(";")
-      .map((statement) => statement.trim())
-      .filter(Boolean);
+    const statements = splitSqlStatements(sql);
 
     for (const statement of statements) {
       try {
@@ -70,6 +68,39 @@ export async function applyMigrations(db: SqlDatabase): Promise<void> {
       }
     }
   }
+}
+
+/** Découpe les instructions SQL sans casser un bloc CREATE TRIGGER … BEGIN … END. */
+export function splitSqlStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let buffer = "";
+  let inTrigger = false;
+  for (const part of sql.split(";")) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    if (!inTrigger && /CREATE\s+TRIGGER/i.test(trimmed)) {
+      inTrigger = true;
+      buffer = trimmed;
+      if (/\bEND\s*$/i.test(trimmed)) {
+        statements.push(buffer);
+        buffer = "";
+        inTrigger = false;
+      }
+      continue;
+    }
+    if (inTrigger) {
+      buffer += `; ${trimmed}`;
+      if (/\bEND\s*$/i.test(trimmed)) {
+        statements.push(buffer);
+        buffer = "";
+        inTrigger = false;
+      }
+      continue;
+    }
+    statements.push(trimmed);
+  }
+  if (buffer.trim()) statements.push(buffer.trim());
+  return statements;
 }
 
 export async function isDatabaseSeeded(db: SqlDatabase): Promise<boolean> {
