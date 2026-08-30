@@ -40,6 +40,7 @@ function mapBranch(row: {
   label: string;
   sort_order: number;
   is_active: number;
+  archived_at: string | null;
 }): SchoolBranchRecord {
   return {
     id: row.id,
@@ -47,6 +48,8 @@ function mapBranch(row: {
     label: row.label,
     sortOrder: row.sort_order,
     isActive: Boolean(row.is_active),
+    isArchived: row.archived_at !== null,
+    archivedAt: row.archived_at,
   };
 }
 
@@ -84,10 +87,10 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       for (const entry of buildDefaultSchoolBranches()) {
         await this.db
           .prepare(
-            `INSERT INTO school_branches (id, code, label, sort_order, is_active)
-             VALUES (?, ?, ?, ?, ?)`,
+            `INSERT INTO school_branches (id, code, label, sort_order, is_active, archived_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
           )
-          .bind(entry.id, entry.code, entry.label, entry.sortOrder, entry.isActive ? 1 : 0)
+          .bind(entry.id, entry.code, entry.label, entry.sortOrder, entry.isActive ? 1 : 0, entry.archivedAt)
           .run();
       }
     }
@@ -116,7 +119,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
     await this.ensureSeeded();
     const rows = await this.db
       .prepare(
-        `SELECT id, code, label, sort_order, is_active
+        `SELECT id, code, label, sort_order, is_active, archived_at
          FROM school_branches ORDER BY sort_order ASC, label ASC`,
       )
       .bind()
@@ -126,6 +129,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         label: string;
         sort_order: number;
         is_active: number;
+        archived_at: string | null;
       }>();
     return (rows.results ?? []).map(mapBranch);
   }
@@ -176,19 +180,22 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
 
   async createBranch(input: SchoolBranchInput): Promise<SchoolBranchRecord> {
     await this.ensureSeeded();
+    const archivedAt = input.isArchived ? new Date().toISOString() : null;
     const record: SchoolBranchRecord = {
       id: createId("school-branch"),
       code: normalizeClassCode(input.code),
       label: input.label.trim(),
       sortOrder: input.sortOrder ?? 0,
       isActive: input.isActive ?? true,
+      isArchived: archivedAt !== null,
+      archivedAt,
     };
     await this.db
       .prepare(
-        `INSERT INTO school_branches (id, code, label, sort_order, is_active)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO school_branches (id, code, label, sort_order, is_active, archived_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .bind(record.id, record.code, record.label, record.sortOrder, record.isActive ? 1 : 0)
+      .bind(record.id, record.code, record.label, record.sortOrder, record.isActive ? 1 : 0, record.archivedAt)
       .run();
     return record;
   }
@@ -197,20 +204,28 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
     await this.ensureSeeded();
     const current = (await this.listBranches()).find((entry) => entry.id === id);
     if (!current) return null;
+    let archivedAt = current.archivedAt;
+    if (patch.isArchived === true) {
+      archivedAt = current.archivedAt ?? new Date().toISOString();
+    } else if (patch.isArchived === false) {
+      archivedAt = null;
+    }
     const next: SchoolBranchRecord = {
       ...current,
       code: patch.code !== undefined ? normalizeClassCode(patch.code) : current.code,
       label: patch.label !== undefined ? patch.label.trim() : current.label,
       sortOrder: patch.sortOrder ?? current.sortOrder,
       isActive: patch.isActive ?? current.isActive,
+      isArchived: archivedAt !== null,
+      archivedAt,
     };
     await this.db
       .prepare(
         `UPDATE school_branches
-         SET code = ?, label = ?, sort_order = ?, is_active = ?
+         SET code = ?, label = ?, sort_order = ?, is_active = ?, archived_at = ?
          WHERE id = ?`,
       )
-      .bind(next.code, next.label, next.sortOrder, next.isActive ? 1 : 0, id)
+      .bind(next.code, next.label, next.sortOrder, next.isActive ? 1 : 0, next.archivedAt, id)
       .run();
     return next;
   }

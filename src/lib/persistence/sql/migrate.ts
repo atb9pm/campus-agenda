@@ -45,6 +45,7 @@ export async function applyMigrations(db: SqlDatabase): Promise<void> {
     "0011_teacher_setups.sql",
     "0012_teacher_notes.sql",
     "0013_teacher_access_meta.sql",
+    "0014_school_branch_archive.sql",
   ];
   for (const fileName of migrationFiles) {
     const migrationPath = path.join(migrationsRoot, fileName);

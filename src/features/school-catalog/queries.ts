@@ -19,7 +19,7 @@ export function listActiveSchoolClasses(classes: SchoolClassRecord[]): SchoolCla
 }
 
 export function listActiveSchoolBranches(branches: SchoolBranchRecord[]): SchoolBranchRecord[] {
-  return sortSchoolBranches(branches.filter((entry) => entry.isActive));
+  return sortSchoolBranches(branches.filter((entry) => entry.isActive && !entry.isArchived));
 }
 
 export function normalizeClassCode(raw: string): string {

@@ -66,12 +66,15 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
 
   async createBranch(input: SchoolBranchInput): Promise<SchoolBranchRecord> {
     await this.ensureSeeded();
+    const archivedAt = input.isArchived ? new Date().toISOString() : null;
     const record: SchoolBranchRecord = {
       id: createId("school-branch"),
       code: normalizeClassCode(input.code),
       label: input.label.trim(),
       sortOrder: input.sortOrder ?? this.branches.length + 1,
       isActive: input.isActive ?? true,
+      isArchived: archivedAt !== null,
+      archivedAt,
     };
     this.branches.push(record);
     return record;
@@ -82,12 +85,20 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
     const index = this.branches.findIndex((entry) => entry.id === id);
     if (index < 0) return null;
     const current = this.branches[index];
+    let archivedAt = current.archivedAt;
+    if (patch.isArchived === true) {
+      archivedAt = current.archivedAt ?? new Date().toISOString();
+    } else if (patch.isArchived === false) {
+      archivedAt = null;
+    }
     const next: SchoolBranchRecord = {
       ...current,
       code: patch.code !== undefined ? normalizeClassCode(patch.code) : current.code,
       label: patch.label !== undefined ? patch.label.trim() : current.label,
       sortOrder: patch.sortOrder ?? current.sortOrder,
       isActive: patch.isActive ?? current.isActive,
+      isArchived: archivedAt !== null,
+      archivedAt,
     };
     this.branches[index] = next;
     return next;
