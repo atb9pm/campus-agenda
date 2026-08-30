@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import type { AnnualCourseNotesStore } from "../../lib/persistence/pedagogical-path-types.ts";
 import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-types.ts";
 import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
@@ -35,6 +33,10 @@ export interface AnnualCourseServiceDeps {
   notes: AnnualCourseNotesStore;
 }
 
+function createId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -60,7 +62,7 @@ async function appendEvent(
 ): Promise<void> {
   await deps.courses.appendEvent({
     ...event,
-    id: randomUUID(),
+    id: createId("tcae"),
     createdAt,
   });
 }
@@ -94,7 +96,7 @@ export async function createAnnualCourse(
 
   const timestamp = nowIso();
   const course: AnnualCourse = {
-    id: randomUUID(),
+    id: createId("ac"),
     schoolYearId: validated.value.schoolYearId,
     classId: validated.value.classId,
     contextId: validated.value.contextId,
@@ -188,7 +190,7 @@ export async function assignTeacherToCourse(
   const validFrom = normalizeInstant(input.validFrom, timestamp);
   const validTo = normalizeInclusiveEnd(input.validTo);
   const assignment: TeacherCourseAssignment = {
-    id: randomUUID(),
+    id: createId("tca"),
     annualCourseId: course.id,
     teacherId: input.teacherId,
     role: input.role,

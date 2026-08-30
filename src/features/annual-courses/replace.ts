@@ -1,11 +1,13 @@
-import { randomUUID } from "node:crypto";
-
 import { endAssignment, findDuplicateAssignment, isAssignmentActiveAt } from "./assignments.ts";
 import type {
   AssignmentRole,
   CourseMutationResult,
   TeacherCourseAssignment,
 } from "./types.ts";
+
+function createId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
 
 export interface ReplaceAnnualCourseTeacherInput {
   annualCourseId: string;
@@ -54,7 +56,7 @@ export function replaceTeacherOnAnnualCourse(
   }
 
   const created: TeacherCourseAssignment = {
-    id: randomUUID(),
+    id: createId("tca"),
     annualCourseId: input.annualCourseId,
     teacherId: input.incomingTeacherId,
     role: input.incomingRole ?? "PRIMARY",
@@ -117,7 +119,7 @@ export function buildTemporaryReplacement(
   }
 
   const created: TeacherCourseAssignment = {
-    id: randomUUID(),
+    id: createId("tca"),
     annualCourseId: input.annualCourseId,
     teacherId: input.teacherId,
     role: "REPLACEMENT",

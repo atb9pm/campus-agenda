@@ -2,14 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-import {
-  ASSIGNMENT_ROLE_LABELS,
-  isAssignmentActiveAt,
-  preferredTeachersForBranch,
-  type AnnualCourse,
-  type AssignmentRole,
-  type TeacherCourseAssignment,
-} from "@campus/features/annual-courses/index.ts";
+import { ASSIGNMENT_ROLE_LABELS, type AnnualCourse, type AssignmentRole, type TeacherCourseAssignment } from "@campus/features/annual-courses/types.ts";
+import { isAssignmentActiveAt, preferredTeachersForBranch } from "@campus/features/annual-courses/assignments.ts";
 import type { PedagogicalContextRecord, SchoolProfessionRecord } from "@campus/features/school-catalog";
 import type { SchoolBranchRecord, SchoolClassRecord } from "@campus/features/school-catalog";
 import {
