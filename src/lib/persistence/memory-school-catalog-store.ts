@@ -8,6 +8,7 @@ import {
   branchDeleteBlockers,
   canReduceProfessionDuration,
   professionDeleteBlockers,
+  validateClassProfessionAttachment,
 } from "../../features/school-catalog/profession-rules.ts";
 import type {
   PedagogicalContextInput,
@@ -72,6 +73,12 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
 
   async createClass(input: SchoolClassInput): Promise<SchoolClassRecord> {
     await this.ensureSeeded();
+    const attachment = validateClassProfessionAttachment({
+      professionId: input.professionId ?? null,
+      trainingYear: input.trainingYear ?? null,
+      professions: this.professions,
+    });
+    if (!attachment.ok) throw new Error(attachment.reason);
     const record: SchoolClassRecord = {
       id: createId("school-class"),
       code: normalizeClassCode(input.code),
@@ -79,8 +86,8 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
       sortOrder: input.sortOrder ?? this.classes.length + 1,
       isActive: input.isActive ?? true,
       schoolYearLabel: input.schoolYearLabel ?? null,
-      professionId: input.professionId ?? null,
-      trainingYear: input.trainingYear ?? null,
+      professionId: attachment.value.professionId,
+      trainingYear: attachment.value.trainingYear,
     };
     this.classes.push(record);
     return record;
@@ -91,6 +98,12 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
     const index = this.classes.findIndex((entry) => entry.id === id);
     if (index < 0) return null;
     const current = this.classes[index]!;
+    const attachment = validateClassProfessionAttachment({
+      professionId: patch.professionId !== undefined ? patch.professionId : current.professionId,
+      trainingYear: patch.trainingYear !== undefined ? patch.trainingYear : current.trainingYear,
+      professions: this.professions,
+    });
+    if (!attachment.ok) throw new Error(attachment.reason);
     const next: SchoolClassRecord = {
       ...current,
       code: patch.code !== undefined ? normalizeClassCode(patch.code) : current.code,
@@ -99,8 +112,8 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
       isActive: patch.isActive ?? current.isActive,
       schoolYearLabel:
         patch.schoolYearLabel !== undefined ? patch.schoolYearLabel : current.schoolYearLabel,
-      professionId: patch.professionId !== undefined ? patch.professionId : current.professionId,
-      trainingYear: patch.trainingYear !== undefined ? patch.trainingYear : current.trainingYear,
+      professionId: attachment.value.professionId,
+      trainingYear: attachment.value.trainingYear,
     };
     this.classes[index] = next;
     return next;

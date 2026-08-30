@@ -252,3 +252,23 @@ export async function classroomExistsInDatabase(db: SqlDatabase, classroomId: st
     .first<{ ok: number }>();
   return Boolean(row);
 }
+
+
+export async function resolveClassroomSubjectNamesInDatabase(
+  db: SqlDatabase,
+  classroomId: string,
+  subjectId: string,
+): Promise<{ classroomName: string | null; subjectName: string | null }> {
+  const classroom = await db
+    .prepare("SELECT name FROM classrooms WHERE id = ? LIMIT 1")
+    .bind(classroomId)
+    .first<{ name: string }>();
+  const subject = await db
+    .prepare("SELECT name FROM subjects WHERE id = ? AND classroom_id = ? LIMIT 1")
+    .bind(subjectId, classroomId)
+    .first<{ name: string }>();
+  return {
+    classroomName: classroom?.name ?? null,
+    subjectName: subject?.name ?? null,
+  };
+}

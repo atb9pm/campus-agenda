@@ -35,9 +35,14 @@ async function handlePatch(request: Request, context: { params: Promise<{ id: st
   const catalog = await getSchoolCatalogStore();
 
   if (body.kind === "class") {
-    const updated = await catalog.updateClass(id, body);
-    if (!updated) return jsonResponse({ ok: false, reason: "Classe introuvable." }, { status: 404 });
-    return jsonResponse({ ok: true, class: updated });
+    try {
+      const updated = await catalog.updateClass(id, body);
+      if (!updated) return jsonResponse({ ok: false, reason: "Classe introuvable." }, { status: 404 });
+      return jsonResponse({ ok: true, class: updated });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "Mise à jour impossible.";
+      return jsonResponse({ ok: false, reason }, { status: 400 });
+    }
   }
 
   if (body.kind === "branch") {

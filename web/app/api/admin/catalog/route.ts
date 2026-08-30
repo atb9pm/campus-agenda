@@ -110,16 +110,21 @@ async function handlePost(request: Request) {
   }
 
   if (body.kind === "class") {
-    const created = await catalog.createClass({
-      code: body.code,
-      label: body.label,
-      sortOrder: body.sortOrder,
-      isActive: body.isActive,
-      schoolYearLabel: body.schoolYearLabel ?? null,
-      professionId: body.professionId ?? null,
-      trainingYear: body.trainingYear ?? null,
-    });
-    return jsonResponse({ ok: true, class: created });
+    try {
+      const created = await catalog.createClass({
+        code: body.code,
+        label: body.label,
+        sortOrder: body.sortOrder,
+        isActive: body.isActive,
+        schoolYearLabel: body.schoolYearLabel ?? null,
+        professionId: body.professionId ?? null,
+        trainingYear: body.trainingYear ?? null,
+      });
+      return jsonResponse({ ok: true, class: created });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "Création impossible.";
+      return jsonResponse({ ok: false, reason }, { status: 400 });
+    }
   }
 
   const created = await catalog.createBranch({

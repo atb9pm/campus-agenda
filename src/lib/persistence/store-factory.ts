@@ -4,7 +4,7 @@ import type { AgendaStore, StoreKind, TemplateStore } from "./types.ts";
 import { createNodeSqliteDatabase, wrapD1Database } from "./sql/adapters.ts";
 import { applyMigrations, isDatabaseSeeded } from "./sql/migrate.ts";
 import { seedDemoDatabase } from "./sql/seed.ts";
-import { SqlAgendaStore, classroomExistsInDatabase } from "./sql/sql-agenda-store.ts";
+import { SqlAgendaStore, classroomExistsInDatabase, resolveClassroomSubjectNamesInDatabase } from "./sql/sql-agenda-store.ts";
 import { SqlTemplateStore } from "./sql/sql-template-store.ts";
 import { SqlSchoolYearStore, hydrateActiveSchoolCalendar } from "./sql/sql-school-year-store.ts";
 import { getMemoryAgendaStore } from "./memory-store.ts";
@@ -12,7 +12,7 @@ import { getMemoryTemplateStore } from "./memory-template-store.ts";
 import { getMemoryTimetableStore } from "./memory-timetable-store.ts";
 import { SqlTimetableStore } from "./sql/sql-timetable-store.ts";
 import type { TimetableStore } from "./timetable-types.ts";
-import { classroomExists as memoryClassroomExists } from "./memory-store.ts";
+import { classroomExists as memoryClassroomExists, resolveClassroomSubjectNames as memoryResolveClassroomSubjectNames } from "./memory-store.ts";
 import { MemorySchoolYearStore, hydrateMemorySchoolCalendar } from "./memory-school-year-store.ts";
 import { MemoryMembershipStore } from "./memory-membership-store.ts";
 import { SqlMembershipStore } from "./sql/sql-membership-store.ts";
@@ -47,6 +47,10 @@ interface ResolvedStore {
   teacherNotesStore: TeacherNotesStore;
   kind: StoreKind;
   classroomExists: (classroomId: string) => Promise<boolean>;
+  resolveClassroomSubjectNames: (
+    classroomId: string,
+    subjectId: string,
+  ) => Promise<{ classroomName: string | null; subjectName: string | null }>;
 }
 
 let resolvedStorePromise: Promise<ResolvedStore> | null = null;
@@ -133,6 +137,7 @@ async function createStore(): Promise<ResolvedStore> {
       teacherNotesStore,
       kind: "memory",
       classroomExists: memoryClassroomExists,
+      resolveClassroomSubjectNames: memoryResolveClassroomSubjectNames,
     };
   }
 
@@ -158,6 +163,8 @@ async function createStore(): Promise<ResolvedStore> {
       teacherNotesStore,
       kind: "sqlite",
       classroomExists: (classroomId) => classroomExistsInDatabase(sqlite, classroomId),
+      resolveClassroomSubjectNames: (classroomId, subjectId) =>
+        resolveClassroomSubjectNamesInDatabase(sqlite, classroomId, subjectId),
     };
   }
 
@@ -185,6 +192,8 @@ async function createStore(): Promise<ResolvedStore> {
         teacherNotesStore,
         kind: "d1",
         classroomExists: (classroomId) => classroomExistsInDatabase(db, classroomId),
+        resolveClassroomSubjectNames: (classroomId, subjectId) =>
+          resolveClassroomSubjectNamesInDatabase(db, classroomId, subjectId),
       };
     }
   } catch {
@@ -210,6 +219,7 @@ async function createStore(): Promise<ResolvedStore> {
     teacherNotesStore,
     kind: "memory",
     classroomExists: memoryClassroomExists,
+    resolveClassroomSubjectNames: memoryResolveClassroomSubjectNames,
   };
 }
 
@@ -295,4 +305,13 @@ export async function restoreStoreSnapshot(payload: unknown): Promise<BackupRest
     },
     payload,
   );
+}
+
+
+export async function resolveClassroomSubjectNames(
+  classroomId: string,
+  subjectId: string,
+): Promise<{ classroomName: string | null; subjectName: string | null }> {
+  const resolved = await resolveAgendaStore();
+  return resolved.resolveClassroomSubjectNames(classroomId, subjectId);
 }

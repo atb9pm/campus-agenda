@@ -3,6 +3,7 @@ import { createPublication, deletePublication, updatePublication } from "../../f
 import { DEMO_CATALOG } from "../../features/classes/demo-data.ts";
 import {
   getClassroomById,
+  getSubjectById,
   getMembershipsForTeacher,
   teacherTeachesSubject,
 } from "../../features/classes/queries.ts";
@@ -129,4 +130,17 @@ export function resetMemoryAgendaStore(seedItems?: PrototypeAgendaItem[]): void 
 
 export async function classroomExists(classroomId: string): Promise<boolean> {
   return Boolean(getClassroomById(DEMO_CATALOG, classroomId));
+}
+
+
+export async function resolveClassroomSubjectNames(
+  classroomId: string,
+  subjectId: string,
+): Promise<{ classroomName: string | null; subjectName: string | null }> {
+  const classroom = getClassroomById(DEMO_CATALOG, classroomId);
+  const subject = getSubjectById(DEMO_CATALOG, subjectId);
+  return {
+    classroomName: classroom?.name ?? null,
+    subjectName: subject?.name ?? null,
+  };
 }

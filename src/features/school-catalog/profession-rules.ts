@@ -3,6 +3,7 @@ import type {
   PedagogyMutationResult,
   SchoolProfessionRecord,
 } from "./profession-types.ts";
+import { normalizeClassCode } from "./queries.ts";
 import type { SchoolBranchRecord, SchoolClassRecord } from "./types.ts";
 
 export function trainingYearsForDuration(durationYears: number): number[] {
@@ -136,3 +137,113 @@ export function isBranchAllowedForClass(options: {
       entry.branchId === options.branch!.id,
   );
 }
+
+/**
+ * Cohérence Classe → Profession → Année de formation.
+ * Legacy autorisé : les deux null. Les états mixtes ou hors durée sont refusés.
+ */
+export function validateClassProfessionAttachment(options: {
+  professionId: string | null;
+  trainingYear: number | null;
+  professions: SchoolProfessionRecord[];
+}): PedagogyMutationResult<{ professionId: string | null; trainingYear: number | null }> {
+  const professionId = options.professionId;
+  const trainingYear = options.trainingYear;
+
+  if (professionId === null && trainingYear === null) {
+    return { ok: true, value: { professionId: null, trainingYear: null } };
+  }
+
+  if (professionId === null || trainingYear === null) {
+    return {
+      ok: false,
+      reason:
+        "Profession et année de formation doivent être renseignées ensemble (ou toutes deux absentes).",
+    };
+  }
+
+  const profession = options.professions.find((entry) => entry.id === professionId);
+  if (!profession) {
+    return { ok: false, reason: "Profession introuvable." };
+  }
+  if (profession.isArchived) {
+    return { ok: false, reason: "Impossible de rattacher une classe à une profession archivée." };
+  }
+  if (!Number.isInteger(profession.durationYears) || profession.durationYears < 1) {
+    return {
+      ok: false,
+      reason: "Cette profession est dans un état incohérent (durée de formation invalide).",
+    };
+  }
+
+  const year = Number(trainingYear);
+  if (!Number.isInteger(year) || year < 1) {
+    return { ok: false, reason: "L'année de formation doit être un entier ≥ 1." };
+  }
+  if (year > profession.durationYears) {
+    return {
+      ok: false,
+      reason:
+        `L'année de formation (${year}) dépasse la durée de la profession` +
+        ` (${profession.durationYears} an${profession.durationYears > 1 ? "s" : ""}).`,
+    };
+  }
+
+  return { ok: true, value: { professionId, trainingYear: year } };
+}
+
+/**
+ * Contrôle serveur des publications Agenda (complète teacherCanPublish).
+ * Résolution : nom de classe → code école, nom de sujet → libellé de branche.
+ * Repli : classe absente du référentiel, legacy sans profession/année, ou sujet
+ * sans branche catalogue correspondante → autorisé (membership reste le garde-fou).
+ */
+export function evaluateAgendaBranchForClass(options: {
+  classroomName: string | null | undefined;
+  subjectName: string | null | undefined;
+  classes: SchoolClassRecord[];
+  branches: SchoolBranchRecord[];
+  contexts: PedagogicalContextRecord[];
+}): PedagogyMutationResult<true> {
+  const classroomName = options.classroomName?.trim();
+  if (!classroomName) return { ok: true, value: true };
+
+  const normalized = normalizeClassCode(classroomName);
+  const schoolClass =
+    options.classes.find((entry) => normalizeClassCode(entry.code) === normalized) ??
+    options.classes.find((entry) => normalizeClassCode(entry.label) === normalized) ??
+    null;
+
+  if (!schoolClass) return { ok: true, value: true };
+  if (!schoolClass.professionId || schoolClass.trainingYear === null) {
+    return { ok: true, value: true };
+  }
+
+  const subjectName = options.subjectName?.trim();
+  if (!subjectName) {
+    return { ok: false, reason: "Branche de publication introuvable." };
+  }
+
+  const normalizedSubject = subjectName.toLowerCase();
+  const branch =
+    options.branches.find((entry) => entry.label.trim().toLowerCase() === normalizedSubject) ?? null;
+
+  if (!branch) return { ok: true, value: true };
+
+  if (
+    isBranchAllowedForClass({
+      schoolClass,
+      branch,
+      contexts: options.contexts,
+    })
+  ) {
+    return { ok: true, value: true };
+  }
+
+  return {
+    ok: false,
+    reason:
+      "Cette branche n’est pas autorisée pour la profession et l’année de formation de la classe.",
+  };
+}
+

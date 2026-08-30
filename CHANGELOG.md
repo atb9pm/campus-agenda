@@ -2,6 +2,35 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.17.1] — Consolidation professions, classes et CTX
+
+### Sécurisé
+
+- Validation serveur Agenda (création / modification) : une publication ne peut plus
+  cibler une branche hors CTX de la classe (complète `teacherCanPublish`).
+- Repli legacy inchangé : classe sans profession/année → branches actives autorisées.
+- Validation serveur Classe → Profession → Année (création / modification) :
+  les deux absents (legacy), ou les deux cohérents ; refus des états mixtes et des
+  années hors `durationYears`.
+
+### Fiabilisé
+
+- Attribution atomique des codes `PRF` / `BR` / `CTX` via `UPDATE … RETURNING`
+  sous le verrou d’écriture SQLite (pas de lecture/écriture séparées du compteur).
+- Les codes déjà émis ne sont jamais recyclés ; aucun changement des IDs existants.
+
+### Non inclus (volontairement)
+
+- **Pas de `schoolYearId` sur les classes dans cette PR** : le champ `schoolYearLabel`
+  reste la référence actuelle. Une évolution additive (`schoolYearId` nullable,
+  conservation du label, backfill seulement si correspondance certaine) est
+  recommandée pour une PR dédiée, afin de ne pas élargir celle-ci.
+
+### Tests
+
+- Couverture consolidation : publication CTX autorisée/refusée, legacy, rattachement
+  classe, compteurs mémoire/SQLite, migration rejouée, stabilité des IDs.
+
 ## [2.17.0] — Professions : structure pédagogique et rattachement des branches
 
 ### Ajouté
