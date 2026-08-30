@@ -5,11 +5,13 @@ import {
   ASSIGNMENT_ROLES,
   MEMBERSHIP_IS_LEGACY_FALLBACK,
   TEACHER_SETUP_IS_NOT_AUTHORIZATION,
+  archiveAnnualCourse,
   assignTeacherToCourse,
   assignTemporaryReplacement,
   createAnnualCourse,
   deleteAnnualCourse,
   endTeacherAssignment,
+  ensureAnnualCourse,
   evaluateTeachingTypeGuard,
   isAssignmentActiveAt,
   replaceTeacherDefinitively,
@@ -679,9 +681,223 @@ test("Agenda — résolution AnnualCourse uniquement si correspondance stable", 
   assert.equal(legacy, null);
 });
 
-test("SQLite — migration 0019, unicité, trigger CTX", async () => {
+test("remplacements temporaires successifs — non chevauchants autorisés, chevauchement refusé", async () => {
+  const fx = await fixture();
+  const course = await createAnnualCourse(fx.deps, {
+    schoolYearId: "year-2027",
+    classId: fx.schoolClass.id,
+    contextId: fx.context.id,
+  });
+  assert.equal(course.ok, true);
+  if (!course.ok) return;
+  await assignTeacherToCourse(fx.deps, {
+    annualCourseId: course.value.id,
+    teacherId: fx.francois.id,
+    role: "PRIMARY",
+    createdByAdminId: "admin-1",
+  });
+
+  const november = await assignTemporaryReplacement(fx.deps, {
+    annualCourseId: course.value.id,
+    teacherId: fx.paul.id,
+    createdByAdminId: "admin-1",
+    validFrom: "2027-11-03",
+    validTo: "2027-11-20",
+  });
+  assert.equal(november.ok, true);
+  if (!november.ok) return;
+  assert.equal(november.value.endedAt, null);
+  assert.equal(isAssignmentActiveAt(november.value, "2027-11-21T00:00:00.000Z"), false);
+
+  const january = await assignTemporaryReplacement(fx.deps, {
+    annualCourseId: course.value.id,
+    teacherId: fx.paul.id,
+    createdByAdminId: "admin-1",
+    validFrom: "2028-01-10",
+    validTo: "2028-01-20",
+  });
+  assert.equal(january.ok, true);
+  if (!january.ok) return;
+  assert.equal(january.value.endedAt, null);
+
+  const overlap = await assignTemporaryReplacement(fx.deps, {
+    annualCourseId: course.value.id,
+    teacherId: fx.paul.id,
+    createdByAdminId: "admin-1",
+    validFrom: "2027-11-15",
+    validTo: "2027-11-25",
+  });
+  assert.equal(overlap.ok, false);
+});
+
+test("PRIMARY successifs — périodes disjointes autorisées, chevauchement refusé", async () => {
+  const fx = await fixture();
+  const course = await createAnnualCourse(fx.deps, {
+    schoolYearId: "year-2027",
+    classId: fx.schoolClass.id,
+    contextId: fx.context.id,
+  });
+  assert.equal(course.ok, true);
+  if (!course.ok) return;
+
+  const first = await assignTeacherToCourse(fx.deps, {
+    annualCourseId: course.value.id,
+    teacherId: fx.francois.id,
+    role: "PRIMARY",
+    createdByAdminId: "admin-1",
+    validFrom: "2027-08-01",
+    validTo: "2027-12-31",
+  });
+  assert.equal(first.ok, true);
+
+  const second = await assignTeacherToCourse(fx.deps, {
+    annualCourseId: course.value.id,
+    teacherId: fx.paul.id,
+    role: "PRIMARY",
+    createdByAdminId: "admin-1",
+    validFrom: "2028-01-01",
+  });
+  assert.equal(second.ok, true);
+
+  const marc = await fx.teachers.createAccount({
+    displayName: "Marc Chevauche",
+    initials: "ChM",
+    teachingType: "TECHNICAL",
+  });
+  assert.equal(marc.ok, true);
+  if (!marc.ok) return;
+  const overlap = await assignTeacherToCourse(fx.deps, {
+    annualCourseId: course.value.id,
+    teacherId: marc.account.id,
+    role: "PRIMARY",
+    createdByAdminId: "admin-1",
+    validFrom: "2027-12-01",
+  });
+  assert.equal(overlap.ok, false);
+});
+
+test("cours archivé — aucune nouvelle attribution", async () => {
+  const fx = await fixture();
+  const course = await createAnnualCourse(fx.deps, {
+    schoolYearId: "year-2027",
+    classId: fx.schoolClass.id,
+    contextId: fx.context.id,
+  });
+  assert.equal(course.ok, true);
+  if (!course.ok) return;
+
+  const tempOk = await assignTemporaryReplacement(fx.deps, {
+    annualCourseId: course.value.id,
+    teacherId: fx.paul.id,
+    createdByAdminId: "admin-1",
+    validFrom: "2027-11-03",
+    validTo: "2027-11-20",
+  });
+  assert.equal(tempOk.ok, true);
+
+  const archived = await archiveAnnualCourse(fx.deps, course.value.id);
+  assert.equal(archived.ok, true);
+
+  const primary = await assignTeacherToCourse(fx.deps, {
+    annualCourseId: course.value.id,
+    teacherId: fx.francois.id,
+    role: "PRIMARY",
+    createdByAdminId: "admin-1",
+  });
+  assert.equal(primary.ok, false);
+  if (!primary.ok) assert.equal(primary.status, 409);
+
+  const co = await assignTeacherToCourse(fx.deps, {
+    annualCourseId: course.value.id,
+    teacherId: fx.francois.id,
+    role: "CO_TEACHER",
+    createdByAdminId: "admin-1",
+  });
+  assert.equal(co.ok, false);
+
+  const replacement = await assignTeacherToCourse(fx.deps, {
+    annualCourseId: course.value.id,
+    teacherId: fx.francois.id,
+    role: "REPLACEMENT",
+    createdByAdminId: "admin-1",
+    validFrom: "2028-02-01",
+    validTo: "2028-02-15",
+  });
+  assert.equal(replacement.ok, false);
+
+  const definitive = await replaceTeacherDefinitively(fx.deps, {
+    annualCourseId: course.value.id,
+    outgoingTeacherId: fx.paul.id,
+    incomingTeacherId: fx.francois.id,
+    createdByAdminId: "admin-1",
+  });
+  assert.equal(definitive.ok, false);
+
+  const tempBlocked = await assignTemporaryReplacement(fx.deps, {
+    annualCourseId: course.value.id,
+    teacherId: fx.francois.id,
+    createdByAdminId: "admin-1",
+    validFrom: "2028-01-10",
+    validTo: "2028-01-20",
+  });
+  assert.equal(tempBlocked.ok, false);
+  if (!tempBlocked.ok) {
+    assert.equal(tempBlocked.reason, "Ce cours annuel est archivé.");
+    assert.equal(tempBlocked.status, 409);
+  }
+
+  const ensured = await ensureAnnualCourse(fx.deps, {
+    schoolYearId: "year-2027",
+    classId: fx.schoolClass.id,
+    contextId: fx.context.id,
+  });
+  assert.equal(ensured.ok, false);
+  if (!ensured.ok) assert.equal(ensured.status, 409);
+});
+
+test("premier professeur incompatible — forçage PRIMARY, jamais CO_TEACHER", async () => {
+  const fx = await fixture();
+  const course = await createAnnualCourse(fx.deps, {
+    schoolYearId: "year-2027",
+    classId: fx.schoolClass.id,
+    contextId: fx.context.id,
+  });
+  assert.equal(course.ok, true);
+  if (!course.ok) return;
+
+  const refused = await assignTeacherToCourse(fx.deps, {
+    annualCourseId: course.value.id,
+    teacherId: fx.sophie.id,
+    role: "PRIMARY",
+    createdByAdminId: "admin-1",
+  });
+  assert.equal(refused.ok, false);
+
+  const forced = await assignTeacherToCourse(fx.deps, {
+    annualCourseId: course.value.id,
+    teacherId: fx.sophie.id,
+    role: "PRIMARY",
+    createdByAdminId: "admin-1",
+    forceIncompatible: true,
+    overrideReason: "Pénurie temporaire",
+  });
+  assert.equal(forced.ok, true);
+  if (!forced.ok) return;
+  assert.equal(forced.value.role, "PRIMARY");
+  assert.notEqual(forced.value.role, "CO_TEACHER");
+  assert.equal(forced.value.overrideReason, "Pénurie temporaire");
+});
+
+test("SQLite — 0018 puis 0019, périodes, archivage, trigger CTX", async () => {
   const db = createNodeSqliteDatabase(":memory:");
-  await applyMigrations(db);
+  await applyMigrations(db, { until: "0018_admin_referential_coherence.sql" });
+  const before = await db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'annual_courses'")
+    .bind()
+    .all<{ name: string }>();
+  assert.equal(before.results.length, 0);
+
+  await applyMigrations(db, { until: "0019_annual_courses_teacher_assignments.sql" });
   const tables = await db
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('annual_courses', 'teacher_course_assignments')")
     .bind()
@@ -689,14 +905,22 @@ test("SQLite — migration 0019, unicité, trigger CTX", async () => {
   assert.ok(tables.results.some((row) => row.name === "annual_courses"));
   assert.ok(tables.results.some((row) => row.name === "teacher_course_assignments"));
 
+  const leftoverIndexes = await db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('idx_tca_open_teacher', 'idx_tca_open_primary')")
+    .bind()
+    .all<{ name: string }>();
+  assert.equal(leftoverIndexes.results.length, 0);
+
   const catalog = new SqlSchoolCatalogStore(db);
   await catalog.ensureSeeded();
   const profession = await catalog.createProfession({ label: "Mécatronicien", durationYears: 4 });
-  const [branch] = await catalog.listBranches();
+  const branches = await catalog.listBranches();
+  const branch = branches.find((entry) => entry.label === "Moteur") ?? branches[0]!;
+  await catalog.updateBranch(branch.id, { teachingType: "TECHNICAL" });
   const ctx = await catalog.createContext({
     professionId: profession.id,
     trainingYear: 1,
-    branchId: branch!.id,
+    branchId: branch.id,
   });
   assert.equal(ctx.ok, true);
   if (!ctx.ok) return;
@@ -716,8 +940,13 @@ test("SQLite — migration 0019, unicité, trigger CTX", async () => {
     initials: "SqF",
     teachingType: "TECHNICAL",
   });
-  assert.equal(francois.ok, true);
-  if (!francois.ok) return;
+  const paul = await teachers.createAccount({
+    displayName: "Paul SQL",
+    initials: "SqP",
+    teachingType: "TECHNICAL",
+  });
+  assert.equal(francois.ok && paul.ok, true);
+  if (!francois.ok || !paul.ok) return;
 
   const deps: AnnualCourseServiceDeps = {
     courses: new SqlAnnualCourseStore(db),
@@ -733,24 +962,125 @@ test("SQLite — migration 0019, unicité, trigger CTX", async () => {
   });
   assert.equal(course.ok, true);
   if (!course.ok) return;
-  const assigned = await assignTeacherToCourse(deps, {
+
+  const firstPrimary = await assignTeacherToCourse(deps, {
     annualCourseId: course.value.id,
     teacherId: francois.account.id,
     role: "PRIMARY",
     createdByAdminId: "admin-sql",
+    validFrom: "2027-08-01",
+    validTo: "2027-12-31",
   });
-  assert.equal(assigned.ok, true);
+  assert.equal(firstPrimary.ok, true);
 
-  const paths = new SqlPedagogicalPathStore(db);
-  await paths.savePath({
-    id: "p1",
-    contextId: ctx.value.id,
-    sessions: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+  const november = await assignTemporaryReplacement(deps, {
+    annualCourseId: course.value.id,
+    teacherId: paul.account.id,
+    createdByAdminId: "admin-sql",
+    validFrom: "2027-11-03",
+    validTo: "2027-11-20",
   });
+  assert.equal(november.ok, true);
+  if (!november.ok) return;
+  assert.equal(november.value.endedAt, null);
+  assert.equal(isAssignmentActiveAt(november.value, "2027-11-21T00:00:00.000Z"), false);
+
+  const january = await assignTemporaryReplacement(deps, {
+    annualCourseId: course.value.id,
+    teacherId: paul.account.id,
+    createdByAdminId: "admin-sql",
+    validFrom: "2028-01-10",
+    validTo: "2028-01-20",
+  });
+  assert.equal(january.ok, true);
+
+  const overlapTemp = await assignTemporaryReplacement(deps, {
+    annualCourseId: course.value.id,
+    teacherId: paul.account.id,
+    createdByAdminId: "admin-sql",
+    validFrom: "2027-11-15",
+    validTo: "2027-11-25",
+  });
+  assert.equal(overlapTemp.ok, false);
+
+  const marc = await teachers.createAccount({
+    displayName: "Marc SQL",
+    initials: "SqM",
+    teachingType: "TECHNICAL",
+  });
+  assert.equal(marc.ok, true);
+  if (!marc.ok) return;
+  const secondPrimary = await assignTeacherToCourse(deps, {
+    annualCourseId: course.value.id,
+    teacherId: marc.account.id,
+    role: "PRIMARY",
+    createdByAdminId: "admin-sql",
+    validFrom: "2028-01-01",
+  });
+  assert.equal(secondPrimary.ok, true);
+
+  const lea = await teachers.createAccount({
+    displayName: "Léa SQL",
+    initials: "SqL",
+    teachingType: "TECHNICAL",
+  });
+  assert.equal(lea.ok, true);
+  if (!lea.ok) return;
+  const overlapPrimary = await assignTeacherToCourse(deps, {
+    annualCourseId: course.value.id,
+    teacherId: lea.account.id,
+    role: "PRIMARY",
+    createdByAdminId: "admin-sql",
+    validFrom: "2027-12-01",
+  });
+  assert.equal(overlapPrimary.ok, false);
+
+  await assert.rejects(
+    () =>
+      db
+        .prepare(
+          `INSERT INTO teacher_course_assignments
+             (id, annual_course_id, teacher_id, role, valid_from, valid_to, created_by_admin_id, created_at, ended_at)
+           VALUES (?, ?, ?, 'REPLACEMENT', ?, ?, 'admin-sql', datetime('now'), NULL)`,
+        )
+        .bind(
+          "tca-overlap-raw",
+          course.value.id,
+          paul.account.id,
+          "2027-11-15T00:00:00.000Z",
+          "2027-11-25T23:59:59.999Z",
+        )
+        .run(),
+    /period overlaps|ABORT/i,
+  );
+
+  const archived = await archiveAnnualCourse(deps, course.value.id);
+  assert.equal(archived.ok, true);
+  const archivedTemp = await assignTemporaryReplacement(deps, {
+    annualCourseId: course.value.id,
+    teacherId: marc.account.id,
+    createdByAdminId: "admin-sql",
+    validFrom: "2028-03-01",
+    validTo: "2028-03-10",
+  });
+  assert.equal(archivedTemp.ok, false);
+
+  const unused = await catalog.createContext({
+    professionId: profession.id,
+    trainingYear: 2,
+    branchId: branch.id,
+  });
+  assert.equal(unused.ok, true);
+  if (!unused.ok) return;
+  const unusedDeleted = await catalog.deleteContext(unused.value.id);
+  assert.equal(unusedDeleted.ok, true);
+
   const blocked = await catalog.deleteContext(ctx.value.id);
   assert.equal(blocked.ok, false);
+  await assert.rejects(
+    () => db.prepare("DELETE FROM pedagogical_contexts WHERE id = ?").bind(ctx.value.id).run(),
+    /CTX used|archive instead|ABORT/i,
+  );
 
   const triggerSql = splitSqlStatements(`
     CREATE TRIGGER IF NOT EXISTS t_demo BEFORE DELETE ON pedagogical_contexts FOR EACH ROW

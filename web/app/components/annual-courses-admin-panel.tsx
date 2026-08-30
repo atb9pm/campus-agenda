@@ -139,6 +139,11 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
         course.classId === schoolClass.id &&
         course.contextId === contextId,
     );
+    if (existing?.isArchived) {
+      throw new Error(
+        "Ce cours annuel est archivé. Réactivez-le ou utilisez un cours actif avant d’attribuer un enseignant.",
+      );
+    }
     if (existing) return existing;
     await postAction({
       action: "create",
@@ -149,12 +154,18 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
     });
     await refresh();
     const latest = await fetch("/api/admin/annual-courses", { credentials: "include" }).then((res) => res.json()) as OverviewPayload;
-    return latest.courses.find(
+    const created = latest.courses.find(
       (course) =>
         course.schoolYearId === schoolClass.schoolYearId &&
         course.classId === schoolClass.id &&
         course.contextId === contextId,
     ) ?? null;
+    if (created?.isArchived) {
+      throw new Error(
+        "Ce cours annuel est archivé. Réactivez-le ou utilisez un cours actif avant d’attribuer un enseignant.",
+      );
+    }
+    return created;
   }
 
   function startAssign(
@@ -179,7 +190,7 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
       teacher?.teachingType &&
       branch.teachingType !== teacher.teachingType;
     const draft = { schoolClass, context, branch, existing, teacherId };
-    setConflictChoice(existing.length > 0 ? "CANCEL" : "CO_TEACHER");
+    setConflictChoice(existing.length > 0 ? "CANCEL" : "CANCEL");
     setForceStep(mismatch ? "warn" : "none");
     setOverrideReason("");
     setTempFrom("");
@@ -241,6 +252,10 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
     const force = forceStep === "confirm";
     if (forceStep === "warn") {
       setError("Confirmez le forçage : cette attribution est incompatible.");
+      return;
+    }
+    if (pending.existing.length === 0) {
+      await completeAssign(pending, "PRIMARY", force);
       return;
     }
     const primary = pending.existing.find((entry) => entry.role === "PRIMARY") ?? pending.existing[0];

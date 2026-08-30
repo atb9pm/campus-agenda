@@ -31,16 +31,90 @@ CREATE TABLE IF NOT EXISTS teacher_course_assignments (
   FOREIGN KEY (annual_course_id) REFERENCES annual_courses(id)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_tca_open_teacher
-  ON teacher_course_assignments (annual_course_id, teacher_id)
-  WHERE ended_at IS NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_tca_open_primary
-  ON teacher_course_assignments (annual_course_id)
-  WHERE role = 'PRIMARY' AND ended_at IS NULL;
+DROP INDEX IF EXISTS idx_tca_open_teacher;
+DROP INDEX IF EXISTS idx_tca_open_primary;
 
 CREATE INDEX IF NOT EXISTS idx_tca_teacher
   ON teacher_course_assignments (teacher_id);
+
+CREATE INDEX IF NOT EXISTS idx_tca_course_teacher
+  ON teacher_course_assignments (annual_course_id, teacher_id);
+
+-- Unicité temporelle : interdire uniquement les périodes qui se chevauchent.
+-- valid_to NULL = +∞. Les lignes explicitement closes (ended_at) sont ignorées.
+-- Un unique index (annual_course_id, teacher_id) WHERE ended_at IS NULL
+-- refuserait un second remplacement non chevauchant (ex. nov. puis janv.).
+
+DROP TRIGGER IF EXISTS tca_no_teacher_overlap_insert;
+DROP TRIGGER IF EXISTS tca_no_teacher_overlap_update;
+DROP TRIGGER IF EXISTS tca_no_primary_overlap_insert;
+DROP TRIGGER IF EXISTS tca_no_primary_overlap_update;
+
+CREATE TRIGGER IF NOT EXISTS tca_no_teacher_overlap_insert
+BEFORE INSERT ON teacher_course_assignments
+FOR EACH ROW
+WHEN NEW.ended_at IS NULL
+BEGIN
+  SELECT RAISE(ABORT, 'teacher assignment period overlaps')
+  WHERE EXISTS (
+    SELECT 1 FROM teacher_course_assignments AS existing
+    WHERE existing.annual_course_id = NEW.annual_course_id
+      AND existing.teacher_id = NEW.teacher_id
+      AND existing.ended_at IS NULL
+      AND existing.valid_from <= COALESCE(NEW.valid_to, '9999-12-31T23:59:59.999Z')
+      AND NEW.valid_from <= COALESCE(existing.valid_to, '9999-12-31T23:59:59.999Z')
+  );
+END;
+
+CREATE TRIGGER IF NOT EXISTS tca_no_teacher_overlap_update
+BEFORE UPDATE ON teacher_course_assignments
+FOR EACH ROW
+WHEN NEW.ended_at IS NULL
+BEGIN
+  SELECT RAISE(ABORT, 'teacher assignment period overlaps')
+  WHERE EXISTS (
+    SELECT 1 FROM teacher_course_assignments AS existing
+    WHERE existing.id != NEW.id
+      AND existing.annual_course_id = NEW.annual_course_id
+      AND existing.teacher_id = NEW.teacher_id
+      AND existing.ended_at IS NULL
+      AND existing.valid_from <= COALESCE(NEW.valid_to, '9999-12-31T23:59:59.999Z')
+      AND NEW.valid_from <= COALESCE(existing.valid_to, '9999-12-31T23:59:59.999Z')
+  );
+END;
+
+CREATE TRIGGER IF NOT EXISTS tca_no_primary_overlap_insert
+BEFORE INSERT ON teacher_course_assignments
+FOR EACH ROW
+WHEN NEW.ended_at IS NULL AND NEW.role = 'PRIMARY'
+BEGIN
+  SELECT RAISE(ABORT, 'primary assignment period overlaps')
+  WHERE EXISTS (
+    SELECT 1 FROM teacher_course_assignments AS existing
+    WHERE existing.annual_course_id = NEW.annual_course_id
+      AND existing.role = 'PRIMARY'
+      AND existing.ended_at IS NULL
+      AND existing.valid_from <= COALESCE(NEW.valid_to, '9999-12-31T23:59:59.999Z')
+      AND NEW.valid_from <= COALESCE(existing.valid_to, '9999-12-31T23:59:59.999Z')
+  );
+END;
+
+CREATE TRIGGER IF NOT EXISTS tca_no_primary_overlap_update
+BEFORE UPDATE ON teacher_course_assignments
+FOR EACH ROW
+WHEN NEW.ended_at IS NULL AND NEW.role = 'PRIMARY'
+BEGIN
+  SELECT RAISE(ABORT, 'primary assignment period overlaps')
+  WHERE EXISTS (
+    SELECT 1 FROM teacher_course_assignments AS existing
+    WHERE existing.id != NEW.id
+      AND existing.annual_course_id = NEW.annual_course_id
+      AND existing.role = 'PRIMARY'
+      AND existing.ended_at IS NULL
+      AND existing.valid_from <= COALESCE(NEW.valid_to, '9999-12-31T23:59:59.999Z')
+      AND NEW.valid_from <= COALESCE(existing.valid_to, '9999-12-31T23:59:59.999Z')
+  );
+END;
 
 CREATE TABLE IF NOT EXISTS teacher_course_assignment_events (
   id TEXT PRIMARY KEY,

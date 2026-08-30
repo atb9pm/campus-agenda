@@ -29,29 +29,40 @@ async function resolveMigrationsRoot(): Promise<string> {
   );
 }
 
-export async function applyMigrations(db: SqlDatabase): Promise<void> {
+export const SQL_MIGRATION_FILES = [
+  "0001_initial.sql",
+  "0002_school_week.sql",
+  "0003_school_year.sql",
+  "0004_teacher_admin.sql",
+  "0005_publication_templates.sql",
+  "0006_timetable.sql",
+  "0007_membership_validity.sql",
+  "0008_school_catalog.sql",
+  "0009_school_day_exceptions.sql",
+  "0010_teacher_accounts.sql",
+  "0011_teacher_setups.sql",
+  "0012_teacher_notes.sql",
+  "0013_teacher_access_meta.sql",
+  "0014_school_branch_archive.sql",
+  "0015_professions_pedagogy.sql",
+  "0016_class_school_year_id.sql",
+  "0017_pedagogical_path.sql",
+  "0018_admin_referential_coherence.sql",
+  "0019_annual_courses_teacher_assignments.sql",
+] as const;
+
+export async function applyMigrations(
+  db: SqlDatabase,
+  options?: { until?: (typeof SQL_MIGRATION_FILES)[number] },
+): Promise<void> {
   const migrationsRoot = await resolveMigrationsRoot();
-  const migrationFiles = [
-    "0001_initial.sql",
-    "0002_school_week.sql",
-    "0003_school_year.sql",
-    "0004_teacher_admin.sql",
-    "0005_publication_templates.sql",
-    "0006_timetable.sql",
-    "0007_membership_validity.sql",
-    "0008_school_catalog.sql",
-    "0009_school_day_exceptions.sql",
-    "0010_teacher_accounts.sql",
-    "0011_teacher_setups.sql",
-    "0012_teacher_notes.sql",
-    "0013_teacher_access_meta.sql",
-    "0014_school_branch_archive.sql",
-    "0015_professions_pedagogy.sql",
-    "0016_class_school_year_id.sql",
-    "0017_pedagogical_path.sql",
-    "0018_admin_referential_coherence.sql",
-    "0019_annual_courses_teacher_assignments.sql",
-  ];
+  const untilIndex = options?.until ? SQL_MIGRATION_FILES.indexOf(options.until) : -1;
+  if (options?.until && untilIndex === -1) {
+    throw new Error(`Migration inconnue : ${options.until}`);
+  }
+  const migrationFiles = options?.until
+    ? SQL_MIGRATION_FILES.slice(0, untilIndex + 1)
+    : SQL_MIGRATION_FILES;
   for (const fileName of migrationFiles) {
     const migrationPath = path.join(migrationsRoot, fileName);
     const sql = await readFile(migrationPath, "utf8");

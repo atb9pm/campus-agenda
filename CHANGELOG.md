@@ -24,7 +24,9 @@ au cours, pas au professeur.
 
 - `AnnualCourse` unique (`schoolYearId` + `classId` + `contextId`).
 - `TeacherCourseAssignment` daté : Titulaire / Coenseignant / Remplaçant.
-- Un seul PRIMARY actif ; remplacement définitif ou temporaire ; coenseignement explicite.
+- Un seul PRIMARY **par période** ; remplacements temporaires successifs non chevauchants autorisés.
+- Aucune nouvelle attribution sur un cours archivé (y compris remplacement temporaire).
+- Premier enseignant (y compris forçage TeachingType) toujours PRIMARY.
 - Audit `teacher_course_assignment_events`.
 - Migration additive `0019_annual_courses_teacher_assignments`
   (sans rejouer `teaching_type` déjà créé en 0018).

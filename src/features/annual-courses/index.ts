@@ -21,6 +21,7 @@ export {
   evaluateTeachingTypeGuard,
   findActivePrimary,
   findDuplicateAssignment,
+  findOverlappingPrimary,
   isAssignmentActiveAt,
   isAssignmentRole,
   preferredTeachersForBranch,

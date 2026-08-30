@@ -104,6 +104,18 @@ export function findActivePrimary(
   );
 }
 
+export function findOverlappingPrimary(
+  existing: TeacherCourseAssignment[],
+  candidate: Pick<TeacherCourseAssignment, "annualCourseId" | "validFrom" | "validTo" | "endedAt">,
+): TeacherCourseAssignment | undefined {
+  return existing.find(
+    (entry) =>
+      entry.annualCourseId === candidate.annualCourseId &&
+      entry.role === "PRIMARY" &&
+      assignmentsOverlap(entry, candidate),
+  );
+}
+
 export function endAssignment(
   assignment: TeacherCourseAssignment,
   endedAt: string,

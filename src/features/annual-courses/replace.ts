@@ -79,7 +79,6 @@ export function replaceTeacherOnAnnualCourse(
   }
 
   const closed = outgoing.map((entry) => endAssignment(entry, effectiveAt));
-  const closedIds = new Set(closed.map((entry) => entry.id));
   const next = assignments.map((entry) => {
     const replacement = closed.find((item) => item.id === entry.id);
     return replacement ?? entry;
@@ -91,7 +90,7 @@ export function replaceTeacherOnAnnualCourse(
     value: {
       closed,
       created,
-      assignments: next.filter((entry) => closedIds.has(entry.id) || entry.id === created.id || true),
+      assignments: next,
     },
   };
 }

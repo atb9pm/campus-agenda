@@ -6,8 +6,8 @@ import type { AnnualCourseStore } from "../../lib/persistence/annual-course-type
 import { teacherCanAccessAnnualCourse } from "./access.ts";
 import {
   evaluateTeachingTypeGuard,
-  findActivePrimary,
   findDuplicateAssignment,
+  findOverlappingPrimary,
   isAssignmentActiveAt,
   isAssignmentRole,
   teacherIsAssignable,
@@ -210,11 +210,11 @@ export async function assignTeacherToCourse(
   }
 
   if (assignment.role === "PRIMARY") {
-    const primary = findActivePrimary(existing, course.id, validFrom);
+    const primary = findOverlappingPrimary(existing, assignment);
     if (primary) {
       return {
         ok: false,
-        reason: "Ce cours a déjà un titulaire actif. Utilisez le remplacement définitif pour changer de titulaire.",
+        reason: "Ce cours a déjà un titulaire sur cette période. Utilisez le remplacement définitif pour changer de titulaire.",
         status: 409,
         code: "PRIMARY_TAKEN",
         existing: [primary],
@@ -327,6 +327,9 @@ export async function assignTemporaryReplacement(
 ): Promise<CourseMutationResult<TeacherCourseAssignment>> {
   const course = await deps.courses.getCourse(input.annualCourseId);
   if (!course) return { ok: false, reason: "Cours annuel introuvable.", status: 404 };
+  if (course.isArchived) {
+    return { ok: false, reason: "Ce cours annuel est archivé.", status: 409 };
+  }
 
   const teacher = await deps.teachers.findAccount(input.teacherId);
   const assignable = teacherIsAssignable(teacher);
