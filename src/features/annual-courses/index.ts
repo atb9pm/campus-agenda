@@ -35,6 +35,7 @@ export {
   lifecycleLabel,
   isClassEligibleForAssignment,
   assignmentRoleForFirstTeacher,
+  effectiveAtForEndAssignment,
 } from "./admin-assign-ui.ts";
 export { parseAssignmentDate, validateAssignmentPeriod, requireOverrideReason } from "./dates.ts";
 export { annualCourseDeleteBlockers, contextDeleteBlockers } from "./ctx-guards.ts";

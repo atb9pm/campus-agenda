@@ -9,6 +9,7 @@ import {
   createAnnualCourse,
   decideAgendaPublishAccess,
   decideAssignmentDialogSubmit,
+  effectiveAtForEndAssignment,
   endTeacherAssignment,
   evaluateTeachingTypeGuard,
   isAssignmentActiveAt,
@@ -558,6 +559,82 @@ test("correction — retirer le CO_TEACHER sans toucher au cours ni aux notes", 
     contextId: fx.context.id,
   });
   assert.equal(notes[0]?.text, "Note conservée");
+});
+
+test("retrait — attribution future à validFrom, active maintenant, déjà terminée refusée", async () => {
+  const fx = await fixture();
+  const course = await createAnnualCourse(fx.deps, {
+    schoolYearId: "year-2027",
+    classId: fx.schoolClass.id,
+    contextId: fx.context.id,
+  });
+  assert.equal(course.ok, true);
+  if (!course.ok) return;
+
+  const upcoming = await assignTeacherToCourse(fx.deps, {
+    annualCourseId: course.value.id,
+    teacherId: fx.francois.id,
+    role: "PRIMARY",
+    createdByAdminId: "admin-1",
+    validFrom: "2027-10-01",
+  });
+  assert.equal(upcoming.ok, true);
+  if (!upcoming.ok) return;
+  assert.equal(assignmentLifecycle(upcoming.value, "2026-08-30T18:00:00.000Z"), "upcoming");
+  assert.equal(effectiveAtForEndAssignment(upcoming.value, "2026-08-30T18:00:00.000Z"), upcoming.value.validFrom);
+
+  const cancelled = await endTeacherAssignment(fx.deps, upcoming.value.id, "admin-1", upcoming.value.validFrom);
+  assert.equal(cancelled.ok, true);
+  if (!cancelled.ok) return;
+  assert.equal(cancelled.value.validFrom, "2027-10-01T00:00:00.000Z");
+  assert.equal(cancelled.value.endedAt, cancelled.value.validFrom);
+  assert.equal(isAssignmentActiveAt(cancelled.value, "2027-09-30T23:59:59.999Z"), false);
+  assert.equal(isAssignmentActiveAt(cancelled.value, "2027-10-01T00:00:00.000Z"), false);
+  assert.equal(isAssignmentActiveAt(cancelled.value, "2027-10-02T00:00:00.000Z"), false);
+  const events = await fx.deps.courses.listEvents(course.value.id);
+  assert.ok(events.some((entry) => entry.kind === "ENDED" && entry.assignmentId === upcoming.value.id));
+  assert.equal((await fx.deps.courses.listAssignments(course.value.id)).length, 1);
+
+  const stillThere = await fx.deps.courses.getAssignment(upcoming.value.id);
+  assert.ok(stillThere);
+  const second = await endTeacherAssignment(fx.deps, upcoming.value.id, "admin-1", "2027-10-01");
+  assert.equal(second.ok, false);
+  if (!second.ok) assert.equal(second.status, 409);
+
+  const otherClass = await fx.catalog.createClass({
+    code: "MMA1C",
+    label: "MMA 1C",
+    schoolYearId: "year-2027",
+    schoolYearLabel: "2027-2028",
+    professionId: fx.profession.id,
+    trainingYear: 1,
+  });
+  const otherCourse = await createAnnualCourse(fx.deps, {
+    schoolYearId: "year-2027",
+    classId: otherClass.id,
+    contextId: fx.context.id,
+  });
+  assert.equal(otherCourse.ok, true);
+  if (!otherCourse.ok) return;
+  const active = await assignTeacherToCourse(fx.deps, {
+    annualCourseId: otherCourse.value.id,
+    teacherId: fx.paul.id,
+    role: "PRIMARY",
+    createdByAdminId: "admin-1",
+    validFrom: "2026-01-01",
+  });
+  assert.equal(active.ok, true);
+  if (!active.ok) return;
+  assert.equal(assignmentLifecycle(active.value), "active");
+  assert.equal(effectiveAtForEndAssignment(active.value), undefined);
+  const endedNow = await endTeacherAssignment(fx.deps, active.value.id, "admin-1");
+  assert.equal(endedNow.ok, true);
+  if (!endedNow.ok) return;
+  assert.ok(endedNow.value.endedAt);
+  assert.equal(isAssignmentActiveAt(endedNow.value), false);
+  const againActive = await endTeacherAssignment(fx.deps, active.value.id, "admin-1");
+  assert.equal(againActive.ok, false);
+  if (!againActive.ok) assert.equal(againActive.status, 409);
 });
 
 test("Agenda — accès, fallback, archivé, admin, homonymes", async () => {

@@ -7,6 +7,7 @@ import { preferredTeachersForBranch } from "@campus/features/annual-courses/assi
 import {
   assignmentLifecycle,
   decideAssignmentDialogSubmit,
+  effectiveAtForEndAssignment,
   isClassEligibleForAssignment,
   lifecycleLabel,
 } from "@campus/features/annual-courses/admin-assign-ui.ts";
@@ -296,13 +297,21 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
     }
   }
 
-  async function endAssignmentRow(assignmentId: string, teacherName: string) {
-    if (!window.confirm(`Retirer l’attribution de ${teacherName} ? Le cours, les notes et l’Agenda restent intactes.`)) {
-      return;
-    }
+  async function endAssignmentRow(assignment: TeacherCourseAssignment, teacherName: string) {
+    const lifecycle = assignmentLifecycle(assignment);
+    const confirmed = window.confirm(
+      lifecycle === "upcoming"
+        ? "Annuler cette attribution prévue ? Le cours et les données pédagogiques restent intactes."
+        : `Retirer l’attribution de ${teacherName} ? Le cours, les notes et l’Agenda restent intactes.`,
+    );
+    if (!confirmed) return;
     setError("");
     try {
-      await postAction({ action: "end", assignmentId });
+      await postAction({
+        action: "end",
+        assignmentId: assignment.id,
+        effectiveAt: effectiveAtForEndAssignment(assignment),
+      });
       onNotice("Attribution terminée. Le cours et les données pédagogiques restent intactes.");
       await refresh();
     } catch (endError) {
@@ -439,7 +448,7 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
                                   <button
                                     type="button"
                                     className="admin-link-button"
-                                    onClick={() => void endAssignmentRow(entry.id, teacherLabel(data.teachers, entry.teacherId))}
+                                    onClick={() => void endAssignmentRow(entry, teacherLabel(data.teachers, entry.teacherId))}
                                   >
                                     Retirer l’attribution
                                   </button>

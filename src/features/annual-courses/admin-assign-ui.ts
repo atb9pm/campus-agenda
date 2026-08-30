@@ -90,3 +90,11 @@ export function isClassEligibleForAssignment(options: {
 export function assignmentRoleForFirstTeacher(): AssignmentRole {
   return "PRIMARY";
 }
+
+/** Date d'effet pour « Retirer » : validFrom si à venir, sinon maintenant (undefined → serveur). */
+export function effectiveAtForEndAssignment(
+  assignment: Pick<TeacherCourseAssignment, "validFrom" | "validTo" | "endedAt">,
+  at = new Date().toISOString(),
+): string | undefined {
+  return assignmentLifecycle(assignment, at) === "upcoming" ? assignment.validFrom : undefined;
+}
