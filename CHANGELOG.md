@@ -2,6 +2,20 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.16.0] — Branches : édition, archivage, couleurs actif/désactivé
+
+### Ajouté
+
+- **Édition** du nom d’une branche depuis Paramétrage des branches (le code est recalculé).
+- **Archivage** des branches (hors liste courante et hors configuration enseignant), avec
+  filtre Branches / Archives.
+- Migration `0014_school_branch_archive` : colonne `archived_at` sur `school_branches`.
+
+### Modifié
+
+- Liste des branches plus lisible : cartes séparées, badge statut,
+  **vert** si active, **rouge** si désactivée ou archivée.
+
 ## [2.15.0] — Gestion des accès : lisibilité, édition, archivage, dernier login
 
 ### Ajouté

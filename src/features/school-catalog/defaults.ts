@@ -42,6 +42,8 @@ export function buildDefaultSchoolBranches(): SchoolBranchRecord[] {
       label,
       sortOrder: index + 1,
       isActive: true,
+      isArchived: false,
+      archivedAt: null,
     };
   });
 }

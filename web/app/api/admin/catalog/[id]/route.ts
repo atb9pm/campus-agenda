@@ -13,6 +13,7 @@ async function handlePatch(request: Request, context: { params: Promise<{ id: st
     label?: string;
     sortOrder?: number;
     isActive?: boolean;
+    isArchived?: boolean;
     schoolYearLabel?: string | null;
   };
 
