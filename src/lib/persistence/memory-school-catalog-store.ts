@@ -10,6 +10,8 @@ import {
   professionDeleteBlockers,
   validateClassProfessionAttachment,
 } from "../../features/school-catalog/profession-rules.ts";
+import { findUniqueSchoolYearIdForLabel } from "../../features/school-catalog/school-year-attachment.ts";
+import type { SchoolYearRef } from "../../features/school-catalog/school-year-attachment.ts";
 import type {
   PedagogicalContextInput,
   PedagogicalContextRecord,
@@ -43,6 +45,25 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
     this.branches = buildDefaultSchoolBranches();
     this.counters.BR = this.branches.length + 1;
     this.seeded = true;
+  }
+
+  /** Backfill prudent : n'écrit schoolYearId que si le label correspond à une unique année. */
+  async applySchoolYearBackfill(years: SchoolYearRef[]): Promise<number> {
+    await this.ensureSeeded();
+    let updated = 0;
+    this.classes = this.classes.map((entry) => {
+      if (entry.schoolYearId) return entry;
+      const matchedId = findUniqueSchoolYearIdForLabel(entry.schoolYearLabel, years);
+      if (!matchedId) return entry;
+      const year = years.find((candidate) => candidate.id === matchedId);
+      updated += 1;
+      return {
+        ...entry,
+        schoolYearId: matchedId,
+        schoolYearLabel: year?.label ?? entry.schoolYearLabel,
+      };
+    });
+    return updated;
   }
 
   private nextAdminCode(kind: AdminCodeKind): string {
@@ -85,6 +106,7 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
       label: input.label.trim() || normalizeClassCode(input.code),
       sortOrder: input.sortOrder ?? this.classes.length + 1,
       isActive: input.isActive ?? true,
+      schoolYearId: input.schoolYearId ?? null,
       schoolYearLabel: input.schoolYearLabel ?? null,
       professionId: attachment.value.professionId,
       trainingYear: attachment.value.trainingYear,
@@ -110,6 +132,7 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
       label: patch.label !== undefined ? patch.label.trim() : current.label,
       sortOrder: patch.sortOrder ?? current.sortOrder,
       isActive: patch.isActive ?? current.isActive,
+      schoolYearId: patch.schoolYearId !== undefined ? patch.schoolYearId : current.schoolYearId,
       schoolYearLabel:
         patch.schoolYearLabel !== undefined ? patch.schoolYearLabel : current.schoolYearLabel,
       professionId: attachment.value.professionId,

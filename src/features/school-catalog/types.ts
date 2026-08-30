@@ -4,10 +4,16 @@ export interface SchoolClassRecord {
   label: string;
   sortOrder: number;
   isActive: boolean;
+  /**
+   * Référence technique stable vers `school_years.id`.
+   * Null = classe legacy / non encore rattachée. Distinct de `trainingYear`.
+   */
+  schoolYearId: string | null;
+  /** Libellé conservé pour compatibilité / affichage (dérivé de l'année si ID présent). */
   schoolYearLabel: string | null;
   /** Profession rattachée (null = à configurer / legacy). */
   professionId: string | null;
-  /** Année de formation 1..N (null = à configurer / legacy). */
+  /** Année de formation 1..N (null = à configurer / legacy). Distinct de `schoolYearId`. */
   trainingYear: number | null;
 }
 
@@ -29,6 +35,7 @@ export interface SchoolClassInput {
   label: string;
   sortOrder?: number;
   isActive?: boolean;
+  schoolYearId?: string | null;
   schoolYearLabel?: string | null;
   professionId?: string | null;
   trainingYear?: number | null;

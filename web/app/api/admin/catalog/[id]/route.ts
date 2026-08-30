@@ -1,4 +1,5 @@
-import { getSchoolCatalogStore } from "@campus/lib/persistence/store-factory.ts";
+import { getSchoolCatalogStore, getSchoolYearStore } from "@campus/lib/persistence/store-factory.ts";
+import { resolveClassSchoolYearAttachment } from "@campus/features/school-catalog/index.ts";
 import { jsonResponse, requireAdminSession } from "../../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../../lib/server/observability.ts";
 
@@ -14,6 +15,7 @@ async function handlePatch(request: Request, context: { params: Promise<{ id: st
     sortOrder?: number;
     isActive?: boolean;
     isArchived?: boolean;
+    schoolYearId?: string | null;
     schoolYearLabel?: string | null;
     professionId?: string | null;
     trainingYear?: number | null;
@@ -36,6 +38,23 @@ async function handlePatch(request: Request, context: { params: Promise<{ id: st
 
   if (body.kind === "class") {
     try {
+      if (body.schoolYearId !== undefined || body.schoolYearLabel !== undefined) {
+        const current = (await catalog.listClasses()).find((entry) => entry.id === id);
+        if (!current) return jsonResponse({ ok: false, reason: "Classe introuvable." }, { status: 404 });
+        const years = await getSchoolYearStore().then((store) => store.listSchoolYears());
+        const schoolYear = resolveClassSchoolYearAttachment({
+          schoolYearId:
+            body.schoolYearId !== undefined ? body.schoolYearId : current.schoolYearId,
+          schoolYearLabel:
+            body.schoolYearLabel !== undefined ? body.schoolYearLabel : current.schoolYearLabel,
+          years,
+        });
+        if (!schoolYear.ok) {
+          return jsonResponse({ ok: false, reason: schoolYear.reason }, { status: 400 });
+        }
+        body.schoolYearId = schoolYear.value.schoolYearId;
+        body.schoolYearLabel = schoolYear.value.schoolYearLabel;
+      }
       const updated = await catalog.updateClass(id, body);
       if (!updated) return jsonResponse({ ok: false, reason: "Classe introuvable." }, { status: 404 });
       return jsonResponse({ ok: true, class: updated });

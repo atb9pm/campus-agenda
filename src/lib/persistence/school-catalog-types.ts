@@ -38,4 +38,8 @@ export interface SchoolCatalogStore {
   deleteContext(id: string): Promise<PedagogyMutationResult<{ id: string }>>;
 
   ensureSeeded(): Promise<void>;
+  /** Backfill prudent schoolYearId depuis schoolYearLabel (correspondance unique). */
+  applySchoolYearBackfill(
+    years: Array<{ id: string; label: string }>,
+  ): Promise<number>;
 }

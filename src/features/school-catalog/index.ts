@@ -35,6 +35,13 @@ export {
   sortSchoolBranches,
   sortSchoolClasses,
 } from "./queries.ts";
+export {
+  findUniqueSchoolYearIdForLabel,
+  listSelectableSchoolYearsForClassEdit,
+  listSelectableSchoolYearsForNewClass,
+  resolveClassSchoolYearAttachment,
+  type SchoolYearRef,
+} from "./school-year-attachment.ts";
 export type {
   SchoolBranchInput,
   SchoolBranchRecord,

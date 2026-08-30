@@ -1,4 +1,5 @@
-import { getSchoolCatalogStore } from "@campus/lib/persistence/store-factory.ts";
+import { getSchoolCatalogStore, getSchoolYearStore } from "@campus/lib/persistence/store-factory.ts";
+import { resolveClassSchoolYearAttachment } from "@campus/features/school-catalog/index.ts";
 import {
   listActiveSchoolBranches,
   listActiveSchoolClasses,
@@ -62,6 +63,7 @@ async function handlePost(request: Request) {
     sortOrder?: number;
     isActive?: boolean;
     isArchived?: boolean;
+    schoolYearId?: string | null;
     schoolYearLabel?: string | null;
     professionId?: string | null;
     trainingYear?: number | null;
@@ -111,12 +113,22 @@ async function handlePost(request: Request) {
 
   if (body.kind === "class") {
     try {
+      const years = await getSchoolYearStore().then((store) => store.listSchoolYears());
+      const schoolYear = resolveClassSchoolYearAttachment({
+        schoolYearId: body.schoolYearId === undefined ? null : body.schoolYearId,
+        schoolYearLabel: body.schoolYearLabel ?? null,
+        years,
+      });
+      if (!schoolYear.ok) {
+        return jsonResponse({ ok: false, reason: schoolYear.reason }, { status: 400 });
+      }
       const created = await catalog.createClass({
         code: body.code,
         label: body.label,
         sortOrder: body.sortOrder,
         isActive: body.isActive,
-        schoolYearLabel: body.schoolYearLabel ?? null,
+        schoolYearId: schoolYear.value.schoolYearId,
+        schoolYearLabel: schoolYear.value.schoolYearLabel,
         professionId: body.professionId ?? null,
         trainingYear: body.trainingYear ?? null,
       });
