@@ -267,11 +267,14 @@ test("enseignants — nouveau typé, legacy null non attribuable", async () => {
   assert.equal(created.ok, true);
   if (!created.ok) return;
 
-  const refused = await fx.teachers.createAccount({
+  const unset = await fx.teachers.createAccount({
     displayName: "Sans Type",
     initials: "StX",
-  } as { displayName: string; initials: string; teachingType: "TECHNICAL" });
-  assert.equal(refused.ok, false);
+  });
+  assert.equal(unset.ok, true);
+  if (!unset.ok) return;
+  assert.equal(unset.account.teachingType, null);
+  assert.equal(teacherIsAssignable(unset.account).ok, false);
 
   const legacy = (await fx.teachers.listAccounts()).find((entry) => entry.teachingType === null);
   assert.ok(legacy);

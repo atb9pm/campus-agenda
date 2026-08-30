@@ -104,10 +104,12 @@ test("comptes — règles d'initiales et d'identifiant", () => {
   assert.equal(buildTeacherId("DuM", ["teacher-dum"]), "teacher-dum-2");
 });
 
-test("comptes — type d'enseignement obligatoire à la création, legacy null conservé", async () => {
+test("comptes — store legacy sans type, création typée, seed null conservé", async () => {
   const store = freshStore();
-  const missing = await store.createAccount({ displayName: "Sans Type", initials: "StX" } as never);
-  assert.equal(missing.ok, false);
+  const missing = await store.createAccount({ displayName: "Sans Type", initials: "StX" });
+  assert.equal(missing.ok, true);
+  if (!missing.ok) return;
+  assert.equal(missing.account.teachingType, null);
   const created = await store.createAccount({
     displayName: "Marie Dupont",
     initials: "TyM",
