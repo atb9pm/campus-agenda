@@ -21,9 +21,14 @@ test("school catalog — seed initial classes et branches", () => {
     classes.map((entry) => entry.code),
     ["MA1", "MA2", "MA3A", "MA3B", "MACAM2", "MACAM4", "MA4"],
   );
+  assert.ok(classes.every((entry) => entry.professionId === null && entry.trainingYear === null));
   assert.deepEqual(
     branches.map((entry) => entry.label),
     ["Moteur", "Électricité", "Transmission", "Châssis"],
+  );
+  assert.deepEqual(
+    branches.map((entry) => entry.adminCode),
+    ["BR-0001", "BR-0002", "BR-0003", "BR-0004"],
   );
   assert.equal(normalizeClassCode(" ma2 "), "MA2");
 });
@@ -63,9 +68,22 @@ test("school catalog — store mémoire seed + soft deactivate", async () => {
 
   const created = await store.createBranch({ code: "DIAG", label: "Diagnostic" });
   assert.equal(created.label, "Diagnostic");
+  assert.equal(created.adminCode, "BR-0005");
   assert.equal(created.isArchived, false);
   assert.equal(created.archivedAt, null);
   assert.ok((await store.listBranches()).some((entry) => entry.id === created.id));
+
+  const profession = await store.createProfession({ label: "Mécanicien", durationYears: 4 });
+  assert.equal(profession.adminCode, "PRF-0001");
+  assert.equal(profession.durationYears, 4);
+
+  const context = await store.createContext({
+    professionId: profession.id,
+    trainingYear: 1,
+    branchId: created.id,
+  });
+  assert.equal(context.ok, true);
+  if (context.ok) assert.equal(context.value.adminCode, "CTX-0001");
 });
 
 test("school catalog — édition et archivage de branche", async () => {

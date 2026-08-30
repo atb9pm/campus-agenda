@@ -1,9 +1,27 @@
+import { formatAdminCode, type AdminCodeKind } from "../../features/school-catalog/admin-codes.ts";
 import {
   buildDefaultSchoolBranches,
   buildDefaultSchoolClasses,
   normalizeClassCode,
 } from "../../features/school-catalog/index.ts";
-import type { SchoolBranchInput, SchoolBranchRecord, SchoolClassInput, SchoolClassRecord } from "../../features/school-catalog/types.ts";
+import {
+  branchDeleteBlockers,
+  canReduceProfessionDuration,
+  professionDeleteBlockers,
+} from "../../features/school-catalog/profession-rules.ts";
+import type {
+  PedagogicalContextInput,
+  PedagogicalContextRecord,
+  PedagogyMutationResult,
+  SchoolProfessionInput,
+  SchoolProfessionRecord,
+} from "../../features/school-catalog/profession-types.ts";
+import type {
+  SchoolBranchInput,
+  SchoolBranchRecord,
+  SchoolClassInput,
+  SchoolClassRecord,
+} from "../../features/school-catalog/types.ts";
 import type { SchoolCatalogStore } from "./school-catalog-types.ts";
 
 function createId(prefix: string): string {
@@ -13,13 +31,23 @@ function createId(prefix: string): string {
 export class MemorySchoolCatalogStore implements SchoolCatalogStore {
   private classes: SchoolClassRecord[] = [];
   private branches: SchoolBranchRecord[] = [];
+  private professions: SchoolProfessionRecord[] = [];
+  private contexts: PedagogicalContextRecord[] = [];
+  private counters: Record<AdminCodeKind, number> = { PRF: 1, BR: 1, CTX: 1 };
   private seeded = false;
 
   async ensureSeeded(): Promise<void> {
     if (this.seeded) return;
     this.classes = buildDefaultSchoolClasses();
     this.branches = buildDefaultSchoolBranches();
+    this.counters.BR = this.branches.length + 1;
     this.seeded = true;
+  }
+
+  private nextAdminCode(kind: AdminCodeKind): string {
+    const sequence = this.counters[kind];
+    this.counters[kind] = sequence + 1;
+    return formatAdminCode(kind, sequence);
   }
 
   async listClasses(): Promise<SchoolClassRecord[]> {
@@ -32,6 +60,16 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
     return [...this.branches];
   }
 
+  async listProfessions(): Promise<SchoolProfessionRecord[]> {
+    await this.ensureSeeded();
+    return [...this.professions];
+  }
+
+  async listContexts(): Promise<PedagogicalContextRecord[]> {
+    await this.ensureSeeded();
+    return [...this.contexts];
+  }
+
   async createClass(input: SchoolClassInput): Promise<SchoolClassRecord> {
     await this.ensureSeeded();
     const record: SchoolClassRecord = {
@@ -41,6 +79,8 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
       sortOrder: input.sortOrder ?? this.classes.length + 1,
       isActive: input.isActive ?? true,
       schoolYearLabel: input.schoolYearLabel ?? null,
+      professionId: input.professionId ?? null,
+      trainingYear: input.trainingYear ?? null,
     };
     this.classes.push(record);
     return record;
@@ -50,7 +90,7 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
     await this.ensureSeeded();
     const index = this.classes.findIndex((entry) => entry.id === id);
     if (index < 0) return null;
-    const current = this.classes[index];
+    const current = this.classes[index]!;
     const next: SchoolClassRecord = {
       ...current,
       code: patch.code !== undefined ? normalizeClassCode(patch.code) : current.code,
@@ -59,6 +99,8 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
       isActive: patch.isActive ?? current.isActive,
       schoolYearLabel:
         patch.schoolYearLabel !== undefined ? patch.schoolYearLabel : current.schoolYearLabel,
+      professionId: patch.professionId !== undefined ? patch.professionId : current.professionId,
+      trainingYear: patch.trainingYear !== undefined ? patch.trainingYear : current.trainingYear,
     };
     this.classes[index] = next;
     return next;
@@ -73,6 +115,7 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
       label: input.label.trim(),
       sortOrder: input.sortOrder ?? this.branches.length + 1,
       isActive: input.isActive ?? true,
+      adminCode: this.nextAdminCode("BR"),
       isArchived: archivedAt !== null,
       archivedAt,
     };
@@ -84,13 +127,10 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
     await this.ensureSeeded();
     const index = this.branches.findIndex((entry) => entry.id === id);
     if (index < 0) return null;
-    const current = this.branches[index];
+    const current = this.branches[index]!;
     let archivedAt = current.archivedAt;
-    if (patch.isArchived === true) {
-      archivedAt = current.archivedAt ?? new Date().toISOString();
-    } else if (patch.isArchived === false) {
-      archivedAt = null;
-    }
+    if (patch.isArchived === true) archivedAt = current.archivedAt ?? new Date().toISOString();
+    else if (patch.isArchived === false) archivedAt = null;
     const next: SchoolBranchRecord = {
       ...current,
       code: patch.code !== undefined ? normalizeClassCode(patch.code) : current.code,
@@ -102,6 +142,157 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
     };
     this.branches[index] = next;
     return next;
+  }
+
+  async deleteBranch(id: string): Promise<PedagogyMutationResult<{ id: string }>> {
+    await this.ensureSeeded();
+    const reason = branchDeleteBlockers({ branchId: id, contexts: this.contexts });
+    if (reason) return { ok: false, reason };
+    const index = this.branches.findIndex((entry) => entry.id === id);
+    if (index < 0) return { ok: false, reason: "Branche introuvable." };
+    this.branches.splice(index, 1);
+    return { ok: true, value: { id } };
+  }
+
+  async createProfession(input: SchoolProfessionInput): Promise<SchoolProfessionRecord> {
+    await this.ensureSeeded();
+    const durationYears = Math.trunc(input.durationYears);
+    if (durationYears < 1 || durationYears > 10) {
+      throw new Error("La durée de formation doit être comprise entre 1 et 10 ans.");
+    }
+    const archivedAt = input.isArchived ? new Date().toISOString() : null;
+    const record: SchoolProfessionRecord = {
+      id: createId("school-profession"),
+      adminCode: this.nextAdminCode("PRF"),
+      label: input.label.trim(),
+      durationYears,
+      sortOrder: input.sortOrder ?? this.professions.length + 1,
+      isActive: input.isActive ?? true,
+      isArchived: archivedAt !== null,
+      archivedAt,
+    };
+    this.professions.push(record);
+    return record;
+  }
+
+  async updateProfession(
+    id: string,
+    patch: Partial<SchoolProfessionInput>,
+  ): Promise<PedagogyMutationResult<SchoolProfessionRecord>> {
+    await this.ensureSeeded();
+    const index = this.professions.findIndex((entry) => entry.id === id);
+    if (index < 0) return { ok: false, reason: "Profession introuvable." };
+    const current = this.professions[index]!;
+
+    if (patch.durationYears !== undefined) {
+      const check = canReduceProfessionDuration({
+        profession: current,
+        nextDurationYears: Math.trunc(patch.durationYears),
+        contexts: this.contexts,
+        classes: this.classes,
+      });
+      if (!check.ok) return check;
+    }
+
+    let archivedAt = current.archivedAt;
+    if (patch.isArchived === true) archivedAt = current.archivedAt ?? new Date().toISOString();
+    else if (patch.isArchived === false) archivedAt = null;
+
+    const next: SchoolProfessionRecord = {
+      ...current,
+      label: patch.label !== undefined ? patch.label.trim() : current.label,
+      durationYears:
+        patch.durationYears !== undefined ? Math.trunc(patch.durationYears) : current.durationYears,
+      sortOrder: patch.sortOrder ?? current.sortOrder,
+      isActive: patch.isActive ?? current.isActive,
+      isArchived: archivedAt !== null,
+      archivedAt,
+    };
+    this.professions[index] = next;
+    return { ok: true, value: next };
+  }
+
+  async deleteProfession(id: string): Promise<PedagogyMutationResult<{ id: string }>> {
+    await this.ensureSeeded();
+    const reason = professionDeleteBlockers({
+      professionId: id,
+      contexts: this.contexts,
+      classes: this.classes,
+    });
+    if (reason) return { ok: false, reason };
+    const index = this.professions.findIndex((entry) => entry.id === id);
+    if (index < 0) return { ok: false, reason: "Profession introuvable." };
+    this.professions.splice(index, 1);
+    return { ok: true, value: { id } };
+  }
+
+  async createContext(
+    input: PedagogicalContextInput,
+  ): Promise<PedagogyMutationResult<PedagogicalContextRecord>> {
+    await this.ensureSeeded();
+    const profession = this.professions.find((entry) => entry.id === input.professionId);
+    if (!profession) return { ok: false, reason: "Profession introuvable." };
+    const trainingYear = Math.trunc(input.trainingYear);
+    if (trainingYear < 1 || trainingYear > profession.durationYears) {
+      return {
+        ok: false,
+        reason: `L'année de formation doit être entre 1 et ${profession.durationYears}.`,
+      };
+    }
+    if (!this.branches.some((entry) => entry.id === input.branchId)) {
+      return { ok: false, reason: "Branche introuvable." };
+    }
+    const duplicate = this.contexts.find(
+      (entry) =>
+        entry.professionId === input.professionId &&
+        entry.trainingYear === trainingYear &&
+        entry.branchId === input.branchId,
+    );
+    if (duplicate) {
+      return { ok: false, reason: `Cette combinaison existe déjà (${duplicate.adminCode}).` };
+    }
+    const archivedAt = input.isArchived ? new Date().toISOString() : null;
+    const record: PedagogicalContextRecord = {
+      id: createId("pedagogical-context"),
+      adminCode: this.nextAdminCode("CTX"),
+      professionId: input.professionId,
+      trainingYear,
+      branchId: input.branchId,
+      isActive: input.isActive ?? true,
+      isArchived: archivedAt !== null,
+      archivedAt,
+    };
+    this.contexts.push(record);
+    return { ok: true, value: record };
+  }
+
+  async updateContext(
+    id: string,
+    patch: Partial<Pick<PedagogicalContextInput, "isActive" | "isArchived">>,
+  ): Promise<PedagogicalContextRecord | null> {
+    await this.ensureSeeded();
+    const index = this.contexts.findIndex((entry) => entry.id === id);
+    if (index < 0) return null;
+    const current = this.contexts[index]!;
+    let archivedAt = current.archivedAt;
+    if (patch.isArchived === true) archivedAt = current.archivedAt ?? new Date().toISOString();
+    else if (patch.isArchived === false) archivedAt = null;
+    const next: PedagogicalContextRecord = {
+      ...current,
+      isActive: patch.isActive ?? current.isActive,
+      isArchived: archivedAt !== null,
+      archivedAt,
+    };
+    this.contexts[index] = next;
+    return next;
+  }
+
+  async deleteContext(id: string): Promise<PedagogyMutationResult<{ id: string }>> {
+    await this.ensureSeeded();
+    const index = this.contexts.findIndex((entry) => entry.id === id);
+    if (index < 0) return { ok: false, reason: "Contexte pédagogique introuvable." };
+    this.contexts.splice(index, 1);
+    return { ok: true, value: { id } };
   }
 }
 
