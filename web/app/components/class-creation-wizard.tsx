@@ -219,27 +219,29 @@ export function ClassCreationWizard({
           publications et notes restent séparés.
         </p>
         <div className="class-wizard-org" role="radiogroup" aria-label="Organisation">
-          <label className={organization === "unique" ? "is-selected" : undefined}>
+          <label htmlFor="class-org-unique" className={organization === "unique" ? "is-selected" : undefined}>
             <input
+              id="class-org-unique"
               type="radio"
               name="class-org"
               checked={organization === "unique"}
               onChange={() => setOrganization("unique")}
             />
             <span>
-              <strong>Classe unique</strong>
+              Classe unique
               <em>Un seul groupe, sans lettre A/B/C.</em>
             </span>
           </label>
-          <label className={organization === "parallel" ? "is-selected" : undefined}>
+          <label htmlFor="class-org-parallel" className={organization === "parallel" ? "is-selected" : undefined}>
             <input
+              id="class-org-parallel"
               type="radio"
               name="class-org"
               checked={organization === "parallel"}
               onChange={() => setOrganization("parallel")}
             />
             <span>
-              <strong>Classes parallèles</strong>
+              Classes parallèles
               <em>Plusieurs groupes qui partagent le même CTX.</em>
             </span>
           </label>
