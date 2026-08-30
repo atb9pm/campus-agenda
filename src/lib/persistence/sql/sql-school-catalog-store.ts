@@ -12,6 +12,7 @@ import {
   branchDeleteBlockers,
   canReduceProfessionDuration,
   professionDeleteBlockers,
+  validateClassProfessionAttachment,
 } from "../../../features/school-catalog/profession-rules.ts";
 import type {
   PedagogicalContextInput,
@@ -138,17 +139,27 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       .run();
   }
 
+  /**
+   * Attribution atomique du prochain code (PRF/BR/CTX).
+   * `next_value` = prochaine séquence à allouer. UPDATE…RETURNING sous le verrou
+   * d’écriture SQLite empêche deux lecteurs d’obtenir la même valeur.
+   * Les codes déjà émis ne sont jamais recyclés.
+   */
   private async nextAdminCode(kind: AdminCodeKind): Promise<string> {
     await this.ensureCounterRow(kind);
     const row = await this.db
-      .prepare("SELECT next_value FROM admin_code_counters WHERE kind = ?")
+      .prepare(
+        `UPDATE admin_code_counters
+         SET next_value = next_value + 1
+         WHERE kind = ?
+         RETURNING next_value - 1 AS sequence`,
+      )
       .bind(kind)
-      .first<{ next_value: number }>();
-    const sequence = Number(row?.next_value ?? 1);
-    await this.db
-      .prepare("UPDATE admin_code_counters SET next_value = ? WHERE kind = ?")
-      .bind(sequence + 1, kind)
-      .run();
+      .first<{ sequence: number }>();
+    const sequence = Number(row?.sequence ?? 0);
+    if (!Number.isInteger(sequence) || sequence < 1) {
+      throw new Error(`Impossible d’attribuer un code administratif ${kind}.`);
+    }
     return formatAdminCode(kind, sequence);
   }
 
@@ -358,6 +369,12 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
 
   async createClass(input: SchoolClassInput): Promise<SchoolClassRecord> {
     await this.ensureSeeded();
+    const attachment = validateClassProfessionAttachment({
+      professionId: input.professionId ?? null,
+      trainingYear: input.trainingYear ?? null,
+      professions: await this.listProfessions(),
+    });
+    if (!attachment.ok) throw new Error(attachment.reason);
     const count = await this.db
       .prepare("SELECT COUNT(*) AS count FROM school_classes")
       .bind()
@@ -369,8 +386,8 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       sortOrder: input.sortOrder ?? Number(count?.count ?? 0) + 1,
       isActive: input.isActive ?? true,
       schoolYearLabel: input.schoolYearLabel ?? null,
-      professionId: input.professionId ?? null,
-      trainingYear: input.trainingYear ?? null,
+      professionId: attachment.value.professionId,
+      trainingYear: attachment.value.trainingYear,
     };
     await this.db
       .prepare(
@@ -396,6 +413,12 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
     await this.ensureSeeded();
     const current = (await this.listClasses()).find((entry) => entry.id === id);
     if (!current) return null;
+    const attachment = validateClassProfessionAttachment({
+      professionId: patch.professionId !== undefined ? patch.professionId : current.professionId,
+      trainingYear: patch.trainingYear !== undefined ? patch.trainingYear : current.trainingYear,
+      professions: await this.listProfessions(),
+    });
+    if (!attachment.ok) throw new Error(attachment.reason);
     const next: SchoolClassRecord = {
       ...current,
       code: patch.code !== undefined ? normalizeClassCode(patch.code) : current.code,
@@ -404,8 +427,8 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       isActive: patch.isActive ?? current.isActive,
       schoolYearLabel:
         patch.schoolYearLabel !== undefined ? patch.schoolYearLabel : current.schoolYearLabel,
-      professionId: patch.professionId !== undefined ? patch.professionId : current.professionId,
-      trainingYear: patch.trainingYear !== undefined ? patch.trainingYear : current.trainingYear,
+      professionId: attachment.value.professionId,
+      trainingYear: attachment.value.trainingYear,
     };
     await this.db
       .prepare(

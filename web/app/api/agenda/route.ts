@@ -1,5 +1,6 @@
 import { AGENDA_ITEM_TYPES } from "@campus/types/agenda.ts";
 import {
+  assertAgendaPublicationBranchAllowed,
   forbiddenResponse,
   getArchivedSchoolYearIds,
   jsonResponse,
@@ -57,6 +58,9 @@ export async function POST(request: Request) {
   if (!(await auth.store!.teacherCanPublish(auth.session!.teacherId, classroomId, subjectId))) {
     return forbiddenResponse("Vous ne pouvez pas publier dans cette branche.");
   }
+
+  const branchGuard = await assertAgendaPublicationBranchAllowed(classroomId, subjectId);
+  if (branchGuard) return branchGuard;
 
   const schoolWeekNumber = Number(body.schoolWeekNumber ?? 0);
   if (!Number.isFinite(schoolWeekNumber) || schoolWeekNumber < 1 || schoolWeekNumber > 38) {

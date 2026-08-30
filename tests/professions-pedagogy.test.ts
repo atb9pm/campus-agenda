@@ -3,9 +3,11 @@ import test from "node:test";
 
 import {
   canReduceProfessionDuration,
+  evaluateAgendaBranchForClass,
   formatAdminCode,
   isBranchAllowedForClass,
   listBranchesForClass,
+  validateClassProfessionAttachment,
 } from "../src/features/school-catalog/index.ts";
 import {
   getMemorySchoolCatalogStore,
@@ -282,4 +284,247 @@ test("persistence SQLite — migration professions + compteurs", async () => {
   });
   assert.equal(renamed.ok, true);
   if (renamed.ok) assert.equal(renamed.value.adminCode, profession.adminCode);
+});
+
+test("consolidation — publication autorisée avec branche du CTX", async () => {
+  const store = freshMemory();
+  const profession = await store.createProfession({ label: "Mécatronicien", durationYears: 4 });
+  const branches = await store.listBranches();
+  const moteur = branches.find((entry) => entry.label === "Moteur")!;
+  await store.createContext({
+    professionId: profession.id,
+    trainingYear: 2,
+    branchId: moteur.id,
+  });
+  const schoolClass = await store.createClass({
+    code: "MA2CTX",
+    label: "MA2CTX",
+    professionId: profession.id,
+    trainingYear: 2,
+  });
+  const result = evaluateAgendaBranchForClass({
+    classroomName: schoolClass.code,
+    subjectName: "Moteur",
+    classes: await store.listClasses(),
+    branches: await store.listBranches(),
+    contexts: await store.listContexts(),
+  });
+  assert.equal(result.ok, true);
+});
+
+test("consolidation — publication refusée hors CTX", async () => {
+  const store = freshMemory();
+  const profession = await store.createProfession({ label: "Mécatronicien", durationYears: 4 });
+  const branches = await store.listBranches();
+  const moteur = branches.find((entry) => entry.label === "Moteur")!;
+  const chassis = branches.find((entry) => entry.label === "Châssis")!;
+  await store.createContext({
+    professionId: profession.id,
+    trainingYear: 2,
+    branchId: moteur.id,
+  });
+  const schoolClass = await store.createClass({
+    code: "MA2CTX2",
+    label: "MA2CTX2",
+    professionId: profession.id,
+    trainingYear: 2,
+  });
+  const result = evaluateAgendaBranchForClass({
+    classroomName: schoolClass.code,
+    subjectName: chassis.label,
+    classes: await store.listClasses(),
+    branches: await store.listBranches(),
+    contexts: await store.listContexts(),
+  });
+  assert.equal(result.ok, false);
+});
+
+test("consolidation — legacy sans profession/année autorise les branches actives", async () => {
+  const store = freshMemory();
+  const [schoolClass] = await store.listClasses();
+  assert.ok(schoolClass);
+  assert.equal(schoolClass.professionId, null);
+  const result = evaluateAgendaBranchForClass({
+    classroomName: schoolClass.code,
+    subjectName: "Châssis",
+    classes: await store.listClasses(),
+    branches: await store.listBranches(),
+    contexts: await store.listContexts(),
+  });
+  assert.equal(result.ok, true);
+});
+
+test("consolidation — classe profession+année valides", async () => {
+  const store = freshMemory();
+  const profession = await store.createProfession({ label: "Conducteur", durationYears: 3 });
+  const created = await store.createClass({
+    code: "COND1",
+    label: "COND1",
+    professionId: profession.id,
+    trainingYear: 3,
+  });
+  assert.equal(created.professionId, profession.id);
+  assert.equal(created.trainingYear, 3);
+  const check = validateClassProfessionAttachment({
+    professionId: profession.id,
+    trainingYear: 2,
+    professions: await store.listProfessions(),
+  });
+  assert.equal(check.ok, true);
+});
+
+test("consolidation — refus année > durée profession", async () => {
+  const store = freshMemory();
+  const profession = await store.createProfession({ label: "Assistant", durationYears: 3 });
+  await assert.rejects(
+    () =>
+      store.createClass({
+        code: "BADY",
+        label: "BADY",
+        professionId: profession.id,
+        trainingYear: 4,
+      }),
+    /durée|dépasse|année/i,
+  );
+});
+
+test("consolidation — refus états profession/année incohérents", async () => {
+  const store = freshMemory();
+  const profession = await store.createProfession({ label: "Tech", durationYears: 2 });
+  await assert.rejects(
+    () =>
+      store.createClass({
+        code: "MIX1",
+        label: "MIX1",
+        professionId: null,
+        trainingYear: 2,
+      }),
+    /ensemble|toutes deux/i,
+  );
+  await assert.rejects(
+    () =>
+      store.createClass({
+        code: "MIX2",
+        label: "MIX2",
+        professionId: profession.id,
+        trainingYear: null,
+      }),
+    /ensemble|toutes deux/i,
+  );
+  const missing = validateClassProfessionAttachment({
+    professionId: "does-not-exist",
+    trainingYear: 1,
+    professions: await store.listProfessions(),
+  });
+  assert.equal(missing.ok, false);
+});
+
+test("consolidation — IDs PRF/BR/CTX stables après modification", async () => {
+  const store = freshMemory();
+  const profession = await store.createProfession({ label: "Init", durationYears: 3 });
+  const branch = await store.createBranch({ code: "NEWB", label: "Nouvelle" });
+  const ctx = await store.createContext({
+    professionId: profession.id,
+    trainingYear: 1,
+    branchId: branch.id,
+  });
+  assert.equal(ctx.ok, true);
+  if (!ctx.ok) return;
+  const renamedProfession = await store.updateProfession(profession.id, { label: "Renommée" });
+  const renamedBranch = await store.updateBranch(branch.id, { label: "Branche renommée" });
+  assert.equal(renamedProfession.ok, true);
+  if (renamedProfession.ok) assert.equal(renamedProfession.value.adminCode, profession.adminCode);
+  assert.equal(renamedBranch?.adminCode, branch.adminCode);
+  assert.equal(ctx.value.adminCode, "CTX-0001");
+});
+
+test("consolidation — génération successive sans duplication (mémoire)", async () => {
+  const store = freshMemory();
+  const codes = [];
+  for (let index = 0; index < 8; index += 1) {
+    const profession = await store.createProfession({
+      label: `Profession ${index}`,
+      durationYears: 2,
+    });
+    codes.push(profession.adminCode);
+  }
+  assert.equal(new Set(codes).size, codes.length);
+  assert.deepEqual(
+    codes,
+    Array.from({ length: 8 }, (_, index) => formatAdminCode("PRF", index + 1)),
+  );
+});
+
+test("consolidation — génération successive sans duplication (SQLite)", async () => {
+  const db = createNodeSqliteDatabase(":memory:");
+  await applyMigrations(db);
+  const store = new SqlSchoolCatalogStore(db);
+  await store.ensureSeeded();
+
+  const professions = await Promise.all(
+    Array.from({ length: 10 }, (_, index) =>
+      store.createProfession({ label: `Concurrent ${index}`, durationYears: 2 }),
+    ),
+  );
+  const codes = professions.map((entry) => entry.adminCode);
+  assert.equal(new Set(codes).size, codes.length);
+  const sequences = codes
+    .map((code) => Number(code.split("-")[1]))
+    .sort((left, right) => left - right);
+  assert.deepEqual(sequences, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+
+  // Monotonie du compteur après sync : pas de recyclage
+  const more = await store.createProfession({ label: "Encore", durationYears: 2 });
+  assert.equal(more.adminCode, "PRF-0011");
+});
+
+test("consolidation — persistence mémoire des rattachements", async () => {
+  const store = freshMemory();
+  const profession = await store.createProfession({ label: "Persist M", durationYears: 3 });
+  const created = await store.createClass({
+    code: "PM1",
+    label: "PM1",
+    professionId: profession.id,
+    trainingYear: 1,
+  });
+  const listed = (await store.listClasses()).find((entry) => entry.id === created.id);
+  assert.equal(listed?.professionId, profession.id);
+  assert.equal(listed?.trainingYear, 1);
+});
+
+test("consolidation — persistence SQLite + migration base existante", async () => {
+  const db = createNodeSqliteDatabase(":memory:");
+  await applyMigrations(db);
+  // Rejouer les migrations (idempotence / base déjà migrée)
+  await applyMigrations(db);
+  const store = new SqlSchoolCatalogStore(db);
+  await store.ensureSeeded();
+
+  const beforeBranches = await store.listBranches();
+  assert.ok(beforeBranches.length >= 4);
+  const preserved = beforeBranches.map((entry) => entry.adminCode);
+
+  const profession = await store.createProfession({ label: "Persist S", durationYears: 3 });
+  const [branch] = beforeBranches;
+  assert.ok(branch);
+  const ctx = await store.createContext({
+    professionId: profession.id,
+    trainingYear: 1,
+    branchId: branch.id,
+  });
+  assert.equal(ctx.ok, true);
+
+  const linked = await store.updateClass((await store.listClasses())[0]!.id, {
+    professionId: profession.id,
+    trainingYear: 1,
+  });
+  assert.equal(linked?.professionId, profession.id);
+
+  const afterBranches = await store.listBranches();
+  assert.deepEqual(
+    afterBranches.map((entry) => entry.adminCode),
+    preserved,
+  );
+  assert.match(profession.adminCode, /^PRF-\d{4}$/);
+  if (ctx.ok) assert.match(ctx.value.adminCode, /^CTX-\d{4}$/);
 });

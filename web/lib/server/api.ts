@@ -9,7 +9,8 @@ import {
   readSessionTokenFromRequest,
   unauthorizedResponse,
 } from "@campus/lib/auth/index.ts";
-import { checkClassroomExists, getAgendaStore, getMembershipStore, getSchoolCatalogStore, getSchoolYearStore, getTeacherAccountStore, getTeacherNotesStore as resolveTeacherNotesStore, getTeacherSetupStore, getTemplateStore } from "@campus/lib/persistence/store-factory.ts";
+import { checkClassroomExists, getAgendaStore, getMembershipStore, getSchoolCatalogStore, getSchoolYearStore, getTeacherAccountStore, getTeacherNotesStore as resolveTeacherNotesStore, getTeacherSetupStore, getTemplateStore, resolveClassroomSubjectNames } from "@campus/lib/persistence/store-factory.ts";
+import { evaluateAgendaBranchForClass } from "@campus/features/school-catalog/index.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import { ARCHIVED_YEAR_READONLY_REASON, getArchivedYearIds, isArchivedYearItem } from "@campus/features/school-year/archived-readonly.ts";
 import type { AppSession } from "@campus/lib/persistence/types.ts";
@@ -92,6 +93,32 @@ export async function assertAgendaItemMutable(item: PrototypeAgendaItem | undefi
   const archivedIds = await getArchivedSchoolYearIds();
   if (isArchivedYearItem(item, archivedIds)) {
     return jsonResponse({ ok: false, reason: ARCHIVED_YEAR_READONLY_REASON }, { status: 403 });
+  }
+  return null;
+}
+
+
+export async function assertAgendaPublicationBranchAllowed(
+  classroomId: string,
+  subjectId: string,
+): Promise<Response | null> {
+  const names = await resolveClassroomSubjectNames(classroomId, subjectId);
+  const catalog = await getSchoolCatalogStore();
+  await catalog.ensureSeeded();
+  const [classes, branches, contexts] = await Promise.all([
+    catalog.listClasses(),
+    catalog.listBranches(),
+    catalog.listContexts(),
+  ]);
+  const result = evaluateAgendaBranchForClass({
+    classroomName: names.classroomName,
+    subjectName: names.subjectName,
+    classes,
+    branches,
+    contexts,
+  });
+  if (!result.ok) {
+    return forbiddenResponse(result.reason);
   }
   return null;
 }

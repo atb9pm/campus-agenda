@@ -1,5 +1,6 @@
 import {
   assertAgendaItemMutable,
+  assertAgendaPublicationBranchAllowed,
   forbiddenResponse,
   jsonResponse,
   requireTeacherSession,
@@ -34,6 +35,14 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   if (existing && !(await auth.store!.teacherCanPublish(auth.session!.teacherId, existing.classroomId, body.subjectId ?? existing.subjectId))) {
     return forbiddenResponse("Branche non autorisée.");
+  }
+
+  if (existing) {
+    const branchGuard = await assertAgendaPublicationBranchAllowed(
+      existing.classroomId,
+      body.subjectId ?? existing.subjectId,
+    );
+    if (branchGuard) return branchGuard;
   }
 
   const result = await auth.store!.updateAgendaItem(itemId, auth.session!.teacherId, body);

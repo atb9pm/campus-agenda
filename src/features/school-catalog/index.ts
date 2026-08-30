@@ -12,10 +12,12 @@ export {
 export {
   branchDeleteBlockers,
   canReduceProfessionDuration,
+  evaluateAgendaBranchForClass,
   isBranchAllowedForClass,
   listBranchesForClass,
   professionDeleteBlockers,
   trainingYearsForDuration,
+  validateClassProfessionAttachment,
 } from "./profession-rules.ts";
 export type {
   PedagogicalContextInput,
