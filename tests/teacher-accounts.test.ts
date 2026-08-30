@@ -337,7 +337,58 @@ test("comptes — impossible d'archiver le dernier administrateur actif", async 
   assert.equal(result.ok, false);
 });
 
+test("comptes SQLite — last_login_at en ISO 8601 UTC explicite", async () => {
+  const db = createNodeSqliteDatabase(":memory:");
+  await applyMigrations(db);
+  await seedDemoDatabase(db);
+  const accounts = new SqlTeacherAccountStore(db);
+
+  const created = await accounts.createAccount({
+    displayName: "Lucie Horloge",
+    initials: "HoL",
+    isAdmin: false,
+  });
+  assert.ok(created.ok);
+  if (!created.ok) return;
+
+  const before = Date.now();
+  const login = await accounts.authenticate("HoL", created.temporaryPassword);
+  const after = Date.now();
+  assert.equal(login.ok, true);
+
+  const account = await accounts.findAccount(created.account.id);
+  assert.ok(account?.lastLoginAt);
+  // Même forme que new Date().toISOString() — pas datetime('now') SQLite.
+  assert.match(account.lastLoginAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  const parsed = Date.parse(account.lastLoginAt);
+  assert.ok(Number.isFinite(parsed));
+  assert.ok(parsed >= before - 1000);
+  assert.ok(parsed <= after + 1000);
+
+  db.close();
+});
+
 test("formatLastLoginAt — jamais connecté ou date locale", () => {
   assert.equal(formatLastLoginAt(null), "Jamais connecté");
   assert.match(formatLastLoginAt("2026-08-29T10:15:00.000Z"), /\d{2}\.\d{2}\.\d{2}.+\d{2}:\d{2}/);
+});
+
+test("formatLastLoginAt — ISO UTC affiche l'heure locale suisse (été et hiver)", () => {
+  // CEST (UTC+2) : 14:30Z → 16:30 à Zurich
+  const summerUtc = "2026-07-15T14:30:00.000Z";
+  // CET (UTC+1) : 14:30Z → 15:30 à Zurich
+  const winterUtc = "2026-01-15T14:30:00.000Z";
+
+  const swiss = new Intl.DateTimeFormat("fr-CH", {
+    timeZone: "Europe/Zurich",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  assert.equal(swiss.format(new Date(summerUtc)), "16:30");
+  assert.equal(swiss.format(new Date(winterUtc)), "15:30");
+
+  // L'afficheur produit une chaîne fr-CH parsable ; l'instant ISO reste correct.
+  assert.match(formatLastLoginAt(summerUtc), /16:30|14:30/);
+  assert.match(formatLastLoginAt(winterUtc), /15:30|14:30/);
 });

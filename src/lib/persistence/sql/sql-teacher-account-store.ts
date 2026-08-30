@@ -248,9 +248,12 @@ export class SqlTeacherAccountStore implements TeacherAccountStore {
     if (row.is_active !== null && !row.is_active) {
       return { ok: false, reason: "Ce compte est désactivé. Contactez l'administrateur." };
     }
+    // ISO 8601 UTC explicite (…Z), comme le store mémoire — évite datetime('now')
+    // sans fuseau, mal interprété par new Date() côté front (fr-CH).
+    const lastLoginAt = new Date().toISOString();
     await this.db
-      .prepare("UPDATE teachers SET last_login_at = datetime('now') WHERE id = ?")
-      .bind(row.id)
+      .prepare("UPDATE teachers SET last_login_at = ? WHERE id = ?")
+      .bind(lastLoginAt, row.id)
       .run();
     return { ok: true, teacherId: row.id, mustChangePassword: Boolean(row.must_change_password) };
   }

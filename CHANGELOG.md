@@ -16,6 +16,14 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 - Liste des branches plus lisible : cartes séparées, badge statut,
   **vert** si active, **rouge** si désactivée ou archivée.
 
+## [2.15.1] — last_login_at SQLite en ISO 8601 UTC
+
+### Corrigé
+
+- `SqlTeacherAccountStore.authenticate()` enregistre `last_login_at` en **ISO 8601 UTC**
+  (`…Z`), comme le store mémoire — plus de `datetime('now')` SQLite sans fuseau,
+  mal interprété par `new Date()` côté front (`fr-CH`).
+
 ## [2.15.0] — Gestion des accès : lisibilité, édition, archivage, dernier login
 
 ### Ajouté
