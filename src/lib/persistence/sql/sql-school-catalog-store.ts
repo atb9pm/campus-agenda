@@ -51,7 +51,13 @@ function mapBranch(row: {
 }
 
 export class SqlSchoolCatalogStore implements SchoolCatalogStore {
-  constructor(private readonly db: SqlDatabase) {}
+  // Champ explicite : `constructor(private …)` n'est pas supporté par
+  // `node --experimental-strip-types` (suite `npm test`).
+  private readonly db: SqlDatabase;
+
+  constructor(db: SqlDatabase) {
+    this.db = db;
+  }
 
   async ensureSeeded(): Promise<void> {
     const classCount = await this.db

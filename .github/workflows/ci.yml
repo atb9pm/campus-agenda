@@ -1,4 +1,5 @@
 # Tests automatiques sur chaque pull request (avant merge).
+# Une seule source de vérité : le script `npm test` de web/package.json.
 name: CI
 
 on:
@@ -23,41 +24,20 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Installer les dépendances
+      # `npm test` enchaîne `pnpm run build` : pnpm doit être disponible.
+      - name: Activer pnpm
+        run: corepack enable
+
+      # pdfjs-dist est résolu depuis `src/` (node_modules à la racine du dépôt).
+      - name: Installer les dépendances racine
+        run: npm install
+
+      - name: Installer les dépendances web
         working-directory: web
         run: npm install
 
-      - name: Tests unitaires (memory store)
+      # Suite de référence : unitaires + build + rendu/API + smoke preview.
+      # Tout nouveau fichier ajouté à `npm test` est couvert automatiquement.
+      - name: Suite de tests (npm test)
         working-directory: web
-        run: |
-          CAMPUS_STORE=memory AUTH_SECRET=test-secret-ci \
-            node --experimental-strip-types --test \
-            ../tests/classes.test.ts \
-            ../tests/auth.test.ts \
-            ../tests/auth-entry.test.ts \
-            ../tests/accessibility.test.ts \
-            ../tests/persistence.test.ts \
-            ../tests/sqlite-store.test.ts \
-            ../tests/teacher.test.ts \
-            ../tests/teacher-setup.test.ts \
-            ../tests/class-notebook.test.ts \
-            ../tests/school-catalog.test.ts \
-            ../tests/school-days.test.ts \
-            ../tests/teacher-accounts.test.ts \
-            ../tests/school-calendar.test.ts \
-            ../tests/publications.test.ts \
-            ../tests/student.test.ts \
-            ../tests/api-auth.test.ts \
-            ../tests/multi-year-operations.test.ts
-
-      - name: Build production
-        working-directory: web
-        run: npm run build
-
-      # Garde-fou déploiement : le rendu et les API doivent répondre sur le build
-      # réellement produit, sinon un merge « vert » casserait la prod.
-      - name: Tests de rendu et API sur le build
-        working-directory: web
-        run: |
-          CAMPUS_STORE=memory AUTH_SECRET=test-secret-ci \
-            node --test tests/rendered-html.test.mjs tests/e2e-api.test.mjs
+        run: npm test
