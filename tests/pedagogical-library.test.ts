@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { DEMO_PROTOTYPE_ITEMS } from "../src/features/agenda/demo-items.ts";
 import { updatePublication } from "../src/features/agenda/publications.ts";
-import { DEMO_CURRENT_TEACHER_ID } from "../src/features/classes/index.ts";
+import { TEACHER_DEMO_ID } from "../src/features/classes/index.ts";
 import {
   createTemplateFromItem,
   deployTemplatesToAgenda,
@@ -101,10 +101,13 @@ test("phase 2.1 — déployer des modèles sur l'année", () => {
 });
 
 test("phase 2.1 — dupliquer depuis une année archivée", () => {
+  // Les items de démo sont signés TEACHER_DEMO_ID (pas le compte ChF admin).
   const archivedItems = DEMO_PROTOTYPE_ITEMS
-    .filter((item) => item.authorTeacherId === DEMO_CURRENT_TEACHER_ID)
+    .filter((item) => item.authorTeacherId === TEACHER_DEMO_ID)
     .slice(0, 2)
     .map((item) => ({ ...item, schoolYearId: ARCHIVED_YEAR_ID }));
+
+  assert.ok(archivedItems.length > 0, "au moins un item de démo à dupliquer");
 
   const duplicateResult = duplicateItemsFromArchivedYear(
     archivedItems,
@@ -114,7 +117,7 @@ test("phase 2.1 — dupliquer depuis une année archivée", () => {
       classroomId: archivedItems[0]!.classroomId,
       alsoCreateTemplates: true,
     },
-    DEMO_CURRENT_TEACHER_ID,
+    TEACHER_DEMO_ID,
     ACTIVE_YEAR_ID,
     200,
     () => "tpl-dup",
