@@ -702,3 +702,25 @@ button { color: inherit; }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
 
+
+.admin-profession-context-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.pedagogical-path-panel { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: #fbfcfe; display: grid; gap: 12px; }
+.pedagogical-path-header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: start; }
+.pedagogical-path-header h4 { margin: 0; color: var(--navy); font-size: 14px; }
+.pedagogical-path-header p { margin: 4px 0 0; color: #667085; font-size: 11px; }
+.pedagogical-path-header button, .pedagogical-path-toolbar button, .pedagogical-path-session-actions button, .pedagogical-path-item-actions button, .pedagogical-path-item-form button { padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: #fff; color: var(--navy); font-size: 9px; font-weight: 700; cursor: pointer; }
+.pedagogical-path-toolbar { display: flex; gap: 8px; }
+.pedagogical-path-sessions { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+.pedagogical-path-session { padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; display: grid; gap: 10px; }
+.pedagogical-path-session-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: center; }
+.pedagogical-path-session-head strong { color: var(--navy); font-size: 13px; }
+.pedagogical-path-session-actions, .pedagogical-path-item-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.pedagogical-path-items { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.pedagogical-path-items li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #f8fafc; }
+.pedagogical-path-item-type { display: inline-block; margin-right: 8px; color: #667085; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.pedagogical-path-items strong { color: var(--navy); font-size: 12px; }
+.pedagogical-path-items p { margin: 2px 0 0; color: #667085; font-size: 11px; }
+.pedagogical-path-item-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.pedagogical-path-item-form label { display: grid; gap: 4px; color: #8793a9; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.pedagogical-path-item-form input, .pedagogical-path-item-form select { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); background: #fff; font-size: 11px; min-width: 140px; }
+.pedagogical-path-session-actions button:disabled, .pedagogical-path-item-actions button:disabled { opacity: .4; cursor: not-allowed; }

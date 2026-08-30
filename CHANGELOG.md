@@ -2,6 +2,41 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.19.0] — Parcours pédagogique : modèle de référence par CTX
+
+### Ajouté
+
+- Parcours pédagogique de référence par CTX (profession + année de formation + branche),
+  indépendant d'une classe, d'une année scolaire, d'un professeur et des dates.
+- Séances de référence avec **ID technique stable** et position 1-based réordonnable
+  (insertion / déplacement sans changer l'identité).
+- Éléments de référence uniquement : **Devoir**, **Contrôle**, **Information**
+  (pas de type Note Agenda).
+- Persistence mémoire + SQLite, migration additive `0017_pedagogical_path`.
+- API admin `/api/admin/pedagogical-path` et UI « Parcours » depuis un CTX.
+- Préparation structurelle des **notes de cours annuelles**
+  (`schoolYearId` + `classId` + `contextId` + `referenceSessionId` + `authorTeacherId`
+  + métadonnées d'héritage `sourceNoteId` / `sourceSchoolYearId` / `inheritedAt`).
+
+### Architecture notes
+
+- Les notes **ne sont pas** un 4ᵉ type Agenda.
+- Elles appartiennent au cours annuel (classe + branche/CTX + année), pas au seul auteur.
+- `authorTeacherId` = provenance uniquement ; un autre enseignant pourra consulter.
+- Legacy carnet (`teacher_notes`, clés `classSetupId:semaine`) **conservé intact**.
+- Reprise N+1 = copie (jamais lien vivant) ; effacement des héritées sans toucher la source.
+
+### templateId Agenda
+
+- `templateId` reste la provenance bibliothèque pédagogique (snapshot).
+- Pas de second champ concurrent dans cette version : la projection annuelle future
+  réutilisera ce mécanisme ou un champ dédié ultérieur, sans rétro-édition historique.
+
+### Non inclus
+
+- Moteur de récupération annuelle, copie auto des notes, calcul de dates,
+  semaines A/B, jours fériés, horaires réels, repositionnement automatique.
+
 ## [2.18.0] — Classes : rattachement stable à l'année scolaire
 
 ### Ajouté
