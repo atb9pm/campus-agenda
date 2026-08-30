@@ -898,6 +898,7 @@ test("SQLite — 0018 puis 0019, périodes, archivage, trigger CTX", async () =>
   assert.equal(before.results.length, 0);
 
   await applyMigrations(db, { until: "0019_annual_courses_teacher_assignments.sql" });
+  await applyMigrations(db);
   const tables = await db
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('annual_courses', 'teacher_course_assignments')")
     .bind()

@@ -2,6 +2,15 @@ import type { TeacherAccountRecord } from "../teacher-accounts/types.ts";
 import { isAssignmentActiveAt } from "./assignments.ts";
 import type { AnnualCourse, TeacherCourseAssignment } from "./types.ts";
 
+export function isVerifiedAdminTeacher(
+  teacher: TeacherAccountRecord | null | undefined,
+  claimedAdmin?: boolean,
+): boolean {
+  if (!teacher) return false;
+  if (claimedAdmin === false) return false;
+  return teacher.isAdmin === true && teacher.isActive && !teacher.isArchived;
+}
+
 export function teacherCanAccessAnnualCourse(options: {
   teacher: TeacherAccountRecord | null | undefined;
   course: AnnualCourse | null | undefined;
@@ -12,12 +21,11 @@ export function teacherCanAccessAnnualCourse(options: {
 }): boolean {
   if (options.isStudent) return false;
   if (!options.teacher || !options.course) return false;
-  if (options.course.isArchived) {
-    return Boolean(options.isAdmin);
-  }
-  if (options.isAdmin && options.teacher.isActive && !options.teacher.isArchived) {
-    return true;
-  }
+
+  const verifiedAdmin = isVerifiedAdminTeacher(options.teacher, options.isAdmin ?? options.teacher.isAdmin);
+  if (verifiedAdmin) return true;
+
+  if (options.course.isArchived) return false;
   if (!options.teacher.isActive || options.teacher.isArchived) return false;
 
   const at = options.at ?? new Date().toISOString();

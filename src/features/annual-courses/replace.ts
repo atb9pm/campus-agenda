@@ -1,4 +1,4 @@
-import { endAssignment, findDuplicateAssignment, isAssignmentActiveAt } from "./assignments.ts";
+import { endAssignment, findDuplicateAssignment, findOverlappingPrimary, isAssignmentActiveAt } from "./assignments.ts";
 import type {
   AssignmentRole,
   CourseMutationResult,
@@ -14,7 +14,8 @@ export interface ReplaceAnnualCourseTeacherInput {
   outgoingTeacherId: string;
   incomingTeacherId: string;
   createdByAdminId: string;
-  effectiveAt?: string;
+  createdAt: string;
+  effectiveAt: string;
   incomingRole?: AssignmentRole;
   incomingValidTo?: string | null;
   forceIncompatible?: boolean;
@@ -28,15 +29,13 @@ export interface ReplaceAnnualCourseTeacherResult {
 }
 
 /**
- * Remplacement définitif : clôture l'attribution sortante, crée l'entrante
- * sur le même AnnualCourse. Aucune copie ni suppression de données pédagogiques.
- * Adapté de replaceTeacherMemberships (memberships/replacement.ts).
+ * Remplacement définitif : calcule l'état prospectif, refuse tout chevauchement,
+ * puis seulement clôture + création. createdAt = date administrative, pas effectiveAt.
  */
 export function replaceTeacherOnAnnualCourse(
   assignments: TeacherCourseAssignment[],
   input: ReplaceAnnualCourseTeacherInput,
 ): CourseMutationResult<ReplaceAnnualCourseTeacherResult> {
-  const effectiveAt = input.effectiveAt ?? new Date().toISOString();
   if (input.outgoingTeacherId === input.incomingTeacherId) {
     return { ok: false, reason: "Le remplaçant doit être un autre enseignant.", status: 400 };
   }
@@ -45,7 +44,7 @@ export function replaceTeacherOnAnnualCourse(
     (entry) =>
       entry.annualCourseId === input.annualCourseId &&
       entry.teacherId === input.outgoingTeacherId &&
-      isAssignmentActiveAt(entry, effectiveAt),
+      isAssignmentActiveAt(entry, input.effectiveAt),
   );
   if (outgoing.length === 0) {
     return {
@@ -60,31 +59,44 @@ export function replaceTeacherOnAnnualCourse(
     annualCourseId: input.annualCourseId,
     teacherId: input.incomingTeacherId,
     role: input.incomingRole ?? "PRIMARY",
-    validFrom: effectiveAt,
+    validFrom: input.effectiveAt,
     validTo: input.incomingValidTo ?? null,
     createdByAdminId: input.createdByAdminId,
-    createdAt: effectiveAt,
+    createdAt: input.createdAt,
     endedAt: null,
     overrideReason: input.overrideReason ?? null,
     overrideByAdminId: input.forceIncompatible ? input.createdByAdminId : null,
   };
 
-  const duplicate = findDuplicateAssignment(assignments, created);
+  const closed = outgoing.map((entry) => endAssignment(entry, input.effectiveAt));
+  const prospective = assignments.map((entry) => {
+    const replacement = closed.find((item) => item.id === entry.id);
+    return replacement ?? entry;
+  });
+
+  const duplicate = findDuplicateAssignment(prospective, created);
   if (duplicate) {
     return {
       ok: false,
-      reason: "Cet enseignant a déjà une attribution active sur ce cours.",
+      reason: "Cet enseignant a déjà une attribution qui recouvre cette période.",
       status: 409,
     };
   }
 
-  const closed = outgoing.map((entry) => endAssignment(entry, effectiveAt));
-  const next = assignments.map((entry) => {
-    const replacement = closed.find((item) => item.id === entry.id);
-    return replacement ?? entry;
-  });
-  next.push(created);
+  if (created.role === "PRIMARY") {
+    const primary = findOverlappingPrimary(prospective, created);
+    if (primary) {
+      return {
+        ok: false,
+        reason: "Ce cours a déjà un titulaire sur cette période. Le remplacement est refusé.",
+        status: 409,
+        code: "PRIMARY_TAKEN",
+        existing: [primary],
+      };
+    }
+  }
 
+  const next = [...prospective, created];
   return {
     ok: true,
     value: {
@@ -110,13 +122,6 @@ export function buildTemporaryReplacement(
   input: TemporaryReplacementInput,
   createdAt = new Date().toISOString(),
 ): CourseMutationResult<TeacherCourseAssignment> {
-  if (!input.validFrom || !input.validTo) {
-    return { ok: false, reason: "Un remplacement temporaire exige validFrom et validTo.", status: 400 };
-  }
-  if (input.validTo < input.validFrom) {
-    return { ok: false, reason: "La fin du remplacement doit être postérieure au début.", status: 400 };
-  }
-
   const created: TeacherCourseAssignment = {
     id: createId("tca"),
     annualCourseId: input.annualCourseId,

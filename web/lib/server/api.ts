@@ -10,7 +10,7 @@ import {
   unauthorizedResponse,
 } from "@campus/lib/auth/index.ts";
 import { checkClassroomExists, getAgendaStore, getAnnualCourseNotesStore, getAnnualCourseStore, getMembershipStore, getPedagogicalPathStore, getSchoolCatalogStore, getSchoolYearStore, getTeacherAccountStore, getTeacherNotesStore as resolveTeacherNotesStore, getTeacherSetupStore, getTemplateStore, resolveClassroomSubjectNames } from "@campus/lib/persistence/store-factory.ts";
-import { resolveAnnualCourseForPublication, teacherCanAccessAnnualCourse } from "@campus/features/annual-courses/index.ts";
+import { decideAgendaPublishAccess, resolveAnnualCourseForPublication } from "@campus/features/annual-courses/index.ts";
 import type { AnnualCourseServiceDeps } from "@campus/features/annual-courses/index.ts";
 import { evaluateAgendaBranchForClass } from "@campus/features/school-catalog/index.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
@@ -122,14 +122,15 @@ export async function authorizeTeacherAgendaPublish(
     contexts,
     courses,
   });
-  if (resolved) {
-    return teacherCanAccessAnnualCourse({
-      teacher,
-      course: resolved.course,
-      assignments,
-    });
-  }
-  return store.teacherCanPublish(teacherId, classroomId, subjectId);
+  const legacyMembershipAllows = resolved
+    ? false
+    : await store.teacherCanPublish(teacherId, classroomId, subjectId);
+  return decideAgendaPublishAccess({
+    resolved,
+    teacher,
+    assignments,
+    legacyMembershipAllows,
+  });
 }
 
 /** Message unique côté client pour déclencher l'écran de changement obligatoire. */

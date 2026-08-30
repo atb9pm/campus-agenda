@@ -21,7 +21,7 @@ async function handleGet(request: Request) {
   if ("error" in auth && auth.error) return auth.error;
 
   const deps = await getAnnualCourseServiceDeps();
-  const [courses, assignments, events, classes, branches, professions, contexts, teachers] =
+  const [courses, assignments, events, classes, branches, professions, contexts, teachers, schoolYears] =
     await Promise.all([
       deps.courses.listCourses(),
       deps.courses.listAssignments(),
@@ -31,6 +31,7 @@ async function handleGet(request: Request) {
       deps.catalog.listProfessions(),
       deps.catalog.listContexts(),
       deps.teachers.listAccounts(),
+      deps.years.listSchoolYears(),
     ]);
 
   return jsonResponse({
@@ -42,6 +43,7 @@ async function handleGet(request: Request) {
     branches,
     professions,
     contexts,
+    schoolYears: schoolYears.map((year) => ({ id: year.id, label: year.label, status: year.status })),
     teachers: teachers.map((teacher) => ({
       id: teacher.id,
       displayName: teacher.displayName,
@@ -108,6 +110,12 @@ async function handlePost(request: Request) {
   }
 
   if (action === "assign") {
+    if (body.role === "REPLACEMENT") {
+      return jsonResponse({
+        ok: false,
+        reason: "Un remplaçant temporaire doit utiliser l'action dédiée, avec validFrom et validTo obligatoires.",
+      }, { status: 400 });
+    }
     if (!isAssignmentRole(body.role)) {
       return jsonResponse({ ok: false, reason: "Rôle invalide." }, { status: 400 });
     }
@@ -148,6 +156,9 @@ async function handlePost(request: Request) {
   }
 
   if (action === "temporary") {
+    if (!body.validFrom || !body.validTo) {
+      return jsonResponse({ ok: false, reason: "Un remplacement temporaire exige validFrom et validTo." }, { status: 400 });
+    }
     const result = await assignTemporaryReplacement(deps, {
       annualCourseId: String(body.annualCourseId ?? ""),
       teacherId: String(body.teacherId ?? ""),

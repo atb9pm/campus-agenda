@@ -3,7 +3,13 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { ASSIGNMENT_ROLE_LABELS, type AnnualCourse, type AssignmentRole, type TeacherCourseAssignment } from "@campus/features/annual-courses/types.ts";
-import { isAssignmentActiveAt, preferredTeachersForBranch } from "@campus/features/annual-courses/assignments.ts";
+import { preferredTeachersForBranch } from "@campus/features/annual-courses/assignments.ts";
+import {
+  assignmentLifecycle,
+  decideAssignmentDialogSubmit,
+  isClassEligibleForAssignment,
+  lifecycleLabel,
+} from "@campus/features/annual-courses/admin-assign-ui.ts";
 import type { PedagogicalContextRecord, SchoolProfessionRecord } from "@campus/features/school-catalog";
 import type { SchoolBranchRecord, SchoolClassRecord } from "@campus/features/school-catalog";
 import {
@@ -30,6 +36,7 @@ interface OverviewPayload {
   branches: SchoolBranchRecord[];
   professions: SchoolProfessionRecord[];
   contexts: PedagogicalContextRecord[];
+  schoolYears: Array<{ id: string; label: string; status: "draft" | "active" | "archived" }>;
   teachers: TeacherSummary[];
 }
 
@@ -96,9 +103,19 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
 
   const structuredClasses = useMemo(() => {
     if (!data) return [];
-    return data.classes.filter(
-      (entry) => entry.schoolYearId && entry.professionId && entry.trainingYear !== null,
-    );
+    return data.classes.filter((entry) => {
+      const year = (data.schoolYears ?? []).find((item) => item.id === entry.schoolYearId) ?? null;
+      const profession = data.professions.find((item) => item.id === entry.professionId) ?? null;
+      return isClassEligibleForAssignment({
+        isActive: entry.isActive,
+        schoolYearId: entry.schoolYearId,
+        professionId: entry.professionId,
+        trainingYear: entry.trainingYear,
+        yearStatus: year?.status ?? null,
+        professionActive: profession?.isActive,
+        professionArchived: profession?.isArchived,
+      });
+    });
   }, [data]);
 
   const currentClass = structuredClasses.find((entry) => entry.id === selectedClassId) ?? structuredClasses[0] ?? null;
@@ -140,9 +157,7 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
         course.contextId === contextId,
     );
     if (existing?.isArchived) {
-      throw new Error(
-        "Ce cours annuel est archivé. Réactivez-le ou utilisez un cours actif avant d’attribuer un enseignant.",
-      );
+      throw new Error("Ce cours annuel est archivé. Aucune nouvelle attribution n’est possible.");
     }
     if (existing) return existing;
     await postAction({
@@ -161,9 +176,7 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
         course.contextId === contextId,
     ) ?? null;
     if (created?.isArchived) {
-      throw new Error(
-        "Ce cours annuel est archivé. Réactivez-le ou utilisez un cours actif avant d’attribuer un enseignant.",
-      );
+      throw new Error("Ce cours annuel est archivé. Aucune nouvelle attribution n’est possible.");
     }
     return created;
   }
@@ -182,15 +195,15 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
         entry.contextId === context.id,
     );
     const existing = course
-      ? data.assignments.filter((entry) => entry.annualCourseId === course.id && isAssignmentActiveAt(entry))
+      ? data.assignments.filter((entry) => entry.annualCourseId === course.id && assignmentLifecycle(entry) !== "ended")
       : [];
     const teacher = data.teachers.find((entry) => entry.id === teacherId);
     const mismatch =
-      branch.teachingType &&
-      teacher?.teachingType &&
-      branch.teachingType !== teacher.teachingType;
+      Boolean(branch.teachingType) &&
+      Boolean(teacher?.teachingType) &&
+      branch.teachingType !== teacher?.teachingType;
     const draft = { schoolClass, context, branch, existing, teacherId };
-    setConflictChoice(existing.length > 0 ? "CANCEL" : "CANCEL");
+    setConflictChoice(existing.length > 0 ? "CANCEL" : "CO_TEACHER");
     setForceStep(mismatch ? "warn" : "none");
     setOverrideReason("");
     setTempFrom("");
@@ -225,7 +238,7 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
         validTo: extra.validTo,
         effectiveAt: extra.validFrom,
         forceIncompatible,
-        overrideReason: forceIncompatible ? overrideReason || "Forçage administrateur" : null,
+        overrideReason: forceIncompatible ? overrideReason.trim() : null,
       });
       onNotice("Attribution enregistrée. Les données du cours restent intactes.");
       setPending(null);
@@ -245,42 +258,55 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
   async function submitConflict(event: FormEvent) {
     event.preventDefault();
     if (!pending) return;
-    if (conflictChoice === "CANCEL") {
+    const decision = decideAssignmentDialogSubmit({
+      existingCount: pending.existing.length,
+      conflictChoice,
+      forceStep,
+      tempFrom,
+      tempTo,
+      effectiveAt,
+    });
+    if (decision.type === "cancel") {
       setPending(null);
       return;
     }
-    const force = forceStep === "confirm";
-    if (forceStep === "warn") {
-      setError("Confirmez le forçage : cette attribution est incompatible.");
+    if (decision.type === "need-force-confirm" || decision.type === "error") {
+      setError(decision.reason);
       return;
     }
-    if (pending.existing.length === 0) {
-      await completeAssign(pending, "PRIMARY", force);
+    if (decision.type === "assign") {
+      await completeAssign(pending, decision.role, decision.force);
       return;
     }
     const primary = pending.existing.find((entry) => entry.role === "PRIMARY") ?? pending.existing[0];
-    if (conflictChoice === "CO_TEACHER") {
-      await completeAssign(pending, "CO_TEACHER", force);
-      return;
-    }
-    if (conflictChoice === "REPLACE" && primary) {
-      await completeAssign(pending, "PRIMARY", force, {
+    if (decision.type === "replace" && primary) {
+      await completeAssign(pending, "PRIMARY", decision.force, {
         action: "replace",
         outgoingTeacherId: primary.teacherId,
-        validFrom: effectiveAt,
+        validFrom: decision.effectiveAt,
       });
       return;
     }
-    if (conflictChoice === "TEMPORARY") {
-      if (!tempFrom || !tempTo) {
-        setError("Indiquez le début et la fin du remplacement temporaire.");
-        return;
-      }
-      await completeAssign(pending, "REPLACEMENT", force, {
+    if (decision.type === "temporary") {
+      await completeAssign(pending, "REPLACEMENT", decision.force, {
         action: "temporary",
-        validFrom: tempFrom,
-        validTo: tempTo,
+        validFrom: decision.validFrom,
+        validTo: decision.validTo,
       });
+    }
+  }
+
+  async function endAssignmentRow(assignmentId: string, teacherName: string) {
+    if (!window.confirm(`Retirer l’attribution de ${teacherName} ? Le cours, les notes et l’Agenda restent intactes.`)) {
+      return;
+    }
+    setError("");
+    try {
+      await postAction({ action: "end", assignmentId });
+      onNotice("Attribution terminée. Le cours et les données pédagogiques restent intactes.");
+      await refresh();
+    } catch (endError) {
+      setError(endError instanceof Error ? endError.message : "Impossible de terminer l’attribution.");
     }
   }
 
@@ -370,8 +396,9 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
                       entry.schoolYearId === currentClass.schoolYearId,
                   );
                   const assigned = course
-                    ? data.assignments.filter((entry) => entry.annualCourseId === course.id && isAssignmentActiveAt(entry))
+                    ? data.assignments.filter((entry) => entry.annualCourseId === course.id && assignmentLifecycle(entry) !== "ended")
                     : [];
+                  const branchReady = Boolean(branch.teachingType);
                   const candidates = preferredTeachersForBranch(
                     data.teachers.filter((entry) => entry.isActive && !entry.isArchived && entry.teachingType),
                     branch.teachingType,
@@ -405,8 +432,17 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
                               return (
                                 <li key={entry.id}>
                                   {teacherLabel(data.teachers, entry.teacherId)} — {roleLabel(entry.role)}
+                                  {" · "}{lifecycleLabel(assignmentLifecycle(entry))}
                                   {teacher && !teacher.teachingType ? " · Non configuré" : ""}
                                   {entry.overrideReason ? " · Type forcé" : ""}
+                                  {" "}
+                                  <button
+                                    type="button"
+                                    className="admin-link-button"
+                                    onClick={() => void endAssignmentRow(entry.id, teacherLabel(data.teachers, entry.teacherId))}
+                                  >
+                                    Retirer l’attribution
+                                  </button>
                                 </li>
                               );
                             })}
@@ -414,21 +450,27 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
                         )}
                       </td>
                       <td>
-                        <select
-                          defaultValue=""
-                          onChange={(event) => {
-                            const teacherId = event.target.value;
-                            event.target.value = "";
-                            if (teacherId) startAssign(currentClass, context, branch, teacherId);
-                          }}
-                        >
-                          <option value="">Choisir…</option>
-                          {candidates.map((teacher) => (
-                            <option key={teacher.id} value={teacher.id}>
-                              {teacher.displayName} ({typeBadge(teacher.teachingType, "teacher")})
-                            </option>
-                          ))}
-                        </select>
+                        {branchReady ? (
+                          <select
+                            defaultValue=""
+                            onChange={(event) => {
+                              const teacherId = event.target.value;
+                              event.target.value = "";
+                              if (teacherId) startAssign(currentClass, context, branch, teacherId);
+                            }}
+                          >
+                            <option value="">Choisir…</option>
+                            {candidates.map((teacher) => (
+                              <option key={teacher.id} value={teacher.id}>
+                                {teacher.displayName} ({typeBadge(teacher.teachingType, "teacher")})
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <p className="admin-error">
+                            Configurez d’abord le type de cette branche dans le Catalogue des branches.
+                          </p>
+                        )}
                       </td>
                     </tr>
                   );
@@ -461,7 +503,7 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
                         return (
                           <li key={entry.id}>
                             {schoolClass?.label ?? "Classe"} → {branch?.label ?? "Branche"} → {roleLabel(entry.role)}
-                            {isAssignmentActiveAt(entry) ? "" : " (terminée)"}
+                            {" · "}{lifecycleLabel(assignmentLifecycle(entry))}
                           </li>
                         );
                       })}

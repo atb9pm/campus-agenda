@@ -25,8 +25,13 @@ au cours, pas au professeur.
 - `AnnualCourse` unique (`schoolYearId` + `classId` + `contextId`).
 - `TeacherCourseAssignment` daté : Titulaire / Coenseignant / Remplaçant.
 - Un seul PRIMARY **par période** ; remplacements temporaires successifs non chevauchants autorisés.
+- Sémantique temporelle : `validFrom` inclusif, `validTo` inclusif, `endedAt` = clôture exclusive (un `endedAt` futur laisse l’attribution active).
+- Remplacement définitif planifié : titulaire actuel jusqu’à T, successeur à partir de T ; validations avant toute mutation.
 - Aucune nouvelle attribution sur un cours archivé (y compris remplacement temporaire).
 - Premier enseignant (y compris forçage TeachingType) toujours PRIMARY.
+- REPLACEMENT uniquement via l’action temporaire (validFrom + validTo).
+- Branche `teachingType` null : nouvelle attribution interdite.
+- Agenda : cours structuré archivé refuse la publication (pas de fallback Membership).
 - Audit `teacher_course_assignment_events`.
 - Migration additive `0019_annual_courses_teacher_assignments`
   (sans rejouer `teaching_type` déjà créé en 0018).

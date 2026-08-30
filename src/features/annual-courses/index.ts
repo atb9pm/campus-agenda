@@ -14,7 +14,7 @@ export {
   type TeacherCourseAssignmentInput,
   type TypeMismatchWarning,
 } from "./types.ts";
-export { validateAnnualCourseInput } from "./validation.ts";
+export { validateAnnualCourseInput, validateAttributionReferential } from "./validation.ts";
 export {
   assignmentsOverlap,
   endAssignment,
@@ -27,7 +27,16 @@ export {
   preferredTeachersForBranch,
   teacherIsAssignable,
 } from "./assignments.ts";
-export { studentMayAccessCourseNotes, teacherCanAccessAnnualCourse } from "./access.ts";
+export { studentMayAccessCourseNotes, teacherCanAccessAnnualCourse, isVerifiedAdminTeacher } from "./access.ts";
+export { decideAgendaPublishAccess } from "./agenda-access.ts";
+export {
+  decideAssignmentDialogSubmit,
+  assignmentLifecycle,
+  lifecycleLabel,
+  isClassEligibleForAssignment,
+  assignmentRoleForFirstTeacher,
+} from "./admin-assign-ui.ts";
+export { parseAssignmentDate, validateAssignmentPeriod, requireOverrideReason } from "./dates.ts";
 export { annualCourseDeleteBlockers, contextDeleteBlockers } from "./ctx-guards.ts";
 export {
   MEMBERSHIP_IS_LEGACY_FALLBACK,

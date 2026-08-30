@@ -17,11 +17,12 @@
  * Agenda
  * ------
  * Les publications restent identifiées par classroomId + subjectId.
- * Résolution quand elle est stable :
+ * Résolution quand elle est unique (jamais le premier homonyme) :
  *   nom de classe → school_classes
  *   nom de sujet  → branche → CTX (profession + année de formation)
  *   → AnnualCourse → TeacherCourseAssignment
- * Sinon : teacherCanPublish / membership inchangé.
+ * Si un AnnualCourse correspondant existe mais est archivé : publication refusée
+ * (pas de fallback Membership). Membership seulement si aucun cours fiable.
  *
  * Remplacement
  * ------------
@@ -38,10 +39,11 @@
  * TeacherSetupConfig (classes / branches affichées) est une préférence d'UI.
  * Ce n'est PAS une autorisation. Seul l'administrateur attribue un cours.
  *
- * validTo
- * -------
+ * validTo / endedAt
+ * -----------------
  * Membership : validTo exclusif (isMembershipActiveAt).
- * Assignment : validTo inclusif (isAssignmentActiveAt). Conserver la distinction.
+ * Assignment : validFrom inclusif, validTo inclusif, endedAt = clôture exclusive
+ * (inactif à partir de cet instant). Un endedAt futur laisse l'attribution active.
  */
 
 export const MEMBERSHIP_IS_LEGACY_FALLBACK = true as const;

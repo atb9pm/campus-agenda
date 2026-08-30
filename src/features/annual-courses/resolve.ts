@@ -10,9 +10,37 @@ export interface ResolvedPublicationCourse {
   course: AnnualCourse;
 }
 
+function uniqueMatch<T>(items: T[], predicate: (entry: T) => boolean): T | null {
+  const hits = items.filter(predicate);
+  return hits.length === 1 ? hits[0]! : null;
+}
+
+function resolveSchoolClass(
+  classes: SchoolClassRecord[],
+  classroomName: string,
+): SchoolClassRecord | null {
+  const normalized = normalizeClassCode(classroomName);
+  const byCode = uniqueMatch(classes, (entry) => normalizeClassCode(entry.code) === normalized);
+  if (byCode) return byCode;
+  return uniqueMatch(classes, (entry) => normalizeClassCode(entry.label) === normalized);
+}
+
+function resolveBranch(
+  branches: SchoolBranchRecord[],
+  subjectName: string,
+): SchoolBranchRecord | null {
+  const normalizedCode = normalizeClassCode(subjectName);
+  const byCode = uniqueMatch(branches, (entry) => normalizeClassCode(entry.code) === normalizedCode);
+  if (byCode) return byCode;
+  const normalizedLabel = subjectName.trim().toLowerCase();
+  return uniqueMatch(branches, (entry) => entry.label.trim().toLowerCase() === normalizedLabel);
+}
+
 /**
  * Résolution Agenda classe + branche → CTX → AnnualCourse.
- * Retourne null si la correspondance n'est pas assez stable (repli membership).
+ * Retourne null si la correspondance n'est pas unique (jamais le premier arbitraire).
+ * Un cours archivé est renvoyé tel quel : l'appelant refuse la publication
+ * au lieu de tomber sur Membership.
  */
 export function resolveAnnualCourseForPublication(options: {
   classroomName: string | null | undefined;
@@ -26,42 +54,31 @@ export function resolveAnnualCourseForPublication(options: {
   const subjectName = options.subjectName?.trim();
   if (!classroomName || !subjectName) return null;
 
-  const normalizedClass = normalizeClassCode(classroomName);
-  const schoolClass =
-    options.classes.find((entry) => normalizeClassCode(entry.code) === normalizedClass) ??
-    options.classes.find((entry) => normalizeClassCode(entry.label) === normalizedClass) ??
-    null;
+  const schoolClass = resolveSchoolClass(options.classes, classroomName);
   if (!schoolClass) return null;
   if (!schoolClass.schoolYearId || !schoolClass.professionId || schoolClass.trainingYear === null) {
     return null;
   }
 
-  const normalizedSubject = subjectName.toLowerCase();
-  const branch =
-    options.branches.find((entry) => entry.label.trim().toLowerCase() === normalizedSubject) ??
-    options.branches.find((entry) => normalizeClassCode(entry.code) === normalizeClassCode(subjectName)) ??
-    null;
+  const branch = resolveBranch(options.branches, subjectName);
   if (!branch) return null;
 
-  const context =
-    options.contexts.find(
-      (entry) =>
-        entry.professionId === schoolClass.professionId &&
-        entry.trainingYear === schoolClass.trainingYear &&
-        entry.branchId === branch.id &&
-        entry.isActive &&
-        !entry.isArchived,
-    ) ?? null;
+  const context = uniqueMatch(
+    options.contexts,
+    (entry) =>
+      entry.professionId === schoolClass.professionId &&
+      entry.trainingYear === schoolClass.trainingYear &&
+      entry.branchId === branch.id,
+  );
   if (!context) return null;
 
-  const course =
-    options.courses.find(
-      (entry) =>
-        entry.schoolYearId === schoolClass.schoolYearId &&
-        entry.classId === schoolClass.id &&
-        entry.contextId === context.id &&
-        !entry.isArchived,
-    ) ?? null;
+  const course = uniqueMatch(
+    options.courses,
+    (entry) =>
+      entry.schoolYearId === schoolClass.schoolYearId &&
+      entry.classId === schoolClass.id &&
+      entry.contextId === context.id,
+  );
   if (!course) return null;
 
   return { schoolClass, branch, context, course };
@@ -73,14 +90,13 @@ export function findCatalogContextForClassBranch(options: {
   contexts: PedagogicalContextRecord[];
 }): PedagogicalContextRecord | null {
   if (!options.schoolClass.professionId || options.schoolClass.trainingYear === null) return null;
-  return (
-    options.contexts.find(
-      (entry) =>
-        entry.professionId === options.schoolClass.professionId &&
-        entry.trainingYear === options.schoolClass.trainingYear &&
-        entry.branchId === options.branchId &&
-        entry.isActive &&
-        !entry.isArchived,
-    ) ?? null
+  return uniqueMatch(
+    options.contexts,
+    (entry) =>
+      entry.professionId === options.schoolClass.professionId &&
+      entry.trainingYear === options.schoolClass.trainingYear &&
+      entry.branchId === options.branchId &&
+      entry.isActive &&
+      !entry.isArchived,
   );
 }
