@@ -2,6 +2,30 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.18.0] — Classes : rattachement stable à l'année scolaire
+
+### Ajouté
+
+- Champ technique `schoolYearId` (nullable) sur les classes annuelles.
+- Migration SQLite additive `0016_class_school_year_id`.
+- Sélection d'une année scolaire réelle dans l'Administration (classes).
+- Validation serveur : ID inexistant refusé ; label synchronisé depuis `SchoolYearRecord`
+  lorsque l'ID est défini.
+- Backfill prudent au démarrage : rattachement uniquement si le `schoolYearLabel`
+  correspond à **exactement une** année scolaire.
+
+### Compatibilité
+
+- `schoolYearLabel` est conservé (affichage / legacy).
+- `schoolYearId = null` reste valide pour les classes historiques.
+- Une classe peut rester liée à une année **archivée** (historique préservé).
+- Les nouvelles classes ne proposent que les années `draft` et `active`.
+- Distinct de `trainingYear` (année de formation métier).
+
+### Non inclus
+
+- Parcours pédagogique, séances, projection annuelle, reports de jours fériés.
+
 ## [2.17.1] — Consolidation professions, classes et CTX
 
 ### Sécurisé

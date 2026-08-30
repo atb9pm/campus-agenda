@@ -11,7 +11,15 @@ import { trainingYearsForDuration } from "@campus/features/school-catalog";
 import { ProfessionsAdminPanel } from "./professions-admin-panel.tsx";
 import { SchoolYearAdminPanel } from "./school-year-admin-panel.tsx";
 import { TeacherAccountsPanel } from "./teacher-accounts-panel.tsx";
-import type { SchoolCalendarWeek } from "../../lib/api-client.ts";
+import {
+  fetchSchoolYears,
+  type SchoolCalendarWeek,
+  type SchoolYearSummary,
+} from "../../lib/api-client.ts";
+import {
+  listSelectableSchoolYearsForClassEdit,
+  listSelectableSchoolYearsForNewClass,
+} from "@campus/features/school-catalog";
 
 type AdminTab = "classes" | "branches" | "professions" | "teachers" | "access" | "weeks";
 
@@ -79,6 +87,8 @@ export function AdministrationPanel({
   const [classes, setClasses] = useState<SchoolClassRecord[]>([]);
   const [branches, setBranches] = useState<SchoolBranchRecord[]>([]);
   const [professions, setProfessions] = useState<SchoolProfessionRecord[]>([]);
+  const [schoolYears, setSchoolYears] = useState<SchoolYearSummary[]>([]);
+  const [classSchoolYearId, setClassSchoolYearId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [classCode, setClassCode] = useState("");
@@ -91,10 +101,11 @@ export function AdministrationPanel({
     setLoading(true);
     setError("");
     try {
-      const catalog = await fetchCatalog(false);
+      const [catalog, years] = await Promise.all([fetchCatalog(false), fetchSchoolYears()]);
       setClasses(catalog.classes);
       setBranches(catalog.branches);
       setProfessions(catalog.professions);
+      setSchoolYears(years);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Chargement impossible.");
     } finally {
@@ -139,6 +150,7 @@ export function AdministrationPanel({
         label: classLabel || classCode,
         sortOrder: classes.length + 1,
         isActive: true,
+        schoolYearId: classSchoolYearId || null,
       }),
     });
     const payload = await response.json() as { ok: boolean; reason?: string };
@@ -148,6 +160,7 @@ export function AdministrationPanel({
     }
     setClassCode("");
     setClassLabel("");
+    setClassSchoolYearId("");
     onNotice("Classe ajoutée au référentiel.");
     await refresh();
   }
@@ -210,6 +223,23 @@ export function AdministrationPanel({
     onNotice(`Classe ${entry.code} mise à jour.`);
     await refresh();
   }
+  async function patchClassSchoolYear(entry: SchoolClassRecord, schoolYearId: string | null) {
+    setError("");
+    const response = await fetch(`/api/admin/catalog/${entry.id}`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "class", schoolYearId }),
+    });
+    const payload = await response.json() as { ok: boolean; reason?: string };
+    if (!response.ok || !payload.ok) {
+      setError(payload.reason ?? "Mise à jour impossible.");
+      return;
+    }
+    onNotice(`Année scolaire de ${entry.code} mise à jour.`);
+    await refresh();
+  }
+
 
   async function patchBranch(
     entry: SchoolBranchRecord,
@@ -284,7 +314,7 @@ export function AdministrationPanel({
             <div>
               <h3>Paramétrage des classes</h3>
               <p>
-                Liste officielle. Rattachez chaque classe à une profession et une année de formation.
+                Liste officielle. Rattachez chaque classe à une année scolaire (ID stable), une profession et une année de formation.
                 Une classe inutilisée peut être désactivée (jamais supprimée).
               </p>
             </div>
@@ -297,6 +327,20 @@ export function AdministrationPanel({
             <label>
               Libellé
               <input value={classLabel} onChange={(event) => setClassLabel(event.target.value)} placeholder="MA2" />
+            </label>
+            <label>
+              Année scolaire
+              <select
+                value={classSchoolYearId}
+                onChange={(event) => setClassSchoolYearId(event.target.value)}
+              >
+                <option value="">Non renseignée (legacy)</option>
+                {listSelectableSchoolYearsForNewClass(schoolYears).map((year) => (
+                  <option key={year.id} value={year.id}>
+                    {year.label} ({year.status === "active" ? "active" : "brouillon"})
+                  </option>
+                ))}
+              </select>
             </label>
             <button type="submit" className="workspace-action">Ajouter</button>
           </form>
@@ -321,6 +365,25 @@ export function AdministrationPanel({
                   <strong>{entry.code}</strong>
                   <span>{entry.label}</span>
                   <div className="admin-class-pedagogy">
+                    <label>
+                      Année scolaire
+                      <select
+                        value={entry.schoolYearId ?? ""}
+                        onChange={(event) => {
+                          void patchClassSchoolYear(entry, event.target.value || null);
+                        }}
+                      >
+                        <option value="">Non renseignée (legacy)</option>
+                        {listSelectableSchoolYearsForClassEdit(schoolYears, entry.schoolYearId).map((year) => (
+                          <option key={year.id} value={year.id}>
+                            {year.label}
+                            {year.status === "archived" ? " (archivée)" : ""}
+                            {year.status === "active" ? " (active)" : ""}
+                            {year.status === "draft" ? " (brouillon)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <label>
                       Profession
                       <select

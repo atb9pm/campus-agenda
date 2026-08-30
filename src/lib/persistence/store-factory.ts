@@ -81,12 +81,14 @@ async function prepareSqlDatabase(
   }
   const weeks = await hydrateActiveSchoolCalendar(db);
   setActiveSchoolWeekEntries(weeks);
+  const schoolYearStore = new SqlSchoolYearStore(db);
   const schoolCatalogStore = new SqlSchoolCatalogStore(db);
   await schoolCatalogStore.ensureSeeded();
+  await schoolCatalogStore.applySchoolYearBackfill(await schoolYearStore.listSchoolYears());
   const teacherAccountStore = new SqlTeacherAccountStore(db);
   await bootstrapTeacherAccounts(teacherAccountStore);
   return {
-    schoolYearStore: new SqlSchoolYearStore(db),
+    schoolYearStore,
     schoolCatalogStore,
     teacherAccountStore,
     teacherSetupStore: new SqlTeacherSetupStore(db),
@@ -103,12 +105,15 @@ async function prepareMemoryStores(): Promise<{
 }> {
   const weeks = await hydrateMemorySchoolCalendar();
   setActiveSchoolWeekEntries(weeks);
+  const schoolYearStore = new MemorySchoolYearStore();
+  await schoolYearStore.seedDefaultActiveYearIfEmpty();
   const schoolCatalogStore = getMemorySchoolCatalogStore();
   await schoolCatalogStore.ensureSeeded();
+  await schoolCatalogStore.applySchoolYearBackfill(await schoolYearStore.listSchoolYears());
   const teacherAccountStore = getMemoryTeacherAccountStore();
   await bootstrapTeacherAccounts(teacherAccountStore);
   return {
-    schoolYearStore: new MemorySchoolYearStore(),
+    schoolYearStore,
     schoolCatalogStore,
     teacherAccountStore,
     teacherSetupStore: getMemoryTeacherSetupStore(),

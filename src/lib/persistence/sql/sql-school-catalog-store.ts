@@ -40,6 +40,7 @@ function mapClass(row: {
   label: string;
   sort_order: number;
   is_active: number;
+  school_year_id: string | null;
   school_year_label: string | null;
   profession_id: string | null;
   training_year: number | null;
@@ -50,6 +51,7 @@ function mapClass(row: {
     label: row.label,
     sortOrder: row.sort_order,
     isActive: Boolean(row.is_active),
+    schoolYearId: row.school_year_id ?? null,
     schoolYearLabel: row.school_year_label,
     professionId: row.profession_id ?? null,
     trainingYear: row.training_year ?? null,
@@ -219,8 +221,8 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         await this.db
           .prepare(
             `INSERT INTO school_classes
-               (id, code, label, sort_order, is_active, school_year_label, profession_id, training_year)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+               (id, code, label, sort_order, is_active, school_year_id, school_year_label, profession_id, training_year)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             entry.id,
@@ -228,6 +230,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
             entry.label,
             entry.sortOrder,
             entry.isActive ? 1 : 0,
+            entry.schoolYearId,
             entry.schoolYearLabel,
             entry.professionId,
             entry.trainingYear,
@@ -288,7 +291,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
     await this.ensureSeeded();
     const rows = await this.db
       .prepare(
-        `SELECT id, code, label, sort_order, is_active, school_year_label,
+        `SELECT id, code, label, sort_order, is_active, school_year_id, school_year_label,
                 profession_id, training_year
          FROM school_classes ORDER BY sort_order ASC, code ASC`,
       )
@@ -299,6 +302,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         label: string;
         sort_order: number;
         is_active: number;
+        school_year_id: string | null;
         school_year_label: string | null;
         profession_id: string | null;
         training_year: number | null;
@@ -385,6 +389,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       label: input.label.trim() || normalizeClassCode(input.code),
       sortOrder: input.sortOrder ?? Number(count?.count ?? 0) + 1,
       isActive: input.isActive ?? true,
+      schoolYearId: input.schoolYearId ?? null,
       schoolYearLabel: input.schoolYearLabel ?? null,
       professionId: attachment.value.professionId,
       trainingYear: attachment.value.trainingYear,
@@ -392,8 +397,8 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
     await this.db
       .prepare(
         `INSERT INTO school_classes
-           (id, code, label, sort_order, is_active, school_year_label, profession_id, training_year)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, code, label, sort_order, is_active, school_year_id, school_year_label, profession_id, training_year)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         record.id,
@@ -401,6 +406,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         record.label,
         record.sortOrder,
         record.isActive ? 1 : 0,
+        record.schoolYearId,
         record.schoolYearLabel,
         record.professionId,
         record.trainingYear,
@@ -425,6 +431,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       label: patch.label !== undefined ? patch.label.trim() : current.label,
       sortOrder: patch.sortOrder ?? current.sortOrder,
       isActive: patch.isActive ?? current.isActive,
+      schoolYearId: patch.schoolYearId !== undefined ? patch.schoolYearId : current.schoolYearId,
       schoolYearLabel:
         patch.schoolYearLabel !== undefined ? patch.schoolYearLabel : current.schoolYearLabel,
       professionId: attachment.value.professionId,
@@ -433,7 +440,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
     await this.db
       .prepare(
         `UPDATE school_classes
-         SET code = ?, label = ?, sort_order = ?, is_active = ?, school_year_label = ?,
+         SET code = ?, label = ?, sort_order = ?, is_active = ?, school_year_id = ?, school_year_label = ?,
              profession_id = ?, training_year = ?
          WHERE id = ?`,
       )
@@ -442,6 +449,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         next.label,
         next.sortOrder,
         next.isActive ? 1 : 0,
+        next.schoolYearId,
         next.schoolYearLabel,
         next.professionId,
         next.trainingYear,
@@ -449,6 +457,31 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       )
       .run();
     return next;
+  }
+
+
+  async applySchoolYearBackfill(
+    years: Array<{ id: string; label: string }>,
+  ): Promise<number> {
+    await this.ensureSeeded();
+    let updated = 0;
+    const classes = await this.listClasses();
+    for (const entry of classes) {
+      if (entry.schoolYearId) continue;
+      const matches = years.filter((year) => year.label.trim() === (entry.schoolYearLabel ?? "").trim());
+      if (matches.length !== 1) continue;
+      const year = matches[0]!;
+      await this.db
+        .prepare(
+          `UPDATE school_classes
+           SET school_year_id = ?, school_year_label = ?
+           WHERE id = ? AND school_year_id IS NULL`,
+        )
+        .bind(year.id, year.label, entry.id)
+        .run();
+      updated += 1;
+    }
+    return updated;
   }
 
   async createBranch(input: SchoolBranchInput): Promise<SchoolBranchRecord> {

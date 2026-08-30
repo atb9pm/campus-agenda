@@ -25,6 +25,7 @@ export function buildDefaultSchoolClasses(): SchoolClassRecord[] {
     label: code,
     sortOrder: index + 1,
     isActive: true,
+    schoolYearId: null,
     schoolYearLabel: "2026-2027",
     professionId: null,
     trainingYear: null,
