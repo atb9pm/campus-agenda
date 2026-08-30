@@ -25,8 +25,10 @@
  *
  * Remplacement
  * ------------
- * replaceTeacherMemberships (src/features/memberships/replacement.ts) continue
- * de servir le flux legacy « Gestion des accès ».
+ * replaceTeacherMemberships (src/features/memberships/replacement.ts) reste
+ * disponible pour le repli Membership. L’UI d’administration (#48) n’a plus
+ * d’onglet « Gestion des accès » : les attributions structurées passent par
+ * l’onglet « Attributions des cours ».
  * replaceTeacherOnAnnualCourse adapte la même idée (clôturer + créer) au cours
  * annuel, sans copier ni supprimer de données pédagogiques.
  * Les deux opérations restent distinctes (espaces d'IDs classroom ≠ school_class).

@@ -15,6 +15,7 @@ import {
   trainingYearsForDuration,
 } from "@campus/features/school-catalog";
 import { BRANCH_TEACHING_TYPE_LABELS, type TeachingType } from "@campus/features/teaching-types/index.ts";
+import { AnnualCoursesAdminPanel } from "./annual-courses-admin-panel.tsx";
 import { ProfessionsAdminPanel } from "./professions-admin-panel.tsx";
 import { SchoolYearAdminPanel } from "./school-year-admin-panel.tsx";
 import { TeacherAccountsPanel } from "./teacher-accounts-panel.tsx";
@@ -24,7 +25,7 @@ import {
   type SchoolYearSummary,
 } from "../../lib/api-client.ts";
 
-type AdminTab = "classes" | "branches" | "professions" | "teachers" | "weeks";
+type AdminTab = "classes" | "branches" | "professions" | "teachers" | "assignments" | "weeks";
 
 interface AdministrationPanelProps {
   currentTeacherId: string;
@@ -49,6 +50,7 @@ const TAB_LABELS: Record<AdminTab, string> = {
   branches: "Catalogue des branches",
   professions: "Professions & plan de formation",
   teachers: "Enseignants",
+  assignments: "Attributions des cours",
   weeks: "Plan des semaines A/B",
 };
 
@@ -756,6 +758,10 @@ export function AdministrationPanel({
 
       {tab === "teachers" ? (
         <TeacherAccountsPanel currentTeacherId={currentTeacherId} onNotice={onNotice} />
+      ) : null}
+
+      {tab === "assignments" ? (
+        <AnnualCoursesAdminPanel onNotice={onNotice} />
       ) : null}
 
       {tab === "weeks" ? (

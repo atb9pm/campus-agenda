@@ -1,9 +1,6 @@
--- Cours annuels, attributions enseignants, types d'enseignement, garde-fou CTX.
--- Migration additive : aucune suppression de colonnes ni de données existantes.
-
-ALTER TABLE teachers ADD COLUMN teaching_type TEXT;
-
-ALTER TABLE school_branches ADD COLUMN teaching_type TEXT;
+-- Cours annuels et attributions enseignants.
+-- Additive après 0018_admin_referential_coherence (teaching_type déjà présent).
+-- Aucune suppression de colonnes ni de données existantes.
 
 CREATE TABLE IF NOT EXISTS annual_courses (
   id TEXT PRIMARY KEY,
@@ -23,7 +20,7 @@ CREATE TABLE IF NOT EXISTS teacher_course_assignments (
   id TEXT PRIMARY KEY,
   annual_course_id TEXT NOT NULL,
   teacher_id TEXT NOT NULL,
-  role TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('PRIMARY', 'CO_TEACHER', 'REPLACEMENT')),
   valid_from TEXT NOT NULL,
   valid_to TEXT,
   created_by_admin_id TEXT NOT NULL,
@@ -70,6 +67,9 @@ SET annual_course_id = (
     AND ac.context_id = annual_course_notes.context_id
 )
 WHERE annual_course_id IS NULL;
+
+-- 0018 a déjà créé ce trigger (parcours + notes). On l'étend aux AnnualCourse.
+DROP TRIGGER IF EXISTS pedagogical_contexts_delete_guard;
 
 CREATE TRIGGER IF NOT EXISTS pedagogical_contexts_delete_guard
 BEFORE DELETE ON pedagogical_contexts

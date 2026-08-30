@@ -676,7 +676,7 @@ test("Agenda — résolution AnnualCourse uniquement si correspondance stable", 
   assert.equal(legacy, null);
 });
 
-test("SQLite — migration 0018, unicité, trigger CTX", async () => {
+test("SQLite — migration 0019, unicité, trigger CTX", async () => {
   const db = createNodeSqliteDatabase(":memory:");
   await applyMigrations(db);
   const tables = await db

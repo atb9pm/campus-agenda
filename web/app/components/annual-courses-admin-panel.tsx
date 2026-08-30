@@ -8,7 +8,7 @@ import type { PedagogicalContextRecord, SchoolProfessionRecord } from "@campus/f
 import type { SchoolBranchRecord, SchoolClassRecord } from "@campus/features/school-catalog";
 import {
   BRANCH_TEACHING_TYPE_LABELS,
-  TEACHING_TYPE_LABELS,
+  TEACHER_TEACHING_TYPE_LABELS,
   type TeachingType,
 } from "@campus/features/teaching-types/index.ts";
 
@@ -58,8 +58,8 @@ function roleLabel(role: AssignmentRole): string {
 }
 
 function typeBadge(type: TeachingType | null, kind: "teacher" | "branch"): string {
-  if (!type) return "Non configuré";
-  return kind === "teacher" ? TEACHING_TYPE_LABELS[type] : BRANCH_TEACHING_TYPE_LABELS[type];
+  if (!type) return "Type à configurer";
+  return kind === "teacher" ? TEACHER_TEACHING_TYPE_LABELS[type] : BRANCH_TEACHING_TYPE_LABELS[type];
 }
 
 export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelProps) {
@@ -109,6 +109,7 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
       (entry) =>
         entry.professionId === currentClass.professionId &&
         entry.trainingYear === currentClass.trainingYear &&
+        entry.isActive &&
         !entry.isArchived,
     );
   }, [data, currentClass]);
@@ -279,7 +280,7 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
     <div className="admin-panel-block annual-courses-admin">
       <header className="config-section-header">
         <div>
-          <h3>Cours annuels et attributions</h3>
+          <h3>Attributions des cours</h3>
           <p>
             Le cours (année + classe + CTX) porte les données. Les enseignants reçoivent un droit,
             jamais la propriété. Seul l’administrateur attribue.
@@ -469,7 +470,7 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
             <p className="admin-error" role="alert">
               Cette branche est {pending.branch.teachingType === "TECHNICAL" ? "technique" : "générale"} mais
               l’enseignant sélectionné est enregistré comme{" "}
-              {TEACHING_TYPE_LABELS[(data.teachers.find((entry) => entry.id === pending.teacherId)?.teachingType ?? "GENERAL") as TeachingType]}.
+              {TEACHER_TEACHING_TYPE_LABELS[(data.teachers.find((entry) => entry.id === pending.teacherId)?.teachingType ?? "GENERAL") as TeachingType]}.
             </p>
           ) : null}
 
