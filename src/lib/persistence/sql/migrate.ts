@@ -49,6 +49,7 @@ export const SQL_MIGRATION_FILES = [
   "0017_pedagogical_path.sql",
   "0018_admin_referential_coherence.sql",
   "0019_annual_courses_teacher_assignments.sql",
+  "0020_school_class_structure.sql",
 ] as const;
 
 export async function applyMigrations(

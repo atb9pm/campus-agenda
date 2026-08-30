@@ -491,6 +491,28 @@ button { color: inherit; }
 .admin-profession-assign label { display: grid; gap: 4px; color: #8793a9; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .admin-profession-assign select { min-width: 180px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); background: #fff; font-size: 11px; }
 .admin-profession-assign button:disabled { opacity: .45; cursor: not-allowed; }
+.admin-training-plan { display: grid; gap: 14px; }
+.admin-training-plan-header { padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: #f8fafc; }
+.class-wizard { display: grid; gap: 16px; margin: 0 0 22px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 12px; background: #fbfcfe; }
+.class-wizard h3 { margin: 0; color: var(--navy); font-size: 16px; }
+.class-wizard-lead, .class-wizard-hint, .class-wizard-plan { margin: 0; color: #516582; font-size: 12px; }
+.class-wizard-section { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.class-wizard-section h4 { margin: 0; color: var(--navy); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+.class-wizard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.class-wizard-grid label, .class-wizard-groups label { display: grid; gap: 4px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8793a9; }
+.class-wizard-grid select, .class-wizard-groups input { padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); font-size: 11px; background: #fff; }
+.class-wizard-org { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.class-wizard-org label { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 10px; background: #fff; cursor: pointer; }
+.class-wizard-org label.is-selected { border-color: var(--blue); background: #f0f7ff; }
+.class-wizard-org span { display: grid; gap: 2px; }
+.class-wizard-org strong { color: var(--navy); font-size: 12px; }
+.class-wizard-org em { color: #667085; font-size: 11px; font-style: normal; }
+.class-wizard-groups { display: grid; gap: 10px; }
+.class-wizard-group-list { display: flex; flex-wrap: wrap; gap: 10px; }
+.class-wizard-preview { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.class-wizard-preview li { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.class-wizard-preview strong { color: var(--navy); font-size: 13px; }
+.class-wizard-preview span { color: #516582; font-size: 11px; }
 .admin-planned-branches { margin: 8px 0 0; color: #344054; font-size: 12px; }
 .admin-planned-branches strong { color: var(--navy); }
 .admin-link-button {

@@ -29,6 +29,7 @@ export function buildDefaultSchoolClasses(): SchoolClassRecord[] {
     schoolYearLabel: "2026-2027",
     professionId: null,
     trainingYear: null,
+    parallelCode: null,
   }));
 }
 

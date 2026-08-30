@@ -2,6 +2,48 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.22.0] — Professions, plans et classes structurées
+
+### Architecture
+
+Le référentiel administratif est clarifié. Le CTX reste inchangé
+(`professionId` + `trainingYear` + `branchId`). Les classes parallèles
+partagent le même CTX ; le groupe A/B/C appartient à la classe.
+
+```
+Catalogue des branches
+→ Professions (durée + abréviation métier)
+→ Plans de formation (CTX)
+→ Création structurée des classes
+→ AnnualCourse (créé à l’attribution, pas à la création de classe)
+```
+
+Prépare la récupération N → N+1 (`CTX + parallelCode`) sans l’implémenter.
+
+### Ajouté
+
+- Onglets séparés **Professions** et **Plans de formation**.
+- `SchoolProfessionRecord.classCodePrefix` (nullable pour le legacy).
+- `SchoolClassRecord.parallelCode` (nullable pour le legacy / classe unique).
+- Assistant de création de classes : année scolaire, profession, année,
+  organisation unique ou parallèle, aperçu, codes générés (`MMA1`, `MMA1A`).
+- Création multiple validée côté serveur (`createStructuredClasses`).
+- Unicité annuelle du code : `schoolYearId + code` (plus d’unicité globale).
+- Résolution Agenda contextualisée par `schoolYearId`.
+- Migration `0020_school_class_structure.sql`.
+
+### Compatibilité
+
+- Professions et classes existantes : prefix / parallelCode = NULL.
+- Les CTX existants (IDs et `adminCode`) sont conservés.
+- Modifier l’abréviation ne renomme pas les classes déjà créées.
+- Les classes legacy restent lisibles.
+
+### Non inclus
+
+- Moteur de récupération N → N+1.
+- Moteur séance → date.
+
 ## [2.21.0] — Cours annuels et attribution sécurisée des enseignants
 
 ### Architecture

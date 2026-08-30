@@ -3,7 +3,7 @@ import type {
   PedagogyMutationResult,
   SchoolProfessionRecord,
 } from "./profession-types.ts";
-import { normalizeClassCode } from "./queries.ts";
+import { resolveSchoolClass } from "./class-resolve.ts";
 import type { SchoolBranchRecord, SchoolClassRecord } from "./types.ts";
 
 export function trainingYearsForDuration(durationYears: number): number[] {
@@ -233,15 +233,16 @@ export function evaluateAgendaBranchForClass(options: {
   classes: SchoolClassRecord[];
   branches: SchoolBranchRecord[];
   contexts: PedagogicalContextRecord[];
+  schoolYearId?: string | null;
 }): PedagogyMutationResult<true> {
   const classroomName = options.classroomName?.trim();
   if (!classroomName) return { ok: true, value: true };
 
-  const normalized = normalizeClassCode(classroomName);
-  const schoolClass =
-    options.classes.find((entry) => normalizeClassCode(entry.code) === normalized) ??
-    options.classes.find((entry) => normalizeClassCode(entry.label) === normalized) ??
-    null;
+  const schoolClass = resolveSchoolClass({
+    classroomName,
+    classes: options.classes,
+    schoolYearId: options.schoolYearId,
+  });
 
   if (!schoolClass) return { ok: true, value: true };
   if (!schoolClass.professionId || schoolClass.trainingYear === null) {

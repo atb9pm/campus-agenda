@@ -102,6 +102,7 @@ export async function authorizeTeacherAgendaPublish(
   classroomId: string,
   subjectId: string,
   store: { teacherCanPublish(teacherId: string, classroomId: string, subjectId: string): Promise<boolean> },
+  schoolYearId?: string | null,
 ): Promise<boolean> {
   const names = await resolveClassroomSubjectNames(classroomId, subjectId);
   const catalog = await getSchoolCatalogStore();
@@ -121,6 +122,7 @@ export async function authorizeTeacherAgendaPublish(
     branches,
     contexts,
     courses,
+    schoolYearId,
   });
   const legacyMembershipAllows = resolved
     ? false
@@ -162,6 +164,7 @@ export async function assertAgendaItemMutable(item: PrototypeAgendaItem | undefi
 export async function assertAgendaPublicationBranchAllowed(
   classroomId: string,
   subjectId: string,
+  schoolYearId?: string | null,
 ): Promise<Response | null> {
   const names = await resolveClassroomSubjectNames(classroomId, subjectId);
   const catalog = await getSchoolCatalogStore();
@@ -177,6 +180,7 @@ export async function assertAgendaPublicationBranchAllowed(
     classes,
     branches,
     contexts,
+    schoolYearId,
   });
   if (!result.ok) {
     return forbiddenResponse(result.reason);

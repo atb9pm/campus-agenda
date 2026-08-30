@@ -45,6 +45,7 @@ export {
   ASSIGNMENT_VALID_TO_IS_INCLUSIVE,
 } from "./compatibility.ts";
 export { resolveAnnualCourseForPublication, findCatalogContextForClassBranch } from "./resolve.ts";
+export { resolveSchoolClass } from "../school-catalog/class-resolve.ts";
 export {
   replaceTeacherOnAnnualCourse,
   buildTemporaryReplacement,

@@ -41,6 +41,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       existing.classroomId,
       body.subjectId ?? existing.subjectId,
       auth.store!,
+      existing.schoolYearId,
     ))
   ) {
     return forbiddenResponse("Branche non autorisée.");
@@ -50,6 +51,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const branchGuard = await assertAgendaPublicationBranchAllowed(
       existing.classroomId,
       body.subjectId ?? existing.subjectId,
+      existing.schoolYearId,
     );
     if (branchGuard) return branchGuard;
   }

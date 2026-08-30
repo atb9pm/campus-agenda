@@ -56,11 +56,12 @@ export async function POST(request: Request) {
     return jsonResponse({ ok: false, reason: "Données de publication invalides." }, { status: 400 });
   }
 
-  if (!(await authorizeTeacherAgendaPublish(auth.session!.teacherId, classroomId, subjectId, auth.store!))) {
+  const activeSchoolYearId = await getActiveSchoolYearId();
+  if (!(await authorizeTeacherAgendaPublish(auth.session!.teacherId, classroomId, subjectId, auth.store!, activeSchoolYearId))) {
     return forbiddenResponse("Vous ne pouvez pas publier dans cette branche.");
   }
 
-  const branchGuard = await assertAgendaPublicationBranchAllowed(classroomId, subjectId);
+  const branchGuard = await assertAgendaPublicationBranchAllowed(classroomId, subjectId, activeSchoolYearId);
   if (branchGuard) return branchGuard;
 
   const schoolWeekNumber = Number(body.schoolWeekNumber ?? 0);

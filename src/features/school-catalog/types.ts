@@ -15,6 +15,11 @@ export interface SchoolClassRecord {
   professionId: string | null;
   /** Année de formation 1..N (null = à configurer / legacy). Distinct de `schoolYearId`. */
   trainingYear: number | null;
+  /**
+   * Groupe parallèle A/B/C. Null = classe unique ou legacy non renseigné.
+   * Ne jamais déduire du dernier caractère du code historique.
+   */
+  parallelCode: string | null;
 }
 
 export interface SchoolBranchRecord {
@@ -44,6 +49,7 @@ export interface SchoolClassInput {
   schoolYearLabel?: string | null;
   professionId?: string | null;
   trainingYear?: number | null;
+  parallelCode?: string | null;
 }
 
 export interface SchoolBranchInput {
