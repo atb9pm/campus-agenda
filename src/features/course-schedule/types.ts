@@ -31,7 +31,17 @@ export interface CourseScheduleSlot {
   periodStart: number;
   periodEnd: number;
   weekKind: CourseWeekKind;
+  /**
+   * Réservé au futur support des changements d’horaire en cours d’année.
+   * Non utilisé pour les conflits ni l’affichage en 2.25.0.
+   * Les créations normales restent null.
+   */
   validFrom: string | null;
+  /**
+   * Réservé au futur support des changements d’horaire en cours d’année.
+   * Non utilisé pour les conflits ni l’affichage en 2.25.0.
+   * Les créations normales restent null.
+   */
   validTo: string | null;
   createdAt: string;
   updatedAt: string;
@@ -43,7 +53,9 @@ export interface CourseScheduleSlotInput {
   periodStart: number;
   periodEnd: number;
   weekKind: CourseWeekKind;
+  /** Réservé au futur support des changements d’horaire en cours d’année. */
   validFrom?: string | null;
+  /** Réservé au futur support des changements d’horaire en cours d’année. */
   validTo?: string | null;
 }
 

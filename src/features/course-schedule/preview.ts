@@ -5,6 +5,7 @@ import type { PedagogicalContextRecord, SchoolProfessionRecord } from "../school
 import type { SchoolBranchRecord, SchoolClassRecord } from "../school-catalog/types.ts";
 import type { TeacherAccountRecord } from "../teacher-accounts/types.ts";
 import { ALL_DAY_PERIODS, formatPeriodRange, LUNCH_PERIOD } from "./periods.ts";
+import { filterSlotsForScheduleView } from "./operational.ts";
 import {
   COURSE_WEEKDAY_LABELS,
   COURSE_WEEK_KIND_LABELS,
@@ -137,11 +138,21 @@ export function buildClassSchedulePreview(options: {
   schoolClass: SchoolClassRecord;
   profession?: SchoolProfessionRecord | null;
   slots: CourseScheduleSlot[];
+  courses?: Array<Pick<AnnualCourse, "id" | "isArchived">>;
+  yearStatus?: string | null;
 }): ClassSchedulePreview {
-  const days = usedWeekdays(options.slots).map((dayOfWeek) => ({
+  const slots =
+    options.courses
+      ? filterSlotsForScheduleView({
+          slots: options.slots,
+          courses: options.courses,
+          yearStatus: options.yearStatus,
+        })
+      : options.slots;
+  const days = usedWeekdays(slots).map((dayOfWeek) => ({
     dayOfWeek,
     dayLabel: COURSE_WEEKDAY_LABELS[dayOfWeek],
-    blocks: buildClassDayBlocks(options.slots, dayOfWeek),
+    blocks: buildClassDayBlocks(slots, dayOfWeek),
   }));
   const training = classDisplayTrainingYearLabel(options.schoolClass.trainingYear);
   return {
@@ -184,8 +195,14 @@ export function buildGlobalDayGrid(options: {
   classes: SchoolClassRecord[];
   contexts: PedagogicalContextRecord[];
   branches: SchoolBranchRecord[];
+  yearStatus?: string | null;
 }): GlobalDayGrid {
-  const applicable = options.slots.filter(
+  const viewSlots = filterSlotsForScheduleView({
+    slots: options.slots,
+    courses: options.courses,
+    yearStatus: options.yearStatus,
+  });
+  const applicable = viewSlots.filter(
     (slot) => slot.dayOfWeek === options.dayOfWeek && slotAppliesToWeekView(slot, options.weekKind),
   );
   const courseById = new Map(options.courses.map((course) => [course.id, course]));

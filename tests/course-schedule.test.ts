@@ -5,6 +5,10 @@ import {
   archiveAnnualCourse,
   assignTeacherToCourse,
   createAnnualCourse,
+  deleteAnnualCourse,
+  ANNUAL_COURSE_SCHEDULE_DELETE_REASON,
+  ANNUAL_COURSE_USED_DELETE_REASON,
+  annualCourseDeleteBlockers,
   type AnnualCourse,
   type AnnualCourseServiceDeps,
 } from "../src/features/annual-courses/index.ts";
@@ -21,7 +25,9 @@ import {
   buildGlobalDayGrid,
   createCourseScheduleSlot,
   deleteCourseScheduleSlot,
+  filterSlotsForScheduleView,
   formatTeachersLine,
+  isOperationalAnnualCourse,
   isTeachablePeriod,
   listClassScheduleSlots,
   rangeCrossesLunch,
@@ -224,6 +230,7 @@ async function makeWorld(kind: StoreKind, extraYears: SchoolYearRecord[] = []): 
     years: yearStore,
     teachers: teachersStore,
     notes,
+    schedules,
   };
   const scheduleDeps: CourseScheduleServiceDeps = {
     schedules,
@@ -695,4 +702,216 @@ test("titulaires et coenseignants affichés, jamais écrits par l’horaire", as
   );
   assert.match(line, /François — titulaire/i);
   assert.match(line, /Bernard — coenseignant/i);
+});
+
+test("blocker — créneau prioritaire sur attributions/notes", () => {
+  assert.equal(isOperationalAnnualCourse({ isArchived: false }), true);
+  assert.equal(isOperationalAnnualCourse({ isArchived: true }), false);
+  assert.equal(
+    annualCourseDeleteBlockers({ assignmentCount: 0, noteCount: 0, scheduleSlotCount: 1 }),
+    ANNUAL_COURSE_SCHEDULE_DELETE_REASON,
+  );
+  assert.equal(
+    annualCourseDeleteBlockers({ assignmentCount: 1, noteCount: 0, scheduleSlotCount: 0 }),
+    ANNUAL_COURSE_USED_DELETE_REASON,
+  );
+});
+
+testBoth("A — AnnualCourse + créneau → suppression refusée 409 USED", async (world) => {
+  const course = await courseFor(world, world.classA, world.moteurCtx);
+  const created = await createCourseScheduleSlot(world.scheduleDeps, slotInput(course.id));
+  assert.equal(created.ok, true);
+  const deleted = await deleteAnnualCourse(world.courseDeps, course.id);
+  assert.equal(deleted.ok, false);
+  if (deleted.ok) return;
+  assert.equal(deleted.status, 409);
+  assert.equal(deleted.code, "USED");
+  assert.equal(deleted.reason, ANNUAL_COURSE_SCHEDULE_DELETE_REASON);
+  assert.equal(await world.courseDeps.courses.getCourse(course.id) !== null, true);
+});
+
+testBoth("B — créneau supprimé → AnnualCourse supprimable", async (world) => {
+  const course = await courseFor(world, world.classA, world.moteurCtx);
+  const created = await createCourseScheduleSlot(world.scheduleDeps, slotInput(course.id));
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+  const removed = await deleteCourseScheduleSlot(world.scheduleDeps, created.value.id);
+  assert.equal(removed.ok, true);
+  const deleted = await deleteAnnualCourse(world.courseDeps, course.id);
+  assert.equal(deleted.ok, true);
+  assert.equal(await world.courseDeps.courses.getCourse(course.id), null);
+});
+
+testBoth("attributions continuent de bloquer la suppression", async (world) => {
+  const course = await courseFor(world, world.classA, world.moteurCtx);
+  const assigned = await assignTeacherToCourse(world.courseDeps, {
+    annualCourseId: course.id,
+    teacherId: world.francois.id,
+    role: "PRIMARY",
+    createdByAdminId: "admin-1",
+  });
+  assert.equal(assigned.ok, true);
+  const deleted = await deleteAnnualCourse(world.courseDeps, course.id);
+  assert.equal(deleted.ok, false);
+  if (deleted.ok) return;
+  assert.equal(deleted.code, "USED");
+  assert.equal(deleted.reason, ANNUAL_COURSE_USED_DELETE_REASON);
+});
+
+testBoth("C — cours archivé n’entre plus en conflit", async (world) => {
+  const archivedCourse = await courseFor(world, world.classA, world.moteurCtx);
+  const first = await createCourseScheduleSlot(world.scheduleDeps, slotInput(archivedCourse.id));
+  assert.equal(first.ok, true);
+  const archived = await archiveAnnualCourse(world.courseDeps, archivedCourse.id);
+  assert.equal(archived.ok, true);
+  const activeCourse = await courseFor(world, world.classA, world.electroCtx);
+  const second = await createCourseScheduleSlot(world.scheduleDeps, slotInput(activeCourse.id));
+  assert.equal(second.ok, true);
+});
+
+testBoth("D/E — aperçu et vue globale année active ignorent le cours archivé", async (world) => {
+  const course = await courseFor(world, world.classA, world.moteurCtx);
+  const created = await createCourseScheduleSlot(world.scheduleDeps, slotInput(course.id));
+  assert.equal(created.ok, true);
+  await archiveAnnualCourse(world.courseDeps, course.id);
+  const courses = await world.courseDeps.courses.listCourses();
+  const slots = await world.scheduleDeps.schedules.listSlots();
+  const preview = buildClassSchedulePreview({
+    schoolClass: world.classA,
+    slots,
+    courses,
+    yearStatus: "active",
+  });
+  assert.equal(preview.days.length, 0);
+  const global = buildGlobalDayGrid({
+    dayOfWeek: 4,
+    weekKind: "all",
+    slots,
+    courses,
+    classes: [world.classA],
+    contexts: [world.moteurCtx],
+    branches: await world.catalog.listBranches(),
+    yearStatus: "active",
+  });
+  const occupied = global.rows.filter((row) => row.kind === "course" && row.cells.some((cell) => cell.entries.length > 0));
+  assert.equal(occupied.length, 0);
+
+  const historical = buildClassSchedulePreview({
+    schoolClass: world.classA,
+    slots,
+    courses,
+    yearStatus: "archived",
+  });
+  assert.equal(historical.days.length, 1);
+});
+
+testBoth("F — créneau d’un cours archivé reste en persistence", async (world) => {
+  const course = await courseFor(world, world.classA, world.moteurCtx);
+  const created = await createCourseScheduleSlot(world.scheduleDeps, slotInput(course.id));
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+  await archiveAnnualCourse(world.courseDeps, course.id);
+  const persisted = await world.scheduleDeps.schedules.getSlot(created.value.id);
+  assert.equal(persisted?.id, created.value.id);
+  assert.equal(persisted?.annualCourseId, course.id);
+  const stillListed = await world.scheduleDeps.schedules.listSlotsByAnnualCourse(course.id);
+  assert.equal(stillListed.length, 1);
+});
+
+testBoth("G — année archivée : aucune mutation de créneau", async (world) => {
+  const course = await courseFor(world, world.classA, world.moteurCtx);
+  const created = await createCourseScheduleSlot(world.scheduleDeps, slotInput(course.id));
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+  world.years[0]!.status = "archived";
+  const update = await updateCourseScheduleSlot(world.scheduleDeps, created.value.id, {
+    dayOfWeek: 4,
+    periodStart: 3,
+    periodEnd: 4,
+    weekKind: "all",
+  });
+  assert.equal(update.ok, false);
+  const removed = await deleteCourseScheduleSlot(world.scheduleDeps, created.value.id);
+  assert.equal(removed.ok, false);
+  const another = await createCourseScheduleSlot(world.scheduleDeps, slotInput(course.id, {
+    periodStart: 6,
+    periodEnd: 7,
+  }));
+  assert.equal(another.ok, false);
+  assert.equal((await world.scheduleDeps.schedules.getSlot(created.value.id))?.periodStart, 1);
+});
+
+testBoth("H — régression A/B, P5, P4-P6, multi-classes", async (world) => {
+  const moteur = await courseFor(world, world.classA, world.moteurCtx);
+  const chassis = await courseFor(world, world.classA, world.chassisCtx);
+  const transmission = await courseFor(world, world.classA, world.transmissionCtx);
+  const other = await courseFor(world, world.classB, world.moteurCtx);
+  assert.equal((await createCourseScheduleSlot(world.scheduleDeps, slotInput(moteur.id, {
+    periodStart: 5,
+    periodEnd: 5,
+  }))).ok, false);
+  assert.equal((await createCourseScheduleSlot(world.scheduleDeps, slotInput(moteur.id, {
+    periodStart: 4,
+    periodEnd: 6,
+  }))).ok, false);
+  assert.equal((await createCourseScheduleSlot(world.scheduleDeps, slotInput(chassis.id, {
+    periodStart: 6,
+    periodEnd: 7,
+    weekKind: "A",
+  }))).ok, true);
+  assert.equal((await createCourseScheduleSlot(world.scheduleDeps, slotInput(transmission.id, {
+    periodStart: 6,
+    periodEnd: 7,
+    weekKind: "B",
+  }))).ok, true);
+  assert.equal((await createCourseScheduleSlot(world.scheduleDeps, slotInput(other.id, {
+    periodStart: 6,
+    periodEnd: 7,
+    weekKind: "A",
+  }))).ok, true);
+});
+
+test("filterSlotsForScheduleView — année active vs archivée", () => {
+  const slots = [
+    {
+      id: "s1",
+      annualCourseId: "live",
+      dayOfWeek: 4 as const,
+      periodStart: 1,
+      periodEnd: 2,
+      weekKind: "all" as const,
+      validFrom: null,
+      validTo: null,
+      createdAt: "t",
+      updatedAt: "t",
+    },
+    {
+      id: "s2",
+      annualCourseId: "old",
+      dayOfWeek: 4 as const,
+      periodStart: 3,
+      periodEnd: 4,
+      weekKind: "all" as const,
+      validFrom: null,
+      validTo: null,
+      createdAt: "t",
+      updatedAt: "t",
+    },
+  ];
+  const courses = [
+    { id: "live", isArchived: false },
+    { id: "old", isArchived: true },
+  ];
+  assert.deepEqual(
+    filterSlotsForScheduleView({ slots, courses, yearStatus: "active" }).map((entry) => entry.id),
+    ["s1"],
+  );
+  assert.deepEqual(
+    filterSlotsForScheduleView({ slots, courses, yearStatus: "draft" }).map((entry) => entry.id),
+    ["s1"],
+  );
+  assert.deepEqual(
+    filterSlotsForScheduleView({ slots, courses, yearStatus: "archived" }).map((entry) => entry.id),
+    ["s1", "s2"],
+  );
 });

@@ -199,6 +199,8 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
         schoolClass: currentClass,
         profession,
         slots: classSlots,
+        courses: data.courses,
+        yearStatus: currentYear?.status,
       })
     : null;
   const yearSlots = data.slots.filter((slot) => {
@@ -213,6 +215,7 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
     classes: yearClasses.filter((entry) => !entry.isArchived),
     contexts: data.contexts,
     branches: data.branches,
+    yearStatus: currentYear?.status,
   });
 
   return (

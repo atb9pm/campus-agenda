@@ -26,6 +26,11 @@ export {
   rangeCrossesLunch,
 } from "./periods.ts";
 export { findConflictingSlot, slotsOverlapOnDay, weekKindsConflict } from "./conflicts.ts";
+export {
+  filterSlotsForScheduleView,
+  includeArchivedCoursesInScheduleView,
+  isOperationalAnnualCourse,
+} from "./operational.ts";
 export { isCourseWeekKind, isCourseWeekday, validateCourseScheduleSlotInput } from "./validation.ts";
 export {
   NO_TEACHER_ASSIGNED_LABEL,

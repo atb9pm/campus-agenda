@@ -32,6 +32,11 @@ CourseScheduleSlot = QUAND le cours a lieu
 - Import PDF / `TimetableSlot` conservés, plus source de vérité du nouvel horaire.
 - Aucune écriture sur `TeacherCourseAssignment` depuis l’horaire.
 
+### Corrigé
+
+- Un `AnnualCourse` avec au moins un `CourseScheduleSlot` ne peut plus être supprimé définitivement.
+- Les cours archivés sont exclus de l’horaire opérationnel (conflits, aperçu, vue globale) d’une année active/draft. Les créneaux restent en base.
+
 ### Non inclus
 
 - Dates calendaires réelles, vacances, exceptions, génération de séances.

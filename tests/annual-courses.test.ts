@@ -5,6 +5,9 @@ import {
   ASSIGNMENT_ROLES,
   MEMBERSHIP_IS_LEGACY_FALLBACK,
   TEACHER_SETUP_IS_NOT_AUTHORIZATION,
+  ANNUAL_COURSE_SCHEDULE_DELETE_REASON,
+  ANNUAL_COURSE_USED_DELETE_REASON,
+  annualCourseDeleteBlockers,
   archiveAnnualCourse,
   assignTeacherToCourse,
   assignTemporaryReplacement,
@@ -258,6 +261,23 @@ test("AnnualCourse — archivage et suppression utilisée refusée", async () =>
   assert.equal(usedDelete.ok, false);
   const archived = await fx.deps.courses.archiveCourse(again.value.id);
   assert.equal(archived?.isArchived, true);
+});
+
+test("AnnualCourse — blockers de suppression (attributions, notes, créneaux)", () => {
+  assert.equal(annualCourseDeleteBlockers({ assignmentCount: 0, noteCount: 0 }), null);
+  assert.equal(annualCourseDeleteBlockers({ assignmentCount: 0, noteCount: 0, scheduleSlotCount: 0 }), null);
+  assert.equal(
+    annualCourseDeleteBlockers({ assignmentCount: 1, noteCount: 0 }),
+    ANNUAL_COURSE_USED_DELETE_REASON,
+  );
+  assert.equal(
+    annualCourseDeleteBlockers({ assignmentCount: 0, noteCount: 1 }),
+    ANNUAL_COURSE_USED_DELETE_REASON,
+  );
+  assert.equal(
+    annualCourseDeleteBlockers({ assignmentCount: 0, noteCount: 0, scheduleSlotCount: 1 }),
+    ANNUAL_COURSE_SCHEDULE_DELETE_REASON,
+  );
 });
 
 test("enseignants — nouveau typé, legacy null non attribuable", async () => {

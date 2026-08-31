@@ -4,6 +4,7 @@ import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-ty
 import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
 import type { TeacherAccountStore } from "../../lib/persistence/teacher-account-types.ts";
 import { findConflictingSlot } from "./conflicts.ts";
+import { isOperationalAnnualCourse } from "./operational.ts";
 import { validateCourseScheduleSlotInput } from "./validation.ts";
 import type { CourseScheduleSlot, CourseScheduleSlotInput, ScheduleMutationResult } from "./types.ts";
 
@@ -54,7 +55,10 @@ async function classSlotsForConflict(
   schoolYearId: string,
 ): Promise<CourseScheduleSlot[]> {
   const courses = (await deps.courses.listCourses()).filter(
-    (course) => course.classId === classId && course.schoolYearId === schoolYearId,
+    (course) =>
+      course.classId === classId &&
+      course.schoolYearId === schoolYearId &&
+      isOperationalAnnualCourse(course),
   );
   const courseIds = new Set(courses.map((course) => course.id));
   const slots = await deps.schedules.listSlots();
@@ -89,6 +93,7 @@ export async function createCourseScheduleSlot(
     periodStart: parsed.value.periodStart,
     periodEnd: parsed.value.periodEnd,
     weekKind: parsed.value.weekKind,
+    // validFrom / validTo : réservés au futur support des changements d’horaire en cours d’année.
     validFrom: parsed.value.validFrom ?? null,
     validTo: parsed.value.validTo ?? null,
     createdAt: timestamp,

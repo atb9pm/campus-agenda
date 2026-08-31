@@ -88,14 +88,15 @@ export async function getCourseStore() {
 }
 
 export async function getAnnualCourseServiceDeps(): Promise<AnnualCourseServiceDeps> {
-  const [courses, catalog, years, teachers, notes] = await Promise.all([
+  const [courses, catalog, years, teachers, notes, schedules] = await Promise.all([
     getAnnualCourseStore(),
     getSchoolCatalogStore(),
     getSchoolYearStore(),
     getTeacherAccountStore(),
     getAnnualCourseNotesStore(),
+    getCourseScheduleStore(),
   ]);
-  return { courses, catalog, years, teachers, notes };
+  return { courses, catalog, years, teachers, notes, schedules };
 }
 
 export async function getCourseScheduleServiceDeps(): Promise<CourseScheduleServiceDeps> {
