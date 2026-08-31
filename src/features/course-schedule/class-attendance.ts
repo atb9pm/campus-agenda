@@ -3,6 +3,7 @@ import { isCourseWeekday } from "./validation.ts";
 import {
   ATTENDANCE_ROLES,
   COURSE_WEEKDAY_LABELS,
+  COURSE_WEEK_KIND_LABELS,
   COURSE_WEEK_KINDS,
   type AttendanceRole,
   type ClassAttendanceDay,
@@ -195,11 +196,16 @@ export function formatSlotDayBadge(
   slot: Pick<CourseScheduleSlot, "dayOfWeek" | "weekKind">,
   days: ClassAttendanceDay[],
 ): string {
+  const weekday = COURSE_WEEKDAY_LABELS[slot.dayOfWeek];
+  const rawWeek = COURSE_WEEK_KIND_LABELS[slot.weekKind];
+  const raw = `${weekday} · ${rawWeek}`;
+  if (days.length === 0) return raw;
   const onDay = days.filter((day) => day.dayOfWeek === slot.dayOfWeek);
+  if (onDay.length === 0) return raw;
   const role = onDay.some((day) => day.role === "PRIMARY")
     ? "PRIMARY"
-    : (onDay.find((day) => day.weekKind === "all" || day.weekKind === slot.weekKind)?.role ?? "ADDITIONAL");
-  const weekday = COURSE_WEEKDAY_LABELS[slot.dayOfWeek];
+    : onDay.find((day) => day.weekKind === "all" || day.weekKind === slot.weekKind)?.role;
+  if (!role) return raw;
   if (role === "PRIMARY") {
     return slot.weekKind === "all" ? `${weekday} · principal` : `${weekday} · principal · ${slot.weekKind}`;
   }

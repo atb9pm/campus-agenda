@@ -260,8 +260,8 @@ export function buildGlobalDayGrid(options: {
 export interface AttendanceWeekDayPreview {
   dayOfWeek: CourseWeekday;
   dayLabel: string;
-  role: AttendanceRole;
-  roleLabel: string;
+  role: AttendanceRole | null;
+  roleLabel: string | null;
   blocks: ClassScheduleBlock[];
   empty: boolean;
 }
@@ -288,9 +288,21 @@ export function buildAttendanceWeekPreview(options: {
       : options.slots;
   const attendance = attendanceDaysForWeek(options.days, options.weekKind);
   const applicable = slots.filter((slot) => slotAppliesToWeekView(slot, options.weekKind));
+  const sourceDays =
+    options.days.length > 0
+      ? attendance.map((day) => ({
+          dayOfWeek: day.dayOfWeek,
+          role: day.role,
+          roleLabel: day.role === "PRIMARY" ? "jour principal" : "jour complémentaire",
+        }))
+      : usedWeekdays(applicable).map((dayOfWeek) => ({
+          dayOfWeek,
+          role: null,
+          roleLabel: null,
+        }));
   return {
     weekKind: options.weekKind,
-    days: attendance.map((day) => {
+    days: sourceDays.map((day) => {
       const blocks = buildClassDayBlocks(
         applicable.filter((slot) => slot.dayOfWeek === day.dayOfWeek),
         day.dayOfWeek,
@@ -299,7 +311,7 @@ export function buildAttendanceWeekPreview(options: {
         dayOfWeek: day.dayOfWeek,
         dayLabel: COURSE_WEEKDAY_LABELS[day.dayOfWeek],
         role: day.role,
-        roleLabel: day.role === "PRIMARY" ? "jour principal" : "jour complémentaire",
+        roleLabel: day.roleLabel,
         blocks,
         empty: !blocks.some((block) => block.kind === "course"),
       };

@@ -119,20 +119,41 @@ async function assertSlotCoveredByAttendance(
   return { ok: true, value: true };
 }
 
+async function classSlotsMatchingClass(
+  deps: CourseScheduleServiceDeps,
+  classId: string,
+  schoolYearId: string,
+  operationalOnly: boolean,
+): Promise<CourseScheduleSlot[]> {
+  const courses = (await deps.courses.listCourses()).filter((course) => {
+    if (course.classId !== classId || course.schoolYearId !== schoolYearId) return false;
+    if (operationalOnly) return isOperationalAnnualCourse(course);
+    return true;
+  });
+  const courseIds = new Set(courses.map((course) => course.id));
+  const slots = await deps.schedules.listSlots();
+  return slots.filter((slot) => courseIds.has(slot.annualCourseId));
+}
+
+/** Conflits opérationnels : uniquement les AnnualCourse non archivés. */
 async function classSlotsForConflict(
   deps: CourseScheduleServiceDeps,
   classId: string,
   schoolYearId: string,
 ): Promise<CourseScheduleSlot[]> {
-  const courses = (await deps.courses.listCourses()).filter(
-    (course) =>
-      course.classId === classId &&
-      course.schoolYearId === schoolYearId &&
-      isOperationalAnnualCourse(course),
-  );
-  const courseIds = new Set(courses.map((course) => course.id));
-  const slots = await deps.schedules.listSlots();
-  return slots.filter((slot) => courseIds.has(slot.annualCourseId));
+  return classSlotsMatchingClass(deps, classId, schoolYearId, true);
+}
+
+/**
+ * Intégrité du plan de présence : tous les créneaux persistés de la classe,
+ * y compris ceux des AnnualCourse archivés (historique PR52).
+ */
+async function classSlotsForAttendanceIntegrity(
+  deps: CourseScheduleServiceDeps,
+  classId: string,
+  schoolYearId: string,
+): Promise<CourseScheduleSlot[]> {
+  return classSlotsMatchingClass(deps, classId, schoolYearId, false);
 }
 
 export async function createCourseScheduleSlot(
@@ -241,7 +262,7 @@ export async function replaceAttendanceDaysForClass(
   const mutable = await assertClassMutable(deps, classId);
   if (!mutable.ok) return mutable;
 
-  const existingSlots = await classSlotsForConflict(deps, classId, mutable.value.schoolYearId);
+  const existingSlots = await classSlotsForAttendanceIntegrity(deps, classId, mutable.value.schoolYearId);
   const uncovered = uncoveredScheduleSlots(parsed.value, existingSlots);
   if (uncovered.length > 0) {
     return {

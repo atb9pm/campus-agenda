@@ -58,6 +58,12 @@ export {
   type AttendanceSlotDayOption,
 } from "./class-attendance.ts";
 export {
+  EMPTY_ATTENDANCE_EDITOR_DRAFT,
+  scheduleEditorStateAfterYearChange,
+  type AttendanceEditorDraft,
+  type ScheduleEditorYearChangeState,
+} from "./schedule-editor-state.ts";
+export {
   NO_TEACHER_ASSIGNED_LABEL,
   buildAttendanceWeekPreview,
   buildClassDayBlocks,

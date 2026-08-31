@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  archiveAnnualCourse,
   assignTeacherToCourse,
   createAnnualCourse,
   type AnnualCourse,
@@ -20,6 +21,7 @@ import {
   deleteCourseScheduleSlot,
   formatSlotDayBadge,
   replaceAttendanceDaysForClass,
+  scheduleEditorStateAfterYearChange,
   suggestAttendanceDraftFromSlots,
   updateCourseScheduleSlot,
   validateAttendancePlan,
@@ -812,4 +814,203 @@ testBoth("update d’un créneau hors couverture → ATTENDANCE_DAY_MISMATCH", a
   assert.equal(updated.ok, false);
   if (updated.ok) return;
   assert.equal(updated.code, ATTENDANCE_DAY_MISMATCH_CODE);
+});
+
+testBoth("A/B/C/D — cours archivé + créneau Jeudi B bloque la suppression du jour", async (world) => {
+  const saved = await replaceAttendanceDaysForClass(
+    world.scheduleDeps,
+    world.classA.id,
+    plan(
+      { dayOfWeek: 1, weekKind: "all", role: "PRIMARY" },
+      { dayOfWeek: 4, weekKind: "B", role: "ADDITIONAL" },
+    ),
+  );
+  assert.equal(saved.ok, true);
+  const chassis = await courseFor(world, world.classA, world.chassisCtx);
+  const created = await createCourseScheduleSlot(world.scheduleDeps, {
+    annualCourseId: chassis.id,
+    dayOfWeek: 4,
+    periodStart: 1,
+    periodEnd: 4,
+    weekKind: "B",
+  });
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+  const archived = await archiveAnnualCourse(world.courseDeps, chassis.id);
+  assert.equal(archived.ok, true);
+
+  const refused = await replaceAttendanceDaysForClass(
+    world.scheduleDeps,
+    world.classA.id,
+    plan({ dayOfWeek: 1, weekKind: "all", role: "PRIMARY" }),
+  );
+  assert.equal(refused.ok, false);
+  if (refused.ok) return;
+  assert.equal(refused.code, ATTENDANCE_IN_USE_CODE);
+  assert.equal(refused.status, 409);
+
+  const persisted = await world.scheduleDeps.schedules.getSlot(created.value.id);
+  assert.equal(persisted?.id, created.value.id);
+  assert.equal(persisted?.dayOfWeek, 4);
+  assert.equal(persisted?.weekKind, "B");
+
+  const still = await world.scheduleDeps.schedules.listAttendanceDaysByClass(world.classA.id);
+  assert.deepEqual(
+    still.map((day) => `${day.dayOfWeek}:${day.weekKind}:${day.role}`).sort(),
+    ["1:all:PRIMARY", "4:B:ADDITIONAL"],
+  );
+});
+
+test("aperçu historique — année archivée + cours archivé + Jeudi B", () => {
+  const days: ClassAttendanceDay[] = [
+    {
+      id: "p",
+      classId: "cl",
+      dayOfWeek: 1,
+      weekKind: "all",
+      role: "PRIMARY",
+      createdAt: "t",
+      updatedAt: "t",
+    },
+    {
+      id: "a",
+      classId: "cl",
+      dayOfWeek: 4,
+      weekKind: "B",
+      role: "ADDITIONAL",
+      createdAt: "t",
+      updatedAt: "t",
+    },
+  ];
+  const slots: CourseScheduleSlot[] = [
+    {
+      id: "s-b",
+      annualCourseId: "chassis",
+      dayOfWeek: 4,
+      periodStart: 1,
+      periodEnd: 4,
+      weekKind: "B",
+      validFrom: null,
+      validTo: null,
+      createdAt: "t",
+      updatedAt: "t",
+    },
+  ];
+  const historical = buildAttendanceWeekPreview({
+    days,
+    slots,
+    weekKind: "B",
+    courses: [{ id: "chassis", isArchived: true }],
+    yearStatus: "archived",
+  });
+  const thursday = historical.days.find((day) => day.dayOfWeek === 4);
+  assert.equal(thursday?.empty, false);
+  assert.equal(thursday?.roleLabel, "jour complémentaire");
+  assert.equal(thursday?.blocks.some((block) => block.kind === "course"), true);
+
+  const operational = buildAttendanceWeekPreview({
+    days,
+    slots,
+    weekKind: "B",
+    courses: [{ id: "chassis", isArchived: true }],
+    yearStatus: "active",
+  });
+  assert.equal(operational.days.find((day) => day.dayOfWeek === 4)?.empty, true);
+});
+
+test("E — legacy sans ClassAttendanceDay : aucun rôle principal/complémentaire inventé", () => {
+  assert.equal(formatSlotDayBadge({ dayOfWeek: 1, weekKind: "all" }, []), "Lundi · Toutes");
+  assert.equal(formatSlotDayBadge({ dayOfWeek: 1, weekKind: "A" }, []), "Lundi · A");
+  assert.equal(formatSlotDayBadge({ dayOfWeek: 1, weekKind: "B" }, []), "Lundi · B");
+  assert.equal(formatSlotDayBadge({ dayOfWeek: 4, weekKind: "B" }, []), "Jeudi · B");
+  assert.equal(formatSlotDayBadge({ dayOfWeek: 1, weekKind: "all" }, []).includes("principal"), false);
+  assert.equal(formatSlotDayBadge({ dayOfWeek: 4, weekKind: "B" }, []).includes("complémentaire"), false);
+});
+
+test("F — legacy Lundi A + Lundi B : distinction A/B dans l’aperçu, sans rôle", () => {
+  const slots: CourseScheduleSlot[] = [
+    {
+      id: "moteur",
+      annualCourseId: "c-a",
+      dayOfWeek: 1,
+      periodStart: 1,
+      periodEnd: 2,
+      weekKind: "A",
+      validFrom: null,
+      validTo: null,
+      createdAt: "t",
+      updatedAt: "t",
+    },
+    {
+      id: "trans",
+      annualCourseId: "c-b",
+      dayOfWeek: 1,
+      periodStart: 1,
+      periodEnd: 2,
+      weekKind: "B",
+      validFrom: null,
+      validTo: null,
+      createdAt: "t",
+      updatedAt: "t",
+    },
+  ];
+  const weekA = buildAttendanceWeekPreview({ days: [], slots, weekKind: "A" });
+  const weekB = buildAttendanceWeekPreview({ days: [], slots, weekKind: "B" });
+  assert.deepEqual(weekA.days.map((day) => day.dayOfWeek), [1]);
+  assert.equal(weekA.days[0]?.role, null);
+  assert.equal(weekA.days[0]?.roleLabel, null);
+  assert.deepEqual(
+    weekA.days[0]?.blocks.filter((block) => block.kind === "course").flatMap((block) => block.slots.map((slot) => slot.id)),
+    ["moteur"],
+  );
+  assert.deepEqual(
+    weekB.days[0]?.blocks.filter((block) => block.kind === "course").flatMap((block) => block.slots.map((slot) => slot.id)),
+    ["trans"],
+  );
+  assert.equal(weekA.days[0]?.blocks.some((block) => block.slots.some((slot) => slot.id === "trans")), false);
+});
+
+test("G — badges principal/complémentaire uniquement après configuration", () => {
+  const days: ClassAttendanceDay[] = [
+    {
+      id: "p",
+      classId: "cl",
+      dayOfWeek: 1,
+      weekKind: "all",
+      role: "PRIMARY",
+      createdAt: "t",
+      updatedAt: "t",
+    },
+    {
+      id: "a",
+      classId: "cl",
+      dayOfWeek: 4,
+      weekKind: "B",
+      role: "ADDITIONAL",
+      createdAt: "t",
+      updatedAt: "t",
+    },
+  ];
+  assert.equal(formatSlotDayBadge({ dayOfWeek: 1, weekKind: "all" }, days), "Lundi · principal");
+  assert.equal(formatSlotDayBadge({ dayOfWeek: 1, weekKind: "A" }, days), "Lundi · principal · A");
+  assert.equal(formatSlotDayBadge({ dayOfWeek: 1, weekKind: "B" }, days), "Lundi · principal · B");
+  assert.equal(formatSlotDayBadge({ dayOfWeek: 4, weekKind: "B" }, days), "Jeudi · complémentaire B");
+});
+
+test("H — régression : présence all autorise slot all / A / B", () => {
+  const days = [{ dayOfWeek: 1 as const, weekKind: "all" as const }];
+  assert.equal(attendanceCoversScheduleSlot(days, { dayOfWeek: 1, weekKind: "all" }), true);
+  assert.equal(attendanceCoversScheduleSlot(days, { dayOfWeek: 1, weekKind: "A" }), true);
+  assert.equal(attendanceCoversScheduleSlot(days, { dayOfWeek: 1, weekKind: "B" }), true);
+});
+
+test("changement d’année — reset complet des brouillons", () => {
+  const next = scheduleEditorStateAfterYearChange("year-2027");
+  assert.equal(next.selectedYearId, "year-2027");
+  assert.equal(next.selectedClassId, "");
+  assert.equal(next.editingDays, false);
+  assert.equal(next.attendanceDraft.primaryDay, "");
+  assert.deepEqual(next.attendanceDraft.additional, []);
+  assert.equal(next.slotDraft, null);
+  assert.equal(next.error, "");
 });

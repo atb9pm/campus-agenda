@@ -11,13 +11,13 @@ import {
   allowedPeriodEnds,
   attendanceOptionsForSlotForm,
   buildAttendanceWeekPreview,
-  buildClassSchedulePreview,
   buildGlobalDayGrid,
   daysPresentInAAndB,
   formatPeriodRange,
   formatSlotDayBadge,
   formatTeachersLine,
   isClassScheduleWritable,
+  scheduleEditorStateAfterYearChange,
   suggestAttendanceDraftFromSlots,
   teachersForAnnualCourse,
   usedAttendanceWeekdays,
@@ -27,7 +27,6 @@ import {
   type CourseWeekKind,
   type CourseWeekday,
 } from "@campus/features/course-schedule/index.ts";
-import { classDisplayProfessionLabel, classDisplayTrainingYearLabel } from "@campus/features/school-catalog/class-display.ts";
 import type { PedagogicalContextRecord, SchoolProfessionRecord } from "@campus/features/school-catalog";
 import type { SchoolBranchRecord, SchoolClassRecord } from "@campus/features/school-catalog";
 
@@ -191,6 +190,16 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
       : classAttendance,
   );
 
+  function handleYearChange(nextYearId: string) {
+    const next = scheduleEditorStateAfterYearChange(nextYearId);
+    setSelectedYearId(next.selectedYearId);
+    setSelectedClassId(next.selectedClassId);
+    setEditingDays(next.editingDays);
+    setAttendanceDraft(next.attendanceDraft);
+    setDraft(next.slotDraft);
+    setError(next.error);
+  }
+
   async function postAction(body: Record<string, unknown>) {
     const response = await fetch("/api/admin/course-schedule", {
       method: "POST",
@@ -304,19 +313,6 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
   if (loading) return <p className="admin-loading">Chargement de l’horaire des classes…</p>;
   if (!data) return <p className="admin-error">{error || "Données indisponibles."}</p>;
 
-  const profession = currentClass
-    ? data.professions.find((entry) => entry.id === currentClass.professionId)
-    : null;
-  const legacyPreview =
-    currentClass && !attendanceConfigured
-      ? buildClassSchedulePreview({
-          schoolClass: currentClass,
-          profession,
-          slots: classSlots,
-          courses: data.courses,
-          yearStatus: currentYear?.status,
-        })
-      : null;
   const previewA = currentClass
     ? buildAttendanceWeekPreview({
         days: classAttendance,
@@ -427,7 +423,7 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
       <div className="class-schedule-filters admin-inline-form">
         <label>
           Année scolaire
-          <select value={selectedYearId} onChange={(event) => setSelectedYearId(event.target.value)}>
+          <select value={selectedYearId} onChange={(event) => handleYearChange(event.target.value)}>
             {data.schoolYears.map((year) => (
               <option key={year.id} value={year.id}>
                 {year.label}
@@ -445,6 +441,8 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
                 setSelectedClassId(event.target.value);
                 setEditingDays(false);
                 setDraft(null);
+                setAttendanceDraft({ primaryDay: "", additional: [] });
+                setError("");
               }}
             >
               {yearClasses.map((entry) => (
@@ -921,23 +919,12 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
           <div className="class-schedule-col-right">
             <section className="class-schedule-section">
               <h4>3. Aperçu horaire généré</h4>
-              {!attendanceConfigured ? (
-                legacyPreview && legacyPreview.days.length > 0 ? (
-                  <div className="class-schedule-preview">
-                    <p className="class-schedule-hint">Horaire existant (lecture) — configurez d’abord les jours de cours.</p>
-                    {legacyPreview.days.map((day) => (
-                      <section key={day.dayOfWeek} className="class-schedule-day">
-                        <h4>
-                          {legacyPreview.classCode} — {day.dayLabel}
-                        </h4>
-                        {renderDayBlocks(day.blocks, false)}
-                      </section>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="class-schedule-empty">Aucun jour de cours configuré.</p>
-                )
-              ) : (
+              {!attendanceConfigured && classSlots.length > 0 ? (
+                <p className="class-schedule-hint">
+                  Horaire existant (lecture) — configurez d’abord les jours de cours.
+                </p>
+              ) : null}
+              {(previewA?.days.length || previewB?.days.length) ? (
                 <div className="class-schedule-week-pair">
                   {[previewA, previewB].map((preview) =>
                     preview ? (
@@ -949,7 +936,7 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
                           preview.days.map((day) => (
                             <div key={`${preview.weekKind}-${day.dayOfWeek}`} className="class-schedule-day">
                               <h4>
-                                {day.dayLabel} — {day.roleLabel}
+                                {day.roleLabel ? `${day.dayLabel} — ${day.roleLabel}` : day.dayLabel}
                               </h4>
                               {renderDayBlocks(day.blocks, day.empty)}
                             </div>
@@ -959,6 +946,10 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
                     ) : null,
                   )}
                 </div>
+              ) : (
+                <p className="class-schedule-empty">
+                  {attendanceConfigured ? "Aucun jour de présence." : "Aucun jour de cours configuré."}
+                </p>
               )}
             </section>
           </div>
