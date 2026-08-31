@@ -4,23 +4,34 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import type { AnnualCourse, TeacherCourseAssignment } from "@campus/features/annual-courses/types.ts";
 import {
+  ADDITIONAL_RHYTHM_CHOICES,
   COURSE_WEEKDAY_LABELS,
   COURSE_WEEK_KIND_LONG_LABELS,
   COURSE_WEEK_KINDS,
   TEACHABLE_PERIODS,
   allowedPeriodEnds,
+  attendanceDraftIsComplete,
+  attendanceInputsFromDraft,
   attendanceOptionsForSlotForm,
+  buildAttendanceRhythmSummary,
   buildAttendanceWeekPreview,
+  buildClassScheduleTemplate,
   buildGlobalDayGrid,
   daysPresentInAAndB,
-  formatPeriodRange,
-  formatSlotDayBadge,
+  filterSlotsForScheduleView,
+  formatAttendancePresenceDetail,
+  formatSlotRhythmLabel,
   formatTeachersLine,
+  formatTemplatePeriod,
+  groupSlotsByAnnualCourse,
   isClassScheduleWritable,
+  nextAdditionalDraftDay,
   scheduleEditorStateAfterYearChange,
+  slotRoleBadge,
   suggestAttendanceDraftFromSlots,
   teachersForAnnualCourse,
   usedAttendanceWeekdays,
+  type AttendanceEditorDraft,
   type ClassAttendanceDay,
   type ClassAttendanceDayInput,
   type CourseScheduleSlot,
@@ -54,6 +65,7 @@ interface OverviewPayload {
 }
 
 type PanelView = "main" | "global";
+type PreviewMode = "template" | "A" | "B";
 
 interface SlotDraft {
   slotId: string | null;
@@ -64,10 +76,7 @@ interface SlotDraft {
   weekKind: CourseWeekKind;
 }
 
-interface AttendanceDraft {
-  primaryDay: CourseWeekday | "";
-  additional: Array<{ dayOfWeek: CourseWeekday; weekKind: CourseWeekKind }>;
-}
+type AttendanceDraft = AttendanceEditorDraft;
 
 interface ClassScheduleAdminPanelProps {
   onNotice: (message: string) => void;
@@ -83,17 +92,6 @@ function branchForCourse(
   return context ? branches.find((entry) => entry.id === context.branchId) : undefined;
 }
 
-function nextAdditionalDefault(
-  primaryDay: CourseWeekday | "",
-  additional: AttendanceDraft["additional"],
-): { dayOfWeek: CourseWeekday; weekKind: CourseWeekKind } {
-  const used = new Set<CourseWeekday>([
-    ...(primaryDay ? [primaryDay] : []),
-    ...additional.map((entry) => entry.dayOfWeek),
-  ]);
-  const free = ([1, 2, 3, 4, 5] as const).find((day) => !used.has(day));
-  return { dayOfWeek: free ?? 4, weekKind: "all" };
-}
 
 export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassScheduleAdminPanelProps) {
   const [data, setData] = useState<OverviewPayload | null>(null);
@@ -104,6 +102,7 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
   const [selectedClassId, setSelectedClassId] = useState("");
   const [globalDay, setGlobalDay] = useState<CourseWeekday>(4);
   const [globalWeek, setGlobalWeek] = useState<CourseWeekKind>("A");
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("template");
   const [draft, setDraft] = useState<SlotDraft | null>(null);
   const [editingDays, setEditingDays] = useState(false);
   const [attendanceDraft, setAttendanceDraft] = useState<AttendanceDraft>({
@@ -179,16 +178,21 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
   const slotDayOptions = attendanceOptionsForSlotForm(classAttendance);
   const suggestedPrimary = suggestAttendanceDraftFromSlots(classSlots);
   const usedSlotDays = usedAttendanceWeekdays(classSlots);
-  const abHintDays = daysPresentInAAndB(
-    editingDays
-      ? [
-          ...(attendanceDraft.primaryDay
-            ? [{ dayOfWeek: attendanceDraft.primaryDay, weekKind: "all" as const }]
-            : []),
-          ...attendanceDraft.additional,
-        ]
-      : classAttendance,
+  const draftAttendanceInputs = attendanceInputsFromDraft(attendanceDraft);
+  const abHintDays = daysPresentInAAndB(editingDays ? draftAttendanceInputs : classAttendance);
+  const rhythmSummary = buildAttendanceRhythmSummary(
+    editingDays ? draftAttendanceInputs : classAttendance,
   );
+  const viewSlots = filterSlotsForScheduleView({
+    slots: classSlots,
+    courses: classCourses,
+    yearStatus: currentYear?.status,
+  });
+  const courseGroups = groupSlotsByAnnualCourse(classCourses, data?.slots ?? []);
+  const template = buildClassScheduleTemplate({
+    days: classAttendance,
+    slots: viewSlots,
+  });
 
   function handleYearChange(nextYearId: string) {
     const next = scheduleEditorStateAfterYearChange(nextYearId);
@@ -237,16 +241,9 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
 
   async function submitAttendance(event: FormEvent) {
     event.preventDefault();
-    if (!currentClass || attendanceDraft.primaryDay === "") return;
+    if (!currentClass || !attendanceDraftIsComplete(attendanceDraft)) return;
     setError("");
-    const days: ClassAttendanceDayInput[] = [
-      { dayOfWeek: attendanceDraft.primaryDay, weekKind: "all", role: "PRIMARY" },
-      ...attendanceDraft.additional.map((day) => ({
-        dayOfWeek: day.dayOfWeek,
-        weekKind: day.weekKind,
-        role: "ADDITIONAL" as const,
-      })),
-    ];
+    const days: ClassAttendanceDayInput[] = attendanceInputsFromDraft(attendanceDraft);
     try {
       await postAction({
         action: "replaceAttendanceDays",
@@ -359,6 +356,7 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
   function renderDayBlocks(
     blocks: ReturnType<typeof buildAttendanceWeekPreview>["days"][number]["blocks"],
     empty: boolean,
+    options: { showWeekKind: boolean } = { showWeekKind: false },
   ) {
     if (empty) return <p className="class-schedule-empty">Aucun cours configuré</p>;
     return (
@@ -367,7 +365,7 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
           if (block.kind === "lunch") {
             return (
               <li key="lunch" className="class-schedule-lunch">
-                <span className="class-schedule-period">P5</span>
+                <span className="class-schedule-period">{formatTemplatePeriod(5, 5)}</span>
                 <span>Pause de midi</span>
               </li>
             );
@@ -375,27 +373,24 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
           const labels = block.slots.map((slot) => {
             const course = data!.courses.find((entry) => entry.id === slot.annualCourseId);
             const branch = course ? branchForCourse(course, data!.contexts, data!.branches) : undefined;
-            const teachers = course
-              ? teachersForAnnualCourse(data!.assignments, data!.teachers, course.id)
-              : [];
             return {
               id: slot.id,
               branch: branch?.label ?? "Branche",
-              teachers: formatTeachersLine(teachers),
+              weekKind: slot.weekKind,
             };
           });
           return (
             <li key={`${block.periodStart}-${block.periodEnd}`}>
               <span className="class-schedule-period">
-                {block.periodStart === block.periodEnd
-                  ? `P${block.periodStart}`
-                  : `P${block.periodStart}–P${block.periodEnd}`}
+                {formatTemplatePeriod(block.periodStart, block.periodEnd)}
               </span>
               <div>
                 {labels.map((entry) => (
                   <p key={entry.id}>
                     <strong>{entry.branch}</strong>
-                    <span> · {entry.teachers}</span>
+                    {options.showWeekKind && entry.weekKind !== "all" ? (
+                      <span className="class-schedule-week-chip"> · {entry.weekKind}</span>
+                    ) : null}
                   </p>
                 ))}
               </div>
@@ -598,7 +593,7 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
                   ) : null}
                   <h5>Jours complémentaires</h5>
                   {attendanceDraft.additional.map((entry, index) => (
-                    <div key={`${entry.dayOfWeek}-${entry.weekKind}-${index}`} className="class-schedule-additional-row">
+                    <div key={`${entry.dayOfWeek}-${index}`} className="class-schedule-additional-row">
                       <label>
                         Jour
                         <select
@@ -619,26 +614,32 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
                           ))}
                         </select>
                       </label>
-                      <label>
-                        Présence
-                        <select
-                          value={entry.weekKind}
-                          onChange={(event) => {
-                            const next = [...attendanceDraft.additional];
-                            next[index] = {
-                              ...entry,
-                              weekKind: event.target.value as CourseWeekKind,
-                            };
-                            setAttendanceDraft({ ...attendanceDraft, additional: next });
-                          }}
-                        >
-                          {COURSE_WEEK_KINDS.map((kind) => (
-                            <option key={kind} value={kind}>
+                      <div>
+                        <span className="class-schedule-form-title">Rythme de présence</span>
+                        <div className="class-schedule-rhythm-radios">
+                          {ADDITIONAL_RHYTHM_CHOICES.map((kind) => (
+                            <label
+                              key={kind}
+                              className={entry.weekKind === kind ? "is-selected" : undefined}
+                            >
+                              <input
+                                type="radio"
+                                name={`additional-week-${index}`}
+                                checked={entry.weekKind === kind}
+                                onChange={() => {
+                                  const next = [...attendanceDraft.additional];
+                                  next[index] = { ...entry, weekKind: kind };
+                                  setAttendanceDraft({ ...attendanceDraft, additional: next });
+                                }}
+                              />
                               {COURSE_WEEK_KIND_LONG_LABELS[kind]}
-                            </option>
+                            </label>
                           ))}
-                        </select>
-                      </label>
+                        </div>
+                        {entry.weekKind === "" ? (
+                          <p className="class-schedule-empty">Choisir…</p>
+                        ) : null}
+                      </div>
                       <button
                         type="button"
                         onClick={() =>
@@ -665,15 +666,30 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
                         ...attendanceDraft,
                         additional: [
                           ...attendanceDraft.additional,
-                          nextAdditionalDefault(attendanceDraft.primaryDay, attendanceDraft.additional),
+                          nextAdditionalDraftDay(attendanceDraft.primaryDay, attendanceDraft.additional),
                         ],
                       })
                     }
                   >
                     + Ajouter un jour complémentaire
                   </button>
+                  {attendanceDraft.primaryDay ? (
+                    <div className="class-schedule-rhythm-preview">
+                      <h5>Aperçu du rythme</h5>
+                      <p>
+                        Semaine A → <strong>{rhythmSummary.weekALine}</strong>
+                      </p>
+                      <p>
+                        Semaine B → <strong>{rhythmSummary.weekBLine}</strong>
+                      </p>
+                    </div>
+                  ) : null}
                   <div className="admin-inline-form">
-                    <button type="submit" className="workspace-action" disabled={!writable || !attendanceDraft.primaryDay}>
+                    <button
+                      type="submit"
+                      className="workspace-action"
+                      disabled={!writable || !attendanceDraftIsComplete(attendanceDraft)}
+                    >
                       Enregistrer
                     </button>
                     <button type="button" onClick={() => setEditingDays(false)}>
@@ -707,11 +723,8 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
                         <strong>
                           {day.role === "PRIMARY" ? "⭐ Jour principal" : "＋ Jour complémentaire"}
                         </strong>
-                        <span>
-                          {COURSE_WEEKDAY_LABELS[day.dayOfWeek]}
-                          {" · "}
-                          {COURSE_WEEK_KIND_LONG_LABELS[day.weekKind]}
-                        </span>
+                        <span>{COURSE_WEEKDAY_LABELS[day.dayOfWeek]}</span>
+                        <span>{formatAttendancePresenceDetail(day)}</span>
                       </li>
                     ))}
                   </ul>
@@ -749,170 +762,170 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
                       <tr>
                         <th>Branche</th>
                         <th>Enseignant</th>
-                        <th>Jour de cours</th>
-                        <th>Périodes</th>
+                        <th>Créneaux</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {classCourses.map((course) => {
+                      {courseGroups.map(({ course, slots }) => {
                         const branch = branchForCourse(course, data.contexts, data.branches);
                         const teachers = teachersForAnnualCourse(data.assignments, data.teachers, course.id);
-                        const slots = data.slots
-                          .filter((slot) => slot.annualCourseId === course.id)
-                          .sort(
-                            (left, right) =>
-                              left.dayOfWeek - right.dayOfWeek || left.periodStart - right.periodStart,
-                          );
                         const courseWritable = writable && attendanceConfigured && !course.isArchived;
                         const teacherLine = formatTeachersLine(teachers);
-                        if (slots.length === 0) {
-                          return (
-                            <tr key={course.id}>
-                              <td>
-                                <strong>{branch?.label ?? "Branche"}</strong>
-                                {course.isArchived ? (
-                                  <div className="admin-teacher-login-meta">Cours archivé</div>
-                                ) : null}
-                              </td>
-                              <td className={teachers.length ? undefined : "class-schedule-no-teacher"}>
-                                {teacherLine}
-                              </td>
-                              <td colSpan={2} className="admin-teacher-login-meta">
-                                Aucun créneau
-                              </td>
-                              <td>
-                                {courseWritable ? (
-                                  <button type="button" onClick={() => openSlotDraft(course)}>
-                                    + Ajouter un créneau
-                                  </button>
-                                ) : null}
-                              </td>
-                            </tr>
-                          );
-                        }
-                        return slots.map((slot, index) => (
-                          <tr key={slot.id}>
+                        const editingThis = draft?.annualCourseId === course.id;
+                        return (
+                          <tr key={course.id}>
                             <td>
-                              {index === 0 ? (
-                                <>
-                                  <strong>{branch?.label ?? "Branche"}</strong>
-                                  {course.isArchived ? (
-                                    <div className="admin-teacher-login-meta">Cours archivé</div>
-                                  ) : null}
-                                </>
-                              ) : (
-                                <span className="admin-teacher-login-meta">{branch?.label}</span>
-                              )}
+                              <strong>{branch?.label ?? "Branche"}</strong>
+                              {course.isArchived ? (
+                                <div className="admin-teacher-login-meta">Cours archivé</div>
+                              ) : null}
                             </td>
                             <td className={teachers.length ? undefined : "class-schedule-no-teacher"}>
-                              {index === 0 ? teacherLine : ""}
+                              {teacherLine}
                             </td>
-                            <td>{formatSlotDayBadge(slot, classAttendance)}</td>
-                            <td>{formatPeriodRange(slot.periodStart, slot.periodEnd)}</td>
+                            <td>
+                              {slots.length === 0 ? (
+                                <span className="admin-teacher-login-meta">Aucun créneau</span>
+                              ) : (
+                                <ul className="class-schedule-slot-lines">
+                                  {slots.map((slot) => {
+                                    const badge = slotRoleBadge(slot, classAttendance);
+                                    return (
+                                      <li key={slot.id}>
+                                        <span>
+                                          {formatSlotRhythmLabel(slot)}
+                                          {" · "}
+                                          {formatTemplatePeriod(slot.periodStart, slot.periodEnd)}
+                                          {badge ? (
+                                            <span className="class-schedule-role-badge">{badge}</span>
+                                          ) : null}
+                                        </span>
+                                        {courseWritable ? (
+                                          <div className="class-schedule-row-actions">
+                                            <button type="button" onClick={() => openSlotDraft(course, slot)}>
+                                              Modifier
+                                            </button>
+                                            <button type="button" onClick={() => void removeSlot(slot.id)}>
+                                              Supprimer
+                                            </button>
+                                          </div>
+                                        ) : null}
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              )}
+                              {editingThis && attendanceConfigured ? (
+                                <form
+                                  className="class-schedule-slot-form admin-inline-form"
+                                  onSubmit={(event) => void submitDraft(event)}
+                                >
+                                  <p className="class-schedule-form-title">
+                                    {draft.slotId ? "Modifier le créneau" : "Ajouter un créneau"}
+                                  </p>
+                                  <p className="class-schedule-meta">
+                                    Branche : <strong>{branch?.label ?? "Branche"}</strong>
+                                  </p>
+                                  <label>
+                                    Jour
+                                    <select
+                                      value={draft.dayOfWeek}
+                                      onChange={(event) => {
+                                        const dayOfWeek = Number(event.target.value) as CourseWeekday;
+                                        const kinds =
+                                          slotDayOptions.find((entry) => entry.dayOfWeek === dayOfWeek)?.weekKinds ??
+                                          [];
+                                        const weekKind = kinds.includes(draft.weekKind)
+                                          ? draft.weekKind
+                                          : (kinds[0] ?? "all");
+                                        setDraft({ ...draft, dayOfWeek, weekKind });
+                                      }}
+                                    >
+                                      {slotDayOptions.map((option) => (
+                                        <option key={option.dayOfWeek} value={option.dayOfWeek}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  {draftWeekKinds.length === 1 ? (
+                                    <p className="class-schedule-readonly">
+                                      Rythme : {COURSE_WEEK_KIND_LONG_LABELS[draftWeekKinds[0]!]}
+                                    </p>
+                                  ) : (
+                                    <label>
+                                      Rythme du cours
+                                      <select
+                                        value={draft.weekKind}
+                                        onChange={(event) =>
+                                          setDraft({ ...draft, weekKind: event.target.value as CourseWeekKind })
+                                        }
+                                      >
+                                        {draftWeekKinds.map((kind) => (
+                                          <option key={kind} value={kind}>
+                                            {COURSE_WEEK_KIND_LONG_LABELS[kind]}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                  )}
+                                  <label>
+                                    Début
+                                    <select
+                                      value={draft.periodStart}
+                                      onChange={(event) => {
+                                        const periodStart = Number(event.target.value);
+                                        const ends = allowedPeriodEnds(periodStart);
+                                        const periodEnd = ends.includes(draft.periodEnd)
+                                          ? draft.periodEnd
+                                          : (ends[0] ?? periodStart);
+                                        setDraft({ ...draft, periodStart, periodEnd });
+                                      }}
+                                    >
+                                      {TEACHABLE_PERIODS.map((period) => (
+                                        <option key={period} value={period}>
+                                          P{period}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label>
+                                    Fin
+                                    <select
+                                      value={draft.periodEnd}
+                                      onChange={(event) => setDraft({ ...draft, periodEnd: Number(event.target.value) })}
+                                    >
+                                      {allowedPeriodEnds(draft.periodStart).map((period) => (
+                                        <option key={period} value={period}>
+                                          P{period}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <button type="submit" className="workspace-action">
+                                    Enregistrer
+                                  </button>
+                                  <button type="button" onClick={() => setDraft(null)}>
+                                    Annuler
+                                  </button>
+                                </form>
+                              ) : null}
+                            </td>
                             <td>
                               {courseWritable ? (
-                                <div className="class-schedule-row-actions">
-                                  <button type="button" onClick={() => openSlotDraft(course, slot)}>
-                                    Modifier
-                                  </button>
-                                  <button type="button" onClick={() => void removeSlot(slot.id)}>
-                                    Supprimer
-                                  </button>
-                                  {index === slots.length - 1 ? (
-                                    <button type="button" onClick={() => openSlotDraft(course)}>
-                                      + Ajouter un créneau
-                                    </button>
-                                  ) : null}
-                                </div>
+                                <button type="button" onClick={() => openSlotDraft(course)}>
+                                  + Ajouter un créneau
+                                </button>
                               ) : null}
                             </td>
                           </tr>
-                        ));
+                        );
                       })}
                     </tbody>
                   </table>
                 </div>
               )}
-
-              {draft && attendanceConfigured ? (
-                <form className="class-schedule-slot-form admin-inline-form" onSubmit={(event) => void submitDraft(event)}>
-                  <p className="class-schedule-form-title">
-                    {draft.slotId ? "Modifier le créneau" : "Ajouter un créneau"}
-                  </p>
-                  <label>
-                    Jour de cours
-                    <select
-                      value={draft.dayOfWeek}
-                      onChange={(event) => {
-                        const dayOfWeek = Number(event.target.value) as CourseWeekday;
-                        const kinds =
-                          slotDayOptions.find((entry) => entry.dayOfWeek === dayOfWeek)?.weekKinds ?? [];
-                        const weekKind = kinds.includes(draft.weekKind) ? draft.weekKind : (kinds[0] ?? "all");
-                        setDraft({ ...draft, dayOfWeek, weekKind });
-                      }}
-                    >
-                      {slotDayOptions.map((option) => (
-                        <option key={option.dayOfWeek} value={option.dayOfWeek}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Rythme du cours
-                    <select
-                      value={draft.weekKind}
-                      onChange={(event) =>
-                        setDraft({ ...draft, weekKind: event.target.value as CourseWeekKind })
-                      }
-                    >
-                      {draftWeekKinds.map((kind) => (
-                        <option key={kind} value={kind}>
-                          {COURSE_WEEK_KIND_LONG_LABELS[kind]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Début
-                    <select
-                      value={draft.periodStart}
-                      onChange={(event) => {
-                        const periodStart = Number(event.target.value);
-                        const ends = allowedPeriodEnds(periodStart);
-                        const periodEnd = ends.includes(draft.periodEnd) ? draft.periodEnd : (ends[0] ?? periodStart);
-                        setDraft({ ...draft, periodStart, periodEnd });
-                      }}
-                    >
-                      {TEACHABLE_PERIODS.map((period) => (
-                        <option key={period} value={period}>
-                          P{period}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Fin
-                    <select
-                      value={draft.periodEnd}
-                      onChange={(event) => setDraft({ ...draft, periodEnd: Number(event.target.value) })}
-                    >
-                      {allowedPeriodEnds(draft.periodStart).map((period) => (
-                        <option key={period} value={period}>
-                          P{period}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button type="submit" className="workspace-action">
-                    Enregistrer
-                  </button>
-                  <button type="button" onClick={() => setDraft(null)}>
-                    Annuler
-                  </button>
-                </form>
-              ) : null}
             </section>
           </div>
 
@@ -924,28 +937,83 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
                   Horaire existant (lecture) — configurez d’abord les jours de cours.
                 </p>
               ) : null}
-              {(previewA?.days.length || previewB?.days.length) ? (
-                <div className="class-schedule-week-pair">
-                  {[previewA, previewB].map((preview) =>
-                    preview ? (
-                      <section key={preview.weekKind} className="class-schedule-week-card">
-                        <h4>SEMAINE {preview.weekKind}</h4>
-                        {preview.days.length === 0 ? (
-                          <p className="class-schedule-empty">Aucun jour de présence.</p>
-                        ) : (
-                          preview.days.map((day) => (
-                            <div key={`${preview.weekKind}-${day.dayOfWeek}`} className="class-schedule-day">
+              {attendanceConfigured || classSlots.length > 0 ? (
+                <>
+                  {attendanceConfigured || editingDays ? (
+                    <div className="class-schedule-summary-pair">
+                      <div className="class-schedule-summary-card">
+                        <span>Semaine A</span>
+                        <strong>{rhythmSummary.weekALine}</strong>
+                      </div>
+                      <div className="class-schedule-summary-card">
+                        <span>Semaine B</span>
+                        <strong>{rhythmSummary.weekBLine}</strong>
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="class-schedule-preview-tabs">
+                    <button
+                      type="button"
+                      className={previewMode === "template" ? "is-selected" : undefined}
+                      onClick={() => setPreviewMode("template")}
+                    >
+                      Trame
+                    </button>
+                    <button
+                      type="button"
+                      className={previewMode === "A" ? "is-selected" : undefined}
+                      onClick={() => setPreviewMode("A")}
+                    >
+                      Semaine A
+                    </button>
+                    <button
+                      type="button"
+                      className={previewMode === "B" ? "is-selected" : undefined}
+                      onClick={() => setPreviewMode("B")}
+                    >
+                      Semaine B
+                    </button>
+                  </div>
+                  {previewMode === "template" ? (
+                    template.days.length === 0 ? (
+                      <p className="class-schedule-empty">Aucun jour de cours configuré.</p>
+                    ) : (
+                      <div className="class-schedule-template">
+                        {template.days.map((day) => (
+                          <div key={day.dayOfWeek} className="class-schedule-template-day class-schedule-day">
+                            <h4>{day.dayLabel.toUpperCase()}</h4>
+                            <p className="class-schedule-template-meta">
+                              {day.coverageLabel}
+                              {day.roleLabel ? ` · ${day.roleLabel}` : ""}
+                            </p>
+                            {renderDayBlocks(day.blocks, day.blocks.every((block) => block.kind !== "course"), {
+                              showWeekKind: true,
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  ) : (
+                    (() => {
+                      const preview = previewMode === "A" ? previewA : previewB;
+                      if (!preview || preview.days.length === 0) {
+                        return <p className="class-schedule-empty">Aucun jour de présence.</p>;
+                      }
+                      return (
+                        <div className="class-schedule-day">
+                          {preview.days.map((day) => (
+                            <div key={`${preview.weekKind}-${day.dayOfWeek}`}>
                               <h4>
                                 {day.roleLabel ? `${day.dayLabel} — ${day.roleLabel}` : day.dayLabel}
                               </h4>
                               {renderDayBlocks(day.blocks, day.empty)}
                             </div>
-                          ))
-                        )}
-                      </section>
-                    ) : null,
+                          ))}
+                        </div>
+                      );
+                    })()
                   )}
-                </div>
+                </>
               ) : (
                 <p className="class-schedule-empty">
                   {attendanceConfigured ? "Aucun jour de présence." : "Aucun jour de cours configuré."}
