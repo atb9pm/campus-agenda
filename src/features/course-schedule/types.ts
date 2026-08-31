@@ -62,3 +62,27 @@ export interface CourseScheduleSlotInput {
 export type ScheduleMutationOk<T> = { ok: true; value: T };
 export type ScheduleMutationErr = { ok: false; reason: string; status?: number; code?: string };
 export type ScheduleMutationResult<T> = ScheduleMutationOk<T> | ScheduleMutationErr;
+
+export const ATTENDANCE_ROLES = ["PRIMARY", "ADDITIONAL"] as const;
+export type AttendanceRole = (typeof ATTENDANCE_ROLES)[number];
+
+export const ATTENDANCE_ROLE_LABELS: Record<AttendanceRole, string> = {
+  PRIMARY: "Jour principal",
+  ADDITIONAL: "Jour complémentaire",
+};
+
+export interface ClassAttendanceDay {
+  id: string;
+  classId: string;
+  dayOfWeek: CourseWeekday;
+  weekKind: CourseWeekKind;
+  role: AttendanceRole;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClassAttendanceDayInput {
+  dayOfWeek: CourseWeekday;
+  weekKind: CourseWeekKind;
+  role: AttendanceRole;
+}

@@ -2,6 +2,7 @@ import {
   getAgendaStore,
   getAnnualCourseNotesStore,
   getAnnualCourseStore,
+  getCourseScheduleStore,
   getMembershipStore,
   getSchoolCatalogStore,
   getSchoolYearStore,
@@ -154,15 +155,17 @@ async function handleDelete(request: Request, context: { params: Promise<{ id: s
     if (!schoolClass) {
       return jsonResponse({ ok: false, reason: "Classe introuvable." }, { status: 404 });
     }
-    const [courses, notes, agenda, timetable, memberships, classrooms, studentAccesses] = await Promise.all([
-      getAnnualCourseStore(),
-      getAnnualCourseNotesStore(),
-      getAgendaStore(),
-      getTimetableStore(),
-      getMembershipStore(),
-      listRuntimeClassrooms(),
-      listStudentAccesses(),
-    ]);
+    const [courses, notes, agenda, timetable, memberships, classrooms, studentAccesses, schedules] =
+      await Promise.all([
+        getAnnualCourseStore(),
+        getAnnualCourseNotesStore(),
+        getAgendaStore(),
+        getTimetableStore(),
+        getMembershipStore(),
+        listRuntimeClassrooms(),
+        listStudentAccesses(),
+        getCourseScheduleStore(),
+      ]);
     const usage = await loadClassDeleteUsage({
       schoolClass,
       courses,
@@ -172,6 +175,7 @@ async function handleDelete(request: Request, context: { params: Promise<{ id: s
       memberships,
       classrooms,
       studentAccesses,
+      schedules,
     });
     const blockers = classDeleteBlockers(schoolClass, classes, usage);
     if (!blockers.ok) {

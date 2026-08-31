@@ -1,5 +1,5 @@
-import type { CourseScheduleSlot } from "../../../features/course-schedule/types.ts";
-import type { CourseWeekKind, CourseWeekday } from "../../../features/course-schedule/types.ts";
+import type { ClassAttendanceDay, CourseScheduleSlot } from "../../../features/course-schedule/types.ts";
+import type { AttendanceRole, CourseWeekKind, CourseWeekday } from "../../../features/course-schedule/types.ts";
 import type { CourseScheduleStore } from "../course-schedule-types.ts";
 import type { SqlDatabase } from "./types.ts";
 
@@ -26,6 +26,28 @@ function mapSlot(row: SlotRow): CourseScheduleSlot {
     weekKind: row.week_kind as CourseWeekKind,
     validFrom: row.valid_from,
     validTo: row.valid_to,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+interface AttendanceRow {
+  id: string;
+  class_id: string;
+  day_of_week: number;
+  week_kind: string;
+  role: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function mapAttendance(row: AttendanceRow): ClassAttendanceDay {
+  return {
+    id: row.id,
+    classId: row.class_id,
+    dayOfWeek: row.day_of_week as CourseWeekday,
+    weekKind: row.week_kind as CourseWeekKind,
+    role: row.role as AttendanceRole,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -111,5 +133,38 @@ export class SqlCourseScheduleStore implements CourseScheduleStore {
   async deleteSlot(id: string): Promise<boolean> {
     const result = await this.db.prepare("DELETE FROM course_schedule_slots WHERE id = ?").bind(id).run();
     return Boolean(result.meta?.changes);
+  }
+
+  async listAttendanceDays(): Promise<ClassAttendanceDay[]> {
+    const result = await this.db
+      .prepare("SELECT * FROM class_attendance_days ORDER BY created_at")
+      .bind()
+      .all<AttendanceRow>();
+    return (result.results ?? []).map(mapAttendance);
+  }
+
+  async listAttendanceDaysByClass(classId: string): Promise<ClassAttendanceDay[]> {
+    const result = await this.db
+      .prepare("SELECT * FROM class_attendance_days WHERE class_id = ? ORDER BY created_at")
+      .bind(classId)
+      .all<AttendanceRow>();
+    return (result.results ?? []).map(mapAttendance);
+  }
+
+  async replaceAttendanceDaysForClass(
+    classId: string,
+    days: ClassAttendanceDay[],
+  ): Promise<ClassAttendanceDay[]> {
+    const statements = [
+      { sql: "DELETE FROM class_attendance_days WHERE class_id = ?", values: [classId] },
+      ...days.map((day) => ({
+        sql: `INSERT INTO class_attendance_days (
+          id, class_id, day_of_week, week_kind, role, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        values: [day.id, day.classId, day.dayOfWeek, day.weekKind, day.role, day.createdAt, day.updatedAt],
+      })),
+    ];
+    await this.db.batch(statements);
+    return this.listAttendanceDaysByClass(classId);
   }
 }

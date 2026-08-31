@@ -15,6 +15,7 @@ export interface ClassDeleteUsage {
   timetableSlots: Array<{ classCode: string; schoolYearId?: string | null }>;
   linkedClassroomIds: string[];
   studentAccesses: Array<{ classroomId: string }>;
+  attendanceDays: Array<{ classId: string }>;
 }
 
 export interface ClassDeleteBlockerCounts {
@@ -25,6 +26,7 @@ export interface ClassDeleteBlockerCounts {
   timetableSlots: number;
   memberships: number;
   studentAccesses: number;
+  attendanceDays: number;
 }
 
 function countLabel(count: number, singular: string, plural: string): string {
@@ -49,6 +51,9 @@ export function formatClassDeleteBlockerReason(counts: ClassDeleteBlockerCounts)
   }
   if (counts.studentAccesses > 0) {
     parts.push(countLabel(counts.studentAccesses, "accès élève", "accès élèves"));
+  }
+  if (counts.attendanceDays > 0) {
+    parts.push(countLabel(counts.attendanceDays, "jour de cours configuré", "jours de cours configurés"));
   }
   const detail = parts.length > 0 ? `\n- ${parts.join("\n- ")}` : "";
   return (
@@ -168,6 +173,7 @@ export function classDeleteBlockerCounts(
   const studentAccesses = (usage.studentAccesses ?? []).filter((entry) =>
     yearlessRuntimeBlocksClass(entry.classroomId, schoolClass, classrooms),
   );
+  const attendanceDays = (usage.attendanceDays ?? []).filter((entry) => entry.classId === schoolClass.id);
   return {
     courses: courses.length,
     assignments: assignments.length,
@@ -176,6 +182,7 @@ export function classDeleteBlockerCounts(
     timetableSlots: timetableSlots.length,
     memberships: memberships.length,
     studentAccesses: studentAccesses.length,
+    attendanceDays: attendanceDays.length,
   };
 }
 
@@ -192,7 +199,8 @@ export function classDeleteBlockers(
       counts.publications +
       counts.timetableSlots +
       counts.memberships +
-      counts.studentAccesses >
+      counts.studentAccesses +
+      counts.attendanceDays >
     0;
   if (!blocked) return { ok: true };
   return { ok: false, reason: formatClassDeleteBlockerReason(counts) };
