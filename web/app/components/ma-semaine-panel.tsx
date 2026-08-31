@@ -4,16 +4,14 @@ import { useMemo } from "react";
 
 import type { SchoolWeek } from "@campus/features/calendar";
 import {
-  buildSchoolWeekPlanRows,
   formatWeekdayLabel,
   groupClassesByWeekday,
-  type TeacherSetupConfig,
+  type TeacherClassSetup,
 } from "@campus/features/teacher-setup";
-
-import type { TeacherClassSetup } from "@campus/features/teacher-setup";
+import { TEACHER_COURSES_EMPTY_MESSAGE } from "@campus/features/teacher-workspace";
 
 interface MaSemainePanelProps {
-  config: TeacherSetupConfig;
+  classes: TeacherClassSetup[];
   schoolWeeks: SchoolWeek[];
   selectedSchoolWeekNumber: number;
   onSelectSchoolWeek: (weekNumber: number) => void;
@@ -26,15 +24,15 @@ function formatSchoolWeekHeading(week: SchoolWeek): string {
 }
 
 export function MaSemainePanel({
-  config,
+  classes,
   schoolWeeks,
   selectedSchoolWeekNumber,
   onSelectSchoolWeek,
   onOpenClass,
 }: MaSemainePanelProps) {
   const activeClasses = useMemo(
-    () => config.classes.filter((entry) => entry.name.trim()),
-    [config.classes],
+    () => classes.filter((entry) => entry.name.trim()),
+    [classes],
   );
   const grouped = useMemo(() => groupClassesByWeekday(activeClasses), [activeClasses]);
   const selectedWeek =
@@ -47,7 +45,7 @@ export function MaSemainePanel({
       <div className="workspace-intro ma-semaine-intro">
         <p className="eyebrow">VUE PERSONNELLE</p>
         <h2>Ma semaine</h2>
-        <p>Vos classes dans l’ordre des jours de cours, avec les branches que vous avez définies.</p>
+        <p>Vos cours attribués, organisés selon vos préférences de jours d’affichage.</p>
       </div>
 
       {selectedWeek && (
@@ -78,9 +76,7 @@ export function MaSemainePanel({
       )}
 
       {!activeClasses.length ? (
-        <p className="ma-semaine-empty">
-          Aucune classe configurée. Rendez-vous dans <strong>Configuration</strong> pour saisir vos classes.
-        </p>
+        <p className="ma-semaine-empty">{TEACHER_COURSES_EMPTY_MESSAGE}</p>
       ) : (
         <div className="ma-semaine-days">
           {grouped.map((group) => (
@@ -111,7 +107,7 @@ export function MaSemainePanel({
                           ))}
                         </ul>
                       ) : (
-                        <p className="ma-semaine-no-branches">Aucune branche saisie</p>
+                        <p className="ma-semaine-no-branches">Branche du cours attribué</p>
                       )}
                     </div>
                   </button>
@@ -125,41 +121,11 @@ export function MaSemainePanel({
       {selectedWeek && (
         <aside className="ma-semaine-plan-hint" aria-label="Rappel semaine A ou B">
           <p>
-            Cette semaine est une semaine <strong>{selectedWeek.kind}</strong>. Vérifiez le calendrier complet
-            dans Configuration si besoin.
+            Cette semaine est une semaine <strong>{selectedWeek.kind}</strong>. Les jours affichés ici
+            sont une préférence personnelle, pas une attribution.
           </p>
         </aside>
       )}
     </section>
-  );
-}
-
-export function MaSemaineWeekPlanPreview({ schoolWeeks }: { schoolWeeks: SchoolWeek[] }) {
-  const rows = useMemo(() => buildSchoolWeekPlanRows(schoolWeeks), [schoolWeeks]);
-  return (
-    <div className="config-week-table-wrap">
-      <table className="config-week-table">
-        <thead>
-          <tr>
-            <th>Semaine</th>
-            <th>Type</th>
-            <th>Lundi</th>
-            <th>Jours de cours TMA</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.number}>
-              <td>{String(row.number).padStart(2, "0")}</td>
-              <td>
-                <span className={`week-kind-badge week-kind-${row.kind.toLowerCase()}`}>{row.kind}</span>
-              </td>
-              <td>{row.mondayLabel}</td>
-              <td>{row.courseDaysLabel}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }

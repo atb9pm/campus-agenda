@@ -60,6 +60,7 @@ test("keeps the validated teacher essentials and social preview", async () => {
   assert.match(page, /HOMEWORK: "Devoir"/);
   assert.match(page, /TEST: "Contrôle"/);
   assert.match(page, /INFORMATION: "Information"/);
+  assert.match(page, /MesCoursPanel/);
   assert.match(page, /MaSemainePanel/);
   assert.match(page, /ClassNotebookPanel/);
   assert.match(page, /ConfigurationPanel/);

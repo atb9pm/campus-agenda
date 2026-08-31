@@ -1,6 +1,7 @@
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import type { TeacherAccountRecord } from "@campus/features/teacher-accounts";
 import type { TeacherSetupConfig } from "@campus/features/teacher-setup";
+import type { TeacherCourseWorkspaceEntry } from "@campus/features/teacher-workspace";
 import type { ClassNotesDocument } from "@campus/features/class-notebook";
 import type { AgendaItemType } from "@campus/types/agenda";
 
@@ -87,6 +88,27 @@ export async function changeTeacherPasswordApi(
   if (!response.ok || !payload.ok) {
     throw new Error(payload.reason ?? "Changement de mot de passe impossible.");
   }
+}
+
+export async function fetchTeacherCoursesApi(schoolYearId?: string): Promise<{
+  schoolYearId: string | null;
+  courses: TeacherCourseWorkspaceEntry[];
+}> {
+  const params = schoolYearId ? `?schoolYearId=${encodeURIComponent(schoolYearId)}` : "";
+  const response = await fetch(`/api/teacher/courses${params}`, { credentials: "include" });
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    schoolYearId?: string | null;
+    courses?: TeacherCourseWorkspaceEntry[];
+  }>(response);
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.reason ?? "Chargement des cours impossible.");
+  }
+  return {
+    schoolYearId: payload.schoolYearId ?? null,
+    courses: payload.courses ?? [],
+  };
 }
 
 /** Null si aucune configuration n'a encore été enregistrée côté serveur. */

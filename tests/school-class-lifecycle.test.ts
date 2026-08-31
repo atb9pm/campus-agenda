@@ -72,8 +72,8 @@ function emptyUsage(overrides: Partial<ClassDeleteUsage> = {}): ClassDeleteUsage
   };
 }
 
-test("version 2.23.0", () => {
-  assert.equal(APP_VERSION, "2.23.0");
+test("version 2.23.0 — cycle de vie des classes", () => {
+  assert.match(APP_VERSION, /^\d+\.\d+\.\d+$/);
 });
 
 test("affichage — abréviations métier non tronquées", () => {

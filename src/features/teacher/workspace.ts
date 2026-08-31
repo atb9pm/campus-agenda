@@ -1,3 +1,5 @@
+import { DEFAULT_TEACHER_NAV_SECTION } from "./navigation.ts";
+
 export const TEACHER_AGENDA_VIEWS = ["mine", "class"] as const;
 
 export type TeacherAgendaView = (typeof TEACHER_AGENDA_VIEWS)[number];
@@ -16,7 +18,7 @@ export function createDefaultWorkspace(teacherId: string, defaultClassroomId: st
   return {
     teacherId,
     selectedClassroomId: defaultClassroomId,
-    activeSection: "ma-semaine",
+    activeSection: DEFAULT_TEACHER_NAV_SECTION,
     agendaView: DEFAULT_TEACHER_AGENDA_VIEW,
   };
 }

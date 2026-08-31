@@ -52,6 +52,7 @@ import {
   fetchAgendaItems,
   fetchApiSession,
   fetchSchoolCalendar,
+  fetchTeacherCoursesApi,
   fetchTeacherNotesApi,
   fetchTeacherSetupApi,
   loginStudentApi,
@@ -77,6 +78,10 @@ import {
   type TeacherClassSetup,
 } from "@campus/features/teacher-setup";
 import {
+  displaySetupsFromAssignedCourses,
+  type TeacherCourseWorkspaceEntry,
+} from "@campus/features/teacher-workspace";
+import {
   clearNotesFromBrowser,
   createEmptyNotesDocument,
   loadNotesFromBrowser,
@@ -92,6 +97,7 @@ import { LoginPanel } from "./components/login-panel.tsx";
 import { PasswordChangePanel } from "./components/password-change-panel.tsx";
 import { ClassNotebookPanel } from "./components/class-notebook-panel.tsx";
 import { MaSemainePanel } from "./components/ma-semaine-panel.tsx";
+import { MesCoursPanel } from "./components/mes-cours-panel.tsx";
 
 type AppMode = "teacher" | "student";
 type StudentEntry = "code" | "teacher-preview";
@@ -118,9 +124,10 @@ function BrandEmblem() {
 function sectionTitle(activeSection: TeacherNavSection, isStudentView: boolean, notebookClassName?: string) {
   if (isStudentView) return "Mon agenda";
   if (notebookClassName) return `Carnet · ${notebookClassName}`;
+  if (activeSection === "mes-cours") return "Mes cours";
   if (activeSection === "ma-semaine") return "Ma semaine";
   if (activeSection === "administration") return "Administration";
-  return "Configuration";
+  return "Préférences";
 }
 
 function sectionDescription(activeSection: TeacherNavSection, isStudentView: boolean, notebookOpen: boolean) {
@@ -128,13 +135,16 @@ function sectionDescription(activeSection: TeacherNavSection, isStudentView: boo
   if (notebookOpen) {
     return "Contrôles, publications élèves et notes prof — semaine par semaine.";
   }
+  if (activeSection === "mes-cours") {
+    return "Cours qui vous sont attribués pour l’année scolaire active.";
+  }
   if (activeSection === "ma-semaine") {
-    return "Vos classes par jour de cours, avec les branches que vous avez définies.";
+    return "Vos cours attribués, organisés selon vos préférences d’affichage.";
   }
   if (activeSection === "administration") {
     return "Référentiel école : classes, branches, accès et plan des semaines A/B.";
   }
-  return "Affectations personnelles : classe, jour de cours et branche.";
+  return "Préférences d’affichage : jour visible et icône. Ce n’est pas une attribution.";
 }
 
 export default function Home() {
@@ -174,6 +184,9 @@ export default function Home() {
     buildDefaultTeacherSetup(DEMO_CATALOG, currentTeacherId),
   );
   const [teacherSetupReady, setTeacherSetupReady] = useState(false);
+  const [teacherCourses, setTeacherCourses] = useState<TeacherCourseWorkspaceEntry[]>([]);
+  const [teacherCoursesYearLabel, setTeacherCoursesYearLabel] = useState<string | null>(null);
+  const [teacherCoursesReady, setTeacherCoursesReady] = useState(false);
   /** Évite d'écrire sur le serveur juste après un chargement / une migration. */
   const skipTeacherSetupSaveRef = useRef(false);
   const [openNotebookClassId, setOpenNotebookClassId] = useState<string | null>(null);
@@ -267,6 +280,38 @@ export default function Home() {
     }
 
     void loadTeacherSetup();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTeacherId, teacherAuthenticated]);
+
+  useEffect(() => {
+    if (!teacherAuthenticated) {
+      setTeacherCoursesReady(false);
+      setTeacherCourses([]);
+      setTeacherCoursesYearLabel(null);
+      return;
+    }
+
+    let cancelled = false;
+    setTeacherCoursesReady(false);
+
+    async function loadTeacherCourses() {
+      try {
+        const payload = await fetchTeacherCoursesApi();
+        if (cancelled) return;
+        setTeacherCourses(payload.courses);
+        setTeacherCoursesYearLabel(payload.courses[0]?.schoolYearLabel ?? null);
+        setTeacherCoursesReady(true);
+      } catch {
+        if (cancelled) return;
+        setTeacherCourses([]);
+        setTeacherCoursesYearLabel(null);
+        setTeacherCoursesReady(true);
+      }
+    }
+
+    void loadTeacherCourses();
     return () => {
       cancelled = true;
     };
@@ -424,9 +469,13 @@ export default function Home() {
   const selectedClassroom = (isStudentView ? studentClassroom : getClassroomById(DEMO_CATALOG, selectedClassroomId)) ?? DEMO_CATALOG.classrooms[0];
 
   const schoolWeeksMemo = schoolWeeks;
+  const assignedDisplaySetups = useMemo(
+    () => displaySetupsFromAssignedCourses(teacherCourses, teacherSetup),
+    [teacherCourses, teacherSetup],
+  );
   const openNotebookClass = useMemo(
-    () => teacherSetup.classes.find((entry) => entry.id === openNotebookClassId) ?? null,
-    [openNotebookClassId, teacherSetup.classes],
+    () => assignedDisplaySetups.find((entry) => entry.id === openNotebookClassId) ?? null,
+    [openNotebookClassId, assignedDisplaySetups],
   );
   const notebookClassroomId = useMemo(
     () => (openNotebookClass ? resolveCatalogClassroomId(openNotebookClass, DEMO_CATALOG) : null),
@@ -633,8 +682,11 @@ export default function Home() {
   }
 
   function resetTeacherSetup() {
-    setTeacherSetup(buildDefaultTeacherSetup(DEMO_CATALOG, currentTeacherId));
-    showNotice("Configuration réinitialisée depuis le catalogue.");
+    setTeacherSetup({
+      version: 1,
+      classes: displaySetupsFromAssignedCourses(teacherCourses, null),
+    });
+    showNotice("Préférences d’affichage réinitialisées.");
   }
 
   function applySchoolCalendarWeeks(weeks: SchoolCalendarWeek[]) {
@@ -681,6 +733,7 @@ export default function Home() {
 
   function openClassNotebook(classSetup: TeacherClassSetup) {
     setOpenNotebookClassId(classSetup.id);
+    setActiveSection("ma-semaine");
     setNotebookCenterWeek(selectedSchoolWeekNumber);
     const mappedClassroomId = resolveCatalogClassroomId(classSetup, DEMO_CATALOG);
     if (mappedClassroomId) {
@@ -1016,9 +1069,9 @@ export default function Home() {
         </nav>
 
         <div className="technical-note">
-          <span>CLASSES CONFIGURÉES</span>
-          <strong>{teacherSetup.classes.filter((entry) => entry.name.trim()).length}</strong>
-          <small>Vue personnelle</small>
+          <span>COURS ATTRIBUÉS</span>
+          <strong>{teacherCourses.length}</strong>
+          <small>Année active</small>
         </div>
         <button className="signout" onClick={() => setStudentCodeModalOpen(true)}><span>👤</span> Espace élève</button>
         <button className="signout" onClick={logoutTeacher}><span>↪</span> Déconnexion</button>
@@ -1036,6 +1089,16 @@ export default function Home() {
             <button className="profile-disc" aria-label="Profil enseignant">{currentTeacher?.initials ?? "FC"}</button>
           </div>
         </header>
+
+        {activeSection === "mes-cours" && (
+          <MesCoursPanel
+            courses={teacherCourses}
+            schoolYearLabel={teacherCoursesYearLabel}
+            loading={!teacherCoursesReady}
+            displaySetups={assignedDisplaySetups}
+            onOpenClass={openClassNotebook}
+          />
+        )}
 
         {activeSection === "ma-semaine" && openNotebookClass && (
           <ClassNotebookPanel
@@ -1061,7 +1124,7 @@ export default function Home() {
 
         {activeSection === "ma-semaine" && !openNotebookClass && (
           <MaSemainePanel
-            config={teacherSetup}
+            classes={assignedDisplaySetups}
             schoolWeeks={schoolWeeksMemo}
             selectedSchoolWeekNumber={selectedSchoolWeekNumber}
             onSelectSchoolWeek={setSelectedSchoolWeekNumber}
@@ -1072,6 +1135,7 @@ export default function Home() {
         {activeSection === "configuration" && (
           <ConfigurationPanel
             config={teacherSetup}
+            courses={teacherCourses}
             onChange={setTeacherSetup}
             onReset={resetTeacherSetup}
             onNotice={showNotice}

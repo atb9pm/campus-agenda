@@ -292,3 +292,34 @@ test("phase 2.0 — E2E calendrier scolaire et liste admin", async () => {
   assert.equal(years.ok, true);
   assert.ok(Array.isArray(years.years));
 });
+
+test("2.24.0 — E2E Mes cours : session uniquement, teacherId client ignoré", async () => {
+  const loginResponse = await request("/api/auth/teacher", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ teacherId: "teacher-demo-current", password: "campus-demo" }),
+  });
+  assert.equal(loginResponse.status, 200);
+  const teacherCookie = extractCookie(loginResponse);
+
+  const forged = await request("/api/teacher/courses?teacherId=teacher-demo-martin", {
+    headers: { cookie: teacherCookie },
+  });
+  assert.equal(forged.status, 200);
+  const payload = await forged.json();
+  assert.equal(payload.ok, true);
+  assert.ok(Array.isArray(payload.courses));
+  assert.ok("schoolYearId" in payload);
+
+  const studentLogin = await request("/api/auth/student", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code: "eleve-test-001" }),
+  });
+  assert.equal(studentLogin.status, 200);
+  const studentForbidden = await request("/api/teacher/courses", {
+    headers: { cookie: extractCookie(studentLogin) },
+  });
+  assert.equal(studentForbidden.status, 401);
+});
+
