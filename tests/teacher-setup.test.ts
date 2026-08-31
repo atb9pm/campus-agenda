@@ -26,15 +26,15 @@ import { seedDemoDatabase } from "../src/lib/persistence/sql/seed.ts";
 import { SqlTeacherSetupStore } from "../src/lib/persistence/sql/sql-teacher-setup-store.ts";
 
 test("navigation — sections enseignant + administration admin", () => {
-  assert.deepEqual([...TEACHER_NAV_SECTIONS], ["ma-semaine", "configuration", "administration"]);
-  assert.equal(DEFAULT_TEACHER_NAV_SECTION, "ma-semaine");
-  assert.deepEqual(teacherNavSectionsForRole(false), ["ma-semaine", "configuration"]);
+  assert.deepEqual([...TEACHER_NAV_SECTIONS], ["mes-cours", "ma-semaine", "configuration", "administration"]);
+  assert.equal(DEFAULT_TEACHER_NAV_SECTION, "mes-cours");
+  assert.deepEqual(teacherNavSectionsForRole(false), ["mes-cours", "ma-semaine", "configuration"]);
   assert.ok(teacherNavSectionsForRole(true).includes("administration"));
 });
 
 test("workspace — ouverture classe retourne sur Ma semaine", () => {
   const workspace = createDefaultWorkspace(TEACHER_CHF_ID, "classe-chf-ma2");
-  assert.equal(workspace.activeSection, "ma-semaine");
+  assert.equal(workspace.activeSection, "mes-cours");
 
   const opened = openClassAgenda(workspace, "classe-chf-ma3b");
   assert.equal(opened.selectedClassroomId, "classe-chf-ma3b");

@@ -2,6 +2,40 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.24.0] — Espace enseignant : Mes cours depuis les attributions
+
+### Architecture
+
+`TeacherCourseAssignment` est la source de vérité de l’espace enseignant.
+`TeacherSetupConfig` reste une préférence d’affichage et n’accorde jamais d’accès.
+
+```
+TeacherCourseAssignment
+→ AnnualCourse
+→ SchoolClass + CTX + SchoolBranch + SchoolYear
+```
+
+### Ajouté
+
+- Service `listTeacherCourses` / `buildTeacherCourseWorkspace` (DTO calculé, pas de table).
+- API `GET /api/teacher/courses` (session uniquement, `teacherId` client ignoré).
+- Écran **Mes cours** regroupé par classe, rôles PRIMARY / CO_TEACHER / REPLACEMENT.
+- Filtre année active, classe active non archivée, cours non archivé, attribution valide.
+- Configuration enseignant limitée aux cours attribués (préférences jour/icône).
+
+### Compatibilité
+
+- `teacher_setups`, memberships, cours et attributions conservés.
+- Pas de migration : aucune nouvelle donnée persistée.
+- Un admin sans attribution ne voit aucun cours dans son espace enseignant.
+
+### Non inclus
+
+- Historique multi-années dans l’UI.
+- Nouvelle table de préférences.
+- Suppression du Membership legacy.
+- Moteur dates réelles / horaires / N→N+1.
+
 ## [2.23.0] — Cycle de vie et gestion des classes
 
 ### Ajouté

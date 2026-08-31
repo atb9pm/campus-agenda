@@ -1,266 +1,117 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
-import type { SchoolBranchRecord, SchoolClassRecord } from "@campus/features/school-catalog";
 import {
-  createEmptyClassSetup,
   WEEKDAY_LABELS,
-  type TeacherClassSetup,
   type TeacherSetupConfig,
   type WeekdayIndex,
 } from "@campus/features/teacher-setup";
+import {
+  matchSetupPreference,
+  TEACHER_COURSES_EMPTY_MESSAGE,
+  upsertSetupPreferenceForCourse,
+  WORKSPACE_ASSIGNMENT_ROLE_LABELS,
+  type TeacherCourseWorkspaceEntry,
+} from "@campus/features/teacher-workspace";
 
 interface ConfigurationPanelProps {
   config: TeacherSetupConfig;
+  courses: TeacherCourseWorkspaceEntry[];
   onChange: (config: TeacherSetupConfig) => void;
   onReset: () => void;
   onNotice: (message: string) => void;
 }
 
-function updateClass(
-  classes: TeacherClassSetup[],
-  classId: string,
-  patch: Partial<TeacherClassSetup>,
-): TeacherClassSetup[] {
-  return classes.map((entry) => (entry.id === classId ? { ...entry, ...patch } : entry));
-}
-
 export function ConfigurationPanel({
   config,
+  courses,
   onChange,
   onReset,
-  onNotice,
 }: ConfigurationPanelProps) {
-  const [schoolClasses, setSchoolClasses] = useState<SchoolClassRecord[]>([]);
-  const [fallbackBranches, setFallbackBranches] = useState<SchoolBranchRecord[]>([]);
-  const [branchesByClassId, setBranchesByClassId] = useState<Record<string, SchoolBranchRecord[]>>(
-    {},
-  );
-  const [catalogError, setCatalogError] = useState("");
+  const preferenceCount = useMemo(() => {
+    return courses.filter((course) => matchSetupPreference(course, config)).length;
+  }, [config, courses]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const response = await fetch("/api/admin/catalog?active=1", { credentials: "include" });
-        const payload = (await response.json()) as {
-          ok: boolean;
-          reason?: string;
-          classes?: SchoolClassRecord[];
-          branches?: SchoolBranchRecord[];
-        };
-        if (!response.ok || !payload.ok) {
-          throw new Error(payload.reason ?? "Référentiel indisponible.");
-        }
-        if (!cancelled) {
-          setSchoolClasses(payload.classes ?? []);
-          setFallbackBranches(payload.branches ?? []);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setCatalogError(error instanceof Error ? error.message : "Référentiel indisponible.");
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const selectedSchoolClassIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const entry of config.classes) {
-      const match = schoolClasses.find((schoolClass) => schoolClass.code === entry.name);
-      if (match) ids.add(match.id);
-    }
-    return [...ids].sort();
-  }, [config.classes, schoolClasses]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const missing = selectedSchoolClassIds.filter((id) => !(id in branchesByClassId));
-    if (missing.length === 0) return;
-
-    void (async () => {
-      const next: Record<string, SchoolBranchRecord[]> = {};
-      await Promise.all(
-        missing.map(async (classId) => {
-          try {
-            const response = await fetch(
-              `/api/admin/catalog?active=1&classId=${encodeURIComponent(classId)}`,
-              { credentials: "include" },
-            );
-            const payload = (await response.json()) as {
-              ok: boolean;
-              branches?: SchoolBranchRecord[];
-            };
-            if (response.ok && payload.ok) {
-              next[classId] = payload.branches ?? [];
-            }
-          } catch {
-            // repli sur la liste non filtrée
-          }
-        }),
-      );
-      if (!cancelled && Object.keys(next).length > 0) {
-        setBranchesByClassId((current) => ({ ...current, ...next }));
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedSchoolClassIds, branchesByClassId]);
-
-  const classCount = useMemo(
-    () => config.classes.filter((entry) => entry.name.trim()).length,
-    [config.classes],
-  );
-
-  function branchesForSchoolClass(schoolClass: SchoolClassRecord | undefined): SchoolBranchRecord[] {
-    if (schoolClass && schoolClass.id in branchesByClassId) {
-      return branchesByClassId[schoolClass.id] ?? fallbackBranches;
-    }
-    return fallbackBranches;
-  }
-
-  function patchClass(classId: string, patch: Partial<TeacherClassSetup>) {
-    onChange({ ...config, classes: updateClass(config.classes, classId, patch) });
-  }
-
-  function addClass() {
-    const firstClass = schoolClasses[0];
-    const firstBranch = branchesForSchoolClass(firstClass)[0];
-    const next = createEmptyClassSetup(config.classes.length);
-    onChange({
-      ...config,
-      classes: [
-        ...config.classes,
-        {
-          ...next,
-          name: firstClass?.code ?? "",
-          programLabel: "",
-          icon: "•",
-          branchNames: firstBranch ? [firstBranch.label] : [],
-        },
-      ],
-    });
-    onNotice("Nouvelle affectation ajoutée.");
-  }
-
-  function removeClass(classId: string) {
-    onChange({ ...config, classes: config.classes.filter((entry) => entry.id !== classId) });
-    onNotice("Affectation retirée.");
+  function patchCourse(
+    course: TeacherCourseWorkspaceEntry,
+    patch: { dayOfWeek?: WeekdayIndex; icon?: string },
+  ) {
+    onChange(upsertSetupPreferenceForCourse(config, course, patch));
   }
 
   return (
     <section className="teacher-workspace" aria-label="Configuration">
       <div className="workspace-intro">
         <p className="eyebrow">PARAMÈTRES PERSONNELS</p>
-        <h2>Configuration</h2>
-        <p>Choisissez vos affectations dans le référentiel école : classe, jour de cours et branche.</p>
+        <h2>Préférences</h2>
+        <p>
+          Personnalisez l’affichage de vos cours attribués : jour visible dans Ma semaine et icône.
+          Vous ne pouvez pas vous attribuer une classe ou une branche.
+        </p>
         <div className="config-summary-row">
           <span>
-            <strong>{classCount}</strong> affectation{classCount > 1 ? "s" : ""}
+            <strong>{courses.length}</strong> cours attribué{courses.length > 1 ? "s" : ""}
+            {preferenceCount ? ` · ${preferenceCount} préférence${preferenceCount > 1 ? "s" : ""}` : ""}
           </span>
           <button type="button" className="workspace-action secondary" onClick={onReset}>
-            Réinitialiser depuis le catalogue
+            Réinitialiser les préférences
           </button>
         </div>
-        {catalogError ? <p className="admin-error">{catalogError}</p> : null}
       </div>
 
-      <div className="config-classes-editor" aria-label="Affectations">
+      <div className="config-classes-editor" aria-label="Préférences d’affichage">
         <header className="config-section-header">
-          <h3>Mes affectations</h3>
-          <button type="button" className="workspace-action" onClick={addClass}>
-            ＋ Ajouter une classe
-          </button>
+          <h3>Afficher / masquer mes cours</h3>
         </header>
 
-        <div className="config-class-list">
-          {config.classes.map((entry) => {
-            const schoolClass = schoolClasses.find((item) => item.code === entry.name);
-            const rowBranches = branchesForSchoolClass(schoolClass);
-            return (
-              <article className="config-class-row config-class-row-simple" key={entry.id}>
-                <label className="config-field">
-                  <span>Nom de la classe</span>
-                  <select
-                    value={entry.name}
-                    onChange={(event) =>
-                      patchClass(entry.id, {
-                        name: event.target.value,
-                        programLabel: "",
-                        icon: "•",
-                        branchNames: [],
-                      })
-                    }
-                  >
-                    <option value="">Choisir…</option>
-                    {schoolClasses.map((item) => (
-                      <option key={item.id} value={item.code}>
-                        {item.code}
-                      </option>
-                    ))}
-                    {entry.name && !schoolClasses.some((item) => item.code === entry.name) ? (
-                      <option value={entry.name}>{entry.name} (ancien)</option>
-                    ) : null}
-                  </select>
-                </label>
+        {!courses.length ? (
+          <p className="ma-semaine-empty">{TEACHER_COURSES_EMPTY_MESSAGE}</p>
+        ) : (
+          <div className="config-class-list">
+            {courses.map((course) => {
+              const preference = matchSetupPreference(course, config);
+              return (
+                <article className="config-class-row config-class-row-simple" key={course.annualCourseId}>
+                  <div className="config-field">
+                    <span>Cours attribué</span>
+                    <strong>
+                      {course.classCode} — {course.branchLabel}
+                    </strong>
+                    <small className="mes-cours-role">
+                      {WORKSPACE_ASSIGNMENT_ROLE_LABELS[course.role]}
+                    </small>
+                  </div>
 
-                <label className="config-field">
-                  <span>Jour de cours</span>
-                  <select
-                    value={entry.dayOfWeek}
-                    onChange={(event) =>
-                      patchClass(entry.id, { dayOfWeek: Number(event.target.value) as WeekdayIndex })
-                    }
-                  >
-                    {(Object.entries(WEEKDAY_LABELS) as Array<[string, string]>).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  <label className="config-field">
+                    <span>Jour d’affichage</span>
+                    <select
+                      value={preference?.dayOfWeek ?? 1}
+                      onChange={(event) =>
+                        patchCourse(course, { dayOfWeek: Number(event.target.value) as WeekdayIndex })
+                      }
+                    >
+                      {(Object.entries(WEEKDAY_LABELS) as Array<[string, string]>).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
 
-                <label className="config-field">
-                  <span>Branche</span>
-                  <select
-                    value={entry.branchNames[0] ?? ""}
-                    onChange={(event) =>
-                      patchClass(entry.id, {
-                        branchNames: event.target.value ? [event.target.value] : [],
-                      })
-                    }
-                  >
-                    <option value="">Choisir…</option>
-                    {rowBranches.map((branch) => (
-                      <option key={branch.id} value={branch.label}>
-                        {branch.label}
-                      </option>
-                    ))}
-                    {entry.branchNames[0] &&
-                    !rowBranches.some((branch) => branch.label === entry.branchNames[0]) ? (
-                      <option value={entry.branchNames[0]}>{entry.branchNames[0]} (ancien)</option>
-                    ) : null}
-                  </select>
-                </label>
-
-                <button
-                  type="button"
-                  className="config-remove-class"
-                  onClick={() => removeClass(entry.id)}
-                  aria-label={`Retirer ${entry.name || "cette affectation"}`}
-                >
-                  Retirer
-                </button>
-              </article>
-            );
-          })}
-        </div>
+                  <label className="config-field">
+                    <span>Icône</span>
+                    <input
+                      value={preference?.icon ?? "•"}
+                      maxLength={4}
+                      onChange={(event) => patchCourse(course, { icon: event.target.value || "•" })}
+                    />
+                  </label>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </div>
     </section>
   );
