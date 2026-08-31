@@ -2,7 +2,7 @@ import type { CourseWeekKind, CourseWeekday } from "./types.ts";
 
 export interface AttendanceEditorDraft {
   primaryDay: CourseWeekday | "";
-  additional: Array<{ dayOfWeek: CourseWeekday; weekKind: CourseWeekKind }>;
+  additional: Array<{ dayOfWeek: CourseWeekday; weekKind: CourseWeekKind | "" }>;
 }
 
 export const EMPTY_ATTENDANCE_EDITOR_DRAFT: AttendanceEditorDraft = {

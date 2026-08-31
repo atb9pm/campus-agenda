@@ -2,6 +2,37 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.25.2] — Horaire : clarifier la trame A/B et regrouper les créneaux par cours
+
+Cette version améliore l’ergonomie de l’horaire des classes sans modifier le modèle de données.
+
+La vue principale affiche désormais la trame réelle : chaque rythme une seule fois
+(jour principal toutes les semaines, jours complémentaires A/B), avec un résumé explicite
+de la présence en semaine A et en semaine B. Les vues Semaine A et Semaine B restent
+disponibles pour le contrôle détaillé.
+
+Les créneaux sont regroupés par `AnnualCourse` : une branche apparaît une seule fois,
+même lorsqu’elle possède plusieurs segments horaires. `CourseScheduleSlot` reste un
+segment d’horaire et ne doit pas être assimilé à une séance pédagogique.
+
+### Ajouté
+
+- Résumé Semaine A / Semaine B calculé depuis `ClassAttendanceDay`.
+- Vue Trame (`buildClassScheduleTemplate`) : un jour calendaire une seule fois, couverture `all` / `A` / `B` / `A+B`.
+- Pause de midi compacte dans la trame : P5 seulement s’il y a un cours le matin et l’après-midi.
+- Configuration groupée : une ligne par branche, plusieurs créneaux internes, enseignant une seule fois.
+- Rythme d’un nouveau jour complémentaire non présélectionné ; aperçu du rythme avant enregistrement.
+
+### Compatibilité
+
+- Aucune migration SQL. `0022_course_schedule_slots.sql` et `0023_class_attendance_days.sql` inchangées.
+- Persistence `CourseScheduleSlot` et `ClassAttendanceDay` inchangée.
+- Conflits, couverture, vues Semaine A/B, vue globale et archives inchangés.
+
+### Non inclus
+
+CourseOccurrence, CourseSession, dates réelles, vacances, salles, import PDF, publication Agenda.
+
 ## [2.25.1] — Horaire : jours principaux et complémentaires des classes
 
 Cette version ajoute les jours structurés de présence d’une classe au-dessus du modèle `CourseScheduleSlot` introduit en 2.25.0.

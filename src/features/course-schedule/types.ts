@@ -24,6 +24,12 @@ export const COURSE_WEEKDAY_LABELS: Record<CourseWeekday, string> = {
   5: "Vendredi",
 };
 
+/**
+ * Segment d’horaire d’un AnnualCourse (jour, périodes, rythme).
+ * Un AnnualCourse peut posséder plusieurs CourseScheduleSlot le même jour.
+ * Ces slots représentent des segments horaires.
+ * Ils ne doivent pas être assimilés automatiquement à des séances pédagogiques distinctes.
+ */
 export interface CourseScheduleSlot {
   id: string;
   annualCourseId: string;

@@ -185,8 +185,8 @@ export function attendanceOptionsForSlotForm(days: ClassAttendanceDay[]): Attend
         role,
         label:
           role === "PRIMARY"
-            ? `${COURSE_WEEKDAY_LABELS[dayOfWeek]} — principal`
-            : `${COURSE_WEEKDAY_LABELS[dayOfWeek]} — complémentaire${extra}`,
+            ? `${COURSE_WEEKDAY_LABELS[dayOfWeek]} — jour principal`
+            : `${COURSE_WEEKDAY_LABELS[dayOfWeek]} — jour complémentaire${extra}`,
         weekKinds,
       };
     });
