@@ -9,9 +9,10 @@ import {
   readSessionTokenFromRequest,
   unauthorizedResponse,
 } from "@campus/lib/auth/index.ts";
-import { checkClassroomExists, getAgendaStore, getAnnualCourseNotesStore, getAnnualCourseStore, getMembershipStore, getPedagogicalPathStore, getSchoolCatalogStore, getSchoolYearStore, getTeacherAccountStore, getTeacherNotesStore as resolveTeacherNotesStore, getTeacherSetupStore, getTemplateStore, resolveClassroomSubjectNames } from "@campus/lib/persistence/store-factory.ts";
+import { checkClassroomExists, getAgendaStore, getAnnualCourseNotesStore, getAnnualCourseStore, getCourseScheduleStore, getMembershipStore, getPedagogicalPathStore, getSchoolCatalogStore, getSchoolYearStore, getTeacherAccountStore, getTeacherNotesStore as resolveTeacherNotesStore, getTeacherSetupStore, getTemplateStore, resolveClassroomSubjectNames } from "@campus/lib/persistence/store-factory.ts";
 import { decideAgendaPublishAccess, resolveAnnualCourseForPublication } from "@campus/features/annual-courses/index.ts";
 import type { AnnualCourseServiceDeps } from "@campus/features/annual-courses/index.ts";
+import type { CourseScheduleServiceDeps } from "@campus/features/course-schedule/index.ts";
 import { evaluateAgendaBranchForClass, assertAgendaClassMutable } from "@campus/features/school-catalog/index.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import { ARCHIVED_YEAR_READONLY_REASON, getArchivedYearIds, isArchivedYearItem } from "@campus/features/school-year/archived-readonly.ts";
@@ -95,6 +96,17 @@ export async function getAnnualCourseServiceDeps(): Promise<AnnualCourseServiceD
     getAnnualCourseNotesStore(),
   ]);
   return { courses, catalog, years, teachers, notes };
+}
+
+export async function getCourseScheduleServiceDeps(): Promise<CourseScheduleServiceDeps> {
+  const [schedules, courses, catalog, years, teachers] = await Promise.all([
+    getCourseScheduleStore(),
+    getAnnualCourseStore(),
+    getSchoolCatalogStore(),
+    getSchoolYearStore(),
+    getTeacherAccountStore(),
+  ]);
+  return { schedules, courses, catalog, years, teachers };
 }
 
 export async function authorizeTeacherAgendaPublish(

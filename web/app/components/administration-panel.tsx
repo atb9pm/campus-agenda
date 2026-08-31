@@ -10,6 +10,7 @@ import type {
 } from "@campus/features/school-catalog";
 import { BRANCH_TEACHING_TYPE_LABELS, type TeachingType } from "@campus/features/teaching-types/index.ts";
 import { AnnualCoursesAdminPanel } from "./annual-courses-admin-panel.tsx";
+import { ClassScheduleAdminPanel } from "./class-schedule-admin-panel.tsx";
 import { ClassesAdminPanel } from "./classes-admin-panel.tsx";
 import { ProfessionsAdminPanel } from "./professions-admin-panel.tsx";
 import { SchoolYearAdminPanel } from "./school-year-admin-panel.tsx";
@@ -21,7 +22,7 @@ import {
   type SchoolYearSummary,
 } from "../../lib/api-client.ts";
 
-type AdminTab = "classes" | "branches" | "professions" | "plans" | "teachers" | "assignments" | "weeks";
+type AdminTab = "classes" | "branches" | "professions" | "plans" | "teachers" | "assignments" | "schedules" | "weeks";
 
 interface AdministrationPanelProps {
   currentTeacherId: string;
@@ -41,6 +42,7 @@ const TAB_LABELS: Record<AdminTab, string> = {
   plans: "Plans de formation",
   teachers: "Enseignants",
   assignments: "Attributions des cours",
+  schedules: "Horaire des classes",
   weeks: "Plan des semaines A/B",
 };
 
@@ -230,7 +232,7 @@ export function AdministrationPanel({
         <h2>Référentiel pédagogique</h2>
         <p>
           Catalogue des branches → professions → plans de formation (CTX) → classes →
-          attributions. Les branches d’une classe viennent du plan, jamais d’une saisie libre.
+          attributions → horaire. Les branches d’une classe viennent du plan, jamais d’une saisie libre.
         </p>
       </div>
 
@@ -252,7 +254,7 @@ export function AdministrationPanel({
         ))}
       </div>
 
-      {loading && tab !== "professions" && tab !== "plans" && tab !== "teachers" ? (
+      {loading && tab !== "professions" && tab !== "plans" && tab !== "teachers" && tab !== "schedules" ? (
         <p className="admin-loading">Chargement…</p>
       ) : null}
 
@@ -456,6 +458,10 @@ export function AdministrationPanel({
 
       {tab === "assignments" ? (
         <AnnualCoursesAdminPanel onNotice={onNotice} />
+      ) : null}
+
+      {tab === "schedules" ? (
+        <ClassScheduleAdminPanel onNotice={onNotice} onOpenAssignments={() => setTab("assignments")} />
       ) : null}
 
       {tab === "weeks" ? (

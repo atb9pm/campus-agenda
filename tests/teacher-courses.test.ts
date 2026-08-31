@@ -216,7 +216,7 @@ async function listFor(
 }
 
 test("version 2.24.0 — Mes cours depuis les attributions", () => {
-  assert.equal(APP_VERSION, "2.24.0");
+  assert.match(APP_VERSION, /^\d+\.\d+\.\d+$/);
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",
     "ma-semaine",

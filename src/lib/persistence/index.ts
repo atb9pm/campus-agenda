@@ -39,9 +39,17 @@ export {
   getTeacherNotesStore,
   getTeacherSetupStore,
   getAnnualCourseStore,
+  getCourseScheduleStore,
   resetStoreFactory,
   resolveAgendaStore,
 } from "./store-factory.ts";
+export type { CourseScheduleStore } from "./course-schedule-types.ts";
+export {
+  MemoryCourseScheduleStore,
+  getMemoryCourseScheduleStore,
+  resetMemoryCourseScheduleStore,
+} from "./memory-course-schedule-store.ts";
+export { SqlCourseScheduleStore } from "./sql/sql-course-schedule-store.ts";
 export type { SchoolYearStore } from "./school-year-types.ts";
 export type { SchoolCatalogStore } from "./school-catalog-types.ts";
 export type { TeacherAccountStore } from "./teacher-account-types.ts";

@@ -443,6 +443,30 @@ button { color: inherit; }
 .admin-workspace .admin-tabs button.active { color: #fff; background: var(--navy); border-color: var(--navy); }
 .annual-course-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .annual-course-table th, .annual-course-table td { text-align: left; vertical-align: top; padding: 10px 8px; border-bottom: 1px solid var(--line); }
+.class-schedule-filters { margin-bottom: 8px; }
+.class-schedule-class-heading { margin: 0 0 14px; }
+.class-schedule-class-heading strong { display: block; color: var(--navy); font-size: 18px; }
+.class-schedule-class-heading p { margin: 4px 0 0; color: #516582; font-size: 12px; }
+.class-schedule-hint { margin: 0 0 14px; color: #516582; font-size: 12px; }
+.class-schedule-table-wrap, .class-schedule-global-wrap { overflow-x: auto; }
+.class-schedule-table button { margin: 0 6px 6px 0; padding: 6px 9px; border: 1px solid var(--line-strong); border-radius: 8px; background: #f8fafc; color: var(--navy); font-size: 9px; font-weight: 700; cursor: pointer; }
+.class-schedule-row-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.class-schedule-no-teacher { color: #98a2b3; font-style: italic; }
+.class-schedule-slot-form { margin-top: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #f8fafc; }
+.class-schedule-form-title { flex-basis: 100%; margin: 0 0 4px; color: var(--navy); font-size: 12px; font-weight: 700; }
+.class-schedule-preview { display: grid; gap: 18px; }
+.class-schedule-day h4 { margin: 0 0 10px; color: var(--navy); font-size: 13px; letter-spacing: .04em; }
+.class-schedule-day ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.class-schedule-day li { display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.class-schedule-day li p { margin: 0; color: #516582; font-size: 12px; }
+.class-schedule-period { color: var(--navy); font-size: 13px; font-weight: 700; }
+.class-schedule-lunch { background: #fff7ed; border-color: #f6d7b0; color: #9a3412; font-weight: 700; }
+.class-schedule-global h4 { margin: 0 0 12px; color: var(--navy); font-size: 13px; letter-spacing: .04em; }
+.class-schedule-global-table { width: 100%; min-width: 520px; border-collapse: collapse; font-size: 12px; }
+.class-schedule-global-table th, .class-schedule-global-table td { padding: 8px 10px; border: 1px solid var(--line); text-align: left; vertical-align: top; color: var(--navy); }
+.class-schedule-global-table th { background: #f8fafc; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
+.class-schedule-lunch-row td { background: #fff7ed; color: #9a3412; font-weight: 700; text-align: center; }
+.class-schedule-lunch-row td:first-child { text-align: left; }
 .annual-course-row.is-none { background: #fff8f0; }
 .annual-course-row.is-ok { background: #f3faf4; }
 .annual-course-row.is-multi { background: #f3f6ff; }

@@ -2,6 +2,41 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.25.0] — Administration : créneaux et horaire généré des classes
+
+L’horaire est désormais généré à partir des créneaux configurés sur les AnnualCourse.
+TeacherCourseAssignment reste la source unique pour les enseignants.
+La période 5 correspond à la pause de midi et ne peut pas recevoir de cours.
+L’ancien import PDF reste disponible pour une future fonction de contrôle/comparaison.
+
+### Architecture
+
+```
+AnnualCourse
+→ CourseScheduleSlot (1 → N)
+→ horaire de classe calculé (jamais une grille persistée)
+
+TeacherCourseAssignment = QUI enseigne
+CourseScheduleSlot = QUAND le cours a lieu
+```
+
+### Ajouté
+
+- Table `course_schedule_slots` (migration `0022_course_schedule_slots.sql`).
+- Service de validation (P5 interdite, P4→P6 interdit, semaines A/B, conflits de classe).
+- Administration → **Horaire des classes** : configuration, aperçu généré, vue globale en lecture.
+- API admin `/api/admin/course-schedule`.
+
+### Compatibilité
+
+- Import PDF / `TimetableSlot` conservés, plus source de vérité du nouvel horaire.
+- Aucune écriture sur `TeacherCourseAssignment` depuis l’horaire.
+
+### Non inclus
+
+- Dates calendaires réelles, vacances, exceptions, génération de séances.
+- Salles, conflits enseignants, drag & drop, affectation professeur depuis l’horaire.
+
 ## [2.24.0] — Espace enseignant : Mes cours depuis les attributions
 
 ### Architecture
