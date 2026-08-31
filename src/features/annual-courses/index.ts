@@ -38,7 +38,12 @@ export {
   effectiveAtForEndAssignment,
 } from "./admin-assign-ui.ts";
 export { parseAssignmentDate, validateAssignmentPeriod, requireOverrideReason } from "./dates.ts";
-export { annualCourseDeleteBlockers, contextDeleteBlockers } from "./ctx-guards.ts";
+export {
+  ANNUAL_COURSE_SCHEDULE_DELETE_REASON,
+  ANNUAL_COURSE_USED_DELETE_REASON,
+  annualCourseDeleteBlockers,
+  contextDeleteBlockers,
+} from "./ctx-guards.ts";
 export {
   MEMBERSHIP_IS_LEGACY_FALLBACK,
   TEACHER_SETUP_IS_NOT_AUTHORIZATION,

@@ -3,6 +3,7 @@ import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-ty
 import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
 import type { TeacherAccountStore } from "../../lib/persistence/teacher-account-types.ts";
 import type { AnnualCourseStore } from "../../lib/persistence/annual-course-types.ts";
+import type { CourseScheduleStore } from "../../lib/persistence/course-schedule-types.ts";
 import { teacherCanAccessAnnualCourse } from "./access.ts";
 import {
   evaluateTeachingTypeGuard,
@@ -33,6 +34,8 @@ export interface AnnualCourseServiceDeps {
   years: SchoolYearStore;
   teachers: TeacherAccountStore;
   notes: AnnualCourseNotesStore;
+  /** Présent en production : les créneaux bloquent la suppression définitive. */
+  schedules?: Pick<CourseScheduleStore, "listSlotsByAnnualCourse">;
 }
 
 function createId(prefix: string): string {
@@ -216,9 +219,13 @@ export async function deleteAnnualCourse(
     classId: course.classId,
     contextId: course.contextId,
   });
+  const scheduleSlots = deps.schedules
+    ? await deps.schedules.listSlotsByAnnualCourse(courseId)
+    : [];
   const blocker = annualCourseDeleteBlockers({
     assignmentCount: assignments.length,
     noteCount: notes.length,
+    scheduleSlotCount: scheduleSlots.length,
   });
   if (blocker) return { ok: false, reason: blocker, status: 409, code: "USED" };
   const deleted = await deps.courses.deleteCourse(courseId);
