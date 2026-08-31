@@ -20,6 +20,8 @@ async function handlePatch(request: Request, context: { params: Promise<{ id: st
     professionId?: string | null;
     trainingYear?: number | null;
     durationYears?: number;
+    classCodePrefix?: string | null;
+    parallelCode?: string | null;
     teachingType?: "TECHNICAL" | "GENERAL" | null;
   };
 
@@ -82,6 +84,7 @@ async function handlePatch(request: Request, context: { params: Promise<{ id: st
     const updated = await catalog.updateProfession(id, {
       label: body.label,
       durationYears: body.durationYears,
+      classCodePrefix: body.classCodePrefix,
       sortOrder: body.sortOrder,
       isActive: body.isActive,
       isArchived: body.isArchived,

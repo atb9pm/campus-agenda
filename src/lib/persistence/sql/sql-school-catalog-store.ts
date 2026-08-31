@@ -9,6 +9,16 @@ import {
   normalizeClassCode,
 } from "../../../features/school-catalog/index.ts";
 import {
+  normalizeParallelCode,
+  parseOptionalClassCodePrefix,
+} from "../../../features/school-catalog/class-codes.ts";
+import { prepareClassRecords } from "../../../features/school-catalog/class-prepare.ts";
+import {
+  assertClassCodeAvailable,
+  assertProfessionPrefixAvailable,
+  assertStructuredGroupAvailable,
+} from "../../../features/school-catalog/class-uniqueness.ts";
+import {
   branchDeleteBlockers,
   canReduceProfessionDuration,
   professionDeleteBlockers,
@@ -44,6 +54,7 @@ function mapClass(row: {
   school_year_label: string | null;
   profession_id: string | null;
   training_year: number | null;
+  parallel_code?: string | null;
 }): SchoolClassRecord {
   return {
     id: row.id,
@@ -55,6 +66,7 @@ function mapClass(row: {
     schoolYearLabel: row.school_year_label,
     professionId: row.profession_id ?? null,
     trainingYear: row.training_year ?? null,
+    parallelCode: row.parallel_code ?? null,
   };
 }
 
@@ -97,11 +109,13 @@ function mapProfession(row: {
   sort_order: number;
   is_active: number;
   archived_at: string | null;
+  class_code_prefix?: string | null;
 }): SchoolProfessionRecord {
   return {
     id: row.id,
     adminCode: row.admin_code,
     label: row.label,
+    classCodePrefix: row.class_code_prefix ?? null,
     durationYears: row.duration_years,
     sortOrder: row.sort_order,
     isActive: Boolean(row.is_active),
@@ -231,8 +245,8 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         await this.db
           .prepare(
             `INSERT INTO school_classes
-               (id, code, label, sort_order, is_active, school_year_id, school_year_label, profession_id, training_year)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+               (id, code, label, sort_order, is_active, school_year_id, school_year_label, profession_id, training_year, parallel_code)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             entry.id,
@@ -244,6 +258,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
             entry.schoolYearLabel,
             entry.professionId,
             entry.trainingYear,
+            entry.parallelCode,
           )
           .run();
       }
@@ -303,7 +318,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
     const rows = await this.db
       .prepare(
         `SELECT id, code, label, sort_order, is_active, school_year_id, school_year_label,
-                profession_id, training_year
+                profession_id, training_year, parallel_code
          FROM school_classes ORDER BY sort_order ASC, code ASC`,
       )
       .bind()
@@ -317,6 +332,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         school_year_label: string | null;
         profession_id: string | null;
         training_year: number | null;
+        parallel_code: string | null;
       }>();
     return (rows.results ?? []).map(mapClass);
   }
@@ -346,7 +362,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
     await this.ensureSeeded();
     const rows = await this.db
       .prepare(
-        `SELECT id, admin_code, label, duration_years, sort_order, is_active, archived_at
+        `SELECT id, admin_code, label, duration_years, sort_order, is_active, archived_at, class_code_prefix
          FROM school_professions ORDER BY sort_order ASC, label ASC`,
       )
       .bind()
@@ -358,6 +374,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         sort_order: number;
         is_active: number;
         archived_at: string | null;
+        class_code_prefix: string | null;
       }>();
     return (rows.results ?? []).map(mapProfession);
   }
@@ -384,47 +401,41 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
   }
 
   async createClass(input: SchoolClassInput): Promise<SchoolClassRecord> {
+    const [record] = await this.createClassesBatch([input]);
+    return record!;
+  }
+
+  async createClassesBatch(inputs: SchoolClassInput[]): Promise<SchoolClassRecord[]> {
     await this.ensureSeeded();
-    const attachment = validateClassProfessionAttachment({
-      professionId: input.professionId ?? null,
-      trainingYear: input.trainingYear ?? null,
-      professions: await this.listProfessions(),
+    if (inputs.length === 0) return [];
+    const [classes, professions] = await Promise.all([this.listClasses(), this.listProfessions()]);
+    const prepared = prepareClassRecords(inputs, {
+      professions,
+      classes,
+      createId: () => createId("school-class"),
+      sortOrderStart: classes.length + 1,
     });
-    if (!attachment.ok) throw new Error(attachment.reason);
-    const count = await this.db
-      .prepare("SELECT COUNT(*) AS count FROM school_classes")
-      .bind()
-      .first<{ count: number }>();
-    const record: SchoolClassRecord = {
-      id: createId("school-class"),
-      code: normalizeClassCode(input.code),
-      label: input.label.trim() || normalizeClassCode(input.code),
-      sortOrder: input.sortOrder ?? Number(count?.count ?? 0) + 1,
-      isActive: input.isActive ?? true,
-      schoolYearId: input.schoolYearId ?? null,
-      schoolYearLabel: input.schoolYearLabel ?? null,
-      professionId: attachment.value.professionId,
-      trainingYear: attachment.value.trainingYear,
-    };
-    await this.db
-      .prepare(
-        `INSERT INTO school_classes
-           (id, code, label, sort_order, is_active, school_year_id, school_year_label, profession_id, training_year)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        record.id,
-        record.code,
-        record.label,
-        record.sortOrder,
-        record.isActive ? 1 : 0,
-        record.schoolYearId,
-        record.schoolYearLabel,
-        record.professionId,
-        record.trainingYear,
-      )
-      .run();
-    return record;
+    if (!prepared.ok) throw new Error(prepared.reason);
+    await this.db.batch(
+      prepared.value.map((record) => ({
+        sql: `INSERT INTO school_classes
+           (id, code, label, sort_order, is_active, school_year_id, school_year_label, profession_id, training_year, parallel_code)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        values: [
+          record.id,
+          record.code,
+          record.label,
+          record.sortOrder,
+          record.isActive ? 1 : 0,
+          record.schoolYearId,
+          record.schoolYearLabel,
+          record.professionId,
+          record.trainingYear,
+          record.parallelCode,
+        ],
+      })),
+    );
+    return prepared.value;
   }
 
   async updateClass(id: string, patch: Partial<SchoolClassInput>): Promise<SchoolClassRecord | null> {
@@ -437,23 +448,48 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       professions: await this.listProfessions(),
     });
     if (!attachment.ok) throw new Error(attachment.reason);
+    const parallel =
+      patch.parallelCode !== undefined
+        ? normalizeParallelCode(patch.parallelCode)
+        : { ok: true as const, value: current.parallelCode };
+    if (!parallel.ok) throw new Error(parallel.reason);
+    const nextCode = patch.code !== undefined ? normalizeClassCode(patch.code) : current.code;
+    const nextYearId = patch.schoolYearId !== undefined ? patch.schoolYearId : current.schoolYearId;
+    const available = assertClassCodeAvailable({
+      code: nextCode,
+      schoolYearId: nextYearId,
+      classes: await this.listClasses(),
+      excludeId: id,
+    });
+    if (!available.ok) throw new Error(available.reason);
+    const group = assertStructuredGroupAvailable({
+      schoolYearId: nextYearId,
+      professionId: attachment.value.professionId,
+      trainingYear: attachment.value.trainingYear,
+      parallelCode: parallel.value,
+      classes: await this.listClasses(),
+      excludeId: id,
+      previous: current,
+    });
+    if (!group.ok) throw new Error(group.reason);
     const next: SchoolClassRecord = {
       ...current,
-      code: patch.code !== undefined ? normalizeClassCode(patch.code) : current.code,
+      code: nextCode,
       label: patch.label !== undefined ? patch.label.trim() : current.label,
       sortOrder: patch.sortOrder ?? current.sortOrder,
       isActive: patch.isActive ?? current.isActive,
-      schoolYearId: patch.schoolYearId !== undefined ? patch.schoolYearId : current.schoolYearId,
+      schoolYearId: nextYearId,
       schoolYearLabel:
         patch.schoolYearLabel !== undefined ? patch.schoolYearLabel : current.schoolYearLabel,
       professionId: attachment.value.professionId,
       trainingYear: attachment.value.trainingYear,
+      parallelCode: parallel.value,
     };
     await this.db
       .prepare(
         `UPDATE school_classes
          SET code = ?, label = ?, sort_order = ?, is_active = ?, school_year_id = ?, school_year_label = ?,
-             profession_id = ?, training_year = ?
+             profession_id = ?, training_year = ?, parallel_code = ?
          WHERE id = ?`,
       )
       .bind(
@@ -465,6 +501,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         next.schoolYearLabel,
         next.professionId,
         next.trainingYear,
+        next.parallelCode,
         id,
       )
       .run();
@@ -593,6 +630,15 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
     if (durationYears < 1 || durationYears > 10) {
       throw new Error("La durée de formation doit être comprise entre 1 et 10 ans.");
     }
+    const prefix = parseOptionalClassCodePrefix(input.classCodePrefix);
+    if (!prefix.ok) throw new Error(prefix.reason);
+    if (prefix.value) {
+      const unique = assertProfessionPrefixAvailable({
+        prefix: prefix.value,
+        professions: await this.listProfessions(),
+      });
+      if (!unique.ok) throw new Error(unique.reason);
+    }
     const count = await this.db
       .prepare("SELECT COUNT(*) AS count FROM school_professions")
       .bind()
@@ -602,6 +648,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       id: createId("school-profession"),
       adminCode: await this.nextAdminCode("PRF"),
       label: input.label.trim(),
+      classCodePrefix: prefix.value,
       durationYears,
       sortOrder: input.sortOrder ?? Number(count?.count ?? 0) + 1,
       isActive: input.isActive ?? true,
@@ -611,8 +658,8 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
     await this.db
       .prepare(
         `INSERT INTO school_professions
-           (id, admin_code, label, duration_years, sort_order, is_active, archived_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           (id, admin_code, label, duration_years, sort_order, is_active, archived_at, class_code_prefix)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         record.id,
@@ -622,6 +669,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         record.sortOrder,
         record.isActive ? 1 : 0,
         record.archivedAt,
+        record.classCodePrefix,
       )
       .run();
     return record;
@@ -649,9 +697,23 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
     if (patch.isArchived === true) archivedAt = current.archivedAt ?? new Date().toISOString();
     else if (patch.isArchived === false) archivedAt = null;
 
+    const prefix =
+      patch.classCodePrefix !== undefined
+        ? parseOptionalClassCodePrefix(patch.classCodePrefix)
+        : { ok: true as const, value: current.classCodePrefix };
+    if (!prefix.ok) return prefix;
+    if (prefix.value) {
+      const unique = assertProfessionPrefixAvailable({
+        prefix: prefix.value,
+        professions: await this.listProfessions(),
+        excludeId: id,
+      });
+      if (!unique.ok) return unique;
+    }
     const next: SchoolProfessionRecord = {
       ...current,
       label: patch.label !== undefined ? patch.label.trim() : current.label,
+      classCodePrefix: prefix.value,
       durationYears:
         patch.durationYears !== undefined ? Math.trunc(patch.durationYears) : current.durationYears,
       sortOrder: patch.sortOrder ?? current.sortOrder,
@@ -662,7 +724,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
     await this.db
       .prepare(
         `UPDATE school_professions
-         SET label = ?, duration_years = ?, sort_order = ?, is_active = ?, archived_at = ?
+         SET label = ?, duration_years = ?, sort_order = ?, is_active = ?, archived_at = ?, class_code_prefix = ?
          WHERE id = ?`,
       )
       .bind(
@@ -671,6 +733,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         next.sortOrder,
         next.isActive ? 1 : 0,
         next.archivedAt,
+        next.classCodePrefix,
         id,
       )
       .run();

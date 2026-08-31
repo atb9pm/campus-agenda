@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 
-import type { SqlDatabase, SqlStatement } from "./types.ts";
+import type { SqlBatchStatement, SqlDatabase, SqlStatement } from "./types.ts";
 
 function wrapStatement(statement: ReturnType<DatabaseSync["prepare"]>, values: unknown[]): SqlStatement {
   return {
@@ -41,6 +41,23 @@ export class NodeSqliteDatabase implements SqlDatabase {
     this.db.exec(query);
   }
 
+  async batch(statements: SqlBatchStatement[]): Promise<void> {
+    this.db.exec("BEGIN");
+    try {
+      for (const statement of statements) {
+        this.db.prepare(statement.sql).run(...statement.values);
+      }
+      this.db.exec("COMMIT");
+    } catch (error) {
+      try {
+        this.db.exec("ROLLBACK");
+      } catch {
+        // la transaction est déjà close
+      }
+      throw error;
+    }
+  }
+
   close() {
     this.db.close();
   }
@@ -67,6 +84,9 @@ export function wrapD1Database(d1: D1Database): SqlDatabase {
     async exec(query: string) {
       await d1.exec(query);
     },
+    async batch(statements: SqlBatchStatement[]) {
+      await d1.batch(statements.map((statement) => d1.prepare(statement.sql).bind(...statement.values)));
+    },
   };
 }
 
@@ -79,4 +99,5 @@ interface D1Database {
     };
   };
   exec(query: string): Promise<unknown>;
+  batch(statements: unknown[]): Promise<unknown>;
 }

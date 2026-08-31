@@ -3,6 +3,11 @@ export interface SchoolProfessionRecord {
   /** Code administratif immuable, ex. PRF-0001. */
   adminCode: string;
   label: string;
+  /**
+   * Abréviation métier pour générer les codes de classe (MMA, MA).
+   * Distincte de `adminCode` (PRF-0001). Null = legacy à configurer.
+   */
+  classCodePrefix: string | null;
   durationYears: number;
   sortOrder: number;
   isActive: boolean;
@@ -13,6 +18,7 @@ export interface SchoolProfessionRecord {
 export interface SchoolProfessionInput {
   label: string;
   durationYears: number;
+  classCodePrefix?: string | null;
   sortOrder?: number;
   isActive?: boolean;
   isArchived?: boolean;

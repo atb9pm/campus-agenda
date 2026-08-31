@@ -4,11 +4,18 @@ export interface SqlStatement {
   run(): Promise<{ success: boolean; meta?: { last_row_id?: number; changes?: number } }>;
 }
 
+export interface SqlBatchStatement {
+  sql: string;
+  values: unknown[];
+}
+
 export interface SqlDatabase {
   prepare(query: string): {
     bind(...values: unknown[]): SqlStatement;
   };
   exec(query: string): Promise<void>;
+  /** Exécute les instructions dans une transaction unique (tout ou rien). */
+  batch(statements: SqlBatchStatement[]): Promise<void>;
 }
 
 export interface AgendaItemRow {

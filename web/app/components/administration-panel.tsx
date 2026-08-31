@@ -9,23 +9,25 @@ import type {
   SchoolProfessionRecord,
 } from "@campus/features/school-catalog";
 import {
+  formatTrainingYearLabel,
   listPlannedBranchesForClass,
   listSelectableSchoolYearsForClassEdit,
-  listSelectableSchoolYearsForNewClass,
   trainingYearsForDuration,
 } from "@campus/features/school-catalog";
 import { BRANCH_TEACHING_TYPE_LABELS, type TeachingType } from "@campus/features/teaching-types/index.ts";
 import { AnnualCoursesAdminPanel } from "./annual-courses-admin-panel.tsx";
+import { ClassCreationWizard } from "./class-creation-wizard.tsx";
 import { ProfessionsAdminPanel } from "./professions-admin-panel.tsx";
 import { SchoolYearAdminPanel } from "./school-year-admin-panel.tsx";
 import { TeacherAccountsPanel } from "./teacher-accounts-panel.tsx";
+import { TrainingPlansAdminPanel } from "./training-plans-admin-panel.tsx";
 import {
   fetchSchoolYears,
   type SchoolCalendarWeek,
   type SchoolYearSummary,
 } from "../../lib/api-client.ts";
 
-type AdminTab = "classes" | "branches" | "professions" | "teachers" | "assignments" | "weeks";
+type AdminTab = "classes" | "branches" | "professions" | "plans" | "teachers" | "assignments" | "weeks";
 
 interface AdministrationPanelProps {
   currentTeacherId: string;
@@ -43,12 +45,14 @@ interface ClassEditDraft {
   schoolYearId: string;
   professionId: string;
   trainingYear: string;
+  parallelCode: string;
 }
 
 const TAB_LABELS: Record<AdminTab, string> = {
   classes: "Classes",
   branches: "Catalogue des branches",
-  professions: "Professions & plan de formation",
+  professions: "Professions",
+  plans: "Plans de formation",
   teachers: "Enseignants",
   assignments: "Attributions des cours",
   weeks: "Plan des semaines A/B",
@@ -109,11 +113,6 @@ export function AdministrationPanel({
   const [loading, setLoading] = useState(true);
   const [sectionError, setSectionError] = useState<{ tab: AdminTab; message: string } | null>(null);
 
-  const [classCode, setClassCode] = useState("");
-  const [classLabel, setClassLabel] = useState("");
-  const [classSchoolYearId, setClassSchoolYearId] = useState("");
-  const [classProfessionId, setClassProfessionId] = useState("");
-  const [classTrainingYear, setClassTrainingYear] = useState("");
   const [classDraft, setClassDraft] = useState<ClassEditDraft | null>(null);
 
   const [branchLabel, setBranchLabel] = useState("");
@@ -165,11 +164,6 @@ export function AdministrationPanel({
     return map;
   }, [professions]);
 
-  const newClassYears = useMemo(() => {
-    const profession = professionById.get(classProfessionId);
-    return profession ? trainingYearsForDuration(profession.durationYears) : [];
-  }, [classProfessionId, professionById]);
-
   function fail(message: string) {
     setSectionError({ tab, message });
   }
@@ -178,47 +172,17 @@ export function AdministrationPanel({
     setSectionError(null);
   }
 
-  async function submitClass(event: FormEvent) {
-    event.preventDefault();
-    succeed();
-    if (!classSchoolYearId || !classProfessionId || !classTrainingYear) {
-      fail("Année scolaire, profession et année de formation sont obligatoires.");
-      return;
-    }
-    const response = await fetch("/api/admin/catalog", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        kind: "class",
-        code: classCode,
-        label: classLabel || classCode,
-        sortOrder: classes.length + 1,
-        isActive: true,
-        schoolYearId: classSchoolYearId,
-        professionId: classProfessionId,
-        trainingYear: Number.parseInt(classTrainingYear, 10),
-      }),
-    });
-    const payload = await response.json() as { ok: boolean; reason?: string };
-    if (!response.ok || !payload.ok) {
-      fail(payload.reason ?? "Création impossible.");
-      return;
-    }
-    setClassCode("");
-    setClassLabel("");
-    setClassSchoolYearId("");
-    setClassProfessionId("");
-    setClassTrainingYear("");
-    onNotice("Classe ajoutée au référentiel.");
-    await refresh();
-  }
-
   async function saveClassDraft(event: FormEvent) {
     event.preventDefault();
     if (!classDraft) return;
     succeed();
-    if (!classDraft.schoolYearId || !classDraft.professionId || !classDraft.trainingYear) {
+    const pedagogyComplete = Boolean(
+      classDraft.schoolYearId && classDraft.professionId && classDraft.trainingYear,
+    );
+    const pedagogyPartial = Boolean(
+      classDraft.schoolYearId || classDraft.professionId || classDraft.trainingYear,
+    );
+    if (pedagogyPartial && !pedagogyComplete) {
       fail("Année scolaire, profession et année de formation doivent être enregistrées ensemble.");
       return;
     }
@@ -228,9 +192,14 @@ export function AdministrationPanel({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         kind: "class",
-        schoolYearId: classDraft.schoolYearId,
-        professionId: classDraft.professionId,
-        trainingYear: Number.parseInt(classDraft.trainingYear, 10),
+        ...(pedagogyComplete
+          ? {
+              schoolYearId: classDraft.schoolYearId,
+              professionId: classDraft.professionId,
+              trainingYear: Number.parseInt(classDraft.trainingYear, 10),
+            }
+          : {}),
+        parallelCode: classDraft.parallelCode.trim() === "" ? null : classDraft.parallelCode,
       }),
     });
     const payload = await response.json() as { ok: boolean; reason?: string };
@@ -343,8 +312,8 @@ export function AdministrationPanel({
         <p className="eyebrow">ADMINISTRATION ÉCOLE</p>
         <h2>Référentiel pédagogique</h2>
         <p>
-          Catalogue des branches, professions et plan de formation (CTX), puis classes.
-          Les branches d’une classe sont déduites automatiquement du plan.
+          Catalogue des branches → professions → plans de formation (CTX) → classes →
+          attributions. Les branches d’une classe viennent du plan, jamais d’une saisie libre.
         </p>
       </div>
 
@@ -366,7 +335,7 @@ export function AdministrationPanel({
         ))}
       </div>
 
-      {loading && tab !== "professions" && tab !== "teachers" ? (
+      {loading && tab !== "professions" && tab !== "plans" && tab !== "teachers" ? (
         <p className="admin-loading">Chargement…</p>
       ) : null}
 
@@ -376,70 +345,22 @@ export function AdministrationPanel({
             <div>
               <h3>Classes</h3>
               <p>
-                Une classe = année scolaire + profession + année de formation.
-                Les branches prévues viennent du plan de formation (CTX), jamais d’une saisie libre.
+                La création de classes est l’étape finale : elle exploite le référentiel déjà configuré.
+                Les branches prévues viennent du plan de formation (CTX).
               </p>
             </div>
           </header>
           {visibleError ? <p className="admin-error">{visibleError}</p> : null}
-          <form className="admin-inline-form" onSubmit={(event) => void submitClass(event)}>
-            <label>
-              Code
-              <input value={classCode} onChange={(event) => setClassCode(event.target.value)} placeholder="MMA1A" required />
-            </label>
-            <label>
-              Libellé
-              <input value={classLabel} onChange={(event) => setClassLabel(event.target.value)} placeholder="MMA1A" />
-            </label>
-            <label>
-              Année scolaire
-              <select
-                value={classSchoolYearId}
-                onChange={(event) => setClassSchoolYearId(event.target.value)}
-                required
-              >
-                <option value="">Choisir…</option>
-                {listSelectableSchoolYearsForNewClass(schoolYears).map((year) => (
-                  <option key={year.id} value={year.id}>
-                    {year.label}{year.status === "active" ? " (active)" : year.status === "draft" ? " (brouillon)" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Profession
-              <select
-                value={classProfessionId}
-                onChange={(event) => {
-                  setClassProfessionId(event.target.value);
-                  setClassTrainingYear("");
-                }}
-                required
-              >
-                <option value="">Choisir…</option>
-                {activeProfessions.map((profession) => (
-                  <option key={profession.id} value={profession.id}>
-                    {profession.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Année de formation
-              <select
-                value={classTrainingYear}
-                onChange={(event) => setClassTrainingYear(event.target.value)}
-                disabled={!classProfessionId}
-                required
-              >
-                <option value="">{classProfessionId ? "Choisir…" : "Choisir d’abord une profession"}</option>
-                {newClassYears.map((year) => (
-                  <option key={year} value={year}>Année {year}</option>
-                ))}
-              </select>
-            </label>
-            <button type="submit" className="workspace-action">Ajouter la classe</button>
-          </form>
+          <ClassCreationWizard
+            classes={classes}
+            professions={professions}
+            contexts={contexts}
+            schoolYears={schoolYears}
+            onNotice={onNotice}
+            onCreated={refresh}
+            onError={fail}
+            onOpenPlans={() => setTab("plans")}
+          />
           <ul className="admin-catalog-list admin-class-list">
             {classes.map((entry) => {
               const linkedProfession = entry.professionId
@@ -476,8 +397,8 @@ export function AdministrationPanel({
                           onChange={(event) =>
                             setClassDraft({ ...classDraft, schoolYearId: event.target.value })
                           }
-                          required
                         >
+                          <option value="">Non renseignée (legacy)</option>
                           {listSelectableSchoolYearsForClassEdit(schoolYears, entry.schoolYearId).map((year) => (
                             <option key={year.id} value={year.id}>
                               {year.label}
@@ -499,8 +420,8 @@ export function AdministrationPanel({
                               trainingYear: "",
                             })
                           }
-                          required
                         >
+                          <option value="">Profession à configurer</option>
                           {selectableProfessions.map((profession) => (
                             <option key={profession.id} value={profession.id}>
                               {profession.label}
@@ -516,11 +437,24 @@ export function AdministrationPanel({
                             setClassDraft({ ...classDraft, trainingYear: event.target.value })
                           }
                           disabled={!classDraft.professionId}
-                          required
                         >
                           <option value="">Choisir…</option>
                           {yearOptions.map((year) => (
-                            <option key={year} value={year}>Année {year}</option>
+                            <option key={year} value={year}>{formatTrainingYearLabel(year)}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        Groupe parallèle
+                        <select
+                          value={classDraft.parallelCode}
+                          onChange={(event) =>
+                            setClassDraft({ ...classDraft, parallelCode: event.target.value })
+                          }
+                        >
+                          <option value="">Aucun</option>
+                          {["A", "B", "C", "D", "E", "F"].map((letter) => (
+                            <option key={letter} value={letter}>{letter}</option>
                           ))}
                         </select>
                       </label>
@@ -530,11 +464,15 @@ export function AdministrationPanel({
                   ) : (
                     <div className="admin-class-pedagogy">
                       <p className="admin-teacher-login-meta">
-                        {entry.schoolYearLabel ?? (entry.schoolYearId ? entry.schoolYearId : "Année scolaire non renseignée (legacy)")}
+                        {entry.code}
                         {" · "}
                         {linkedProfession?.label ?? "Profession à configurer"}
                         {" · "}
-                        {entry.trainingYear !== null ? `Année ${entry.trainingYear}` : "Année de formation à configurer"}
+                        {entry.trainingYear !== null ? formatTrainingYearLabel(entry.trainingYear) : "Année de formation à configurer"}
+                        {" · "}
+                        {entry.parallelCode ? `Groupe ${entry.parallelCode}` : "Groupe : aucun"}
+                        {" · "}
+                        {entry.schoolYearLabel ?? (entry.schoolYearId ? entry.schoolYearId : "Année scolaire non renseignée (legacy)")}
                       </p>
                       {structured ? (
                         planned.length > 0 ? (
@@ -546,7 +484,7 @@ export function AdministrationPanel({
                         ) : (
                           <p className="admin-class-config-warn">
                             Aucune branche n’est encore définie dans le plan de formation pour cette profession et cette année.
-                            <button type="button" className="admin-link-button" onClick={() => setTab("professions")}>
+                            <button type="button" className="admin-link-button" onClick={() => setTab("plans")}>
                               Ouvrir le plan de formation
                             </button>
                           </p>
@@ -562,6 +500,7 @@ export function AdministrationPanel({
                             schoolYearId: entry.schoolYearId ?? "",
                             professionId: entry.professionId ?? "",
                             trainingYear: entry.trainingYear !== null ? String(entry.trainingYear) : "",
+                            parallelCode: entry.parallelCode ?? "",
                           })
                         }
                       >
@@ -754,6 +693,10 @@ export function AdministrationPanel({
 
       {tab === "professions" ? (
         <ProfessionsAdminPanel onNotice={onNotice} />
+      ) : null}
+
+      {tab === "plans" ? (
+        <TrainingPlansAdminPanel onNotice={onNotice} />
       ) : null}
 
       {tab === "teachers" ? (

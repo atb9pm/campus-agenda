@@ -98,6 +98,7 @@ async function fixture() {
     schoolYearLabel: "2027-2028",
     professionId: profession.id,
     trainingYear: 1,
+    parallelCode: "B",
   });
   const teachers = getMemoryTeacherAccountStore();
   const francois = await teachers.createAccount({
@@ -340,6 +341,7 @@ test("attributions — titulaire, coenseignant, temporaire, définitif", async (
     schoolYearLabel: "2027-2028",
     professionId: fx.profession.id,
     trainingYear: 1,
+    parallelCode: "A",
   });
   const classC = await fx.catalog.createClass({
     code: "MMA1C",
@@ -348,6 +350,7 @@ test("attributions — titulaire, coenseignant, temporaire, définitif", async (
     schoolYearLabel: "2027-2028",
     professionId: fx.profession.id,
     trainingYear: 1,
+    parallelCode: "C",
   });
   const courseA = await createAnnualCourse(fx.deps, {
     schoolYearId: "year-2027",

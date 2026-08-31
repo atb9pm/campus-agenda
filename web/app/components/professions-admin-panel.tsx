@@ -2,15 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-import type {
-  PedagogicalContextRecord,
-  SchoolBranchRecord,
-  SchoolClassRecord,
-  SchoolProfessionRecord,
-} from "@campus/features/school-catalog";
-import { trainingYearsForDuration } from "@campus/features/school-catalog";
-import { BRANCH_TEACHING_TYPE_LABELS } from "@campus/features/teaching-types/index.ts";
-import { PedagogicalPathPanel } from "./pedagogical-path-panel.tsx";
+import type { SchoolClassRecord, SchoolProfessionRecord } from "@campus/features/school-catalog";
 
 interface ProfessionsAdminPanelProps {
   onNotice: (message: string) => void;
@@ -20,20 +12,13 @@ interface ProfessionEditDraft {
   professionId: string;
   label: string;
   durationYears: string;
-}
-
-interface YearAssignDraft {
-  [key: string]: string;
+  classCodePrefix: string;
 }
 
 function professionCardClass(entry: SchoolProfessionRecord): string {
   if (entry.isArchived) return "admin-teacher-card is-archived";
   if (!entry.isActive) return "admin-teacher-card is-inactive";
   return "admin-teacher-card is-active";
-}
-
-function yearKey(professionId: string, year: number): string {
-  return `${professionId}:${year}`;
 }
 
 async function copyText(value: string): Promise<boolean> {
@@ -45,54 +30,41 @@ async function copyText(value: string): Promise<boolean> {
   }
 }
 
-async function fetchFullCatalog() {
+async function fetchProfessionsCatalog() {
   const response = await fetch("/api/admin/catalog", { credentials: "include" });
   const payload = (await response.json()) as {
     ok: boolean;
     reason?: string;
     classes?: SchoolClassRecord[];
-    branches?: SchoolBranchRecord[];
     professions?: SchoolProfessionRecord[];
-    contexts?: PedagogicalContextRecord[];
   };
   if (!response.ok || !payload.ok) {
     throw new Error(payload.reason ?? "Chargement du référentiel impossible.");
   }
   return {
     classes: payload.classes ?? [],
-    branches: payload.branches ?? [],
     professions: payload.professions ?? [],
-    contexts: payload.contexts ?? [],
   };
 }
 
 export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) {
   const [classes, setClasses] = useState<SchoolClassRecord[]>([]);
-  const [branches, setBranches] = useState<SchoolBranchRecord[]>([]);
   const [professions, setProfessions] = useState<SchoolProfessionRecord[]>([]);
-  const [contexts, setContexts] = useState<PedagogicalContextRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [label, setLabel] = useState("");
+  const [classCodePrefix, setClassCodePrefix] = useState("");
   const [durationYears, setDurationYears] = useState("3");
   const [showArchived, setShowArchived] = useState(false);
   const [editDraft, setEditDraft] = useState<ProfessionEditDraft | null>(null);
-  const [assignDraft, setAssignDraft] = useState<YearAssignDraft>({});
-  const [pathEditor, setPathEditor] = useState<{
-    contextId: string;
-    adminCode: string;
-    branchLabel: string;
-  } | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const catalog = await fetchFullCatalog();
+      const catalog = await fetchProfessionsCatalog();
       setClasses(catalog.classes);
-      setBranches(catalog.branches);
       setProfessions(catalog.professions);
-      setContexts(catalog.contexts);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Chargement impossible.");
     } finally {
@@ -114,17 +86,6 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
     [professions, showArchived],
   );
 
-  const branchById = useMemo(() => {
-    const map = new Map<string, SchoolBranchRecord>();
-    for (const branch of branches) map.set(branch.id, branch);
-    return map;
-  }, [branches]);
-
-  const assignableBranches = useMemo(
-    () => branches.filter((entry) => entry.isActive && !entry.isArchived),
-    [branches],
-  );
-
   async function submitProfession(event: FormEvent) {
     event.preventDefault();
     setError("");
@@ -136,6 +97,7 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
       body: JSON.stringify({
         kind: "profession",
         label,
+        classCodePrefix,
         durationYears: duration,
         sortOrder: professions.length + 1,
         isActive: true,
@@ -147,6 +109,7 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
       return;
     }
     setLabel("");
+    setClassCodePrefix("");
     setDurationYears("3");
     onNotice("Profession ajoutée au référentiel.");
     await refresh();
@@ -157,6 +120,7 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
     patch: {
       label?: string;
       durationYears?: number;
+      classCodePrefix?: string | null;
       isActive?: boolean;
       isArchived?: boolean;
     },
@@ -194,9 +158,27 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
       setError("La durée de formation doit être un entier ≥ 1.");
       return;
     }
+    const nextPrefix = editDraft.classCodePrefix.trim();
+    if (!nextPrefix && !entry.classCodePrefix) {
+      setError("L'abréviation des classes est obligatoire.");
+      return;
+    }
+    const linkedClassCount = classes.filter((schoolClass) => schoolClass.professionId === entry.id).length;
+    if (
+      nextPrefix &&
+      entry.classCodePrefix &&
+      nextPrefix.toUpperCase().replace(/[^A-Z0-9]/g, "") !== entry.classCodePrefix &&
+      linkedClassCount > 0
+    ) {
+      const confirmed = window.confirm(
+        `Modifier l’abréviation n’a aucun effet sur les ${linkedClassCount} classe${linkedClassCount > 1 ? "s" : ""} déjà créée${linkedClassCount > 1 ? "s" : ""}. Le nouveau préfixe s’applique uniquement aux nouvelles classes. Continuer ?`,
+      );
+      if (!confirmed) return;
+    }
     const ok = await patchProfession(entry, {
       label: nextLabel,
       durationYears: nextDuration,
+      classCodePrefix: nextPrefix || entry.classCodePrefix,
     });
     if (!ok) return;
     onNotice(`Profession « ${nextLabel} » mise à jour.`);
@@ -225,84 +207,9 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
     await refresh();
   }
 
-  async function assignBranch(professionId: string, trainingYear: number) {
-    const key = yearKey(professionId, trainingYear);
-    const branchId = assignDraft[key]?.trim();
-    if (!branchId) {
-      setError("Choisissez une branche à affecter.");
-      return;
-    }
-    setError("");
-    const response = await fetch("/api/admin/catalog", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        kind: "context",
-        professionId,
-        trainingYear,
-        branchId,
-        isActive: true,
-      }),
-    });
-    const payload = (await response.json()) as { ok: boolean; reason?: string };
-    if (!response.ok || !payload.ok) {
-      setError(payload.reason ?? "Affectation impossible.");
-      return;
-    }
-    setAssignDraft((current) => ({ ...current, [key]: "" }));
-    onNotice(`Branche affectée à l’année ${trainingYear}.`);
-    await refresh();
-  }
-
-  async function removeContext(context: PedagogicalContextRecord) {
-    setError("");
-    const deleteResponse = await fetch(`/api/admin/catalog/${context.id}?kind=context`, {
-      method: "DELETE",
-      credentials: "include",
-    });
-    const deletePayload = (await deleteResponse.json()) as { ok: boolean; reason?: string };
-    if (deleteResponse.ok && deletePayload.ok) {
-      onNotice(`Affectation ${context.adminCode} retirée.`);
-      await refresh();
-      return;
-    }
-
-    const archiveResponse = await fetch(`/api/admin/catalog/${context.id}`, {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "context", isArchived: true }),
-    });
-    const archivePayload = (await archiveResponse.json()) as { ok: boolean; reason?: string };
-    if (!archiveResponse.ok || !archivePayload.ok) {
-      setError(
-        deletePayload.reason ??
-          archivePayload.reason ??
-          "Retrait impossible. Archivez l’affectation manuellement.",
-      );
-      return;
-    }
-    onNotice(
-      `Affectation ${context.adminCode} archivée` +
-        (deletePayload.reason ? ` (${deletePayload.reason})` : "") +
-        ".",
-    );
-    await refresh();
-  }
-
   async function handleCopy(code: string) {
     const ok = await copyText(code);
     onNotice(ok ? `Code ${code} copié.` : `Impossible de copier ${code}.`);
-  }
-
-  function contextsForYear(professionId: string, year: number, includeArchived = false) {
-    return contexts.filter(
-      (entry) =>
-        entry.professionId === professionId &&
-        entry.trainingYear === year &&
-        (includeArchived || !entry.isArchived),
-    );
   }
 
   if (loading) {
@@ -313,11 +220,10 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
     <div className="admin-panel-block">
       <header className="config-section-header">
         <div>
-          <h3>Professions & plan de formation</h3>
+          <h3>Professions</h3>
           <p>
-            Créez une profession, définissez sa durée, puis attribuez à chaque année de formation
-            les branches prévues dans le catalogue. Cette section est l’interface graphique du CTX
-            : profession + année de formation + branche.
+            Catalogue des métiers. L’abréviation (MMA, MA) sert à générer les codes de classe.
+            L’identifiant système (PRF-0001) n’est pas une abréviation métier.
           </p>
         </div>
       </header>
@@ -326,11 +232,20 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
 
       <form className="admin-inline-form" onSubmit={(event) => void submitProfession(event)}>
         <label>
-          Nom de la profession
+          Nom officiel
           <input
             value={label}
             onChange={(event) => setLabel(event.target.value)}
-            placeholder="Informaticien-ne"
+            placeholder="Mécanicien en maintenance"
+            required
+          />
+        </label>
+        <label>
+          Abréviation des classes
+          <input
+            value={classCodePrefix}
+            onChange={(event) => setClassCodePrefix(event.target.value)}
+            placeholder="MMA"
             required
           />
         </label>
@@ -375,7 +290,6 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
         <ul className="admin-teacher-access-list">
           {visibleProfessions.map((entry) => {
             const editing = editDraft?.professionId === entry.id;
-            const years = trainingYearsForDuration(entry.durationYears);
             const linkedClassCount = classes.filter(
               (schoolClass) => schoolClass.professionId === entry.id,
             ).length;
@@ -383,7 +297,7 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
               <li key={entry.id} className={`${professionCardClass(entry)} admin-profession-card`}>
                 <div className="admin-teacher-identity">
                   <strong className="admin-teacher-initials">
-                    {entry.label.slice(0, 3).toUpperCase()}
+                    {(entry.classCodePrefix ?? entry.label).slice(0, 3).toUpperCase()}
                   </strong>
                   {editing && editDraft ? (
                     <form
@@ -391,13 +305,27 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
                       onSubmit={(event) => void saveEdit(event)}
                     >
                       <label>
-                        Nom
+                        Nom officiel
                         <input
                           value={editDraft.label}
                           onChange={(event) =>
                             setEditDraft({ ...editDraft, label: event.target.value })
                           }
                           required
+                        />
+                      </label>
+                      <label>
+                        Abréviation des classes
+                        <input
+                          value={editDraft.classCodePrefix}
+                          onChange={(event) =>
+                            setEditDraft({
+                              ...editDraft,
+                              classCodePrefix: event.target.value,
+                            })
+                          }
+                          placeholder="MMA"
+                          required={!entry.classCodePrefix}
                         />
                       </label>
                       <label>
@@ -416,6 +344,12 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
                           required
                         />
                       </label>
+                      {linkedClassCount > 0 ? (
+                        <p className="admin-class-config-warn">
+                          Modifier l’abréviation ne renomme pas les {linkedClassCount} classe
+                          {linkedClassCount > 1 ? "s" : ""} déjà créée{linkedClassCount > 1 ? "s" : ""}.
+                        </p>
+                      ) : null}
                       <div className="admin-teacher-edit-actions">
                         <button type="submit">Enregistrer</button>
                         <button type="button" onClick={() => setEditDraft(null)}>
@@ -427,14 +361,17 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
                     <div>
                       <p className="admin-teacher-name">{entry.label}</p>
                       <p className="admin-teacher-login-meta">
-                        {entry.durationYears} an{entry.durationYears > 1 ? "s" : ""} de formation
+                        Abréviation des classes :{" "}
+                        {entry.classCodePrefix ?? "Abréviation à configurer"}
+                        {" · "}
+                        {entry.durationYears} an{entry.durationYears > 1 ? "s" : ""}
                         {linkedClassCount > 0
                           ? ` · ${linkedClassCount} classe${linkedClassCount > 1 ? "s" : ""}`
                           : ""}
                       </p>
                       <div className="admin-code-row">
-                        <span className="admin-admin-code" title="Code administratif">
-                          {entry.adminCode}
+                        <span className="admin-admin-code" title="Identifiant système">
+                          Identifiant système : {entry.adminCode}
                         </span>
                         <button
                           type="button"
@@ -458,6 +395,9 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
                   >
                     {entry.isArchived ? "Archivée" : entry.isActive ? "Active" : "Désactivée"}
                   </span>
+                  {!entry.classCodePrefix ? (
+                    <span className="badge-status is-off">Abréviation à configurer</span>
+                  ) : null}
                 </div>
 
                 <div className="admin-teacher-actions">
@@ -469,6 +409,7 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
                           professionId: entry.id,
                           label: entry.label,
                           durationYears: String(entry.durationYears),
+                          classCodePrefix: entry.classCodePrefix ?? "",
                         })
                       }
                     >
@@ -492,119 +433,11 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
                     Supprimer
                   </button>
                 </div>
-
-                {!entry.isArchived ? (
-                  <div className="admin-profession-years">
-                    {years.map((year) => {
-                      const yearContexts = contextsForYear(entry.id, year);
-                      const key = yearKey(entry.id, year);
-                      const assignedIds = new Set(yearContexts.map((ctx) => ctx.branchId));
-                      const availableBranches = assignableBranches.filter(
-                        (branch) => !assignedIds.has(branch.id),
-                      );
-                      return (
-                        <div key={key} className="admin-profession-year">
-                          <div className="admin-profession-year-header">
-                            <strong>Année {year}</strong>
-                            <span>
-                              {yearContexts.length} branche
-                              {yearContexts.length > 1 ? "s" : ""}
-                            </span>
-                          </div>
-
-                          {yearContexts.length === 0 ? (
-                            <p className="admin-profession-empty">Aucune branche affectée.</p>
-                          ) : (
-                            <ul className="admin-profession-assignments">
-                              {yearContexts.map((context) => {
-                                const branch = branchById.get(context.branchId);
-                                return (
-                                  <li key={context.id}>
-                                    <div>
-                                      <span className="admin-profession-branch-label">
-                                        {branch?.label ?? context.branchId}
-                                        {branch?.teachingType
-                                          ? ` — ${BRANCH_TEACHING_TYPE_LABELS[branch.teachingType]}`
-                                          : ""}
-                                      </span>
-                                      <span className="admin-admin-code">{context.adminCode}</span>
-                                    </div>
-                                    <div className="admin-profession-context-actions">
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          setPathEditor({
-                                            contextId: context.id,
-                                            adminCode: context.adminCode,
-                                            branchLabel: branch?.label ?? context.branchId,
-                                          })
-                                        }
-                                      >
-                                        Parcours
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => void removeContext(context)}
-                                      >
-                                        Retirer
-                                      </button>
-                                    </div>
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          )}
-
-                          <div className="admin-profession-assign">
-                            <label>
-                              Ajouter une branche
-                              <select
-                                value={assignDraft[key] ?? ""}
-                                onChange={(event) =>
-                                  setAssignDraft((current) => ({
-                                    ...current,
-                                    [key]: event.target.value,
-                                  }))
-                                }
-                              >
-                                <option value="">Choisir…</option>
-                                {availableBranches.map((branch) => (
-                                  <option key={branch.id} value={branch.id}>
-                                    {branch.label} — {branch.teachingType
-                                      ? BRANCH_TEACHING_TYPE_LABELS[branch.teachingType]
-                                      : "Type à configurer"}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <button
-                              type="button"
-                              disabled={!assignDraft[key]}
-                              onClick={() => void assignBranch(entry.id, year)}
-                            >
-                              Ajouter
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : null}
               </li>
             );
           })}
         </ul>
       )}
-
-      {pathEditor ? (
-        <PedagogicalPathPanel
-          contextId={pathEditor.contextId}
-          adminCode={pathEditor.adminCode}
-          branchLabel={pathEditor.branchLabel}
-          onNotice={onNotice}
-          onClose={() => setPathEditor(null)}
-        />
-      ) : null}
     </div>
   );
 }

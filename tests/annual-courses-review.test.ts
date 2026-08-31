@@ -93,6 +93,7 @@ async function fixture(yearStatus: "draft" | "active" | "archived" = "active") {
     schoolYearLabel: "2027-2028",
     professionId: profession.id,
     trainingYear: 1,
+    parallelCode: "A",
   });
   const teachers = getMemoryTeacherAccountStore();
   const francois = await teachers.createAccount({
@@ -608,6 +609,7 @@ test("retrait — attribution future à validFrom, active maintenant, déjà ter
     schoolYearLabel: "2027-2028",
     professionId: fx.profession.id,
     trainingYear: 1,
+    parallelCode: "C",
   });
   const otherCourse = await createAnnualCourse(fx.deps, {
     schoolYearId: "year-2027",

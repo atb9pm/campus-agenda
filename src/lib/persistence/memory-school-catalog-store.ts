@@ -5,6 +5,16 @@ import {
   normalizeClassCode,
 } from "../../features/school-catalog/index.ts";
 import {
+  normalizeParallelCode,
+  parseOptionalClassCodePrefix,
+} from "../../features/school-catalog/class-codes.ts";
+import { prepareClassRecords } from "../../features/school-catalog/class-prepare.ts";
+import {
+  assertClassCodeAvailable,
+  assertProfessionPrefixAvailable,
+  assertStructuredGroupAvailable,
+} from "../../features/school-catalog/class-uniqueness.ts";
+import {
   branchDeleteBlockers,
   canReduceProfessionDuration,
   professionDeleteBlockers,
@@ -99,26 +109,22 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
   }
 
   async createClass(input: SchoolClassInput): Promise<SchoolClassRecord> {
+    const [record] = await this.createClassesBatch([input]);
+    return record!;
+  }
+
+  async createClassesBatch(inputs: SchoolClassInput[]): Promise<SchoolClassRecord[]> {
     await this.ensureSeeded();
-    const attachment = validateClassProfessionAttachment({
-      professionId: input.professionId ?? null,
-      trainingYear: input.trainingYear ?? null,
+    if (inputs.length === 0) return [];
+    const prepared = prepareClassRecords(inputs, {
       professions: this.professions,
+      classes: this.classes,
+      createId: () => createId("school-class"),
+      sortOrderStart: this.classes.length + 1,
     });
-    if (!attachment.ok) throw new Error(attachment.reason);
-    const record: SchoolClassRecord = {
-      id: createId("school-class"),
-      code: normalizeClassCode(input.code),
-      label: input.label.trim() || normalizeClassCode(input.code),
-      sortOrder: input.sortOrder ?? this.classes.length + 1,
-      isActive: input.isActive ?? true,
-      schoolYearId: input.schoolYearId ?? null,
-      schoolYearLabel: input.schoolYearLabel ?? null,
-      professionId: attachment.value.professionId,
-      trainingYear: attachment.value.trainingYear,
-    };
-    this.classes.push(record);
-    return record;
+    if (!prepared.ok) throw new Error(prepared.reason);
+    this.classes = [...this.classes, ...prepared.value];
+    return prepared.value;
   }
 
   async updateClass(id: string, patch: Partial<SchoolClassInput>): Promise<SchoolClassRecord | null> {
@@ -132,17 +138,42 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
       professions: this.professions,
     });
     if (!attachment.ok) throw new Error(attachment.reason);
+    const parallel =
+      patch.parallelCode !== undefined
+        ? normalizeParallelCode(patch.parallelCode)
+        : { ok: true as const, value: current.parallelCode };
+    if (!parallel.ok) throw new Error(parallel.reason);
+    const nextCode = patch.code !== undefined ? normalizeClassCode(patch.code) : current.code;
+    const nextYearId = patch.schoolYearId !== undefined ? patch.schoolYearId : current.schoolYearId;
+    const available = assertClassCodeAvailable({
+      code: nextCode,
+      schoolYearId: nextYearId,
+      classes: this.classes,
+      excludeId: id,
+    });
+    if (!available.ok) throw new Error(available.reason);
+    const group = assertStructuredGroupAvailable({
+      schoolYearId: nextYearId,
+      professionId: attachment.value.professionId,
+      trainingYear: attachment.value.trainingYear,
+      parallelCode: parallel.value,
+      classes: this.classes,
+      excludeId: id,
+      previous: current,
+    });
+    if (!group.ok) throw new Error(group.reason);
     const next: SchoolClassRecord = {
       ...current,
-      code: patch.code !== undefined ? normalizeClassCode(patch.code) : current.code,
+      code: nextCode,
       label: patch.label !== undefined ? patch.label.trim() : current.label,
       sortOrder: patch.sortOrder ?? current.sortOrder,
       isActive: patch.isActive ?? current.isActive,
-      schoolYearId: patch.schoolYearId !== undefined ? patch.schoolYearId : current.schoolYearId,
+      schoolYearId: nextYearId,
       schoolYearLabel:
         patch.schoolYearLabel !== undefined ? patch.schoolYearLabel : current.schoolYearLabel,
       professionId: attachment.value.professionId,
       trainingYear: attachment.value.trainingYear,
+      parallelCode: parallel.value,
     };
     this.classes[index] = next;
     return next;
@@ -205,11 +236,21 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
     if (durationYears < 1 || durationYears > 10) {
       throw new Error("La durée de formation doit être comprise entre 1 et 10 ans.");
     }
+    const prefix = parseOptionalClassCodePrefix(input.classCodePrefix);
+    if (!prefix.ok) throw new Error(prefix.reason);
+    if (prefix.value) {
+      const unique = assertProfessionPrefixAvailable({
+        prefix: prefix.value,
+        professions: this.professions,
+      });
+      if (!unique.ok) throw new Error(unique.reason);
+    }
     const archivedAt = input.isArchived ? new Date().toISOString() : null;
     const record: SchoolProfessionRecord = {
       id: createId("school-profession"),
       adminCode: this.nextAdminCode("PRF"),
       label: input.label.trim(),
+      classCodePrefix: prefix.value,
       durationYears,
       sortOrder: input.sortOrder ?? this.professions.length + 1,
       isActive: input.isActive ?? true,
@@ -243,9 +284,23 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
     if (patch.isArchived === true) archivedAt = current.archivedAt ?? new Date().toISOString();
     else if (patch.isArchived === false) archivedAt = null;
 
+    const prefix =
+      patch.classCodePrefix !== undefined
+        ? parseOptionalClassCodePrefix(patch.classCodePrefix)
+        : { ok: true as const, value: current.classCodePrefix };
+    if (!prefix.ok) return prefix;
+    if (prefix.value) {
+      const unique = assertProfessionPrefixAvailable({
+        prefix: prefix.value,
+        professions: this.professions,
+        excludeId: id,
+      });
+      if (!unique.ok) return unique;
+    }
     const next: SchoolProfessionRecord = {
       ...current,
       label: patch.label !== undefined ? patch.label.trim() : current.label,
+      classCodePrefix: prefix.value,
       durationYears:
         patch.durationYears !== undefined ? Math.trunc(patch.durationYears) : current.durationYears,
       sortOrder: patch.sortOrder ?? current.sortOrder,

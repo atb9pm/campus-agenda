@@ -1,3 +1,4 @@
+import { resolveSchoolClass } from "../school-catalog/class-resolve.ts";
 import { normalizeClassCode } from "../school-catalog/queries.ts";
 import type { PedagogicalContextRecord } from "../school-catalog/profession-types.ts";
 import type { SchoolBranchRecord, SchoolClassRecord } from "../school-catalog/types.ts";
@@ -13,16 +14,6 @@ export interface ResolvedPublicationCourse {
 function uniqueMatch<T>(items: T[], predicate: (entry: T) => boolean): T | null {
   const hits = items.filter(predicate);
   return hits.length === 1 ? hits[0]! : null;
-}
-
-function resolveSchoolClass(
-  classes: SchoolClassRecord[],
-  classroomName: string,
-): SchoolClassRecord | null {
-  const normalized = normalizeClassCode(classroomName);
-  const byCode = uniqueMatch(classes, (entry) => normalizeClassCode(entry.code) === normalized);
-  if (byCode) return byCode;
-  return uniqueMatch(classes, (entry) => normalizeClassCode(entry.label) === normalized);
 }
 
 function resolveBranch(
@@ -49,12 +40,17 @@ export function resolveAnnualCourseForPublication(options: {
   branches: SchoolBranchRecord[];
   contexts: PedagogicalContextRecord[];
   courses: AnnualCourse[];
+  schoolYearId?: string | null;
 }): ResolvedPublicationCourse | null {
   const classroomName = options.classroomName?.trim();
   const subjectName = options.subjectName?.trim();
   if (!classroomName || !subjectName) return null;
 
-  const schoolClass = resolveSchoolClass(options.classes, classroomName);
+  const schoolClass = resolveSchoolClass({
+    classroomName,
+    classes: options.classes,
+    schoolYearId: options.schoolYearId,
+  });
   if (!schoolClass) return null;
   if (!schoolClass.schoolYearId || !schoolClass.professionId || schoolClass.trainingYear === null) {
     return null;

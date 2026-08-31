@@ -49,7 +49,63 @@ export const SQL_MIGRATION_FILES = [
   "0017_pedagogical_path.sql",
   "0018_admin_referential_coherence.sql",
   "0019_annual_courses_teacher_assignments.sql",
+  "0020_school_class_structure.sql",
 ] as const;
+
+const SCHEMA_MIGRATIONS_DDL = `CREATE TABLE IF NOT EXISTS schema_migrations (
+  filename TEXT PRIMARY KEY,
+  applied_at TEXT NOT NULL
+)`;
+
+const ONCE_BEGIN = /CAMPUS:BEGIN ONCE\s+(\S+)/;
+const ONCE_END = /CAMPUS:END ONCE\s+(\S+)/;
+
+async function ensureSchemaMigrations(db: SqlDatabase): Promise<void> {
+  await db.exec(`${SCHEMA_MIGRATIONS_DDL};`);
+}
+
+async function markMigrationApplied(db: SqlDatabase, filename: string): Promise<void> {
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO schema_migrations (filename, applied_at)
+       VALUES (?, datetime('now'))`,
+    )
+    .bind(filename)
+    .run();
+}
+
+async function isMigrationApplied(db: SqlDatabase, filename: string): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT filename FROM schema_migrations WHERE filename = ?")
+    .bind(filename)
+    .first<{ filename: string }>();
+  return Boolean(row?.filename);
+}
+
+/**
+ * Bases déjà migrées avant schema_migrations : si l'index annuel existe,
+ * le rebuild destructif de 0020 a déjà été joué.
+ */
+async function backfillDestructiveMigrations(db: SqlDatabase): Promise<void> {
+  const index = await db
+    .prepare(
+      `SELECT name FROM sqlite_master
+       WHERE type = 'index' AND name = 'idx_school_classes_year_code'`,
+    )
+    .bind()
+    .first<{ name: string }>();
+  if (index?.name) {
+    await markMigrationApplied(db, "0020_school_class_structure.sql");
+  }
+}
+
+function stripOnceMarkers(sql: string): string {
+  return sql
+    .split("\n")
+    .filter((line) => !/^\s*--\s*CAMPUS:(BEGIN|END) ONCE\b/.test(line))
+    .join("\n")
+    .trim();
+}
 
 export async function applyMigrations(
   db: SqlDatabase,
@@ -60,6 +116,9 @@ export async function applyMigrations(
   if (options?.until && untilIndex === -1) {
     throw new Error(`Migration inconnue : ${options.until}`);
   }
+  await ensureSchemaMigrations(db);
+  await backfillDestructiveMigrations(db);
+
   const migrationFiles = options?.until
     ? SQL_MIGRATION_FILES.slice(0, untilIndex + 1)
     : SQL_MIGRATION_FILES;
@@ -67,16 +126,51 @@ export async function applyMigrations(
     const migrationPath = path.join(migrationsRoot, fileName);
     const sql = await readFile(migrationPath, "utf8");
     const statements = splitSqlStatements(sql);
+    let skipOnceKey: string | null = null;
+    let ranOnceKey: string | null = null;
 
     for (const statement of statements) {
+      const begin = statement.match(ONCE_BEGIN);
+      const end = statement.match(ONCE_END);
+      if (begin && (await isMigrationApplied(db, begin[1]!))) {
+        skipOnceKey = begin[1]!;
+      } else if (begin) {
+        ranOnceKey = begin[1]!;
+      }
+
+      if (skipOnceKey) {
+        if (end) skipOnceKey = null;
+        if (begin || !end) continue;
+      }
+
+      const cleaned = stripOnceMarkers(statement);
+      if (!cleaned) {
+        if (end && ranOnceKey) {
+          await markMigrationApplied(db, ranOnceKey);
+          ranOnceKey = null;
+        }
+        continue;
+      }
+
       try {
-        await db.exec(`${statement};`);
+        await db.exec(`${cleaned};`);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         // `ALTER TABLE ... ADD COLUMN` est rejoué à chaque démarrage : la colonne
         // déjà présente n'est pas une erreur de migration.
-        if (message.includes("duplicate column name")) continue;
+        if (message.includes("duplicate column name")) {
+          if (end && ranOnceKey) {
+            await markMigrationApplied(db, ranOnceKey);
+            ranOnceKey = null;
+          }
+          continue;
+        }
         throw error;
+      }
+
+      if (end && ranOnceKey) {
+        await markMigrationApplied(db, ranOnceKey);
+        ranOnceKey = null;
       }
     }
   }

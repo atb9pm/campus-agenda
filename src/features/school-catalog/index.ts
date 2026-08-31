@@ -44,6 +44,34 @@ export {
   type SchoolYearRef,
 } from "./school-year-attachment.ts";
 export { validateAdminClassCreate } from "./admin-class.ts";
+export {
+  buildClassCode,
+  buildClassLabel,
+  buildStructuredClassBatch,
+  defaultParallelCodes,
+  formatProfessionOptionLabel,
+  formatRecoveryKey,
+  formatTrainingYearLabel,
+  normalizeClassCodePrefix,
+  normalizeParallelCode,
+  parseOptionalClassCodePrefix,
+  PARALLEL_GROUP_LETTERS,
+} from "./class-codes.ts";
+export { resolveSchoolClass } from "./class-resolve.ts";
+export {
+  assertClassCodeAvailable,
+  assertProfessionPrefixAvailable,
+  assertStructuredGroupAvailable,
+} from "./class-uniqueness.ts";
+export {
+  countActiveContextsForYear,
+  createStructuredClasses,
+  parseStructuredClassesRequest,
+  structuredDraftsToInputs,
+  validateStructuredClassBatch,
+  type StructuredClassBatchInput,
+  type ValidatedStructuredClassBatch,
+} from "./structured-class-batch.ts";
 export { CTX_IN_USE_DELETE_REASON, contextDeleteBlockers } from "./ctx-guards.ts";
 export type {
   SchoolBranchInput,

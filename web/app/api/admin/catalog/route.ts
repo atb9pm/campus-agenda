@@ -1,5 +1,10 @@
 import { getSchoolCatalogStore, getSchoolYearStore } from "@campus/lib/persistence/store-factory.ts";
-import { validateAdminClassCreate } from "@campus/features/school-catalog/index.ts";
+import {
+  createStructuredClasses,
+  normalizeClassCodePrefix,
+  parseStructuredClassesRequest,
+  validateAdminClassCreate,
+} from "@campus/features/school-catalog/index.ts";
 import {
   listActiveSchoolBranches,
   listActiveSchoolClasses,
@@ -58,7 +63,7 @@ async function handlePost(request: Request) {
   if ("error" in auth && auth.error) return auth.error;
 
   const body = (await request.json()) as {
-    kind?: "class" | "branch" | "profession" | "context";
+    kind?: "class" | "branch" | "profession" | "context" | "structured-classes";
     code?: string;
     label?: string;
     sortOrder?: number;
@@ -69,8 +74,11 @@ async function handlePost(request: Request) {
     professionId?: string | null;
     trainingYear?: number | null;
     durationYears?: number;
+    classCodePrefix?: string | null;
     branchId?: string;
     teachingType?: string | null;
+    organization?: "unique" | "parallel";
+    parallelCodes?: string[];
   };
 
   const catalog = await getSchoolCatalogStore();
@@ -79,10 +87,15 @@ async function handlePost(request: Request) {
     if (!body.label?.trim() || body.durationYears === undefined) {
       return jsonResponse({ ok: false, reason: "Données invalides." }, { status: 400 });
     }
+    const prefix = normalizeClassCodePrefix(body.classCodePrefix);
+    if (!prefix.ok) {
+      return jsonResponse({ ok: false, reason: prefix.reason }, { status: 400 });
+    }
     try {
       const created = await catalog.createProfession({
         label: body.label,
         durationYears: body.durationYears,
+        classCodePrefix: prefix.value,
         sortOrder: body.sortOrder,
         isActive: body.isActive,
         isArchived: body.isArchived,
@@ -92,6 +105,31 @@ async function handlePost(request: Request) {
       const reason = error instanceof Error ? error.message : "Création impossible.";
       return jsonResponse({ ok: false, reason }, { status: 400 });
     }
+  }
+
+  if (body.kind === "structured-classes") {
+    if (!body.schoolYearId || !body.professionId || body.trainingYear === undefined) {
+      return jsonResponse({ ok: false, reason: "Données invalides." }, { status: 400 });
+    }
+    const organization = parseStructuredClassesRequest(body);
+    if (!organization.ok) {
+      return jsonResponse({ ok: false, reason: organization.reason }, { status: 400 });
+    }
+    const years = await getSchoolYearStore().then((store) => store.listSchoolYears());
+    const created = await createStructuredClasses(catalog, {
+      years,
+      input: {
+        schoolYearId: body.schoolYearId,
+        professionId: body.professionId,
+        trainingYear: body.trainingYear,
+        organization: organization.value.organization,
+        parallelCodes: organization.value.parallelCodes,
+      },
+    });
+    if (!created.ok) {
+      return jsonResponse({ ok: false, reason: created.reason }, { status: 400 });
+    }
+    return jsonResponse({ ok: true, classes: created.value });
   }
 
   if (body.kind === "context") {
