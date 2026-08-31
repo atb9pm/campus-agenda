@@ -6,6 +6,7 @@ export {
   type TeacherCourseWorkspaceResult,
 } from "./types.ts";
 export {
+  assignedBranchNames,
   buildTeacherCourseWorkspace,
   displaySetupsFromAssignedCourses,
   formatTeacherCourseClassMeta,

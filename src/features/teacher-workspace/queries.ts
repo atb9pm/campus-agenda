@@ -170,43 +170,63 @@ export function formatTeacherCourseClassMeta(group: Pick<
   return parts.join(" · ");
 }
 
+/**
+ * Branches réellement attribuées, dans l’ordre des TeacherCourseWorkspaceEntry.
+ * Une même branche (même id, ou même libellé normalisé) n’apparaît qu’une fois.
+ */
+export function assignedBranchNames(courses: TeacherCourseWorkspaceEntry[]): string[] {
+  const seenIds = new Set<string>();
+  const seenLabels = new Set<string>();
+  const names: string[] = [];
+  for (const course of courses) {
+    const label = course.branchLabel.trim();
+    if (!label) continue;
+    const normalized = label.toLowerCase().replace(/\s+/g, " ");
+    if (seenIds.has(course.branchId) || seenLabels.has(normalized)) continue;
+    seenIds.add(course.branchId);
+    seenLabels.add(normalized);
+    names.push(course.branchLabel);
+  }
+  return names;
+}
+
+function buildDisplayClassSetup(
+  courses: TeacherCourseWorkspaceEntry[],
+  setup: TeacherSetupConfig | null | undefined,
+  index: number,
+): TeacherClassSetup | null {
+  const first = courses[0];
+  if (!first) return null;
+  const matched = matchSetupPreference(first, setup);
+  return {
+    id: first.classId,
+    name: first.classCode,
+    programLabel: matched?.programLabel.trim() || first.professionLabel || first.classLabel,
+    dayOfWeek: matched?.dayOfWeek ?? (((index % 5) + 1) as WeekdayIndex),
+    branchNames: assignedBranchNames(courses),
+    icon: matched?.icon?.trim() || CLASS_ICONS[index % CLASS_ICONS.length]!,
+  };
+}
+
 export function toDisplayClassSetup(
   entry: TeacherCourseWorkspaceEntry,
   setup?: TeacherSetupConfig | null,
   index = 0,
 ): TeacherClassSetup {
-  const matched = matchSetupPreference(entry, setup);
-  if (matched) {
-    return {
-      ...matched,
-      name: entry.classCode,
-      programLabel: matched.programLabel.trim() || entry.professionLabel || entry.classLabel,
-      branchNames: matched.branchNames.length ? matched.branchNames : [entry.branchLabel],
-    };
-  }
-  return {
-    id: entry.classId,
-    name: entry.classCode,
-    programLabel: entry.professionLabel ?? entry.classLabel,
-    dayOfWeek: (((index % 5) + 1) as WeekdayIndex),
-    branchNames: [entry.branchLabel],
-    icon: CLASS_ICONS[index % CLASS_ICONS.length]!,
-  };
+  return buildDisplayClassSetup([entry], setup, index)!;
 }
 
+/**
+ * Un TeacherClassSetup par classe attribuée.
+ * `branchNames` = union des branches des cours courants — jamais celles du setup legacy.
+ */
 export function displaySetupsFromAssignedCourses(
   courses: TeacherCourseWorkspaceEntry[],
   setup?: TeacherSetupConfig | null,
 ): TeacherClassSetup[] {
-  const seen = new Set<string>();
-  const result: TeacherClassSetup[] = [];
-  courses.forEach((entry, index) => {
-    const display = toDisplayClassSetup(entry, setup, index);
-    if (seen.has(display.id)) return;
-    seen.add(display.id);
-    result.push(display);
-  });
-  return result;
+  return groupTeacherCoursesByClass(courses)
+    .map((group, index) => buildDisplayClassSetup(group.courses, setup, index))
+    .filter((entry): entry is TeacherClassSetup => entry !== null);
 }
 
 export function upsertSetupPreferenceForCourse(

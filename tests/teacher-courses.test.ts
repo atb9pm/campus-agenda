@@ -12,6 +12,7 @@ import {
 } from "../src/features/annual-courses/index.ts";
 import {
   buildTeacherCourseWorkspace,
+  displaySetupsFromAssignedCourses,
   groupTeacherCoursesByClass,
   listTeacherCourses,
   matchSetupPreference,
@@ -19,6 +20,7 @@ import {
   sessionTeacherIdForCoursesApi,
   TEACHER_COURSES_EMPTY_MESSAGE,
   WORKSPACE_ASSIGNMENT_ROLE_LABELS,
+  type TeacherCourseWorkspaceEntry,
 } from "../src/features/teacher-workspace/index.ts";
 import { TEACHER_NAV_SECTIONS, DEFAULT_TEACHER_NAV_SECTION } from "../src/features/teacher/index.ts";
 import type { TeacherSetupConfig } from "../src/features/teacher-setup/index.ts";
@@ -690,6 +692,165 @@ test("O — ordre classes/branches déterministe", async () => {
   assert.equal(groups[0]?.classCode, "CONDVL1");
   assert.equal(groups[1]?.classCode, "MECMA1A");
   assert.equal(groups[1]?.courses.length, 2);
+});
+
+function workspaceEntry(
+  patch: Partial<TeacherCourseWorkspaceEntry> & {
+    classId: string;
+    classCode: string;
+    annualCourseId: string;
+    branchId: string;
+    branchLabel: string;
+  },
+): TeacherCourseWorkspaceEntry {
+  return {
+    assignmentId: `${patch.annualCourseId}-as`,
+    role: "PRIMARY",
+    validFrom: TODAY,
+    validTo: null,
+    schoolYearId: "year-2027",
+    schoolYearLabel: "2027-2028",
+    classLabel: patch.classCode,
+    classSortOrder: 1,
+    professionId: null,
+    professionLabel: "Mécanicien en maintenance d’automobiles",
+    trainingYear: 1,
+    parallelCode: "A",
+    contextId: `ctx-${patch.branchId}`,
+    branchCode: patch.branchId,
+    branchSortOrder: 1,
+    teachingType: "TECHNICAL",
+    ...patch,
+  };
+}
+
+test("display setups — une classe, deux branches attribuées", () => {
+  const courses = [
+    workspaceEntry({
+      annualCourseId: "ac-moteur",
+      classId: "class-mecma1a",
+      classCode: "MECMA1A",
+      branchId: "br-moteur",
+      branchLabel: "Moteur",
+      branchSortOrder: 1,
+    }),
+    workspaceEntry({
+      annualCourseId: "ac-elec",
+      classId: "class-mecma1a",
+      classCode: "MECMA1A",
+      branchId: "br-elec",
+      branchLabel: "Électricité",
+      branchSortOrder: 2,
+    }),
+  ];
+  const groups = groupTeacherCoursesByClass(courses);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0]?.courses.length, 2);
+  assert.deepEqual(
+    groups[0]?.courses.map((entry) => entry.annualCourseId),
+    ["ac-moteur", "ac-elec"],
+  );
+
+  const setups = displaySetupsFromAssignedCourses(courses);
+  assert.equal(setups.length, 1);
+  assert.equal(setups[0]?.id, "class-mecma1a");
+  assert.equal(setups[0]?.name, "MECMA1A");
+  assert.deepEqual(setups[0]?.branchNames, ["Moteur", "Électricité"]);
+});
+
+test("display setups — legacy Transmission n’entre pas dans branchNames", () => {
+  const courses = [
+    workspaceEntry({
+      annualCourseId: "ac-moteur",
+      classId: "class-mecma1a",
+      classCode: "MECMA1A",
+      branchId: "br-moteur",
+      branchLabel: "Moteur",
+    }),
+    workspaceEntry({
+      annualCourseId: "ac-elec",
+      classId: "class-mecma1a",
+      classCode: "MECMA1A",
+      branchId: "br-elec",
+      branchLabel: "Électricité",
+    }),
+  ];
+  const setup: TeacherSetupConfig = {
+    version: 1,
+    classes: [
+      {
+        id: "legacy-mecma",
+        name: "MECMA1A",
+        programLabel: "Ancien libellé",
+        dayOfWeek: 4,
+        branchNames: ["Transmission"],
+        icon: "⭐",
+      },
+    ],
+  };
+  const setups = displaySetupsFromAssignedCourses(courses, setup);
+  assert.equal(setups.length, 1);
+  assert.deepEqual(setups[0]?.branchNames, ["Moteur", "Électricité"]);
+  assert.equal(setups[0]?.branchNames.includes("Transmission"), false);
+  assert.equal(setups[0]?.dayOfWeek, 4);
+  assert.equal(setups[0]?.icon, "⭐");
+  assert.equal(setups[0]?.programLabel, "Ancien libellé");
+  assert.equal(setups[0]?.id, "class-mecma1a");
+});
+
+test("display setups — deux classes distinctes", () => {
+  const courses = [
+    workspaceEntry({
+      annualCourseId: "ac-condvl",
+      classId: "class-condvl1",
+      classCode: "CONDVL1",
+      classSortOrder: 1,
+      branchId: "br-chassis",
+      branchLabel: "Châssis",
+      professionLabel: "Conducteur de véhicules lourds",
+      parallelCode: null,
+    }),
+    workspaceEntry({
+      annualCourseId: "ac-moteur",
+      classId: "class-mecma1a",
+      classCode: "MECMA1A",
+      classSortOrder: 2,
+      branchId: "br-moteur",
+      branchLabel: "Moteur",
+    }),
+  ];
+  const setups = displaySetupsFromAssignedCourses(courses);
+  assert.equal(setups.length, 2);
+  assert.equal(setups[0]?.id, "class-condvl1");
+  assert.deepEqual(setups[0]?.branchNames, ["Châssis"]);
+  assert.equal(setups[1]?.id, "class-mecma1a");
+  assert.deepEqual(setups[1]?.branchNames, ["Moteur"]);
+});
+
+test("display setups — même branche via plusieurs attributions, pas de doublon", () => {
+  const courses = [
+    workspaceEntry({
+      annualCourseId: "ac-moteur-1",
+      assignmentId: "as-1",
+      classId: "class-mecma1a",
+      classCode: "MECMA1A",
+      branchId: "br-moteur",
+      branchLabel: "Moteur",
+      role: "PRIMARY",
+    }),
+    workspaceEntry({
+      annualCourseId: "ac-moteur-1",
+      assignmentId: "as-2",
+      classId: "class-mecma1a",
+      classCode: "MECMA1A",
+      branchId: "br-moteur",
+      branchLabel: "Moteur",
+      role: "CO_TEACHER",
+    }),
+  ];
+  const setups = displaySetupsFromAssignedCourses(courses);
+  assert.equal(setups.length, 1);
+  assert.deepEqual(setups[0]?.branchNames, ["Moteur"]);
 });
 
 test("correspondance setup — pas le premier doublon", () => {
