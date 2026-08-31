@@ -53,6 +53,8 @@ export function prepareClassRecord(options: {
       professionId: attachment.value.professionId,
       trainingYear: attachment.value.trainingYear,
       parallelCode: parallel.value,
+      isArchived: false,
+      archivedAt: null,
     },
   };
 }

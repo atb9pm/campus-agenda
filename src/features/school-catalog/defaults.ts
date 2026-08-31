@@ -30,6 +30,8 @@ export function buildDefaultSchoolClasses(): SchoolClassRecord[] {
     professionId: null,
     trainingYear: null,
     parallelCode: null,
+    isArchived: false,
+    archivedAt: null,
   }));
 }
 

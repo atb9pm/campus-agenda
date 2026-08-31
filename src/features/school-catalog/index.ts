@@ -59,6 +59,37 @@ export {
 } from "./class-codes.ts";
 export { resolveSchoolClass } from "./class-resolve.ts";
 export {
+  classCardClassName,
+  classLifecycleLabel,
+  classLifecycleStatus,
+  applyClassLifecyclePatch,
+  type ClassLifecycleStatus,
+} from "./class-lifecycle.ts";
+export {
+  classDisplayGroupLabel,
+  classDisplayMeta,
+  classDisplayProfessionLabel,
+  classDisplaySchoolYearLabel,
+  classDisplayTrainingYearLabel,
+  formatProfessionPrefixBadge,
+} from "./class-display.ts";
+export {
+  agendaItemBlocksClassDeletion,
+  classDeleteBlockerCounts,
+  classDeleteBlockers,
+  formatClassDeleteBlockerReason,
+  type ClassDeleteUsage,
+} from "./class-delete-blockers.ts";
+export { loadClassDeleteUsage } from "./class-delete-service.ts";
+export {
+  countClassesByStatus,
+  filterClassesByStatus,
+  groupSchoolClasses,
+  type ClassGroup,
+  type ClassGroupBy,
+  type ClassStatusFilter,
+} from "./class-grouping.ts";
+export {
   assertClassCodeAvailable,
   assertProfessionPrefixAvailable,
   assertStructuredGroupAvailable,

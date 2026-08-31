@@ -20,6 +20,9 @@ export interface SchoolClassRecord {
    * Ne jamais déduire du dernier caractère du code historique.
    */
   parallelCode: string | null;
+  /** false = encore dans le cycle courant (active ou désactivée). */
+  isArchived: boolean;
+  archivedAt: string | null;
 }
 
 export interface SchoolBranchRecord {
@@ -50,6 +53,7 @@ export interface SchoolClassInput {
   professionId?: string | null;
   trainingYear?: number | null;
   parallelCode?: string | null;
+  isArchived?: boolean;
 }
 
 export interface SchoolBranchInput {

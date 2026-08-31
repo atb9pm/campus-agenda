@@ -13,6 +13,7 @@ import {
   parseOptionalClassCodePrefix,
 } from "../../../features/school-catalog/class-codes.ts";
 import { prepareClassRecords } from "../../../features/school-catalog/class-prepare.ts";
+import { applyClassLifecyclePatch } from "../../../features/school-catalog/class-lifecycle.ts";
 import {
   assertClassCodeAvailable,
   assertProfessionPrefixAvailable,
@@ -55,6 +56,8 @@ function mapClass(row: {
   profession_id: string | null;
   training_year: number | null;
   parallel_code?: string | null;
+  is_archived?: number | null;
+  archived_at?: string | null;
 }): SchoolClassRecord {
   return {
     id: row.id,
@@ -67,6 +70,8 @@ function mapClass(row: {
     professionId: row.profession_id ?? null,
     trainingYear: row.training_year ?? null,
     parallelCode: row.parallel_code ?? null,
+    isArchived: Boolean(row.is_archived),
+    archivedAt: row.archived_at ?? null,
   };
 }
 
@@ -245,8 +250,8 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         await this.db
           .prepare(
             `INSERT INTO school_classes
-               (id, code, label, sort_order, is_active, school_year_id, school_year_label, profession_id, training_year, parallel_code)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+               (id, code, label, sort_order, is_active, school_year_id, school_year_label, profession_id, training_year, parallel_code, is_archived, archived_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             entry.id,
@@ -259,6 +264,8 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
             entry.professionId,
             entry.trainingYear,
             entry.parallelCode,
+            entry.isArchived ? 1 : 0,
+            entry.archivedAt,
           )
           .run();
       }
@@ -318,7 +325,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
     const rows = await this.db
       .prepare(
         `SELECT id, code, label, sort_order, is_active, school_year_id, school_year_label,
-                profession_id, training_year, parallel_code
+                profession_id, training_year, parallel_code, is_archived, archived_at
          FROM school_classes ORDER BY sort_order ASC, code ASC`,
       )
       .bind()
@@ -333,6 +340,8 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         profession_id: string | null;
         training_year: number | null;
         parallel_code: string | null;
+        is_archived: number | null;
+        archived_at: string | null;
       }>();
     return (rows.results ?? []).map(mapClass);
   }
@@ -419,8 +428,8 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
     await this.db.batch(
       prepared.value.map((record) => ({
         sql: `INSERT INTO school_classes
-           (id, code, label, sort_order, is_active, school_year_id, school_year_label, profession_id, training_year, parallel_code)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, code, label, sort_order, is_active, school_year_id, school_year_label, profession_id, training_year, parallel_code, is_archived, archived_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         values: [
           record.id,
           record.code,
@@ -432,6 +441,8 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
           record.professionId,
           record.trainingYear,
           record.parallelCode,
+          record.isArchived ? 1 : 0,
+          record.archivedAt,
         ],
       })),
     );
@@ -472,12 +483,19 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       previous: current,
     });
     if (!group.ok) throw new Error(group.reason);
+    const lifecycle = applyClassLifecyclePatch(current, {
+      isActive: patch.isActive,
+      isArchived: patch.isArchived,
+    });
+    if (!lifecycle.ok) throw new Error(lifecycle.reason);
     const next: SchoolClassRecord = {
       ...current,
       code: nextCode,
       label: patch.label !== undefined ? patch.label.trim() : current.label,
       sortOrder: patch.sortOrder ?? current.sortOrder,
-      isActive: patch.isActive ?? current.isActive,
+      isActive: lifecycle.value.isActive,
+      isArchived: lifecycle.value.isArchived,
+      archivedAt: lifecycle.value.archivedAt,
       schoolYearId: nextYearId,
       schoolYearLabel:
         patch.schoolYearLabel !== undefined ? patch.schoolYearLabel : current.schoolYearLabel,
@@ -489,7 +507,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       .prepare(
         `UPDATE school_classes
          SET code = ?, label = ?, sort_order = ?, is_active = ?, school_year_id = ?, school_year_label = ?,
-             profession_id = ?, training_year = ?, parallel_code = ?
+             profession_id = ?, training_year = ?, parallel_code = ?, is_archived = ?, archived_at = ?
          WHERE id = ?`,
       )
       .bind(
@@ -502,10 +520,20 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         next.professionId,
         next.trainingYear,
         next.parallelCode,
+        next.isArchived ? 1 : 0,
+        next.archivedAt,
         id,
       )
       .run();
     return next;
+  }
+
+  async deleteClass(id: string): Promise<boolean> {
+    await this.ensureSeeded();
+    const current = (await this.listClasses()).find((entry) => entry.id === id);
+    if (!current) return false;
+    await this.db.prepare("DELETE FROM school_classes WHERE id = ?").bind(id).run();
+    return true;
   }
 
 

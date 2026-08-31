@@ -9,6 +9,7 @@ import {
   parseOptionalClassCodePrefix,
 } from "../../features/school-catalog/class-codes.ts";
 import { prepareClassRecords } from "../../features/school-catalog/class-prepare.ts";
+import { applyClassLifecyclePatch } from "../../features/school-catalog/class-lifecycle.ts";
 import {
   assertClassCodeAvailable,
   assertProfessionPrefixAvailable,
@@ -162,12 +163,19 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
       previous: current,
     });
     if (!group.ok) throw new Error(group.reason);
+    const lifecycle = applyClassLifecyclePatch(current, {
+      isActive: patch.isActive,
+      isArchived: patch.isArchived,
+    });
+    if (!lifecycle.ok) throw new Error(lifecycle.reason);
     const next: SchoolClassRecord = {
       ...current,
       code: nextCode,
       label: patch.label !== undefined ? patch.label.trim() : current.label,
       sortOrder: patch.sortOrder ?? current.sortOrder,
-      isActive: patch.isActive ?? current.isActive,
+      isActive: lifecycle.value.isActive,
+      isArchived: lifecycle.value.isArchived,
+      archivedAt: lifecycle.value.archivedAt,
       schoolYearId: nextYearId,
       schoolYearLabel:
         patch.schoolYearLabel !== undefined ? patch.schoolYearLabel : current.schoolYearLabel,
@@ -177,6 +185,14 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
     };
     this.classes[index] = next;
     return next;
+  }
+
+  async deleteClass(id: string): Promise<boolean> {
+    await this.ensureSeeded();
+    const index = this.classes.findIndex((entry) => entry.id === id);
+    if (index < 0) return false;
+    this.classes.splice(index, 1);
+    return true;
   }
 
   async createBranch(input: SchoolBranchInput): Promise<SchoolBranchRecord> {

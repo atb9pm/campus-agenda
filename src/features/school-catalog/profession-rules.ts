@@ -245,6 +245,9 @@ export function evaluateAgendaBranchForClass(options: {
   });
 
   if (!schoolClass) return { ok: true, value: true };
+  if (schoolClass.isArchived) {
+    return { ok: false, reason: "Cette classe est archivée. Impossible de publier un nouvel élément." };
+  }
   if (!schoolClass.professionId || schoolClass.trainingYear === null) {
     return { ok: true, value: true };
   }

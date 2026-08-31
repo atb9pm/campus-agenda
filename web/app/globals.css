@@ -535,6 +535,11 @@ button { color: inherit; }
 .admin-teacher-list button:disabled { opacity: .45; cursor: not-allowed; }
 
 .admin-teacher-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.admin-class-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin: 0 0 16px; }
+.admin-class-group-by { display: grid; gap: 4px; color: #8793a9; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.admin-class-group-by select { min-width: 180px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); background: #fff; font-size: 11px; }
+.admin-class-group { display: grid; gap: 10px; margin: 0 0 18px; }
+.admin-class-group h4 { margin: 0; color: var(--navy); font-size: 13px; }
 .admin-teacher-toolbar button { padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: #fff; color: #516582; font-size: 10px; font-weight: 700; cursor: pointer; }
 .admin-teacher-toolbar button.is-selected { color: #fff; background: var(--navy); border-color: var(--navy); }
 .admin-teacher-access-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
@@ -544,6 +549,7 @@ button { color: inherit; }
 .admin-teacher-card.is-archived { border-color: #d0d5dd; background: #f8fafc; opacity: .92; }
 .admin-teacher-identity { display: flex; gap: 12px; align-items: flex-start; }
 .admin-teacher-initials { display: inline-flex; min-width: 42px; justify-content: center; padding: 6px 8px; border-radius: 8px; color: var(--navy); background: #eef4fd; font-size: 12px; }
+.admin-teacher-initials.is-class-prefix { min-width: 3.25rem; width: max-content; max-width: 100%; padding: 6px 9px; font-size: 11px; font-weight: 800; letter-spacing: .04em; line-height: 1.2; white-space: nowrap; }
 .admin-teacher-name { margin: 0; color: var(--navy); font-size: 13px; font-weight: 700; }
 .admin-teacher-login-meta { margin: 4px 0 0; color: #667085; font-size: 11px; }
 .admin-teacher-badges { display: flex; flex-wrap: wrap; gap: 6px; align-content: flex-start; }
@@ -659,8 +665,10 @@ button { color: inherit; }
   .school-year-admin { padding-right: 16px; padding-left: 16px; }
   .config-classes-editor, .config-week-plan, .ma-semaine-week-banner, .ma-semaine-days, .ma-semaine-empty, .ma-semaine-plan-hint, .class-notebook-toolbar, .class-notebook-week-controls, .class-notebook-grid, .class-notebook-warning, .class-notebook-clipboard-hint { margin-right: 16px; margin-left: 16px; }
   .admin-workspace .admin-tabs, .admin-panel-block, .admin-error, .admin-loading, .admin-placeholder { margin-right: 16px; margin-left: 16px; }
-  .admin-catalog-list li, .admin-catalog-list.admin-class-list li, .admin-teacher-list li { grid-template-columns: 1fr; }
-  .admin-teacher-card { grid-template-columns: 1fr; }
+  .admin-catalog-list li, .admin-catalog-list.admin-class-list li, .admin-teacher-list li, .admin-teacher-access-list .admin-teacher-card { grid-template-columns: 1fr; }
+  .admin-class-toolbar { align-items: flex-start; }
+  .admin-class-group-by { width: 100%; }
+  .admin-class-group-by select { width: 100%; }
   .admin-teacher-actions { justify-content: flex-start; }
   .day-grid-head, .day-grid-row { grid-template-columns: 48px repeat(5, minmax(0, 1fr)); }
   .day-cell-label { display: none; }

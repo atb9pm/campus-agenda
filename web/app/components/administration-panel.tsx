@@ -8,15 +8,9 @@ import type {
   SchoolClassRecord,
   SchoolProfessionRecord,
 } from "@campus/features/school-catalog";
-import {
-  formatTrainingYearLabel,
-  listPlannedBranchesForClass,
-  listSelectableSchoolYearsForClassEdit,
-  trainingYearsForDuration,
-} from "@campus/features/school-catalog";
 import { BRANCH_TEACHING_TYPE_LABELS, type TeachingType } from "@campus/features/teaching-types/index.ts";
 import { AnnualCoursesAdminPanel } from "./annual-courses-admin-panel.tsx";
-import { ClassCreationWizard } from "./class-creation-wizard.tsx";
+import { ClassesAdminPanel } from "./classes-admin-panel.tsx";
 import { ProfessionsAdminPanel } from "./professions-admin-panel.tsx";
 import { SchoolYearAdminPanel } from "./school-year-admin-panel.tsx";
 import { TeacherAccountsPanel } from "./teacher-accounts-panel.tsx";
@@ -38,14 +32,6 @@ interface AdministrationPanelProps {
 interface BranchEditDraft {
   branchId: string;
   label: string;
-}
-
-interface ClassEditDraft {
-  classId: string;
-  schoolYearId: string;
-  professionId: string;
-  trainingYear: string;
-  parallelCode: string;
 }
 
 const TAB_LABELS: Record<AdminTab, string> = {
@@ -113,8 +99,6 @@ export function AdministrationPanel({
   const [loading, setLoading] = useState(true);
   const [sectionError, setSectionError] = useState<{ tab: AdminTab; message: string } | null>(null);
 
-  const [classDraft, setClassDraft] = useState<ClassEditDraft | null>(null);
-
   const [branchLabel, setBranchLabel] = useState("");
   const [branchTeachingType, setBranchTeachingType] = useState<TeachingType | "">("");
   const [branchEditDraft, setBranchEditDraft] = useState<BranchEditDraft | null>(null);
@@ -153,64 +137,12 @@ export function AdministrationPanel({
     [branches, showArchivedBranches],
   );
 
-  const activeProfessions = useMemo(
-    () => professions.filter((entry) => entry.isActive && !entry.isArchived),
-    [professions],
-  );
-
-  const professionById = useMemo(() => {
-    const map = new Map<string, SchoolProfessionRecord>();
-    for (const profession of professions) map.set(profession.id, profession);
-    return map;
-  }, [professions]);
-
   function fail(message: string) {
     setSectionError({ tab, message });
   }
 
   function succeed() {
     setSectionError(null);
-  }
-
-  async function saveClassDraft(event: FormEvent) {
-    event.preventDefault();
-    if (!classDraft) return;
-    succeed();
-    const pedagogyComplete = Boolean(
-      classDraft.schoolYearId && classDraft.professionId && classDraft.trainingYear,
-    );
-    const pedagogyPartial = Boolean(
-      classDraft.schoolYearId || classDraft.professionId || classDraft.trainingYear,
-    );
-    if (pedagogyPartial && !pedagogyComplete) {
-      fail("Année scolaire, profession et année de formation doivent être enregistrées ensemble.");
-      return;
-    }
-    const response = await fetch(`/api/admin/catalog/${classDraft.classId}`, {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        kind: "class",
-        ...(pedagogyComplete
-          ? {
-              schoolYearId: classDraft.schoolYearId,
-              professionId: classDraft.professionId,
-              trainingYear: Number.parseInt(classDraft.trainingYear, 10),
-            }
-          : {}),
-        parallelCode: classDraft.parallelCode.trim() === "" ? null : classDraft.parallelCode,
-      }),
-    });
-    const payload = await response.json() as { ok: boolean; reason?: string };
-    if (!response.ok || !payload.ok) {
-      fail(payload.reason ?? "Mise à jour impossible.");
-      return;
-    }
-    const entry = classes.find((item) => item.id === classDraft.classId);
-    onNotice(`Classe ${entry?.code ?? ""} mise à jour.`);
-    setClassDraft(null);
-    await refresh();
   }
 
   async function submitBranch(event: FormEvent) {
@@ -242,21 +174,6 @@ export function AdministrationPanel({
     setBranchLabel("");
     setBranchTeachingType("");
     onNotice("Branche ajoutée au catalogue.");
-    await refresh();
-  }
-
-  async function toggleClassActive(entry: SchoolClassRecord) {
-    succeed();
-    const response = await fetch(`/api/admin/catalog/${entry.id}`, {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "class", isActive: !entry.isActive }),
-    });
-    if (!response.ok) {
-      fail("Mise à jour impossible.");
-      return;
-    }
     await refresh();
   }
 
@@ -340,185 +257,19 @@ export function AdministrationPanel({
       ) : null}
 
       {tab === "classes" && !loading ? (
-        <div className="admin-panel-block">
-          <header className="config-section-header">
-            <div>
-              <h3>Classes</h3>
-              <p>
-                La création de classes est l’étape finale : elle exploite le référentiel déjà configuré.
-                Les branches prévues viennent du plan de formation (CTX).
-              </p>
-            </div>
-          </header>
-          {visibleError ? <p className="admin-error">{visibleError}</p> : null}
-          <ClassCreationWizard
-            classes={classes}
-            professions={professions}
-            contexts={contexts}
-            schoolYears={schoolYears}
-            onNotice={onNotice}
-            onCreated={refresh}
-            onError={fail}
-            onOpenPlans={() => setTab("plans")}
-          />
-          <ul className="admin-catalog-list admin-class-list">
-            {classes.map((entry) => {
-              const linkedProfession = entry.professionId
-                ? professionById.get(entry.professionId) ?? null
-                : null;
-              const editing = classDraft?.classId === entry.id;
-              const draftProfession = editing
-                ? professionById.get(classDraft.professionId) ?? null
-                : linkedProfession;
-              const yearOptions = draftProfession
-                ? trainingYearsForDuration(draftProfession.durationYears)
-                : [];
-              const structured = Boolean(entry.schoolYearId && entry.professionId && entry.trainingYear !== null);
-              const planned = structured
-                ? listPlannedBranchesForClass({ schoolClass: entry, branches, contexts })
-                : [];
-              const selectableProfessions = activeProfessions.slice();
-              if (
-                draftProfession &&
-                !selectableProfessions.some((profession) => profession.id === draftProfession.id)
-              ) {
-                selectableProfessions.unshift(draftProfession);
-              }
-              return (
-                <li key={entry.id}>
-                  <strong>{entry.code}</strong>
-                  <span>{entry.label}</span>
-                  {editing && classDraft ? (
-                    <form className="admin-class-pedagogy" onSubmit={(event) => void saveClassDraft(event)}>
-                      <label>
-                        Année scolaire
-                        <select
-                          value={classDraft.schoolYearId}
-                          onChange={(event) =>
-                            setClassDraft({ ...classDraft, schoolYearId: event.target.value })
-                          }
-                        >
-                          <option value="">Non renseignée (legacy)</option>
-                          {listSelectableSchoolYearsForClassEdit(schoolYears, entry.schoolYearId).map((year) => (
-                            <option key={year.id} value={year.id}>
-                              {year.label}
-                              {year.status === "archived" ? " (archivée)" : ""}
-                              {year.status === "active" ? " (active)" : ""}
-                              {year.status === "draft" ? " (brouillon)" : ""}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        Profession
-                        <select
-                          value={classDraft.professionId}
-                          onChange={(event) =>
-                            setClassDraft({
-                              ...classDraft,
-                              professionId: event.target.value,
-                              trainingYear: "",
-                            })
-                          }
-                        >
-                          <option value="">Profession à configurer</option>
-                          {selectableProfessions.map((profession) => (
-                            <option key={profession.id} value={profession.id}>
-                              {profession.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        Année de formation
-                        <select
-                          value={classDraft.trainingYear}
-                          onChange={(event) =>
-                            setClassDraft({ ...classDraft, trainingYear: event.target.value })
-                          }
-                          disabled={!classDraft.professionId}
-                        >
-                          <option value="">Choisir…</option>
-                          {yearOptions.map((year) => (
-                            <option key={year} value={year}>{formatTrainingYearLabel(year)}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        Groupe parallèle
-                        <select
-                          value={classDraft.parallelCode}
-                          onChange={(event) =>
-                            setClassDraft({ ...classDraft, parallelCode: event.target.value })
-                          }
-                        >
-                          <option value="">Aucun</option>
-                          {["A", "B", "C", "D", "E", "F"].map((letter) => (
-                            <option key={letter} value={letter}>{letter}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <button type="submit">Enregistrer</button>
-                      <button type="button" onClick={() => setClassDraft(null)}>Annuler</button>
-                    </form>
-                  ) : (
-                    <div className="admin-class-pedagogy">
-                      <p className="admin-teacher-login-meta">
-                        {entry.code}
-                        {" · "}
-                        {linkedProfession?.label ?? "Profession à configurer"}
-                        {" · "}
-                        {entry.trainingYear !== null ? formatTrainingYearLabel(entry.trainingYear) : "Année de formation à configurer"}
-                        {" · "}
-                        {entry.parallelCode ? `Groupe ${entry.parallelCode}` : "Groupe : aucun"}
-                        {" · "}
-                        {entry.schoolYearLabel ?? (entry.schoolYearId ? entry.schoolYearId : "Année scolaire non renseignée (legacy)")}
-                      </p>
-                      {structured ? (
-                        planned.length > 0 ? (
-                          <p className="admin-planned-branches">
-                            <strong>Branches prévues</strong>
-                            {" — "}
-                            {planned.map((branch) => branch.label).join(", ")}
-                          </p>
-                        ) : (
-                          <p className="admin-class-config-warn">
-                            Aucune branche n’est encore définie dans le plan de formation pour cette profession et cette année.
-                            <button type="button" className="admin-link-button" onClick={() => setTab("plans")}>
-                              Ouvrir le plan de formation
-                            </button>
-                          </p>
-                        )
-                      ) : (
-                        <span className="admin-class-config-warn">Classe legacy : année scolaire / profession / année de formation à configurer</span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setClassDraft({
-                            classId: entry.id,
-                            schoolYearId: entry.schoolYearId ?? "",
-                            professionId: entry.professionId ?? "",
-                            trainingYear: entry.trainingYear !== null ? String(entry.trainingYear) : "",
-                            parallelCode: entry.parallelCode ?? "",
-                          })
-                        }
-                      >
-                        Modifier
-                      </button>
-                    </div>
-                  )}
-                  <span className={entry.isActive ? "status-active" : "status-inactive"}>
-                    {entry.isActive ? "Active" : "Inactive"}
-                  </span>
-                  <button type="button" onClick={() => void toggleClassActive(entry)}>
-                    {entry.isActive ? "Désactiver" : "Réactiver"}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+        <ClassesAdminPanel
+          classes={classes}
+          branches={branches}
+          professions={professions}
+          contexts={contexts}
+          schoolYears={schoolYears}
+          error={visibleError}
+          onNotice={onNotice}
+          onError={fail}
+          onClearError={succeed}
+          onCreated={refresh}
+          onOpenPlans={() => setTab("plans")}
+        />
       ) : null}
 
       {tab === "branches" && !loading ? (

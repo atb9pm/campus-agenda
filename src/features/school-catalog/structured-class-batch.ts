@@ -145,6 +145,8 @@ export function validateStructuredClassBatch(options: {
       professionId: structured.value.professionId,
       trainingYear: structured.value.trainingYear,
       parallelCode: draft.parallelCode,
+      isArchived: false,
+      archivedAt: null,
     });
   }
 
