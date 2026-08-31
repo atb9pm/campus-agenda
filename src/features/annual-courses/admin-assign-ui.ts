@@ -72,6 +72,7 @@ export function decideAssignmentDialogSubmit(input: {
 
 export function isClassEligibleForAssignment(options: {
   isActive: boolean;
+  isArchived?: boolean;
   schoolYearId: string | null;
   professionId: string | null;
   trainingYear: number | null;
@@ -79,6 +80,7 @@ export function isClassEligibleForAssignment(options: {
   professionActive?: boolean;
   professionArchived?: boolean;
 }): boolean {
+  if (options.isArchived) return false;
   if (!options.isActive) return false;
   if (!options.schoolYearId || !options.professionId || options.trainingYear === null) return false;
   if (options.yearStatus === "archived") return false;

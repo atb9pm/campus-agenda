@@ -15,6 +15,7 @@ export function decideAgendaPublishAccess(options: {
   at?: string;
 }): boolean {
   if (options.resolved) {
+    if (options.resolved.schoolClass.isArchived) return false;
     if (options.resolved.course.isArchived) return false;
     return teacherCanAccessAnnualCourse({
       teacher: options.teacher,

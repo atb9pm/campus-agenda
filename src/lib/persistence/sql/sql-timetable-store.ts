@@ -50,6 +50,7 @@ export class SqlTimetableStore implements TimetableStore {
       .prepare(
         "SELECT id, school_year_id, source_filename, school_year_label, source_version, status, slot_count, excluded_sps_count, imported_at FROM timetable_imports WHERE status = 'active' LIMIT 1",
       )
+      .bind()
       .first<ImportRow>();
     return row ? rowToImport(row) : null;
   }
@@ -59,6 +60,7 @@ export class SqlTimetableStore implements TimetableStore {
       .prepare(
         "SELECT id, school_year_id, source_filename, school_year_label, source_version, status, slot_count, excluded_sps_count, imported_at FROM timetable_imports ORDER BY imported_at DESC",
       )
+      .bind()
       .all<ImportRow>();
     return results.map(rowToImport);
   }
@@ -118,7 +120,7 @@ export class SqlTimetableStore implements TimetableStore {
   }
 
   async activateImport(importId: string): Promise<TimetableImportRecord> {
-    await this.db.prepare("UPDATE timetable_imports SET status = 'archived' WHERE status = 'active'").run();
+    await this.db.prepare("UPDATE timetable_imports SET status = 'archived' WHERE status = 'active'").bind().run();
     await this.db.prepare("UPDATE timetable_imports SET status = 'active' WHERE id = ?").bind(importId).run();
     const active = await this.getActiveImport();
     if (!active) throw new Error("Activation échouée.");
@@ -145,6 +147,24 @@ export class SqlTimetableStore implements TimetableStore {
     const active = await this.getActiveImport();
     if (!active) return [];
     return this.loadSlots(active.id, classCode);
+  }
+
+  async listClassSlotsAcrossImports(
+    classCode: string,
+  ): Promise<Array<{ classCode: string; schoolYearId: string | null }>> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT s.class_code AS class_code, i.school_year_id AS school_year_id
+         FROM timetable_slots s
+         INNER JOIN timetable_imports i ON i.id = s.import_id
+         WHERE UPPER(s.class_code) = UPPER(?)`,
+      )
+      .bind(classCode)
+      .all<{ class_code: string; school_year_id: string | null }>();
+    return (results ?? []).map((row) => ({
+      classCode: row.class_code,
+      schoolYearId: row.school_year_id,
+    }));
   }
 
   async listSlotsForTeacherCode(

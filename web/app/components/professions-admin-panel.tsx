@@ -2,7 +2,11 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-import type { SchoolClassRecord, SchoolProfessionRecord } from "@campus/features/school-catalog";
+import {
+  formatProfessionPrefixBadge,
+  type SchoolClassRecord,
+  type SchoolProfessionRecord,
+} from "@campus/features/school-catalog";
 
 interface ProfessionsAdminPanelProps {
   onNotice: (message: string) => void;
@@ -296,8 +300,8 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
             return (
               <li key={entry.id} className={`${professionCardClass(entry)} admin-profession-card`}>
                 <div className="admin-teacher-identity">
-                  <strong className="admin-teacher-initials">
-                    {(entry.classCodePrefix ?? entry.label).slice(0, 3).toUpperCase()}
+                  <strong className="admin-teacher-initials is-class-prefix">
+                    {formatProfessionPrefixBadge(entry.classCodePrefix, entry.label)}
                   </strong>
                   {editing && editDraft ? (
                     <form

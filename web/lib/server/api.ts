@@ -12,7 +12,7 @@ import {
 import { checkClassroomExists, getAgendaStore, getAnnualCourseNotesStore, getAnnualCourseStore, getMembershipStore, getPedagogicalPathStore, getSchoolCatalogStore, getSchoolYearStore, getTeacherAccountStore, getTeacherNotesStore as resolveTeacherNotesStore, getTeacherSetupStore, getTemplateStore, resolveClassroomSubjectNames } from "@campus/lib/persistence/store-factory.ts";
 import { decideAgendaPublishAccess, resolveAnnualCourseForPublication } from "@campus/features/annual-courses/index.ts";
 import type { AnnualCourseServiceDeps } from "@campus/features/annual-courses/index.ts";
-import { evaluateAgendaBranchForClass } from "@campus/features/school-catalog/index.ts";
+import { evaluateAgendaBranchForClass, assertAgendaClassMutable } from "@campus/features/school-catalog/index.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import { ARCHIVED_YEAR_READONLY_REASON, getArchivedYearIds, isArchivedYearItem } from "@campus/features/school-year/archived-readonly.ts";
 import type { AppSession } from "@campus/lib/persistence/types.ts";
@@ -160,11 +160,30 @@ export async function assertAgendaItemMutable(item: PrototypeAgendaItem | undefi
   return null;
 }
 
+export async function assertAgendaClassMutableForItem(
+  item: PrototypeAgendaItem | undefined,
+): Promise<Response | null> {
+  if (!item) return null;
+  const names = await resolveClassroomSubjectNames(item.classroomId, item.subjectId);
+  const catalog = await getSchoolCatalogStore();
+  await catalog.ensureSeeded();
+  const result = assertAgendaClassMutable({
+    classroomName: names.classroomName,
+    schoolYearId: item.schoolYearId,
+    classes: await catalog.listClasses(),
+  });
+  if (!result.ok) {
+    return jsonResponse({ ok: false, reason: result.reason }, { status: 403 });
+  }
+  return null;
+}
+
 
 export async function assertAgendaPublicationBranchAllowed(
   classroomId: string,
   subjectId: string,
   schoolYearId?: string | null,
+  purpose: "create" | "update" = "create",
 ): Promise<Response | null> {
   const names = await resolveClassroomSubjectNames(classroomId, subjectId);
   const catalog = await getSchoolCatalogStore();
@@ -181,6 +200,7 @@ export async function assertAgendaPublicationBranchAllowed(
     branches,
     contexts,
     schoolYearId,
+    purpose,
   });
   if (!result.ok) {
     return forbiddenResponse(result.reason);

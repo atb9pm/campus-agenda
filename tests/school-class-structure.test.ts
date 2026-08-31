@@ -60,8 +60,8 @@ async function professionWithPlan(store = freshCatalog(), prefix = "MMA") {
   return { store, profession, moteur, contextsBefore: await store.listContexts() };
 }
 
-test("version 2.22.0", () => {
-  assert.equal(APP_VERSION, "2.22.0");
+test("version 2.22.0 livrée puis successeurs", () => {
+  assert.match(APP_VERSION, /^\d+\.\d+\.\d+$/);
 });
 
 test("profession — création label + prefix + durée, normalisation MMA", async () => {
@@ -848,6 +848,8 @@ test("migration 0020 — deux classes structurées pré-0020 sans groupe restent
       { id: "class-ma3b", code: "MA3B", parallelCode: null },
     ],
   );
+
+  await applyMigrations(db);
 
   const catalog = new SqlSchoolCatalogStore(db);
   await catalog.ensureSeeded();

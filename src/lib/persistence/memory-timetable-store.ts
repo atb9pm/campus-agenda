@@ -5,13 +5,13 @@ import { filterSlotsForCourseDay } from "../../features/timetable/slot-logic.ts"
 import type { TimetableStore } from "./timetable-types.ts";
 
 let memoryImports: TimetableImportRecord[] = [];
-let memorySlots: TimetableSlot[] = [];
+let memorySlotsByImport = new Map<string, TimetableSlot[]>();
 let memoryClassMappings = new Map<string, string>();
 let memoryTeacherMappings = new Map<string, string | null>();
 
 export function resetMemoryTimetableStore(): void {
   memoryImports = [];
-  memorySlots = [];
+  memorySlotsByImport = new Map();
   memoryClassMappings = new Map();
   memoryTeacherMappings = new Map();
 }
@@ -37,8 +37,9 @@ export class MemoryTimetableStore implements TimetableStore {
       slotCount: parsed.slots.length,
     };
     memoryImports = [importRecord, ...memoryImports.map((entry) => ({ ...entry, status: entry.status === "active" ? "archived" as const : entry.status }))];
-    memorySlots = parsed.slots.map((slot) => ({ ...slot }));
-    return { importRecord, slots: memorySlots.map((slot) => ({ ...slot })) };
+    memorySlotsByImport.set(id, parsed.slots.map((slot) => ({ ...slot })));
+    const slots = memorySlotsByImport.get(id) ?? [];
+    return { importRecord, slots: slots.map((slot) => ({ ...slot })) };
   }
 
   async activateImport(importId: string): Promise<TimetableImportRecord> {
@@ -54,9 +55,26 @@ export class MemoryTimetableStore implements TimetableStore {
   async listActiveSlots(classCode?: string): Promise<TimetableSlot[]> {
     const active = await this.getActiveImport();
     if (!active) return [];
-    let slots = memorySlots;
-    if (classCode) slots = slots.filter((slot) => slot.classCode === classCode.toUpperCase());
-    return slots.map((slot) => ({ ...slot }));
+    const slots = memorySlotsByImport.get(active.id) ?? [];
+    const filtered = classCode
+      ? slots.filter((slot) => slot.classCode === classCode.toUpperCase())
+      : slots;
+    return filtered.map((slot) => ({ ...slot }));
+  }
+
+  async listClassSlotsAcrossImports(
+    classCode: string,
+  ): Promise<Array<{ classCode: string; schoolYearId: string | null }>> {
+    const wanted = classCode.toUpperCase();
+    const results: Array<{ classCode: string; schoolYearId: string | null }> = [];
+    for (const entry of memoryImports) {
+      const slots = memorySlotsByImport.get(entry.id) ?? [];
+      for (const slot of slots) {
+        if (slot.classCode.toUpperCase() !== wanted) continue;
+        results.push({ classCode: slot.classCode, schoolYearId: entry.schoolYearId });
+      }
+    }
+    return results;
   }
 
   async listSlotsForTeacherCode(

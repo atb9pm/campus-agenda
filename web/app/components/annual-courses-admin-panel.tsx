@@ -109,6 +109,7 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
       const profession = data.professions.find((item) => item.id === entry.professionId) ?? null;
       return isClassEligibleForAssignment({
         isActive: entry.isActive,
+        isArchived: entry.isArchived,
         schoolYearId: entry.schoolYearId,
         professionId: entry.professionId,
         trainingYear: entry.trainingYear,

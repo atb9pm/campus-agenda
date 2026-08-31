@@ -87,6 +87,9 @@ export function validateAttributionReferential(options: {
   if (!options.schoolClass) {
     return { ok: false, reason: "Classe introuvable.", status: 400 };
   }
+  if (options.schoolClass.isArchived) {
+    return { ok: false, reason: "Cette classe est archivée.", status: 400 };
+  }
   if (!options.schoolClass.isActive) {
     return { ok: false, reason: "Cette classe est inactive.", status: 400 };
   }

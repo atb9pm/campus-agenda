@@ -18,6 +18,7 @@ export interface SchoolCatalogStore {
   createClass(input: SchoolClassInput): Promise<SchoolClassRecord>;
   createClassesBatch(inputs: SchoolClassInput[]): Promise<SchoolClassRecord[]>;
   updateClass(id: string, patch: Partial<SchoolClassInput>): Promise<SchoolClassRecord | null>;
+  deleteClass(id: string): Promise<boolean>;
   createBranch(input: SchoolBranchInput): Promise<SchoolBranchRecord>;
   updateBranch(id: string, patch: Partial<SchoolBranchInput>): Promise<SchoolBranchRecord | null>;
   deleteBranch(id: string): Promise<PedagogyMutationResult<{ id: string }>>;

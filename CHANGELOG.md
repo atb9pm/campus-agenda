@@ -2,6 +2,32 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.23.0] — Cycle de vie et gestion des classes
+
+### Ajouté
+
+- Affichage complet des abréviations métier (MECMA, MECAUTO, CONDVL).
+- Liste des classes : code + nom de profession, méta (année de formation, groupe, année scolaire).
+- États **Active / Désactivée / Archivée** (`isArchived`, `archivedAt`).
+- Archivage sans réactivation automatique au désarchivage.
+- Suppression définitive admin des classes jamais utilisées, avec blockers serveur
+  (résolution classroomId runtime → nom, accès élèves, horaires de tous les imports).
+- Filtres Actives / Désactivées / Archivées et regroupement
+  (profession, année scolaire, année de formation, code).
+- Migration `0021_school_class_lifecycle.sql`.
+
+### Compatibilité
+
+- Classes existantes : `isArchived = false`, `archivedAt = null`.
+- IDs, codes, professions et groupes inchangés.
+- Les publications, notes et attributions existantes ne sont pas modifiées.
+
+### Non inclus
+
+- Moteur de récupération N → N+1.
+- Moteur séance → date.
+- Coordination des contrôles.
+
 ## [2.22.0] — Professions, plans et classes structurées
 
 ### Architecture

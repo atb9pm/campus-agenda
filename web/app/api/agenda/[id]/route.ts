@@ -1,5 +1,6 @@
 import {
   assertAgendaItemMutable,
+  assertAgendaClassMutableForItem,
   assertAgendaPublicationBranchAllowed,
   forbiddenResponse,
   jsonResponse,
@@ -33,6 +34,8 @@ export async function PATCH(request: Request, context: RouteContext) {
   const existing = await auth.store!.findAgendaItem(itemId);
   const archivedBlock = await assertAgendaItemMutable(existing);
   if (archivedBlock) return archivedBlock;
+  const classBlock = await assertAgendaClassMutableForItem(existing);
+  if (classBlock) return classBlock;
 
   if (
     existing &&
@@ -52,6 +55,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       existing.classroomId,
       body.subjectId ?? existing.subjectId,
       existing.schoolYearId,
+      "update",
     );
     if (branchGuard) return branchGuard;
   }
@@ -77,6 +81,8 @@ export async function DELETE(request: Request, context: RouteContext) {
   const existing = await auth.store!.findAgendaItem(itemId);
   const archivedBlock = await assertAgendaItemMutable(existing);
   if (archivedBlock) return archivedBlock;
+  const classBlock = await assertAgendaClassMutableForItem(existing);
+  if (classBlock) return classBlock;
 
   const result = await auth.store!.deleteAgendaItem(itemId, auth.session!.teacherId);
   if (!result.ok) {

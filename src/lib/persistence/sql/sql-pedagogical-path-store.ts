@@ -211,6 +211,14 @@ export class SqlAnnualCourseNotesStore implements AnnualCourseNotesStore {
     return Number(row?.count ?? 0);
   }
 
+  async countByClassId(classId: string): Promise<number> {
+    const row = await this.db
+      .prepare("SELECT COUNT(*) AS count FROM annual_course_notes WHERE class_id = ?")
+      .bind(classId)
+      .first<{ count: number }>();
+    return Number(row?.count ?? 0);
+  }
+
   async attachAnnualCourseId(filter: AnnualCourseNoteFilter, annualCourseId: string): Promise<number> {
     const result = await this.db
       .prepare(

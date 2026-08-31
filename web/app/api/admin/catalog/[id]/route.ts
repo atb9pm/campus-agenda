@@ -1,5 +1,19 @@
-import { getSchoolCatalogStore, getSchoolYearStore } from "@campus/lib/persistence/store-factory.ts";
-import { validateAdminClassCreate } from "@campus/features/school-catalog/index.ts";
+import {
+  getAgendaStore,
+  getAnnualCourseNotesStore,
+  getAnnualCourseStore,
+  getMembershipStore,
+  getSchoolCatalogStore,
+  getSchoolYearStore,
+  getTimetableStore,
+  listRuntimeClassrooms,
+  listStudentAccesses,
+} from "@campus/lib/persistence/store-factory.ts";
+import {
+  classDeleteBlockers,
+  loadClassDeleteUsage,
+  validateAdminClassCreate,
+} from "@campus/features/school-catalog/index.ts";
 import { jsonResponse, requireAdminSession } from "../../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../../lib/server/observability.ts";
 
@@ -40,6 +54,12 @@ async function handlePatch(request: Request, context: { params: Promise<{ id: st
   const catalog = await getSchoolCatalogStore();
 
   if (body.kind === "class") {
+    if (body.isArchived !== undefined && typeof body.isArchived !== "boolean") {
+      return jsonResponse({ ok: false, reason: "isArchived doit être un booléen." }, { status: 400 });
+    }
+    if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
+      return jsonResponse({ ok: false, reason: "isActive doit être un booléen." }, { status: 400 });
+    }
     try {
       const pedagogyTouched =
         body.schoolYearId !== undefined ||
@@ -116,16 +136,53 @@ async function handleDelete(request: Request, context: { params: Promise<{ id: s
     | "branch"
     | "profession"
     | "context"
+    | "class"
     | null;
 
-  if (kind !== "branch" && kind !== "profession" && kind !== "context") {
+  if (kind !== "branch" && kind !== "profession" && kind !== "context" && kind !== "class") {
     return jsonResponse(
-      { ok: false, reason: "Paramètre kind requis (branch|profession|context)." },
+      { ok: false, reason: "Paramètre kind requis (class|branch|profession|context)." },
       { status: 400 },
     );
   }
 
   const catalog = await getSchoolCatalogStore();
+
+  if (kind === "class") {
+    const classes = await catalog.listClasses();
+    const schoolClass = classes.find((entry) => entry.id === id) ?? null;
+    if (!schoolClass) {
+      return jsonResponse({ ok: false, reason: "Classe introuvable." }, { status: 404 });
+    }
+    const [courses, notes, agenda, timetable, memberships, classrooms, studentAccesses] = await Promise.all([
+      getAnnualCourseStore(),
+      getAnnualCourseNotesStore(),
+      getAgendaStore(),
+      getTimetableStore(),
+      getMembershipStore(),
+      listRuntimeClassrooms(),
+      listStudentAccesses(),
+    ]);
+    const usage = await loadClassDeleteUsage({
+      schoolClass,
+      courses,
+      notes,
+      agenda,
+      timetable,
+      memberships,
+      classrooms,
+      studentAccesses,
+    });
+    const blockers = classDeleteBlockers(schoolClass, classes, usage);
+    if (!blockers.ok) {
+      return jsonResponse({ ok: false, reason: blockers.reason }, { status: 409 });
+    }
+    const deleted = await catalog.deleteClass(id);
+    if (!deleted) {
+      return jsonResponse({ ok: false, reason: "Classe introuvable." }, { status: 404 });
+    }
+    return jsonResponse({ ok: true, id });
+  }
 
   if (kind === "branch") {
     const result = await catalog.deleteBranch(id);

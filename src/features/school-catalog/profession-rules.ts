@@ -234,6 +234,8 @@ export function evaluateAgendaBranchForClass(options: {
   branches: SchoolBranchRecord[];
   contexts: PedagogicalContextRecord[];
   schoolYearId?: string | null;
+  /** create = nouvelle publication (refuse inactive). update = mutation existante. */
+  purpose?: "create" | "update";
 }): PedagogyMutationResult<true> {
   const classroomName = options.classroomName?.trim();
   if (!classroomName) return { ok: true, value: true };
@@ -245,6 +247,12 @@ export function evaluateAgendaBranchForClass(options: {
   });
 
   if (!schoolClass) return { ok: true, value: true };
+  if (schoolClass.isArchived) {
+    return { ok: false, reason: "Cette classe est archivée. Impossible de publier un nouvel élément." };
+  }
+  if ((options.purpose ?? "create") !== "update" && !schoolClass.isActive) {
+    return { ok: false, reason: "Cette classe est désactivée. Impossible de publier un nouvel élément." };
+  }
   if (!schoolClass.professionId || schoolClass.trainingYear === null) {
     return { ok: true, value: true };
   }

@@ -15,7 +15,7 @@ export function sortSchoolBranches(branches: SchoolBranchRecord[]): SchoolBranch
 }
 
 export function listActiveSchoolClasses(classes: SchoolClassRecord[]): SchoolClassRecord[] {
-  return sortSchoolClasses(classes.filter((entry) => entry.isActive));
+  return sortSchoolClasses(classes.filter((entry) => entry.isActive && !entry.isArchived));
 }
 
 export function listActiveSchoolBranches(branches: SchoolBranchRecord[]): SchoolBranchRecord[] {

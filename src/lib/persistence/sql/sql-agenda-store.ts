@@ -253,6 +253,23 @@ export async function classroomExistsInDatabase(db: SqlDatabase, classroomId: st
   return Boolean(row);
 }
 
+export async function listClassroomsInDatabase(
+  db: SqlDatabase,
+): Promise<Array<{ id: string; name: string }>> {
+  const { results } = await db.prepare("SELECT id, name FROM classrooms").bind().all<{ id: string; name: string }>();
+  return results ?? [];
+}
+
+export async function listStudentAccessesInDatabase(
+  db: SqlDatabase,
+): Promise<Array<{ classroomId: string }>> {
+  const { results } = await db
+    .prepare("SELECT classroom_id FROM student_accesses")
+    .bind()
+    .all<{ classroom_id: string }>();
+  return (results ?? []).map((row) => ({ classroomId: row.classroom_id }));
+}
+
 
 export async function resolveClassroomSubjectNamesInDatabase(
   db: SqlDatabase,
