@@ -132,6 +132,14 @@ export async function classroomExists(classroomId: string): Promise<boolean> {
   return Boolean(getClassroomById(DEMO_CATALOG, classroomId));
 }
 
+export async function listRuntimeClassrooms(): Promise<Array<{ id: string; name: string }>> {
+  return DEMO_CATALOG.classrooms.map((entry) => ({ id: entry.id, name: entry.name }));
+}
+
+export async function listStudentAccesses(): Promise<Array<{ classroomId: string }>> {
+  return DEMO_CATALOG.studentAccesses.map((entry) => ({ classroomId: entry.classroomId }));
+}
+
 
 export async function resolveClassroomSubjectNames(
   classroomId: string,

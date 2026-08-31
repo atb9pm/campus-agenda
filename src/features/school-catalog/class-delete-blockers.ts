@@ -1,13 +1,20 @@
 import { normalizeClassCode } from "./queries.ts";
 import type { SchoolClassRecord } from "./types.ts";
 
+export interface RuntimeClassroomRef {
+  id: string;
+  name: string;
+}
+
 export interface ClassDeleteUsage {
+  classrooms: RuntimeClassroomRef[];
   courses: Array<{ id: string; classId: string }>;
   assignments: Array<{ annualCourseId: string }>;
   notes: Array<{ classId: string }>;
   agendaItems: Array<{ classroomId: string; schoolYearId?: string | null }>;
   timetableSlots: Array<{ classCode: string; schoolYearId?: string | null }>;
   linkedClassroomIds: string[];
+  studentAccesses: Array<{ classroomId: string }>;
 }
 
 export interface ClassDeleteBlockerCounts {
@@ -17,6 +24,7 @@ export interface ClassDeleteBlockerCounts {
   publications: number;
   timetableSlots: number;
   memberships: number;
+  studentAccesses: number;
 }
 
 function countLabel(count: number, singular: string, plural: string): string {
@@ -39,6 +47,9 @@ export function formatClassDeleteBlockerReason(counts: ClassDeleteBlockerCounts)
   if (counts.memberships > 0) {
     parts.push(countLabel(counts.memberships, "accès / membership", "accès / memberships"));
   }
+  if (counts.studentAccesses > 0) {
+    parts.push(countLabel(counts.studentAccesses, "accès élève", "accès élèves"));
+  }
   const detail = parts.length > 0 ? `\n- ${parts.join("\n- ")}` : "";
   return (
     "Impossible de supprimer cette classe car elle a déjà été utilisée. Archivez-la à la place." +
@@ -46,16 +57,43 @@ export function formatClassDeleteBlockerReason(counts: ClassDeleteBlockerCounts)
   );
 }
 
-function classroomMatchesClass(
+/**
+ * Nom réel de la classroom runtime. Jamais dérivé en découpant un ID opaque.
+ */
+export function resolveRuntimeClassroomName(
+  classroomId: string,
+  classrooms: RuntimeClassroomRef[],
+): string | null {
+  const found = classrooms.find((entry) => entry.id === classroomId);
+  const name = found?.name.trim() ?? "";
+  return name || null;
+}
+
+function schoolClassMatchesDisplayName(schoolClass: SchoolClassRecord, displayName: string): boolean {
+  const normalized = normalizeClassCode(displayName);
+  if (!normalized) return false;
+  return (
+    normalized === normalizeClassCode(schoolClass.code) ||
+    normalized === normalizeClassCode(schoolClass.label)
+  );
+}
+
+/**
+ * Relie un `classroomId` runtime (Agenda / Membership / StudentAccess) à une SchoolClass.
+ * 1. id catalogue identique (rare) ;
+ * 2. résolution id → name, puis name ↔ code/libellé ;
+ * 3. repli uniquement si l’identifiant stocké EST déjà le code/libellé (données synthétiques).
+ */
+export function runtimeClassroomRefersToSchoolClass(
   classroomId: string,
   schoolClass: SchoolClassRecord,
+  classrooms: RuntimeClassroomRef[],
 ): boolean {
-  const classroom = normalizeClassCode(classroomId);
-  if (!classroom) return false;
+  if (!classroomId) return false;
   if (classroomId === schoolClass.id) return true;
-  if (classroom === normalizeClassCode(schoolClass.code)) return true;
-  if (classroom === normalizeClassCode(schoolClass.label)) return true;
-  return false;
+  const name = resolveRuntimeClassroomName(classroomId, classrooms);
+  if (name) return schoolClassMatchesDisplayName(schoolClass, name);
+  return schoolClassMatchesDisplayName(schoolClass, classroomId);
 }
 
 function sameCodeClasses(schoolClass: SchoolClassRecord, allClasses: SchoolClassRecord[]): SchoolClassRecord[] {
@@ -64,21 +102,32 @@ function sameCodeClasses(schoolClass: SchoolClassRecord, allClasses: SchoolClass
 }
 
 /**
+ * Usage sans année (Membership, StudentAccess) : si le nom correspond,
+ * bloquer — y compris quand le même code existe sur plusieurs années.
+ */
+function yearlessRuntimeBlocksClass(
+  classroomId: string,
+  schoolClass: SchoolClassRecord,
+  classrooms: RuntimeClassroomRef[],
+): boolean {
+  return runtimeClassroomRefersToSchoolClass(classroomId, schoolClass, classrooms);
+}
+
+/**
  * Publications Agenda : jamais uniquement `classroomId = code`.
- * Structuré : code (ou id/libellé) ET schoolYearId.
- * Legacy sans année : conservateur — toute utilisation du code, ou ambiguïté, bloque.
+ * Structuré : nom runtime + schoolYearId.
+ * Sans année : conservateur.
  */
 export function agendaItemBlocksClassDeletion(
   item: { classroomId: string; schoolYearId?: string | null },
   schoolClass: SchoolClassRecord,
   allClasses: SchoolClassRecord[],
+  classrooms: RuntimeClassroomRef[],
 ): boolean {
-  if (!classroomMatchesClass(item.classroomId, schoolClass)) return false;
-  if (schoolClass.schoolYearId) {
+  if (!runtimeClassroomRefersToSchoolClass(item.classroomId, schoolClass, classrooms)) return false;
+  if (schoolClass.schoolYearId && item.schoolYearId) {
     return item.schoolYearId === schoolClass.schoolYearId;
   }
-  const twins = sameCodeClasses(schoolClass, allClasses);
-  if (twins.length > 1) return true;
   return true;
 }
 
@@ -89,7 +138,8 @@ function timetableSlotBlocksClassDeletion(
 ): boolean {
   if (normalizeClassCode(slot.classCode) !== normalizeClassCode(schoolClass.code)) return false;
   if (schoolClass.schoolYearId) {
-    return slot.schoolYearId === schoolClass.schoolYearId || slot.schoolYearId == null;
+    if (slot.schoolYearId == null) return true;
+    return slot.schoolYearId === schoolClass.schoolYearId;
   }
   const twins = sameCodeClasses(schoolClass, allClasses);
   if (twins.length > 1) return true;
@@ -101,18 +151,22 @@ export function classDeleteBlockerCounts(
   allClasses: SchoolClassRecord[],
   usage: ClassDeleteUsage,
 ): ClassDeleteBlockerCounts {
+  const classrooms = usage.classrooms ?? [];
   const courses = usage.courses.filter((entry) => entry.classId === schoolClass.id);
   const courseIds = new Set(courses.map((entry) => entry.id));
   const assignments = usage.assignments.filter((entry) => courseIds.has(entry.annualCourseId));
   const notes = usage.notes.filter((entry) => entry.classId === schoolClass.id);
   const publications = usage.agendaItems.filter((item) =>
-    agendaItemBlocksClassDeletion(item, schoolClass, allClasses),
+    agendaItemBlocksClassDeletion(item, schoolClass, allClasses, classrooms),
   );
   const timetableSlots = usage.timetableSlots.filter((slot) =>
     timetableSlotBlocksClassDeletion(slot, schoolClass, allClasses),
   );
   const memberships = usage.linkedClassroomIds.filter((classroomId) =>
-    classroomMatchesClass(classroomId, schoolClass),
+    yearlessRuntimeBlocksClass(classroomId, schoolClass, classrooms),
+  );
+  const studentAccesses = (usage.studentAccesses ?? []).filter((entry) =>
+    yearlessRuntimeBlocksClass(entry.classroomId, schoolClass, classrooms),
   );
   return {
     courses: courses.length,
@@ -121,6 +175,7 @@ export function classDeleteBlockerCounts(
     publications: publications.length,
     timetableSlots: timetableSlots.length,
     memberships: memberships.length,
+    studentAccesses: studentAccesses.length,
   };
 }
 
@@ -136,7 +191,8 @@ export function classDeleteBlockers(
       counts.notes +
       counts.publications +
       counts.timetableSlots +
-      counts.memberships >
+      counts.memberships +
+      counts.studentAccesses >
     0;
   if (!blocked) return { ok: true };
   return { ok: false, reason: formatClassDeleteBlockerReason(counts) };

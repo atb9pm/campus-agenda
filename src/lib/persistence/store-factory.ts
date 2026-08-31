@@ -4,7 +4,7 @@ import type { AgendaStore, StoreKind, TemplateStore } from "./types.ts";
 import { createNodeSqliteDatabase, wrapD1Database } from "./sql/adapters.ts";
 import { applyMigrations, isDatabaseSeeded } from "./sql/migrate.ts";
 import { seedDemoDatabase } from "./sql/seed.ts";
-import { SqlAgendaStore, classroomExistsInDatabase, resolveClassroomSubjectNamesInDatabase } from "./sql/sql-agenda-store.ts";
+import { SqlAgendaStore, classroomExistsInDatabase, listClassroomsInDatabase, listStudentAccessesInDatabase, resolveClassroomSubjectNamesInDatabase } from "./sql/sql-agenda-store.ts";
 import { SqlTemplateStore } from "./sql/sql-template-store.ts";
 import { SqlSchoolYearStore, hydrateActiveSchoolCalendar } from "./sql/sql-school-year-store.ts";
 import { getMemoryAgendaStore } from "./memory-store.ts";
@@ -12,7 +12,7 @@ import { getMemoryTemplateStore } from "./memory-template-store.ts";
 import { getMemoryTimetableStore } from "./memory-timetable-store.ts";
 import { SqlTimetableStore } from "./sql/sql-timetable-store.ts";
 import type { TimetableStore } from "./timetable-types.ts";
-import { classroomExists as memoryClassroomExists, resolveClassroomSubjectNames as memoryResolveClassroomSubjectNames } from "./memory-store.ts";
+import { classroomExists as memoryClassroomExists, listRuntimeClassrooms as memoryListRuntimeClassrooms, listStudentAccesses as memoryListStudentAccesses, resolveClassroomSubjectNames as memoryResolveClassroomSubjectNames } from "./memory-store.ts";
 import { MemorySchoolYearStore, hydrateMemorySchoolCalendar } from "./memory-school-year-store.ts";
 import { MemoryMembershipStore } from "./memory-membership-store.ts";
 import { SqlMembershipStore } from "./sql/sql-membership-store.ts";
@@ -63,6 +63,8 @@ interface ResolvedStore {
   annualCourseStore: AnnualCourseStore;
   kind: StoreKind;
   classroomExists: (classroomId: string) => Promise<boolean>;
+  listRuntimeClassrooms: () => Promise<Array<{ id: string; name: string }>>;
+  listStudentAccesses: () => Promise<Array<{ classroomId: string }>>;
   resolveClassroomSubjectNames: (
     classroomId: string,
     subjectId: string,
@@ -176,6 +178,8 @@ async function createStore(): Promise<ResolvedStore> {
       annualCourseStore,
       kind: "memory",
       classroomExists: memoryClassroomExists,
+      listRuntimeClassrooms: memoryListRuntimeClassrooms,
+      listStudentAccesses: memoryListStudentAccesses,
       resolveClassroomSubjectNames: memoryResolveClassroomSubjectNames,
     };
   }
@@ -208,6 +212,8 @@ async function createStore(): Promise<ResolvedStore> {
       annualCourseStore,
       kind: "sqlite",
       classroomExists: (classroomId) => classroomExistsInDatabase(sqlite, classroomId),
+      listRuntimeClassrooms: () => listClassroomsInDatabase(sqlite),
+      listStudentAccesses: () => listStudentAccessesInDatabase(sqlite),
       resolveClassroomSubjectNames: (classroomId, subjectId) =>
         resolveClassroomSubjectNamesInDatabase(sqlite, classroomId, subjectId),
     };
@@ -243,6 +249,8 @@ async function createStore(): Promise<ResolvedStore> {
         annualCourseStore,
         kind: "d1",
         classroomExists: (classroomId) => classroomExistsInDatabase(db, classroomId),
+        listRuntimeClassrooms: () => listClassroomsInDatabase(db),
+        listStudentAccesses: () => listStudentAccessesInDatabase(db),
         resolveClassroomSubjectNames: (classroomId, subjectId) =>
           resolveClassroomSubjectNamesInDatabase(db, classroomId, subjectId),
       };
@@ -276,6 +284,8 @@ async function createStore(): Promise<ResolvedStore> {
     annualCourseStore,
     kind: "memory",
     classroomExists: memoryClassroomExists,
+    listRuntimeClassrooms: memoryListRuntimeClassrooms,
+    listStudentAccesses: memoryListStudentAccesses,
     resolveClassroomSubjectNames: memoryResolveClassroomSubjectNames,
   };
 }
@@ -352,6 +362,16 @@ export async function getStoreKind(): Promise<StoreKind> {
 export async function checkClassroomExists(classroomId: string): Promise<boolean> {
   const resolved = await resolveAgendaStore();
   return resolved.classroomExists(classroomId);
+}
+
+export async function listRuntimeClassrooms(): Promise<Array<{ id: string; name: string }>> {
+  const resolved = await resolveAgendaStore();
+  return resolved.listRuntimeClassrooms();
+}
+
+export async function listStudentAccesses(): Promise<Array<{ classroomId: string }>> {
+  const resolved = await resolveAgendaStore();
+  return resolved.listStudentAccesses();
 }
 
 export async function exportStoreSnapshot(): Promise<AgendaBackupSnapshot> {

@@ -6,6 +6,8 @@ import {
   getSchoolCatalogStore,
   getSchoolYearStore,
   getTimetableStore,
+  listRuntimeClassrooms,
+  listStudentAccesses,
 } from "@campus/lib/persistence/store-factory.ts";
 import {
   classDeleteBlockers,
@@ -152,12 +154,14 @@ async function handleDelete(request: Request, context: { params: Promise<{ id: s
     if (!schoolClass) {
       return jsonResponse({ ok: false, reason: "Classe introuvable." }, { status: 404 });
     }
-    const [courses, notes, agenda, timetable, memberships] = await Promise.all([
+    const [courses, notes, agenda, timetable, memberships, classrooms, studentAccesses] = await Promise.all([
       getAnnualCourseStore(),
       getAnnualCourseNotesStore(),
       getAgendaStore(),
       getTimetableStore(),
       getMembershipStore(),
+      listRuntimeClassrooms(),
+      listStudentAccesses(),
     ]);
     const usage = await loadClassDeleteUsage({
       schoolClass,
@@ -166,6 +170,8 @@ async function handleDelete(request: Request, context: { params: Promise<{ id: s
       agenda,
       timetable,
       memberships,
+      classrooms,
+      studentAccesses,
     });
     const blockers = classDeleteBlockers(schoolClass, classes, usage);
     if (!blockers.ok) {

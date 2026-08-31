@@ -10,7 +10,8 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 - Liste des classes : code + nom de profession, méta (année de formation, groupe, année scolaire).
 - États **Active / Désactivée / Archivée** (`isArchived`, `archivedAt`).
 - Archivage sans réactivation automatique au désarchivage.
-- Suppression définitive admin des classes jamais utilisées, avec blockers serveur.
+- Suppression définitive admin des classes jamais utilisées, avec blockers serveur
+  (résolution classroomId runtime → nom, accès élèves, horaires de tous les imports).
 - Filtres Actives / Désactivées / Archivées et regroupement
   (profession, année scolaire, année de formation, code).
 - Migration `0021_school_class_lifecycle.sql`.

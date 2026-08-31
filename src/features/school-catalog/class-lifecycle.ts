@@ -36,6 +36,13 @@ export function applyClassLifecyclePatch(
   isArchived: boolean;
   archivedAt: string | null;
 }> {
+  if (current.isArchived && patch.isArchived === false && patch.isActive === true) {
+    return {
+      ok: false,
+      reason: "Désarchivez d'abord la classe avant de la réactiver.",
+    };
+  }
+
   let isArchived = current.isArchived;
   let isActive = current.isActive;
   let archivedAt = current.archivedAt;

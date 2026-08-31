@@ -65,6 +65,7 @@ export {
   applyClassLifecyclePatch,
   type ClassLifecycleStatus,
 } from "./class-lifecycle.ts";
+export { assertAgendaClassMutable } from "./agenda-class-guards.ts";
 export {
   classDisplayGroupLabel,
   classDisplayMeta,
@@ -78,7 +79,10 @@ export {
   classDeleteBlockerCounts,
   classDeleteBlockers,
   formatClassDeleteBlockerReason,
+  resolveRuntimeClassroomName,
+  runtimeClassroomRefersToSchoolClass,
   type ClassDeleteUsage,
+  type RuntimeClassroomRef,
 } from "./class-delete-blockers.ts";
 export { loadClassDeleteUsage } from "./class-delete-service.ts";
 export {
