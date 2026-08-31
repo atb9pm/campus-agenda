@@ -4,11 +4,14 @@ import { classDisplayProfessionLabel, classDisplayTrainingYearLabel } from "../s
 import type { PedagogicalContextRecord, SchoolProfessionRecord } from "../school-catalog/profession-types.ts";
 import type { SchoolBranchRecord, SchoolClassRecord } from "../school-catalog/types.ts";
 import type { TeacherAccountRecord } from "../teacher-accounts/types.ts";
+import { attendanceDaysForWeek } from "./class-attendance.ts";
 import { ALL_DAY_PERIODS, formatPeriodRange, LUNCH_PERIOD } from "./periods.ts";
 import { filterSlotsForScheduleView } from "./operational.ts";
 import {
   COURSE_WEEKDAY_LABELS,
   COURSE_WEEK_KIND_LABELS,
+  type AttendanceRole,
+  type ClassAttendanceDay,
   type CourseScheduleSlot,
   type CourseWeekday,
   type CourseWeekKind,
@@ -251,5 +254,67 @@ export function buildGlobalDayGrid(options: {
     weekKind: options.weekKind,
     classColumns: classColumns.map((entry) => ({ classId: entry.id, classCode: entry.code })),
     rows,
+  };
+}
+
+export interface AttendanceWeekDayPreview {
+  dayOfWeek: CourseWeekday;
+  dayLabel: string;
+  role: AttendanceRole | null;
+  roleLabel: string | null;
+  blocks: ClassScheduleBlock[];
+  empty: boolean;
+}
+
+export interface AttendanceWeekPreview {
+  weekKind: Exclude<CourseWeekKind, "all">;
+  days: AttendanceWeekDayPreview[];
+}
+
+export function buildAttendanceWeekPreview(options: {
+  days: ClassAttendanceDay[];
+  slots: CourseScheduleSlot[];
+  weekKind: Exclude<CourseWeekKind, "all">;
+  courses?: Array<Pick<AnnualCourse, "id" | "isArchived">>;
+  yearStatus?: string | null;
+}): AttendanceWeekPreview {
+  const slots =
+    options.courses
+      ? filterSlotsForScheduleView({
+          slots: options.slots,
+          courses: options.courses,
+          yearStatus: options.yearStatus,
+        })
+      : options.slots;
+  const attendance = attendanceDaysForWeek(options.days, options.weekKind);
+  const applicable = slots.filter((slot) => slotAppliesToWeekView(slot, options.weekKind));
+  const sourceDays =
+    options.days.length > 0
+      ? attendance.map((day) => ({
+          dayOfWeek: day.dayOfWeek,
+          role: day.role,
+          roleLabel: day.role === "PRIMARY" ? "jour principal" : "jour complémentaire",
+        }))
+      : usedWeekdays(applicable).map((dayOfWeek) => ({
+          dayOfWeek,
+          role: null,
+          roleLabel: null,
+        }));
+  return {
+    weekKind: options.weekKind,
+    days: sourceDays.map((day) => {
+      const blocks = buildClassDayBlocks(
+        applicable.filter((slot) => slot.dayOfWeek === day.dayOfWeek),
+        day.dayOfWeek,
+      );
+      return {
+        dayOfWeek: day.dayOfWeek,
+        dayLabel: COURSE_WEEKDAY_LABELS[day.dayOfWeek],
+        role: day.role,
+        roleLabel: day.roleLabel,
+        blocks,
+        empty: !blocks.some((block) => block.kind === "course"),
+      };
+    }),
   };
 }

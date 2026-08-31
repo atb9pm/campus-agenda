@@ -13,9 +13,6 @@ import {
   type AnnualCourseServiceDeps,
 } from "../src/features/annual-courses/index.ts";
 import {
-  APP_VERSION,
-} from "../src/lib/app-version.ts";
-import {
   LUNCH_PERIOD,
   NO_TEACHER_ASSIGNED_LABEL,
   TEACHABLE_PERIODS,
@@ -31,6 +28,7 @@ import {
   isTeachablePeriod,
   listClassScheduleSlots,
   rangeCrossesLunch,
+  replaceAttendanceDaysForClass,
   teachersForAnnualCourse,
   updateCourseScheduleSlot,
   usedWeekdays,
@@ -59,7 +57,7 @@ import {
 import type { SchoolYearRecord } from "../src/features/school-year/types.ts";
 import type { SchoolYearStore } from "../src/lib/persistence/school-year-types.ts";
 import { createNodeSqliteDatabase } from "../src/lib/persistence/sql/adapters.ts";
-import { applyMigrations, SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
+import { applyMigrations } from "../src/lib/persistence/sql/migrate.ts";
 import { SqlAnnualCourseStore } from "../src/lib/persistence/sql/sql-annual-course-store.ts";
 import { SqlAnnualCourseNotesStore } from "../src/lib/persistence/sql/sql-pedagogical-path-store.ts";
 import { SqlCourseScheduleStore } from "../src/lib/persistence/sql/sql-course-schedule-store.ts";
@@ -240,6 +238,14 @@ async function makeWorld(kind: StoreKind, extraYears: SchoolYearRecord[] = []): 
     teachers: teachersStore,
   };
 
+  const seededA = await replaceAttendanceDaysForClass(scheduleDeps, classA.id, [
+    { dayOfWeek: 4, weekKind: "all", role: "PRIMARY" },
+  ]);
+  const seededB = await replaceAttendanceDaysForClass(scheduleDeps, classB.id, [
+    { dayOfWeek: 4, weekKind: "all", role: "PRIMARY" },
+  ]);
+  assert.equal(seededA.ok && seededB.ok, true);
+
   return {
     kind,
     db,
@@ -282,9 +288,7 @@ function testBoth(name: string, run: (world: World) => Promise<void>) {
   });
 }
 
-test("version 2.25.0 — créneaux et horaire généré", () => {
-  assert.equal(APP_VERSION, "2.25.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0022_course_schedule_slots.sql");
+test("version 2.25.0 — créneaux et horaire généré (règles conservées)", () => {
   assert.equal(isTeachablePeriod(LUNCH_PERIOD), false);
   assert.deepEqual([...TEACHABLE_PERIODS], [1, 2, 3, 4, 6, 7, 8, 9, 10]);
   assert.equal(rangeCrossesLunch(4, 6), true);
@@ -641,6 +645,10 @@ testBoth("V — même classCode sur deux années, aucune collision", async (worl
   });
   assert.equal(courseNext.ok, true);
   if (!courseNext.ok) return;
+  const seededNext = await replaceAttendanceDaysForClass(world.scheduleDeps, classNext.id, [
+    { dayOfWeek: 4, weekKind: "all", role: "PRIMARY" },
+  ]);
+  assert.equal(seededNext.ok, true);
   const first = await createCourseScheduleSlot(world.scheduleDeps, slotInput(courseA.id));
   const second = await createCourseScheduleSlot(world.scheduleDeps, slotInput(courseNext.value.id));
   assert.equal(first.ok, true);

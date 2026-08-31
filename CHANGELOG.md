@@ -2,6 +2,42 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.25.1] — Horaire : jours principaux et complémentaires des classes
+
+Cette version ajoute les jours structurés de présence d’une classe au-dessus du modèle `CourseScheduleSlot` introduit en 2.25.0.
+
+Le jour principal est présent toutes les semaines. Les jours complémentaires peuvent être `all` / `A` / `B`.
+Les `CourseScheduleSlot` restent la source de vérité pour le contenu de l’horaire et conservent leur `weekKind` afin de permettre l’alternance de branches même sur le jour principal.
+`TeacherCourseAssignment` reste la source unique des enseignants.
+Les données de la 2.25.0 sont conservées : aucune migration automatique silencieuse des jours de présence n’est effectuée.
+
+### Architecture
+
+```
+SchoolClass
+→ ClassAttendanceDay (disponibilité de la classe)
+AnnualCourse
+→ CourseScheduleSlot (contenu pédagogique dans cette disponibilité)
+TeacherCourseAssignment = QUI enseigne
+```
+
+### Ajouté
+
+- Table `class_attendance_days` (migration `0023_class_attendance_days.sql`).
+- Plan de présence atomique (`replaceAttendanceDays`) : exactement 1 PRIMARY (`weekKind = all`) et 0 à N ADDITIONAL.
+- Couverture `attendanceCoversScheduleSlot` : un jour `all` autorise les créneaux `all` / `A` / `B`.
+- Administration → **Horaire des classes** : jours de cours, configuration, aperçu généré A/B, vue globale secondaire.
+
+### Compatibilité
+
+- Migration `0022_course_schedule_slots.sql` inchangée.
+- Les créneaux 2.25.0 restent lisibles. Sans jours de présence, l’horaire existant est en lecture et la création de créneau est refusée (`ATTENDANCE_NOT_CONFIGURED`).
+- Un plan de présence incompatible avec des créneaux existants est refusé (`ATTENDANCE_IN_USE`). Aucun cours n’est déplacé automatiquement.
+
+### Non inclus
+
+CourseOccurrence, dates réelles, vacances, salles, disponibilité enseignants, import PDF, publication Agenda, refonte des attributions.
+
 ## [2.25.0] — Administration : créneaux et horaire généré des classes
 
 L’horaire est désormais généré à partir des créneaux configurés sur les AnnualCourse.

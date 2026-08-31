@@ -1,11 +1,14 @@
 import {
   createCourseScheduleSlot,
   deleteCourseScheduleSlot,
+  isAttendanceRole,
   isCourseWeekKind,
   isCourseWeekday,
-  updateCourseScheduleSlot,
+  replaceAttendanceDaysForClass,
+  type ClassAttendanceDayInput,
   type CourseWeekKind,
   type CourseWeekday,
+  updateCourseScheduleSlot,
 } from "@campus/features/course-schedule/index.ts";
 import {
   getCourseScheduleServiceDeps,
@@ -19,22 +22,34 @@ async function handleGet(request: Request) {
   if ("error" in auth && auth.error) return auth.error;
 
   const deps = await getCourseScheduleServiceDeps();
-  const [slots, courses, assignments, classes, branches, professions, contexts, teachers, schoolYears] =
-    await Promise.all([
-      deps.schedules.listSlots(),
-      deps.courses.listCourses(),
-      deps.courses.listAssignments(),
-      deps.catalog.listClasses(),
-      deps.catalog.listBranches(),
-      deps.catalog.listProfessions(),
-      deps.catalog.listContexts(),
-      deps.teachers!.listAccounts(),
-      deps.years.listSchoolYears(),
-    ]);
+  const [
+    slots,
+    attendanceDays,
+    courses,
+    assignments,
+    classes,
+    branches,
+    professions,
+    contexts,
+    teachers,
+    schoolYears,
+  ] = await Promise.all([
+    deps.schedules.listSlots(),
+    deps.schedules.listAttendanceDays(),
+    deps.courses.listCourses(),
+    deps.courses.listAssignments(),
+    deps.catalog.listClasses(),
+    deps.catalog.listBranches(),
+    deps.catalog.listProfessions(),
+    deps.catalog.listContexts(),
+    deps.teachers!.listAccounts(),
+    deps.years.listSchoolYears(),
+  ]);
 
   return jsonResponse({
     ok: true,
     slots,
+    attendanceDays,
     courses,
     assignments,
     classes,
@@ -57,6 +72,15 @@ function parseWeekday(value: unknown): CourseWeekday | null {
   return isCourseWeekday(numeric) ? numeric : null;
 }
 
+function parseAttendanceDayInput(raw: unknown): ClassAttendanceDayInput | null {
+  if (!raw || typeof raw !== "object") return null;
+  const entry = raw as Record<string, unknown>;
+  const dayOfWeek = parseWeekday(entry.dayOfWeek);
+  const weekKind = isCourseWeekKind(entry.weekKind) ? entry.weekKind : null;
+  if (!dayOfWeek || !weekKind || !isAttendanceRole(entry.role)) return null;
+  return { dayOfWeek, weekKind, role: entry.role };
+}
+
 async function handlePost(request: Request) {
   const auth = await requireAdminSession(request);
   if ("error" in auth && auth.error) return auth.error;
@@ -65,6 +89,8 @@ async function handlePost(request: Request) {
   const body = (await request.json()) as {
     action?: string;
     id?: string;
+    classId?: string;
+    days?: unknown;
     annualCourseId?: string;
     dayOfWeek?: number;
     periodStart?: number;
@@ -83,10 +109,36 @@ async function handlePost(request: Request) {
   }
 
   const action = body.action ?? "create";
-  const dayOfWeek = parseWeekday(body.dayOfWeek);
-  const weekKind = isCourseWeekKind(body.weekKind) ? (body.weekKind as CourseWeekKind) : null;
+
+  if (action === "replaceAttendanceDays") {
+    const classId = String(body.classId ?? "").trim();
+    if (!classId) {
+      return jsonResponse({ ok: false, reason: "La classe est obligatoire." }, { status: 400 });
+    }
+    if (!Array.isArray(body.days)) {
+      return jsonResponse({ ok: false, reason: "Le plan de présence est invalide." }, { status: 400 });
+    }
+    const days: ClassAttendanceDayInput[] = [];
+    for (const raw of body.days) {
+      const parsed = parseAttendanceDayInput(raw);
+      if (!parsed) {
+        return jsonResponse({ ok: false, reason: "Jour de présence invalide." }, { status: 400 });
+      }
+      days.push(parsed);
+    }
+    const result = await replaceAttendanceDaysForClass(deps, classId, days);
+    if (!result.ok) {
+      return jsonResponse(
+        { ok: false, reason: result.reason, code: result.code },
+        { status: result.status ?? 400 },
+      );
+    }
+    return jsonResponse({ ok: true, attendanceDays: result.value });
+  }
 
   if (action === "create") {
+    const dayOfWeek = parseWeekday(body.dayOfWeek);
+    const weekKind = isCourseWeekKind(body.weekKind) ? (body.weekKind as CourseWeekKind) : null;
     if (!dayOfWeek || !weekKind) {
       return jsonResponse({ ok: false, reason: "Jour ou rythme invalide." }, { status: 400 });
     }
@@ -109,6 +161,8 @@ async function handlePost(request: Request) {
   }
 
   if (action === "update") {
+    const dayOfWeek = parseWeekday(body.dayOfWeek);
+    const weekKind = isCourseWeekKind(body.weekKind) ? (body.weekKind as CourseWeekKind) : null;
     if (!dayOfWeek || !weekKind) {
       return jsonResponse({ ok: false, reason: "Jour ou rythme invalide." }, { status: 400 });
     }

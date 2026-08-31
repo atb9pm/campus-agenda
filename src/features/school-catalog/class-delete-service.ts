@@ -1,5 +1,6 @@
 import type { AnnualCourseNotesStore } from "../../lib/persistence/pedagogical-path-types.ts";
 import type { AnnualCourseStore } from "../../lib/persistence/annual-course-types.ts";
+import type { CourseScheduleStore } from "../../lib/persistence/course-schedule-types.ts";
 import type { AgendaStore } from "../../lib/persistence/types.ts";
 import type { MembershipStore } from "../../lib/persistence/membership-types.ts";
 import type { TimetableStore } from "../../lib/persistence/timetable-types.ts";
@@ -15,8 +16,9 @@ export async function loadClassDeleteUsage(options: {
   memberships: MembershipStore;
   classrooms: RuntimeClassroomRef[];
   studentAccesses: Array<{ classroomId: string }>;
+  schedules: CourseScheduleStore;
 }): Promise<ClassDeleteUsage> {
-  const [courses, assignments, noteCount, agendaItems, memberships, timetableSlots] =
+  const [courses, assignments, noteCount, agendaItems, memberships, timetableSlots, attendanceDays] =
     await Promise.all([
       options.courses.listCourses(),
       options.courses.listAssignments(),
@@ -24,6 +26,7 @@ export async function loadClassDeleteUsage(options: {
       options.agenda.exportAllItems(),
       options.memberships.listMemberships(),
       options.timetable.listClassSlotsAcrossImports(options.schoolClass.code),
+      options.schedules.listAttendanceDaysByClass(options.schoolClass.id),
     ]);
   return {
     classrooms: options.classrooms,
@@ -34,5 +37,6 @@ export async function loadClassDeleteUsage(options: {
     timetableSlots,
     linkedClassroomIds: memberships.map((entry) => entry.classroomId),
     studentAccesses: options.studentAccesses,
+    attendanceDays: attendanceDays.map((day) => ({ classId: day.classId })),
   };
 }

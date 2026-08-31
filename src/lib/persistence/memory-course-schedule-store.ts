@@ -1,8 +1,9 @@
-import type { CourseScheduleSlot } from "../../features/course-schedule/types.ts";
+import type { ClassAttendanceDay, CourseScheduleSlot } from "../../features/course-schedule/types.ts";
 import type { CourseScheduleStore } from "./course-schedule-types.ts";
 
 export class MemoryCourseScheduleStore implements CourseScheduleStore {
   private readonly slots = new Map<string, CourseScheduleSlot>();
+  private attendanceDays = new Map<string, ClassAttendanceDay>();
 
   async listSlots(): Promise<CourseScheduleSlot[]> {
     return [...this.slots.values()]
@@ -31,6 +32,29 @@ export class MemoryCourseScheduleStore implements CourseScheduleStore {
 
   async deleteSlot(id: string): Promise<boolean> {
     return this.slots.delete(id);
+  }
+
+  async listAttendanceDays(): Promise<ClassAttendanceDay[]> {
+    return [...this.attendanceDays.values()]
+      .map((entry) => ({ ...entry }))
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  }
+
+  async listAttendanceDaysByClass(classId: string): Promise<ClassAttendanceDay[]> {
+    return (await this.listAttendanceDays()).filter((entry) => entry.classId === classId);
+  }
+
+  async replaceAttendanceDaysForClass(
+    classId: string,
+    days: ClassAttendanceDay[],
+  ): Promise<ClassAttendanceDay[]> {
+    const next = new Map(this.attendanceDays);
+    for (const [id, day] of next) {
+      if (day.classId === classId) next.delete(id);
+    }
+    for (const day of days) next.set(day.id, { ...day });
+    this.attendanceDays = next;
+    return this.listAttendanceDaysByClass(classId);
   }
 }
 

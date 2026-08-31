@@ -68,6 +68,7 @@ function emptyUsage(overrides: Partial<ClassDeleteUsage> = {}): ClassDeleteUsage
     timetableSlots: [],
     linkedClassroomIds: [],
     studentAccesses: [],
+    attendanceDays: [],
     ...overrides,
   };
 }
@@ -222,6 +223,12 @@ test("suppression — classe jamais utilisée autorisée ; cours / attribution /
     agendaItems: [{ classroomId: "MMA1A", schoolYearId: "sy-2026" }],
   }));
   assert.equal(otherYearOk.ok, true);
+
+  const withAttendance = classDeleteBlockers(used, [used], emptyUsage({
+    attendanceDays: [{ classId: used.id }, { classId: used.id }],
+  }));
+  assert.equal(withAttendance.ok, false);
+  if (!withAttendance.ok) assert.match(withAttendance.reason, /2 jours de cours configurés/);
 
   const legacyA = classRecord({
     id: "leg-a",

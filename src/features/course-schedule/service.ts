@@ -4,9 +4,26 @@ import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-ty
 import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
 import type { TeacherAccountStore } from "../../lib/persistence/teacher-account-types.ts";
 import { findConflictingSlot } from "./conflicts.ts";
+import {
+  ATTENDANCE_DAY_MISMATCH_CODE,
+  ATTENDANCE_DAY_MISMATCH_REASON,
+  ATTENDANCE_IN_USE_CODE,
+  ATTENDANCE_IN_USE_REASON,
+  ATTENDANCE_NOT_CONFIGURED_CODE,
+  ATTENDANCE_NOT_CONFIGURED_REASON,
+  attendanceCoversScheduleSlot,
+  uncoveredScheduleSlots,
+  validateAttendancePlan,
+} from "./class-attendance.ts";
 import { isOperationalAnnualCourse } from "./operational.ts";
 import { validateCourseScheduleSlotInput } from "./validation.ts";
-import type { CourseScheduleSlot, CourseScheduleSlotInput, ScheduleMutationResult } from "./types.ts";
+import type {
+  ClassAttendanceDay,
+  ClassAttendanceDayInput,
+  CourseScheduleSlot,
+  CourseScheduleSlotInput,
+  ScheduleMutationResult,
+} from "./types.ts";
 
 export interface CourseScheduleServiceDeps {
   schedules: CourseScheduleStore;
@@ -18,6 +35,10 @@ export interface CourseScheduleServiceDeps {
 
 function createId(): string {
   return `css-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function createAttendanceId(): string {
+  return `cad-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function nowIso(): string {
@@ -49,20 +70,90 @@ async function assertCourseMutable(
   return { ok: true, value: { courseId: course.id, classId: course.classId, schoolYearId: course.schoolYearId } };
 }
 
+async function assertClassMutable(
+  deps: CourseScheduleServiceDeps,
+  classId: string,
+): Promise<ScheduleMutationResult<{ classId: string; schoolYearId: string }>> {
+  const schoolClass = (await deps.catalog.listClasses()).find((entry) => entry.id === classId);
+  if (!schoolClass) return { ok: false, reason: "Classe introuvable.", status: 404 };
+  if (schoolClass.isArchived) {
+    return { ok: false, reason: "Cette classe est archivée (lecture seule).", status: 409 };
+  }
+  if (!schoolClass.isActive) {
+    return { ok: false, reason: "Cette classe est désactivée. Aucun nouveau créneau opérationnel.", status: 409 };
+  }
+  const year = schoolClass.schoolYearId
+    ? (await deps.years.listSchoolYears()).find((entry) => entry.id === schoolClass.schoolYearId)
+    : undefined;
+  if (schoolClass.schoolYearId && !year) {
+    return { ok: false, reason: "Année scolaire introuvable.", status: 400 };
+  }
+  if (year?.status === "archived") {
+    return { ok: false, reason: "Cette année scolaire est archivée (lecture seule).", status: 409 };
+  }
+  return { ok: true, value: { classId: schoolClass.id, schoolYearId: schoolClass.schoolYearId ?? "" } };
+}
+
+async function assertSlotCoveredByAttendance(
+  deps: CourseScheduleServiceDeps,
+  classId: string,
+  slot: Pick<CourseScheduleSlot, "dayOfWeek" | "weekKind">,
+): Promise<ScheduleMutationResult<true>> {
+  const days = await deps.schedules.listAttendanceDaysByClass(classId);
+  if (days.length === 0) {
+    return {
+      ok: false,
+      reason: ATTENDANCE_NOT_CONFIGURED_REASON,
+      status: 409,
+      code: ATTENDANCE_NOT_CONFIGURED_CODE,
+    };
+  }
+  if (!attendanceCoversScheduleSlot(days, slot)) {
+    return {
+      ok: false,
+      reason: ATTENDANCE_DAY_MISMATCH_REASON,
+      status: 409,
+      code: ATTENDANCE_DAY_MISMATCH_CODE,
+    };
+  }
+  return { ok: true, value: true };
+}
+
+async function classSlotsMatchingClass(
+  deps: CourseScheduleServiceDeps,
+  classId: string,
+  schoolYearId: string,
+  operationalOnly: boolean,
+): Promise<CourseScheduleSlot[]> {
+  const courses = (await deps.courses.listCourses()).filter((course) => {
+    if (course.classId !== classId || course.schoolYearId !== schoolYearId) return false;
+    if (operationalOnly) return isOperationalAnnualCourse(course);
+    return true;
+  });
+  const courseIds = new Set(courses.map((course) => course.id));
+  const slots = await deps.schedules.listSlots();
+  return slots.filter((slot) => courseIds.has(slot.annualCourseId));
+}
+
+/** Conflits opérationnels : uniquement les AnnualCourse non archivés. */
 async function classSlotsForConflict(
   deps: CourseScheduleServiceDeps,
   classId: string,
   schoolYearId: string,
 ): Promise<CourseScheduleSlot[]> {
-  const courses = (await deps.courses.listCourses()).filter(
-    (course) =>
-      course.classId === classId &&
-      course.schoolYearId === schoolYearId &&
-      isOperationalAnnualCourse(course),
-  );
-  const courseIds = new Set(courses.map((course) => course.id));
-  const slots = await deps.schedules.listSlots();
-  return slots.filter((slot) => courseIds.has(slot.annualCourseId));
+  return classSlotsMatchingClass(deps, classId, schoolYearId, true);
+}
+
+/**
+ * Intégrité du plan de présence : tous les créneaux persistés de la classe,
+ * y compris ceux des AnnualCourse archivés (historique PR52).
+ */
+async function classSlotsForAttendanceIntegrity(
+  deps: CourseScheduleServiceDeps,
+  classId: string,
+  schoolYearId: string,
+): Promise<CourseScheduleSlot[]> {
+  return classSlotsMatchingClass(deps, classId, schoolYearId, false);
 }
 
 export async function createCourseScheduleSlot(
@@ -73,6 +164,8 @@ export async function createCourseScheduleSlot(
   if (!parsed.ok) return parsed;
   const mutable = await assertCourseMutable(deps, parsed.value.annualCourseId);
   if (!mutable.ok) return mutable;
+  const covered = await assertSlotCoveredByAttendance(deps, mutable.value.classId, parsed.value);
+  if (!covered.ok) return covered;
 
   const existing = await classSlotsForConflict(deps, mutable.value.classId, mutable.value.schoolYearId);
   const conflict = findConflictingSlot({ ...parsed.value, id: "" }, existing);
@@ -113,6 +206,8 @@ export async function updateCourseScheduleSlot(
   if (!parsed.ok) return parsed;
   const mutable = await assertCourseMutable(deps, current.annualCourseId);
   if (!mutable.ok) return mutable;
+  const covered = await assertSlotCoveredByAttendance(deps, mutable.value.classId, parsed.value);
+  if (!covered.ok) return covered;
 
   const existing = await classSlotsForConflict(deps, mutable.value.classId, mutable.value.schoolYearId);
   const next = {
@@ -155,6 +250,40 @@ export async function listClassScheduleSlots(
   schoolYearId: string,
 ): Promise<CourseScheduleSlot[]> {
   return classSlotsForConflict(deps, classId, schoolYearId);
+}
+
+export async function replaceAttendanceDaysForClass(
+  deps: CourseScheduleServiceDeps,
+  classId: string,
+  inputDays: ClassAttendanceDayInput[],
+): Promise<ScheduleMutationResult<ClassAttendanceDay[]>> {
+  const parsed = validateAttendancePlan(inputDays);
+  if (!parsed.ok) return parsed;
+  const mutable = await assertClassMutable(deps, classId);
+  if (!mutable.ok) return mutable;
+
+  const existingSlots = await classSlotsForAttendanceIntegrity(deps, classId, mutable.value.schoolYearId);
+  const uncovered = uncoveredScheduleSlots(parsed.value, existingSlots);
+  if (uncovered.length > 0) {
+    return {
+      ok: false,
+      reason: ATTENDANCE_IN_USE_REASON,
+      status: 409,
+      code: ATTENDANCE_IN_USE_CODE,
+    };
+  }
+
+  const timestamp = nowIso();
+  const days: ClassAttendanceDay[] = parsed.value.map((day) => ({
+    id: createAttendanceId(),
+    classId,
+    dayOfWeek: day.dayOfWeek,
+    weekKind: day.weekKind,
+    role: day.role,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  }));
+  return { ok: true, value: await deps.schedules.replaceAttendanceDaysForClass(classId, days) };
 }
 
 export function isClassScheduleWritable(options: {
