@@ -254,16 +254,20 @@ function slot(
   return { dayOfWeek, weekKind };
 }
 
-test("version 2.28.0 — jours de présence, migration 0023 après 0022, pas de 0024", () => {
+test("version — jours de présence, 0023 puis 0024, pas de 0025", () => {
   assert.match(APP_VERSION, /^\d+\.\d+\.\d+$/);
   assert.ok(SQL_MIGRATION_FILES.includes("0022_course_schedule_slots.sql"));
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0023_class_attendance_days.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
   assert.ok(
     SQL_MIGRATION_FILES.indexOf("0022_course_schedule_slots.sql") <
       SQL_MIGRATION_FILES.indexOf("0023_class_attendance_days.sql"),
   );
+  assert.ok(
+    SQL_MIGRATION_FILES.indexOf("0023_class_attendance_days.sql") <
+      SQL_MIGRATION_FILES.indexOf("0024_structured_agenda_bridge.sql"),
+  );
   assert.equal(
-    SQL_MIGRATION_FILES.some((file) => file.startsWith("0024")),
+    SQL_MIGRATION_FILES.some((file) => file.startsWith("0025")),
     false,
   );
 });

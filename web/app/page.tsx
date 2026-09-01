@@ -1169,6 +1169,11 @@ export default function Home() {
             key={openTimelineCourseId}
             annualCourseId={openTimelineCourseId}
             onBack={() => setOpenTimelineCourseId(null)}
+            onAgendaItemCreated={(item) => {
+              setItems((previous) =>
+                previous.some((entry) => entry.id === item.id) ? previous : [...previous, item],
+              );
+            }}
           />
         )}
 

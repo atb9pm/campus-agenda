@@ -514,6 +514,33 @@ test("2.29.0 — E2E déroulement de cours : session, id, teacherId ignoré, pas
       `${method} timeline ${mutation.status}`,
     );
   }
+
+  const unassignedPublish = await request("/api/teacher/course-publications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      annualCourseId: "unknown-course",
+      courseSessionKey: "year-x|unknown-course|2027-08-16",
+      referenceItemId: "ref-x",
+    }),
+  });
+  assert.ok(
+    unassignedPublish.status === 403 || unassignedPublish.status === 404,
+    `publication non affectée ${unassignedPublish.status}`,
+  );
+});
+
+test("PR59 — publication structurée sans session → 401", async () => {
+  const response = await request("/api/teacher/course-publications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      annualCourseId: "ac-1",
+      courseSessionKey: "year-2027|ac-1|2027-08-16",
+      referenceItemId: "ref-1",
+    }),
+  });
+  assert.equal(response.status, 401);
 });
 
 

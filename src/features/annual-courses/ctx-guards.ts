@@ -9,6 +9,9 @@ export const ANNUAL_COURSE_SCHEDULE_DELETE_REASON =
 export const ANNUAL_COURSE_USED_DELETE_REASON =
   "Ce cours annuel a déjà été utilisé. Il ne peut plus être supprimé définitivement. Archivez-le.";
 
+export const ANNUAL_COURSE_AGENDA_DELETE_REASON =
+  "Ce cours annuel est utilisé par des publications Agenda. Supprimez ou archivez d’abord les éléments concernés.";
+
 export function annualCourseDeleteBlockers(options: {
   assignmentCount: number;
   noteCount: number;
@@ -18,11 +21,10 @@ export function annualCourseDeleteBlockers(options: {
   if ((options.scheduleSlotCount ?? 0) > 0) {
     return ANNUAL_COURSE_SCHEDULE_DELETE_REASON;
   }
-  if (
-    options.assignmentCount === 0 &&
-    options.noteCount === 0 &&
-    !options.hasLinkedPublications
-  ) {
+  if (options.hasLinkedPublications) {
+    return ANNUAL_COURSE_AGENDA_DELETE_REASON;
+  }
+  if (options.assignmentCount === 0 && options.noteCount === 0) {
     return null;
   }
   return ANNUAL_COURSE_USED_DELETE_REASON;

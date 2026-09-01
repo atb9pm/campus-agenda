@@ -26,6 +26,16 @@ export class MemoryAgendaStore implements AgendaStore {
   }
 
   async createAgendaItem(input: CreateAgendaInput): Promise<PrototypeAgendaItem> {
+    const annualCourseId = input.annualCourseId?.trim() || null;
+    const referenceItemId = input.referenceItemId?.trim() || null;
+    if (annualCourseId && referenceItemId) {
+      const duplicate = this.items.find(
+        (item) => item.annualCourseId === annualCourseId && item.referenceItemId === referenceItemId,
+      );
+      if (duplicate) {
+        throw new Error("Cet élément de référence a déjà été publié dans l’Agenda pour ce cours.");
+      }
+    }
     const id = Math.max(0, ...this.items.map((item) => item.id)) + 1;
     this.items = createPublication(this.items, {
       id,
@@ -41,6 +51,11 @@ export class MemoryAgendaStore implements AgendaStore {
       detail: input.detail,
       templateId: input.templateId ?? null,
       schoolYearId: input.schoolYearId ?? null,
+      annualCourseId: input.annualCourseId ?? null,
+      courseSessionKey: input.courseSessionKey ?? null,
+      courseSessionDate: input.courseSessionDate ?? null,
+      referenceSessionId: input.referenceSessionId ?? null,
+      referenceItemId: input.referenceItemId ?? null,
     });
     return (await this.findAgendaItem(id))!;
   }
@@ -50,7 +65,8 @@ export class MemoryAgendaStore implements AgendaStore {
     actorTeacherId: string,
     patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber">>,
   ): Promise<AgendaMutationResult> {
-    const result = updatePublication(this.items, itemId, actorTeacherId, patch, false);
+    const actorIsAdmin = await this.teacherIsAdmin(actorTeacherId);
+    const result = updatePublication(this.items, itemId, actorTeacherId, patch, actorIsAdmin);
     if (!result.ok) {
       return { ok: false, reason: result.reason, status: result.reason.includes("introuvable") ? 404 : 403 };
     }
@@ -62,7 +78,8 @@ export class MemoryAgendaStore implements AgendaStore {
 
   async deleteAgendaItem(itemId: number, actorTeacherId: string): Promise<AgendaMutationResult> {
     const existing = await this.findAgendaItem(itemId);
-    const result = deletePublication(this.items, itemId, actorTeacherId, false);
+    const actorIsAdmin = await this.teacherIsAdmin(actorTeacherId);
+    const result = deletePublication(this.items, itemId, actorTeacherId, actorIsAdmin);
     if (!result.ok) {
       return { ok: false, reason: result.reason, status: result.reason.includes("introuvable") ? 404 : 403 };
     }
@@ -110,6 +127,23 @@ export class MemoryAgendaStore implements AgendaStore {
     return getMemoryTeacherAccountStore().verifyCredentials(teacherId, password);
   }
 
+  async listAgendaItemsByAnnualCourse(annualCourseId: string): Promise<PrototypeAgendaItem[]> {
+    return this.items.filter((item) => item.annualCourseId === annualCourseId);
+  }
+
+  async findAgendaItemByReferenceItem(
+    annualCourseId: string,
+    referenceItemId: string,
+  ): Promise<PrototypeAgendaItem | undefined> {
+    return this.items.find(
+      (item) => item.annualCourseId === annualCourseId && item.referenceItemId === referenceItemId,
+    );
+  }
+
+  async countAgendaItemsByAnnualCourse(annualCourseId: string): Promise<number> {
+    return this.items.filter((item) => item.annualCourseId === annualCourseId).length;
+  }
+
   async exportAllItems(): Promise<PrototypeAgendaItem[]> {
     return this.items.map((item) => ({ ...item }));
   }
@@ -146,7 +180,11 @@ export async function classroomExists(classroomId: string): Promise<boolean> {
 }
 
 export async function listRuntimeClassrooms(): Promise<Array<{ id: string; name: string }>> {
-  return getMemoryLegacySchool().classrooms.map((entry) => ({ id: entry.id, name: entry.name }));
+  return getMemoryLegacySchool().classrooms.map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    schoolClassId: entry.schoolClassId ?? null,
+  }));
 }
 
 export async function listStudentAccesses(): Promise<Array<{ classroomId: string }>> {

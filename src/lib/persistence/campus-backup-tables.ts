@@ -1,4 +1,4 @@
-/** Tables 0001→0023 — ordre d'INSERT (parents avant enfants). */
+/** Tables 0001→0024 — ordre d'INSERT (parents avant enfants). */
 export const CAMPUS_BACKUP_INSERT_ORDER = [
   "teachers",
   "classrooms",
@@ -72,6 +72,7 @@ export const CAMPUS_BACKUP_COLUMNS: Record<CampusBackupTableName, BackupColumnSp
     { name: "program_label", type: "text" },
     { name: "access_code_hint", type: "text" },
     { name: "created_at", type: "text" },
+    { name: "school_class_id", type: "text" },
   ),
   school_years: cols(
     { name: "id", type: "text", required: true },
@@ -101,6 +102,7 @@ export const CAMPUS_BACKUP_COLUMNS: Record<CampusBackupTableName, BackupColumnSp
     { name: "id", type: "text", required: true },
     { name: "classroom_id", type: "text", required: true },
     { name: "name", type: "text", required: true },
+    { name: "annual_course_id", type: "text" },
   ),
   memberships: cols(
     { name: "id", type: "text", required: true },
@@ -149,6 +151,11 @@ export const CAMPUS_BACKUP_COLUMNS: Record<CampusBackupTableName, BackupColumnSp
     { name: "school_week_number", type: "integer" },
     { name: "template_id", type: "text" },
     { name: "school_year_id", type: "text" },
+    { name: "annual_course_id", type: "text" },
+    { name: "course_session_key", type: "text" },
+    { name: "course_session_date", type: "text" },
+    { name: "reference_session_id", type: "text" },
+    { name: "reference_item_id", type: "text" },
   ),
   timetable_imports: cols(
     { name: "id", type: "text", required: true },
@@ -359,6 +366,9 @@ export const CAMPUS_BACKUP_FOREIGN_KEYS: Array<{
   { table: "annual_course_notes", column: "context_id", parent: "pedagogical_contexts", parentColumn: "id" },
   { table: "annual_course_notes", column: "author_teacher_id", parent: "teachers", parentColumn: "id" },
   { table: "course_schedule_slots", column: "annual_course_id", parent: "annual_courses", parentColumn: "id" },
+  { table: "classrooms", column: "school_class_id", parent: "school_classes", parentColumn: "id" },
+  { table: "subjects", column: "annual_course_id", parent: "annual_courses", parentColumn: "id" },
+  { table: "agenda_items", column: "annual_course_id", parent: "annual_courses", parentColumn: "id" },
   { table: "class_attendance_days", column: "class_id", parent: "school_classes", parentColumn: "id" },
   { table: "teacher_setups", column: "teacher_id", parent: "teachers", parentColumn: "id" },
   { table: "teacher_notes", column: "teacher_id", parent: "teachers", parentColumn: "id" },

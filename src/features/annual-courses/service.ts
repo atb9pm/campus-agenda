@@ -4,6 +4,7 @@ import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts
 import type { TeacherAccountStore } from "../../lib/persistence/teacher-account-types.ts";
 import type { AnnualCourseStore } from "../../lib/persistence/annual-course-types.ts";
 import type { CourseScheduleStore } from "../../lib/persistence/course-schedule-types.ts";
+import type { AgendaStore } from "../../lib/persistence/types.ts";
 import { teacherCanAccessAnnualCourse } from "./access.ts";
 import {
   evaluateTeachingTypeGuard,
@@ -36,6 +37,8 @@ export interface AnnualCourseServiceDeps {
   notes: AnnualCourseNotesStore;
   /** Présent en production : les créneaux bloquent la suppression définitive. */
   schedules?: Pick<CourseScheduleStore, "listSlotsByAnnualCourse">;
+  /** Publications Agenda structurées : bloquent la suppression définitive. */
+  agenda?: Pick<AgendaStore, "countAgendaItemsByAnnualCourse">;
 }
 
 function createId(prefix: string): string {
@@ -222,10 +225,14 @@ export async function deleteAnnualCourse(
   const scheduleSlots = deps.schedules
     ? await deps.schedules.listSlotsByAnnualCourse(courseId)
     : [];
+  const publicationCount = deps.agenda
+    ? await deps.agenda.countAgendaItemsByAnnualCourse(courseId)
+    : 0;
   const blocker = annualCourseDeleteBlockers({
     assignmentCount: assignments.length,
     noteCount: notes.length,
     scheduleSlotCount: scheduleSlots.length,
+    hasLinkedPublications: publicationCount > 0,
   });
   if (blocker) return { ok: false, reason: blocker, status: 409, code: "USED" };
   const deleted = await deps.courses.deleteCourse(courseId);

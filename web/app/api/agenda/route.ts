@@ -49,7 +49,28 @@ export async function POST(request: Request) {
     type?: string;
     title?: string;
     detail?: string;
+    annualCourseId?: string;
+    courseSessionKey?: string;
+    courseSessionDate?: string;
+    referenceSessionId?: string;
+    referenceItemId?: string;
   };
+
+  if (
+    body.annualCourseId != null ||
+    body.courseSessionKey != null ||
+    body.courseSessionDate != null ||
+    body.referenceSessionId != null ||
+    body.referenceItemId != null
+  ) {
+    return jsonResponse(
+      {
+        ok: false,
+        reason: "La provenance structurée ne peut être écrite que depuis le déroulement du cours.",
+      },
+      { status: 400 },
+    );
+  }
 
   const classroomId = String(body.classroomId ?? "").trim();
   const subjectId = String(body.subjectId ?? "").trim();

@@ -2,6 +2,25 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.30.0] — Agenda structuré : relier les cours réels aux publications
+
+Pont explicite entre le référentiel SchoolClass / AnnualCourse et le runtime Agenda. Publication CourseTimeline → Agenda, provenance figée, déduplication AnnualCourse + ReferenceItem.
+
+### Ajouté
+
+- Pont explicite SchoolClass / AnnualCourse vers Agenda runtime (`classrooms.school_class_id`, `subjects.annual_course_id`).
+- Publication CourseTimeline → Agenda via `POST /api/teacher/course-publications`.
+- Provenance stable des publications (`annual_course_id`, `course_session_key`, dates et IDs de référence).
+- Déduplication AnnualCourse + ReferenceItem (une seule publication par élément de parcours).
+- Droits structurés via TeacherCourseAssignment (lecture classe + publication à la date de séance).
+- Correction jours mardi/mercredi/vendredi du carnet (`weekdayToCourseDayIndex`).
+- Parité Memory / SQLite sur les mutations administrateur.
+- Backup compatible avec les nouveaux liens (colonnes optionnelles, anciens snapshots v4 acceptés).
+
+### Non inclus
+
+Récupération N → N+1, moteur complet de coordination des contrôles, persistance CourseSession / CourseTimeline, migration 0025.
+
 ## [2.29.0] — Déroulement chronologique des cours
 
 Vue « Voir le déroulement » depuis Mes cours. Les CourseSession calculées depuis l’horaire réel sont associées dynamiquement aux ReferenceSession du parcours pédagogique du CTX.

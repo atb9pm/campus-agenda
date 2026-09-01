@@ -222,7 +222,8 @@ export function validateClassProfessionAttachment(options: {
 }
 
 /**
- * Contrôle serveur des publications Agenda (complète teacherCanPublish).
+ * LEGACY ADAPTER — contrôle Agenda par noms classroom/subject.
+ * Inutilisé lorsqu'un lien structuré explicite existe.
  * Résolution : nom de classe → code école, nom de sujet → libellé de branche.
  * Repli : classe absente du référentiel, legacy sans profession/année, ou sujet
  * sans branche catalogue correspondante → autorisé (membership reste le garde-fou).

@@ -1,3 +1,4 @@
+import { isStructuredAgendaPublication, structuredAgendaPatchGuard } from "@campus/features/agenda/index.ts";
 import {
   assertAgendaItemMutable,
   assertAgendaClassMutableForItem,
@@ -30,6 +31,11 @@ export async function PATCH(request: Request, context: RouteContext) {
     hour?: number;
     subjectId?: string;
     schoolWeekNumber?: number;
+    annualCourseId?: string;
+    courseSessionKey?: string;
+    courseSessionDate?: string;
+    referenceSessionId?: string;
+    referenceItemId?: string;
   };
 
   const existing = await auth.store!.findAgendaItem(itemId);
@@ -37,6 +43,21 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (archivedBlock) return archivedBlock;
   const classBlock = await assertAgendaClassMutableForItem(existing);
   if (classBlock) return classBlock;
+
+  if (existing && isStructuredAgendaPublication(existing)) {
+    const guard = structuredAgendaPatchGuard(existing, body as Record<string, unknown>);
+    if (!guard.ok) {
+      return jsonResponse({ ok: false, reason: guard.reason }, { status: 400 });
+    }
+    const result = await auth.store!.updateAgendaItem(itemId, auth.session!.teacherId, {
+      title: body.title,
+      detail: body.detail,
+    });
+    if (!result.ok) {
+      return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
+    }
+    return jsonResponse({ ok: true, item: result.item });
+  }
 
   if (
     existing &&

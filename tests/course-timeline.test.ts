@@ -360,11 +360,11 @@ async function seedAssignedCourse(
   return course.value;
 }
 
-test("version 2.29.0 — déroulement, aucune migration 0024", () => {
-  assert.equal(APP_VERSION, "2.29.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0023_class_attendance_days.sql");
+test("version 2.30.0 — déroulement, migration 0024, aucune table CourseSession", () => {
+  assert.equal(APP_VERSION, "2.30.0");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
   assert.equal(
-    SQL_MIGRATION_FILES.some((file) => file.startsWith("0024")),
+    SQL_MIGRATION_FILES.some((file) => file.startsWith("0025")),
     false,
   );
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
@@ -1123,11 +1123,11 @@ test("sources — GET enseignant lecture seule, pas d’ensurePath, pas de calen
   assert.match(itemLabels, /HOMEWORK: "Devoir"/);
   assert.match(itemLabels, /TEST: "Contrôle"/);
   assert.match(itemLabels, /INFORMATION: "Information"/);
-  assert.match(timelineUi, /Prévu dans le parcours/);
-  assert.match(timelineUi, /non publié dans l’Agenda/);
+  assert.match(timelineUi, /Publier dans l’Agenda/);
+  assert.match(timelineUi, /Publié dans l’Agenda/);
   assert.match(timelineUi, /REFERENCE_ITEM_TYPE_LABELS/);
   assert.match(timelineUi, /AbortController/);
-  assert.doesNotMatch(timelineUi, /Publier/);
+  assert.match(timelineUi, /publishTeacherCoursePublicationApi/);
   assert.doesNotMatch(timelineUi, /Créer devoir/);
   assert.doesNotMatch(timelineUi, /Créer contrôle/);
   assert.doesNotMatch(timelineUi, /Passée/);

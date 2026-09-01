@@ -2,9 +2,9 @@ import type { ClassroomCatalog } from "../classes/queries.ts";
 import { getClassroomById, getSubjectsForTeacherInClassroom } from "../classes/queries.ts";
 import type { TeacherClassSetup, WeekdayIndex } from "../teacher-setup/types.ts";
 
-/** Jour de cours TMA accepté par l'API (0 = lundi, 3 = jeudi). */
-export function weekdayToCourseDayIndex(dayOfWeek: WeekdayIndex): 0 | 3 {
-  return dayOfWeek === 4 ? 3 : 0;
+/** Conversion ISO TeacherSetup (1=lundi … 5=vendredi) → index Agenda (0=lundi … 4=vendredi). */
+export function weekdayToCourseDayIndex(dayOfWeek: WeekdayIndex): 0 | 1 | 2 | 3 | 4 {
+  return (dayOfWeek - 1) as 0 | 1 | 2 | 3 | 4;
 }
 
 export function resolveCatalogClassroomId(

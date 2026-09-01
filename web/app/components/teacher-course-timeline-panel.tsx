@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { COURSE_WEEKDAY_LABELS } from "@campus/features/course-schedule";
 import {
   formatCourseSessionNumber,
@@ -12,14 +12,20 @@ import type {
   CourseTimelineProjection,
   TeacherCourseTimelineCourse,
 } from "@campus/features/course-timeline";
+import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import { REFERENCE_ITEM_TYPE_LABELS } from "@campus/features/pedagogical-path";
 import { formatTrainingYearLabel } from "@campus/features/school-catalog";
 import { WORKSPACE_ASSIGNMENT_ROLE_LABELS } from "@campus/features/teacher-workspace";
-import { fetchTeacherCourseTimelineApi } from "../../lib/api-client.ts";
+import {
+  fetchTeacherCourseTimelineApi,
+  publishTeacherCoursePublicationApi,
+  type CourseTimelinePublicationSummary,
+} from "../../lib/api-client.ts";
 
 interface TeacherCourseTimelinePanelProps {
   annualCourseId: string;
   onBack: () => void;
+  onAgendaItemCreated?: (item: PrototypeAgendaItem) => void;
 }
 
 function courseIdentityLine(course: TeacherCourseTimelineCourse): string {
@@ -38,7 +44,19 @@ function unscheduledCountLabel(count: number): string {
   return `${count} séances du parcours n’ont actuellement aucune date réelle.`;
 }
 
-function ReferenceItems({ entry }: { entry: CourseTimelineEntry }) {
+function ReferenceItems({
+  entry,
+  publishedByItemId,
+  publishingItemId,
+  publishError,
+  onPublish,
+}: {
+  entry: CourseTimelineEntry;
+  publishedByItemId: Map<string, CourseTimelinePublicationSummary>;
+  publishingItemId: string | null;
+  publishError: string;
+  onPublish: (referenceItemId: string, courseSessionKey: string) => void;
+}) {
   const reference = entry.referenceSession;
   if (!reference) {
     return <p className="course-timeline-empty-ref">Aucun contenu de référence prévu pour cette séance.</p>;
@@ -49,29 +67,57 @@ function ReferenceItems({ entry }: { entry: CourseTimelineEntry }) {
   return (
     <div className="course-timeline-reference">
       <h4>{label}</h4>
-      <p className="course-timeline-unpublished">
-        Prévu dans le parcours — non publié dans l’Agenda
-      </p>
       {reference.items.length === 0 ? (
         <p className="course-timeline-empty-items">
           Aucun devoir, contrôle ou information prévu dans cette séance de référence.
         </p>
       ) : (
         <ul className="course-timeline-items">
-          {reference.items.map((item) => (
-            <li key={item.id}>
-              <span className="course-timeline-item-type">{REFERENCE_ITEM_TYPE_LABELS[item.type]}</span>
-              <strong>{item.title}</strong>
-              {item.detail.trim() ? <p>{item.detail}</p> : null}
-            </li>
-          ))}
+          {reference.items.map((item) => {
+            const published = publishedByItemId.get(item.id);
+            const busy = publishingItemId === item.id;
+            return (
+              <li key={item.id}>
+                <span className="course-timeline-item-type">{REFERENCE_ITEM_TYPE_LABELS[item.type]}</span>
+                <strong>{item.title}</strong>
+                {item.detail.trim() ? <p>{item.detail}</p> : null}
+                {published ? (
+                  <p className="course-timeline-published">✓ Publié dans l’Agenda</p>
+                ) : (
+                  <button
+                    type="button"
+                    className="workspace-action secondary"
+                    disabled={busy || Boolean(publishingItemId)}
+                    onClick={() => onPublish(item.id, entry.courseSession.key)}
+                  >
+                    {busy ? "Publication…" : "Publier dans l’Agenda"}
+                  </button>
+                )}
+                {publishError && publishingItemId === item.id ? (
+                  <p className="course-timeline-publish-error">{publishError}</p>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
   );
 }
 
-function TimelineCards({ timeline }: { timeline: CourseTimelineProjection }) {
+function TimelineCards({
+  timeline,
+  publishedByItemId,
+  publishingItemId,
+  publishError,
+  onPublish,
+}: {
+  timeline: CourseTimelineProjection;
+  publishedByItemId: Map<string, CourseTimelinePublicationSummary>;
+  publishingItemId: string | null;
+  publishError: string;
+  onPublish: (referenceItemId: string, courseSessionKey: string) => void;
+}) {
   if (timeline.entries.length === 0) {
     return (
       <p className="ma-semaine-empty">
@@ -98,7 +144,13 @@ function TimelineCards({ timeline }: { timeline: CourseTimelineProjection }) {
                   {periods ? ` · ${periods}` : ""}
                 </p>
               </header>
-              <ReferenceItems entry={entry} />
+              <ReferenceItems
+                entry={entry}
+                publishedByItemId={publishedByItemId}
+                publishingItemId={publishingItemId}
+                publishError={publishError}
+                onPublish={onPublish}
+              />
             </article>
           </li>
         );
@@ -107,11 +159,18 @@ function TimelineCards({ timeline }: { timeline: CourseTimelineProjection }) {
   );
 }
 
-export function TeacherCourseTimelinePanel({ annualCourseId, onBack }: TeacherCourseTimelinePanelProps) {
+export function TeacherCourseTimelinePanel({
+  annualCourseId,
+  onBack,
+  onAgendaItemCreated,
+}: TeacherCourseTimelinePanelProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [course, setCourse] = useState<TeacherCourseTimelineCourse | null>(null);
   const [timeline, setTimeline] = useState<CourseTimelineProjection | null>(null);
+  const [publications, setPublications] = useState<CourseTimelinePublicationSummary[]>([]);
+  const [publishingItemId, setPublishingItemId] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -122,6 +181,7 @@ export function TeacherCourseTimelinePanel({ annualCourseId, onBack }: TeacherCo
         if (controller.signal.aborted) return;
         setCourse(payload.course);
         setTimeline(payload.timeline);
+        setPublications(payload.publications);
         setError("");
         setLoading(false);
       } catch (caught) {
@@ -136,6 +196,44 @@ export function TeacherCourseTimelinePanel({ annualCourseId, onBack }: TeacherCo
 
     return () => controller.abort();
   }, [annualCourseId]);
+
+  const publishedByItemId = useMemo(() => {
+    const map = new Map<string, CourseTimelinePublicationSummary>();
+    for (const publication of publications) {
+      if (publication.referenceItemId) {
+        map.set(publication.referenceItemId, publication);
+      }
+    }
+    return map;
+  }, [publications]);
+
+  async function handlePublish(referenceItemId: string, courseSessionKey: string) {
+    setPublishingItemId(referenceItemId);
+    setPublishError("");
+    try {
+      const item = await publishTeacherCoursePublicationApi({
+        annualCourseId,
+        courseSessionKey,
+        referenceItemId,
+      });
+      setPublications((previous) => [
+        ...previous.filter((entry) => entry.referenceItemId !== referenceItemId),
+        {
+          agendaItemId: item.id,
+          referenceItemId,
+          courseSessionKey: item.courseSessionKey ?? courseSessionKey,
+          courseSessionDate: item.courseSessionDate ?? null,
+          type: item.type,
+        },
+      ]);
+      onAgendaItemCreated?.(item);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : "Publication impossible.";
+      setPublishError(message);
+    } finally {
+      setPublishingItemId(null);
+    }
+  }
 
   const identity = course ? courseIdentityLine(course) : "";
   const unscheduled = timeline?.unscheduledReferenceSessions ?? [];
@@ -160,8 +258,7 @@ export function TeacherCourseTimelinePanel({ annualCourseId, onBack }: TeacherCo
           Déroulement prévu du cours à partir de l’horaire réel et du parcours pédagogique de référence.
         </p>
         <p>
-          Les devoirs, contrôles et informations affichés ici sont prévus dans le parcours et ne sont pas
-          encore publiés dans l’Agenda.
+          Les devoirs, contrôles et informations peuvent être publiés dans l’Agenda depuis cette vue.
         </p>
         <button type="button" className="workspace-action secondary" onClick={onBack}>
           ← Retour à Mes cours
@@ -190,7 +287,13 @@ export function TeacherCourseTimelinePanel({ annualCourseId, onBack }: TeacherCo
             <p className="course-timeline-banner">{unscheduledCountLabel(unscheduled.length)}</p>
           ) : null}
 
-          <TimelineCards timeline={timeline} />
+          <TimelineCards
+            timeline={timeline}
+            publishedByItemId={publishedByItemId}
+            publishingItemId={publishingItemId}
+            publishError={publishError}
+            onPublish={handlePublish}
+          />
 
           {unscheduled.length > 0 ? (
             <section className="course-timeline-unscheduled" aria-label="Séances du parcours sans date">
