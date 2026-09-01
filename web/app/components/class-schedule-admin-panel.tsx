@@ -38,6 +38,11 @@ import {
   type CourseWeekKind,
   type CourseWeekday,
 } from "@campus/features/course-schedule/index.ts";
+import {
+  formatCourseSessionPeriods,
+  formatSwissDate,
+  type CourseSession,
+} from "@campus/features/course-sessions/index.ts";
 import type { PedagogicalContextRecord, SchoolProfessionRecord } from "@campus/features/school-catalog";
 import type { SchoolBranchRecord, SchoolClassRecord } from "@campus/features/school-catalog";
 
@@ -64,7 +69,7 @@ interface OverviewPayload {
   teachers: TeacherSummary[];
 }
 
-type PanelView = "main" | "global";
+type PanelView = "main" | "global" | "dates";
 type PreviewMode = "template" | "A" | "B";
 
 interface SlotDraft {
@@ -109,6 +114,10 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
     primaryDay: "",
     additional: [],
   });
+  const [datesClassId, setDatesClassId] = useState("");
+  const [datesCourseId, setDatesCourseId] = useState("");
+  const [dateSessions, setDateSessions] = useState<CourseSession[]>([]);
+  const [datesLoading, setDatesLoading] = useState(false);
 
   const refresh = useCallback(async () => {
     const response = await fetch("/api/admin/course-schedule", { credentials: "include" });
@@ -154,6 +163,22 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
         return leftLabel.localeCompare(rightLabel, "fr-CH");
       });
   }, [data, currentClass]);
+
+  const datesCourses = useMemo(() => {
+    if (!data) return [];
+    return data.courses
+      .filter((course) => {
+        if (course.schoolYearId !== selectedYearId) return false;
+        if (datesClassId && course.classId !== datesClassId) return false;
+        if (currentYear?.status !== "archived" && course.isArchived) return false;
+        return true;
+      })
+      .sort((left, right) => {
+        const leftLabel = branchForCourse(left, data.contexts, data.branches)?.label ?? "";
+        const rightLabel = branchForCourse(right, data.contexts, data.branches)?.label ?? "";
+        return leftLabel.localeCompare(rightLabel, "fr-CH");
+      });
+  }, [data, selectedYearId, datesClassId, currentYear?.status]);
 
   const classSlots = useMemo(() => {
     if (!data) return [];
@@ -204,6 +229,8 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
     setAttendanceDraft(next.attendanceDraft);
     setDraft(next.slotDraft);
     setError(next.error);
+    setDatesClassId("");
+    setDatesCourseId("");
   }
 
   async function postAction(body: Record<string, unknown>) {
@@ -309,6 +336,43 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
     });
   }
 
+  useEffect(() => {
+    if (view !== "dates" || !selectedYearId) return;
+    let cancelled = false;
+    const params = new URLSearchParams({ schoolYearId: selectedYearId });
+    if (datesClassId) params.set("classId", datesClassId);
+    if (datesCourseId && datesCourses.some((entry) => entry.id === datesCourseId)) {
+      params.set("annualCourseId", datesCourseId);
+    }
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setDatesLoading(true);
+      void fetch(`/api/admin/course-sessions?${params.toString()}`, { credentials: "include" })
+        .then(async (response) => {
+          const payload = (await response.json()) as { ok: boolean; reason?: string; sessions?: CourseSession[] };
+          if (!response.ok || !payload.ok) {
+            throw new Error(payload.reason ?? "Chargement des dates réelles impossible.");
+          }
+          if (!cancelled) {
+            setDateSessions(payload.sessions ?? []);
+            setError("");
+          }
+        })
+        .catch((loadError: unknown) => {
+          if (!cancelled) {
+            setDateSessions([]);
+            setError(loadError instanceof Error ? loadError.message : "Chargement impossible.");
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setDatesLoading(false);
+        });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, selectedYearId, datesClassId, datesCourseId, datesCourses]);
+
   if (loading) return <p className="admin-loading">Chargement de l’horaire des classes…</p>;
   if (!data) return <p className="admin-error">{error || "Données indisponibles."}</p>;
 
@@ -407,10 +471,11 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
     <div className="admin-panel-block class-schedule-admin">
       <header className="config-section-header">
         <div>
-          <h3>Horaire des classes</h3>
+          <h3>{view === "dates" ? "Dates réelles des cours" : "Horaire des classes"}</h3>
           <p>
-            Les jours de cours définissent la présence de la classe. Les créneaux placent les branches.
-            L’enseignant reste défini uniquement dans Attributions des cours.
+            {view === "dates"
+              ? "Ces dates sont calculées automatiquement à partir de l’année scolaire et de l’horaire."
+              : "Les jours de cours définissent la présence de la classe. Les créneaux placent les branches. L’enseignant reste défini uniquement dans Attributions des cours."}
           </p>
         </div>
       </header>
@@ -429,7 +494,44 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
             ))}
           </select>
         </label>
-        {view !== "global" ? (
+        {view === "dates" ? (
+          <>
+            <label>
+              Classe
+              <select
+                value={datesClassId}
+                onChange={(event) => {
+                  setDatesClassId(event.target.value);
+                  setDatesCourseId("");
+                }}
+              >
+                <option value="">Toutes les classes</option>
+                {yearClasses.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.code}
+                    {!entry.isActive ? " (inactive)" : ""}
+                    {entry.isArchived ? " (archivée)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Cours / branche
+              <select value={datesCourseId} onChange={(event) => setDatesCourseId(event.target.value)}>
+                <option value="">Tous les cours</option>
+                {datesCourses.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {branchForCourse(course, data.contexts, data.branches)?.label ?? "Branche"}
+                    {datesClassId
+                      ? ""
+                      : ` · ${data.classes.find((entry) => entry.id === course.classId)?.code ?? ""}`}
+                    {course.isArchived ? " (archivé)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        ) : view !== "global" ? (
           <label>
             Classe
             <select
@@ -484,18 +586,77 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
       </div>
 
       <div className="class-schedule-toolbar">
-        {view === "global" ? (
-          <button type="button" onClick={() => setView("main")}>
-            Horaire de la classe
-          </button>
-        ) : (
-          <button type="button" onClick={() => setView("global")}>
-            Vue globale
-          </button>
-        )}
+        <button type="button" className={view === "main" ? "active" : undefined} onClick={() => setView("main")}>
+          Horaire de la classe
+        </button>
+        <button type="button" className={view === "global" ? "active" : undefined} onClick={() => setView("global")}>
+          Vue globale
+        </button>
+        <button
+          type="button"
+          className={view === "dates" ? "active" : undefined}
+          onClick={() => {
+            setView("dates");
+            setDatesClassId((current) => current || currentClass?.id || "");
+            setError("");
+          }}
+        >
+          Dates réelles
+        </button>
       </div>
 
-      {view === "global" ? (
+      {view === "dates" ? (
+        <div className="class-schedule-dates">
+          {datesLoading ? (
+            <p className="admin-loading">Calcul des dates réelles…</p>
+          ) : dateSessions.length === 0 ? (
+            <p className="class-schedule-empty">Aucune séance calculée pour ces filtres.</p>
+          ) : (
+            <div className="class-schedule-table-wrap">
+              <table className="class-schedule-dates-table">
+                <thead>
+                  <tr>
+                    <th>N°</th>
+                    <th>Date</th>
+                    <th>Semaine</th>
+                    <th>Type A/B</th>
+                    <th>Jour</th>
+                    <th>Branche</th>
+                    <th>Périodes</th>
+                    <th>Enseignant(s)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dateSessions.map((session) => {
+                    const sessionCourse = data.courses.find((entry) => entry.id === session.annualCourseId);
+                    const branchLabel = sessionCourse
+                      ? (branchForCourse(sessionCourse, data.contexts, data.branches)?.label ?? "Branche")
+                      : "Branche";
+                    const teachers = teachersForAnnualCourse(
+                      data.assignments,
+                      data.teachers,
+                      session.annualCourseId,
+                      `${session.date}T12:00:00.000Z`,
+                    );
+                    return (
+                      <tr key={session.key}>
+                        <td>{session.sequenceNumber}</td>
+                        <td>{formatSwissDate(session.date)}</td>
+                        <td>{session.schoolWeekNumber}</td>
+                        <td>{session.weekKind}</td>
+                        <td>{COURSE_WEEKDAY_LABELS[session.dayOfWeek]}</td>
+                        <td>{branchLabel}</td>
+                        <td>{formatCourseSessionPeriods(session.segments)}</td>
+                        <td>{formatTeachersLine(teachers)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : view === "global" ? (
         <div className="class-schedule-global">
           <h4>
             {COURSE_WEEKDAY_LABELS[globalDay].toUpperCase()} —{" "}

@@ -335,6 +335,17 @@ testBoth("C — P4-P6 traverse la pause", async (world) => {
   assert.equal(created.code, "CROSSES_LUNCH");
 });
 
+testBoth("validFrom > validTo — écriture refusée", async (world) => {
+  const course = await courseFor(world, world.classA, world.moteurCtx);
+  const created = await createCourseScheduleSlot(world.scheduleDeps, slotInput(course.id, {
+    validFrom: "2026-10-01",
+    validTo: "2026-09-01",
+  }));
+  assert.equal(created.ok, false);
+  if (created.ok) return;
+  assert.match(created.reason, /antérieure ou égale/);
+});
+
 testBoth("D — P6-P10 autorisé", async (world) => {
   const course = await courseFor(world, world.classA, world.moteurCtx);
   const created = await createCourseScheduleSlot(world.scheduleDeps, slotInput(course.id, {

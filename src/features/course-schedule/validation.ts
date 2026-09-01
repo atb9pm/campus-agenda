@@ -15,6 +15,30 @@ export function isCourseWeekKind(value: unknown): value is CourseWeekKind {
   return (COURSE_WEEK_KINDS as readonly string[]).includes(String(value));
 }
 
+const ISO_CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+export function isIsoCalendarDate(value: string): boolean {
+  const match = ISO_CALENDAR_DATE.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day, 12);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
+
+function parseSlotValidityDate(
+  value: string | null | undefined,
+  fieldLabel: string,
+): ScheduleMutationResult<string | null> {
+  if (value == null || value.trim() === "") return { ok: true, value: null };
+  const trimmed = value.trim();
+  if (!isIsoCalendarDate(trimmed)) {
+    return { ok: false, reason: `${fieldLabel} doit être au format AAAA-MM-JJ.`, status: 400 };
+  }
+  return { ok: true, value: trimmed };
+}
+
 export function validateCourseScheduleSlotInput(
   input: CourseScheduleSlotInput,
 ): ScheduleMutationResult<CourseScheduleSlotInput> {
@@ -46,5 +70,16 @@ export function validateCourseScheduleSlotInput(
   if (!(COURSE_WEEK_KINDS as readonly string[]).includes(input.weekKind)) {
     return { ok: false, reason: "Le rythme doit être Toutes les semaines, Semaine A ou Semaine B.", status: 400 };
   }
-  return { ok: true, value: input };
+  const validFrom = parseSlotValidityDate(input.validFrom, "La date de début de validité");
+  if (!validFrom.ok) return validFrom;
+  const validTo = parseSlotValidityDate(input.validTo, "La date de fin de validité");
+  if (!validTo.ok) return validTo;
+  if (validFrom.value && validTo.value && validFrom.value > validTo.value) {
+    return {
+      ok: false,
+      reason: "La date de début de validité doit être antérieure ou égale à la date de fin.",
+      status: 400,
+    };
+  }
+  return { ok: true, value: { ...input, validFrom: validFrom.value, validTo: validTo.value } };
 }

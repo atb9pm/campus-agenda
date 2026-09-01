@@ -468,6 +468,11 @@ button { color: inherit; }
 .class-schedule-lunch-row td { background: #fff7ed; color: #9a3412; font-weight: 700; text-align: center; }
 .class-schedule-lunch-row td:first-child { text-align: left; }
 .class-schedule-toolbar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin: 0 0 16px; }
+.class-schedule-toolbar button { padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: #fff; color: #516582; font-size: 10px; font-weight: 700; cursor: pointer; }
+.class-schedule-toolbar button.active { color: #fff; background: var(--navy); border-color: var(--navy); }
+.class-schedule-dates-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 12px; }
+.class-schedule-dates-table th, .class-schedule-dates-table td { padding: 8px 10px; border: 1px solid var(--line); text-align: left; vertical-align: top; color: var(--navy); }
+.class-schedule-dates-table th { background: #f8fafc; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
 .class-schedule-layout {
   display: grid;
   grid-template-columns: 1fr;

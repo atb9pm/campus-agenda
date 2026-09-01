@@ -254,8 +254,8 @@ function slot(
   return { dayOfWeek, weekKind };
 }
 
-test("version 2.27.0 — jours de présence, migration 0023 après 0022, pas de 0024", () => {
-  assert.equal(APP_VERSION, "2.27.0");
+test("version 2.28.0 — jours de présence, migration 0023 après 0022, pas de 0024", () => {
+  assert.equal(APP_VERSION, "2.28.0");
   assert.ok(SQL_MIGRATION_FILES.includes("0022_course_schedule_slots.sql"));
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0023_class_attendance_days.sql");
   assert.ok(
