@@ -108,6 +108,21 @@ export {
   type ValidatedStructuredClassBatch,
 } from "./structured-class-batch.ts";
 export { CTX_IN_USE_DELETE_REASON, contextDeleteBlockers } from "./ctx-guards.ts";
+export {
+  filterProfessionsForPlanSearch,
+  findActiveContextForCell,
+  formatBranchUsageLine,
+  formatPedagogicalContextLabel,
+  isActiveTrainingPlanContext,
+  projectTrainingPlanMatrix,
+  sortBranchesForTrainingPlan,
+  summarizeBranchUsages,
+  type BranchUsageByProfession,
+  type PedagogicalContextLabelMode,
+  type TrainingPlanMatrix,
+  type TrainingPlanMatrixCell,
+  type TrainingPlanMatrixRow,
+} from "./training-plan.ts";
 export type {
   SchoolBranchInput,
   SchoolBranchRecord,
