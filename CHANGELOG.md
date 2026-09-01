@@ -2,6 +2,27 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.29.0] — Déroulement chronologique des cours
+
+Vue « Voir le déroulement » depuis Mes cours. Les CourseSession calculées depuis l’horaire réel sont associées dynamiquement aux ReferenceSession du parcours pédagogique du CTX.
+
+Règle : `CourseSession.sequenceNumber` = `ReferenceSession.position`. La projection est entièrement calculée. Aucune table de correspondance.
+
+### Ajouté
+
+- Vue « Voir le déroulement » depuis Mes cours (sous-vue, pas de nouvelle section de navigation).
+- Projection `CourseSession.sequenceNumber` → `ReferenceSession.position`.
+- Dates réelles + parcours pédagogique de référence, en un seul appel enseignant.
+- Éléments Devoir / Contrôle / Information affichés comme références non publiées dans l’Agenda.
+- Séances réelles sans contenu de référence conservées (dates visibles).
+- Références du parcours sans date réelle conservées, sans inventer de date.
+- Accès contrôlé par TeacherCourseAssignment via l’espace Mes cours (PRIMARY, CO_TEACHER, REPLACEMENT actif).
+- Aucune nouvelle table. Aucune publication Agenda automatique.
+
+### Non inclus
+
+Publication Agenda, snapshot, notes professeur, persistance de CourseSession, historique multi-années.
+
 ## [2.28.0] — CourseSession calculée depuis l’horaire et le calendrier
 
 Une séance n’est pas un créneau d’horaire. Elle est **calculée** :

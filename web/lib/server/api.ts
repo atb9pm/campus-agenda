@@ -15,6 +15,7 @@ import { decideAgendaPublishAccess, resolveAnnualCourseForPublication } from "@c
 import { validateAgendaScheduleTarget } from "@campus/features/agenda/schedule-target.ts";
 import type { AnnualCourseServiceDeps } from "@campus/features/annual-courses/index.ts";
 import type { CourseScheduleServiceDeps } from "@campus/features/course-schedule/index.ts";
+import type { CourseTimelineServiceDeps } from "@campus/features/course-timeline/index.ts";
 import { evaluateAgendaBranchForClass, assertAgendaClassMutable } from "@campus/features/school-catalog/index.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import { ARCHIVED_YEAR_READONLY_REASON, getArchivedYearIds, isArchivedYearItem } from "@campus/features/school-year/archived-readonly.ts";
@@ -117,6 +118,18 @@ export async function getCourseScheduleServiceDeps(): Promise<CourseScheduleServ
     getTeacherAccountStore(),
   ]);
   return { schedules, courses, catalog, years, teachers };
+}
+
+export async function getCourseTimelineServiceDeps(): Promise<CourseTimelineServiceDeps> {
+  const [schedules, courses, catalog, years, teachers, paths] = await Promise.all([
+    getCourseScheduleStore(),
+    getAnnualCourseStore(),
+    getSchoolCatalogStore(),
+    getSchoolYearStore(),
+    getTeacherAccountStore(),
+    getPedagogicalPathStore(),
+  ]);
+  return { schedules, courses, catalog, years, teachers, paths };
 }
 
 export async function authorizeTeacherAgendaPublish(

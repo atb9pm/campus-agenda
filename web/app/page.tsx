@@ -102,6 +102,7 @@ import { PasswordChangePanel } from "./components/password-change-panel.tsx";
 import { ClassNotebookPanel } from "./components/class-notebook-panel.tsx";
 import { MaSemainePanel } from "./components/ma-semaine-panel.tsx";
 import { MesCoursPanel } from "./components/mes-cours-panel.tsx";
+import { TeacherCourseTimelinePanel } from "./components/teacher-course-timeline-panel.tsx";
 
 type AppMode = "teacher" | "student";
 type StudentEntry = "code" | "teacher-preview";
@@ -206,6 +207,7 @@ export default function Home() {
   const [teacherCourses, setTeacherCourses] = useState<TeacherCourseWorkspaceEntry[]>([]);
   const [teacherCoursesYearLabel, setTeacherCoursesYearLabel] = useState<string | null>(null);
   const [teacherCoursesReady, setTeacherCoursesReady] = useState(false);
+  const [openTimelineCourseId, setOpenTimelineCourseId] = useState<string | null>(null);
   /** Évite d'écrire sur le serveur juste après un chargement / une migration. */
   const skipTeacherSetupSaveRef = useRef(false);
   const [openNotebookClassId, setOpenNotebookClassId] = useState<string | null>(null);
@@ -238,6 +240,7 @@ export default function Home() {
     setTeacherAuthenticated(true);
     setStudentSession(null);
     setStudentEntry(null);
+    setOpenTimelineCourseId(null);
     setLoginError("");
     const fallbackIds = getClassroomsForTeacher(DEMO_CATALOG, session.teacherId).map((classroom) => classroom.id);
     let classroomIds = fallbackIds;
@@ -680,6 +683,7 @@ export default function Home() {
       setStudentEntry(null);
       setAppMode("teacher");
       setTeacherAuthenticated(false);
+      setOpenTimelineCourseId(null);
     })();
   }
 
@@ -725,11 +729,13 @@ export default function Home() {
       setPasswordChange(null);
       setPasswordChangeError("");
       setTeacherAuthenticated(false);
+      setOpenTimelineCourseId(null);
     })();
   }
 
   function navigate(section: TeacherNavSection) {
     setActiveSection(section);
+    setOpenTimelineCourseId(null);
   }
 
   function showNotice(message: string) {
@@ -771,6 +777,7 @@ export default function Home() {
       setStudentEntry(null);
       setAppMode("teacher");
       setTeacherAuthenticated(false);
+      setOpenTimelineCourseId(null);
       showNotice("Session réinitialisée.");
     })();
   }
@@ -1146,13 +1153,22 @@ export default function Home() {
           </div>
         </header>
 
-        {activeSection === "mes-cours" && (
+        {activeSection === "mes-cours" && openTimelineCourseId === null && (
           <MesCoursPanel
             courses={teacherCourses}
             schoolYearLabel={teacherCoursesYearLabel}
             loading={!teacherCoursesReady}
             displaySetups={assignedDisplaySetups}
             onOpenClass={openClassNotebook}
+            onOpenCourse={(course) => setOpenTimelineCourseId(course.annualCourseId)}
+          />
+        )}
+
+        {activeSection === "mes-cours" && openTimelineCourseId !== null && (
+          <TeacherCourseTimelinePanel
+            key={openTimelineCourseId}
+            annualCourseId={openTimelineCourseId}
+            onBack={() => setOpenTimelineCourseId(null)}
           />
         )}
 

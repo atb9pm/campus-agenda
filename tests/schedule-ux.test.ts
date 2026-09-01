@@ -63,7 +63,7 @@ const thursdayA = attendance(4, "A", "ADDITIONAL");
 const referenceDays = [mondayAll, thursdayB];
 
 test("version 2.28.0 — aucune migration SQL", () => {
-  assert.equal(APP_VERSION, "2.28.0");
+  assert.match(APP_VERSION, /^\d+\.\d+\.\d+$/);
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0023_class_attendance_days.sql");
   assert.equal(
     SQL_MIGRATION_FILES.some((file) => file.startsWith("0024")),

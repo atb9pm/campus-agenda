@@ -483,3 +483,37 @@ test("2.27.0 — API CTX refuse profession désactivée et restaure le même id"
   assert.equal(restoredPayload.context.isArchived, false);
 });
 
+test("2.29.0 — E2E déroulement de cours : session, id, teacherId ignoré, pas de mutation", async () => {
+  const anon = await request("/api/teacher/course-timeline");
+  assert.equal(anon.status, 401);
+
+  const teacherCookie = await loginTeacher("teacher-demo-current");
+  const missingId = await request("/api/teacher/course-timeline", {
+    headers: { cookie: teacherCookie },
+  });
+  assert.equal(missingId.status, 400);
+
+  const unknown = await request("/api/teacher/course-timeline?annualCourseId=unknown-course", {
+    headers: { cookie: teacherCookie },
+  });
+  assert.equal(unknown.status, 404);
+
+  const forgedUnknown = await request(
+    "/api/teacher/course-timeline?annualCourseId=unknown-course&teacherId=teacher-chf",
+    { headers: { cookie: teacherCookie } },
+  );
+  assert.equal(forgedUnknown.status, 404);
+
+  for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+    const mutation = await request("/api/teacher/course-timeline?annualCourseId=unknown-course", {
+      method,
+      headers: { cookie: teacherCookie },
+    });
+    assert.ok(
+      mutation.status === 404 || mutation.status === 405,
+      `${method} timeline ${mutation.status}`,
+    );
+  }
+});
+
+

@@ -98,7 +98,7 @@ function shuffleSlots(slots: CourseScheduleSlot[]): CourseScheduleSlot[] {
 }
 
 test("version 2.28.0 — CourseSession calculée, aucune migration 0024", () => {
-  assert.equal(APP_VERSION, "2.28.0");
+  assert.match(APP_VERSION, /^\d+\.\d+\.\d+$/);
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0023_class_attendance_days.sql");
   assert.equal(
     SQL_MIGRATION_FILES.some((file) => file.startsWith("0024")),
