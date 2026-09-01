@@ -215,7 +215,9 @@ test("suppression CTX — vide OK, parcours et notes bloquent, archivage possibl
   if (!blockedPath.ok) assert.equal(blockedPath.reason, CTX_IN_USE_DELETE_REASON);
 
   const archived = await catalog.updateContext(withPath.value.id, { isArchived: true });
-  assert.ok(archived?.isArchived);
+  assert.equal(archived.ok, true);
+  if (!archived.ok) return;
+  assert.ok(archived.value.isArchived);
 
   const withNote = await catalog.createContext({
     professionId: profession.id,

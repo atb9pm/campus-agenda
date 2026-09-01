@@ -2,6 +2,34 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.27.0] — Référentiel : organiser les branches par année de formation
+
+Cette version améliore la gestion du plan de formation **sans modifier l’identité des branches**.
+
+Une branche reste un élément unique du catalogue, par exemple « Moteur ». Son utilisation selon la profession et l’année de formation continue d’être représentée par les contextes pédagogiques existants (Profession + Année + Branche). Aucune duplication « Moteur 1 / Moteur 2 / Moteur 3 » n’est créée. Aucune migration SQL.
+
+### Ajouté
+
+- Matrice de plan de formation (branches × années) dans Administration / Plans de formation. Les colonnes viennent de `durationYears` (2, 3, 4 ans ou durée générique).
+- Cocher une case crée un CTX via l’API existante ; décocher retire un CTX inutilisé, ou archive avec confirmation s’il est déjà utilisé (cours, notes, parcours). Recocher une affectation archivée la restaure (même `contextId`) au lieu de créer un doublon. Création et restauration refusées si la profession ou la branche est désactivée/archivée (validation serveur).
+- Synthèse calculée des usages d’une branche dans le catalogue (`MA · années 1, 2, 3, 4`).
+- Libellés contextuels `formatPedagogicalContextLabel` : court (`Moteur · 3e année`) et complet (`Moteur · Mécatronicien automobile · 3e année`).
+- Filtrage des branches de classe inchangé : `listPlannedBranchesForClass` / CTX.
+
+### Compatibilité
+
+- `SchoolBranchRecord` inchangé : pas de `trainingYear`.
+- Les `contextId` existants et les `AnnualCourse` qui les référencent restent valides.
+- Migrations `0001`→`0023` inchangées.
+
+### Note technique (future CourseSession)
+
+Une future `CourseSession` sera rattachée à `AnnualCourse` (qui possède `contextId`). Aucun `trainingYear` supplémentaire ne devra être stocké sur la séance.
+
+### Non inclus
+
+CourseSession, CourseOccurrence, dates réelles, N→N+1, coordination des contrôles.
+
 ## [2.26.0] — Stabilisation : audit global, sécurité et cohérence des données
 
 Point de stabilisation après le référentiel, les cours annuels, les attributions et l’horaire.

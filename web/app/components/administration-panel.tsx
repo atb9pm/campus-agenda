@@ -8,6 +8,7 @@ import type {
   SchoolClassRecord,
   SchoolProfessionRecord,
 } from "@campus/features/school-catalog";
+import { formatBranchUsageLine, summarizeBranchUsages } from "@campus/features/school-catalog";
 import { BRANCH_TEACHING_TYPE_LABELS, type TeachingType } from "@campus/features/teaching-types/index.ts";
 import { AnnualCoursesAdminPanel } from "./annual-courses-admin-panel.tsx";
 import { ClassScheduleAdminPanel } from "./class-schedule-admin-panel.tsx";
@@ -62,6 +63,16 @@ function branchCodeFromLabel(label: string): string {
 
 function branchTypeLabel(type: TeachingType | null): string {
   return type ? BRANCH_TEACHING_TYPE_LABELS[type] : "Type à configurer";
+}
+
+function branchUsageText(
+  branchId: string,
+  professions: SchoolProfessionRecord[],
+  contexts: PedagogicalContextRecord[],
+): string {
+  const usages = summarizeBranchUsages({ branchId, professions, contexts });
+  if (usages.length === 0) return "Aucune affectation active.";
+  return `Utilisé dans : ${usages.map(formatBranchUsageLine).join(" · ")}`;
 }
 
 async function fetchCatalog(activeOnly = false) {
@@ -375,7 +386,10 @@ export function AdministrationPanel({
                               {entry.adminCode}
                             </p>
                           ) : null}
-                          <p className="admin-teacher-login-meta">{branchTypeLabel(entry.teachingType)}</p>
+                              <p className="admin-teacher-login-meta">{branchTypeLabel(entry.teachingType)}</p>
+                          <p className="admin-branch-usage">
+                            {branchUsageText(entry.id, professions, contexts)}
+                          </p>
                         </div>
                       )}
                     </div>
@@ -451,7 +465,7 @@ export function AdministrationPanel({
       ) : null}
 
       {tab === "plans" ? (
-        <TrainingPlansAdminPanel onNotice={onNotice} />
+        <TrainingPlansAdminPanel onNotice={onNotice} onOpenBranches={() => setTab("branches")} />
       ) : null}
 
       {tab === "teachers" ? (

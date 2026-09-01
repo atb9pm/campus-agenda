@@ -25,6 +25,10 @@ import {
   professionDeleteBlockers,
   validateClassProfessionAttachment,
 } from "../../../features/school-catalog/profession-rules.ts";
+import {
+  contextCreateParentBlocker,
+  contextRestoreParentBlocker,
+} from "../../../features/school-catalog/ctx-guards.ts";
 import type {
   PedagogicalContextInput,
   PedagogicalContextRecord,
@@ -787,6 +791,9 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
   ): Promise<PedagogyMutationResult<PedagogicalContextRecord>> {
     await this.ensureSeeded();
     const profession = (await this.listProfessions()).find((entry) => entry.id === input.professionId);
+    const branch = (await this.listBranches()).find((entry) => entry.id === input.branchId);
+    const parentBlocker = contextCreateParentBlocker(profession, branch);
+    if (parentBlocker) return { ok: false, reason: parentBlocker };
     if (!profession) return { ok: false, reason: "Profession introuvable." };
     const trainingYear = Math.trunc(input.trainingYear);
     if (trainingYear < 1 || trainingYear > profession.durationYears) {
@@ -794,9 +801,6 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         ok: false,
         reason: `L'année de formation doit être entre 1 et ${profession.durationYears}.`,
       };
-    }
-    if (!(await this.listBranches()).some((entry) => entry.id === input.branchId)) {
-      return { ok: false, reason: "Branche introuvable." };
     }
     const duplicate = (await this.listContexts()).find(
       (entry) =>
@@ -840,10 +844,10 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
   async updateContext(
     id: string,
     patch: Partial<Pick<PedagogicalContextInput, "isActive" | "isArchived">>,
-  ): Promise<PedagogicalContextRecord | null> {
+  ): Promise<PedagogyMutationResult<PedagogicalContextRecord>> {
     await this.ensureSeeded();
     const current = (await this.listContexts()).find((entry) => entry.id === id);
-    if (!current) return null;
+    if (!current) return { ok: false, reason: "Contexte pédagogique introuvable." };
     let archivedAt = current.archivedAt;
     if (patch.isArchived === true) archivedAt = current.archivedAt ?? new Date().toISOString();
     else if (patch.isArchived === false) archivedAt = null;
@@ -853,6 +857,14 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       isArchived: archivedAt !== null,
       archivedAt,
     };
+    const currentOperational = current.isActive && !current.isArchived;
+    const nextOperational = next.isActive && !next.isArchived;
+    if (nextOperational && !currentOperational) {
+      const profession = (await this.listProfessions()).find((entry) => entry.id === current.professionId);
+      const branch = (await this.listBranches()).find((entry) => entry.id === current.branchId);
+      const blocker = contextRestoreParentBlocker(profession, branch);
+      if (blocker) return { ok: false, reason: blocker };
+    }
     await this.db
       .prepare(
         `UPDATE pedagogical_contexts
@@ -861,7 +873,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       )
       .bind(next.isActive ? 1 : 0, next.archivedAt, id)
       .run();
-    return next;
+    return { ok: true, value: next };
   }
 
   async deleteContext(id: string): Promise<PedagogyMutationResult<{ id: string }>> {

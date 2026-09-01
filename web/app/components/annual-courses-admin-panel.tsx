@@ -13,6 +13,7 @@ import {
 } from "@campus/features/annual-courses/admin-assign-ui.ts";
 import type { PedagogicalContextRecord, SchoolProfessionRecord } from "@campus/features/school-catalog";
 import type { SchoolBranchRecord, SchoolClassRecord } from "@campus/features/school-catalog";
+import { formatPedagogicalContextLabel } from "@campus/features/school-catalog";
 import {
   BRANCH_TEACHING_TYPE_LABELS,
   TEACHER_TEACHING_TYPE_LABELS,
@@ -514,7 +515,15 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
                         const branch = data.branches.find((item) => item.id === context?.branchId);
                         return (
                           <li key={entry.id}>
-                            {schoolClass?.label ?? "Classe"} → {branch?.label ?? "Branche"} → {roleLabel(entry.role)}
+                            {schoolClass?.label ?? "Classe"} →{" "}
+                            {formatPedagogicalContextLabel({
+                              branchLabel: branch?.label ?? "Branche",
+                              trainingYear: context?.trainingYear ?? schoolClass?.trainingYear ?? 1,
+                              professionLabel: data.professions.find((entry) => entry.id === schoolClass?.professionId)
+                                ?.label,
+                              mode: "full",
+                            })}{" "}
+                            → {roleLabel(entry.role)}
                             {" · "}{lifecycleLabel(assignmentLifecycle(entry))}
                           </li>
                         );
