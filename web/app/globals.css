@@ -796,9 +796,34 @@ button { color: inherit; }
 .mes-cours-groups { display: grid; gap: 14px; }
 .mes-cours-class header h3 { margin: 4px 0 0; }
 .mes-cours-branches { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
-.mes-cours-branches li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #f8fbff; }
+.mes-cours-branches li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #f8fbff; }
 .mes-cours-branches strong { display: block; color: var(--navy); font-size: 14px; }
 .mes-cours-role { display: inline-block; margin-top: 4px; color: #516582; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.course-timeline-banner { margin: 0 0 16px; padding: 14px 16px; border: 1px solid #d5e2f4; border-radius: 10px; background: #f8fbff; color: #30558f; font-size: 12px; line-height: 1.5; }
+.course-timeline-list { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.course-timeline-card header h3 { margin: 4px 0 0; }
+.course-timeline-reference { display: grid; gap: 8px; }
+.course-timeline-reference h4 { margin: 0; color: var(--navy); font-size: 16px; }
+.course-timeline-unpublished { margin: 0; color: #7a5a12; font-size: 11px; font-weight: 700; }
+.course-timeline-empty-ref,
+.course-timeline-empty-items { margin: 0; color: #516582; font-size: 12px; line-height: 1.5; }
+.course-timeline-items { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.course-timeline-items li { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfe; }
+.course-timeline-item-type { display: block; margin-bottom: 4px; color: #30558f; font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.course-timeline-items strong { display: block; color: var(--navy); font-size: 13px; }
+.course-timeline-items p { margin: 4px 0 0; color: #516582; font-size: 12px; line-height: 1.45; }
+.course-timeline-unscheduled { margin-top: 24px; padding: 18px 20px; border: 1px dashed var(--line-strong); border-radius: 12px; background: #fff; }
+.course-timeline-unscheduled h3 { margin: 0 0 12px; color: var(--navy); font-size: 14px; }
+.course-timeline-unscheduled ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.course-timeline-unscheduled li { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #f8fbff; }
+.course-timeline-unscheduled strong { color: var(--navy); font-size: 12px; }
+.course-timeline-unscheduled span { color: #516582; font-size: 12px; }
+.course-timeline .workspace-intro { display: grid; gap: 8px; }
+.course-timeline .workspace-intro p { max-width: 640px; }
+.course-timeline .workspace-action { margin-top: 8px; }
+@media (max-width: 720px) {
+  .course-timeline-list { grid-template-columns: 1fr; }
+}
 .ma-semaine-intro { margin-bottom: 18px; }
 .ma-semaine-week-banner { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; margin: 0 38px 18px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(135deg, #f8fbff, #fff); }
 .ma-semaine-week-banner strong { display: block; margin-top: 4px; color: var(--navy); font-size: 16px; }

@@ -2,6 +2,10 @@ import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts"
 import type { TeacherAccountRecord } from "@campus/features/teacher-accounts";
 import type { TeacherSetupConfig } from "@campus/features/teacher-setup";
 import type { TeacherCourseWorkspaceEntry } from "@campus/features/teacher-workspace";
+import type {
+  CourseTimelineProjection,
+  TeacherCourseTimelineCourse,
+} from "@campus/features/course-timeline";
 import type { ClassNotesDocument } from "@campus/features/class-notebook";
 import type { AgendaItemType } from "@campus/types/agenda";
 
@@ -121,6 +125,30 @@ export async function fetchTeacherCoursesApi(schoolYearId?: string | null): Prom
     schoolYearId: payload.schoolYearId ?? null,
     courses: payload.courses ?? [],
   };
+}
+
+export async function fetchTeacherCourseTimelineApi(
+  annualCourseId: string,
+  signal?: AbortSignal,
+): Promise<{
+  course: TeacherCourseTimelineCourse;
+  timeline: CourseTimelineProjection;
+}> {
+  const params = `?annualCourseId=${encodeURIComponent(annualCourseId)}`;
+  const response = await fetch(`/api/teacher/course-timeline${params}`, {
+    credentials: "include",
+    signal,
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    course?: TeacherCourseTimelineCourse;
+    timeline?: CourseTimelineProjection;
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.course || !payload.timeline) {
+    throw new Error(payload.reason ?? "Chargement du déroulement impossible.");
+  }
+  return { course: payload.course, timeline: payload.timeline };
 }
 
 /** Null si aucune configuration n'a encore été enregistrée côté serveur. */

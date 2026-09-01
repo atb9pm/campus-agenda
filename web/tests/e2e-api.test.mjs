@@ -483,3 +483,152 @@ test("2.27.0 — API CTX refuse profession désactivée et restaure le même id"
   assert.equal(restoredPayload.context.isArchived, false);
 });
 
+test("2.29.0 — E2E déroulement de cours : session, id, teacherId ignoré, pas de mutation", async () => {
+  const anon = await request("/api/teacher/course-timeline");
+  assert.equal(anon.status, 401);
+
+  const teacherCookie = await loginTeacher("teacher-demo-current");
+  const missingId = await request("/api/teacher/course-timeline", {
+    headers: { cookie: teacherCookie },
+  });
+  assert.equal(missingId.status, 400);
+
+  const unknown = await request("/api/teacher/course-timeline?annualCourseId=unknown-course", {
+    headers: { cookie: teacherCookie },
+  });
+  assert.equal(unknown.status, 404);
+
+  const forgedUnknown = await request(
+    "/api/teacher/course-timeline?annualCourseId=unknown-course&teacherId=teacher-chf",
+    { headers: { cookie: teacherCookie } },
+  );
+  assert.equal(forgedUnknown.status, 404);
+
+  for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+    const mutation = await request("/api/teacher/course-timeline?annualCourseId=unknown-course", {
+      method,
+      headers: { cookie: teacherCookie },
+    });
+    assert.ok(
+      mutation.status === 404 || mutation.status === 405,
+      `${method} timeline ${mutation.status}`,
+    );
+  }
+
+  const adminCookie = await loginAdmin();
+  const headers = { "Content-Type": "application/json", cookie: adminCookie };
+  const yearsResponse = await request("/api/admin/school-year", { headers: { cookie: adminCookie } });
+  const yearsPayload = await yearsResponse.json();
+  const activeYear = (yearsPayload.years ?? []).find((entry) => entry.status === "active");
+  assert.ok(activeYear, "année scolaire active requise");
+
+  const professionResponse = await request("/api/admin/catalog", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      kind: "profession",
+      label: "Profession déroulement E2E",
+      durationYears: 4,
+      classCodePrefix: "TLNE",
+    }),
+  });
+  const professionPayload = await professionResponse.json();
+  assert.equal(professionResponse.status, 200, professionPayload.reason ?? "profession");
+  const professionId = professionPayload.profession.id;
+
+  const classResponse = await request("/api/admin/catalog", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      kind: "class",
+      code: "TLNE1A",
+      label: "TLNE 1A",
+      schoolYearId: activeYear.id,
+      professionId,
+      trainingYear: 1,
+    }),
+  });
+  const classPayload = await classResponse.json();
+  assert.equal(classResponse.status, 200, classPayload.reason ?? "classe");
+  const classId = classPayload.class.id;
+
+  const catalogResponse = await request("/api/admin/catalog", { headers: { cookie: adminCookie } });
+  const catalog = await catalogResponse.json();
+  const branch = (catalog.branches ?? []).find((entry) => entry.label === "Moteur") ?? catalog.branches[0];
+  assert.ok(branch);
+
+  await request(`/api/admin/catalog/${branch.id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ kind: "branch", teachingType: "TECHNICAL" }),
+  });
+
+  const contextResponse = await request("/api/admin/catalog", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      kind: "context",
+      professionId,
+      trainingYear: 1,
+      branchId: branch.id,
+    }),
+  });
+  const contextPayload = await contextResponse.json();
+  assert.equal(contextResponse.status, 200, contextPayload.reason ?? "CTX");
+  const contextId = contextPayload.context.id;
+
+  const courseResponse = await request("/api/admin/annual-courses", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      action: "create",
+      schoolYearId: activeYear.id,
+      classId,
+      contextId,
+    }),
+  });
+  const coursePayload = await courseResponse.json();
+  assert.ok(courseResponse.status < 300, coursePayload.reason ?? "cours annuel");
+  const annualCourseId = coursePayload.course.id;
+
+  const unauthorized = await request(
+    `/api/teacher/course-timeline?annualCourseId=${encodeURIComponent(annualCourseId)}&teacherId=teacher-chf`,
+    { headers: { cookie: teacherCookie } },
+  );
+  assert.equal(unauthorized.status, 403);
+
+  const adminWithoutAssignment = await request(
+    `/api/teacher/course-timeline?annualCourseId=${encodeURIComponent(annualCourseId)}`,
+    { headers: { cookie: adminCookie } },
+  );
+  assert.equal(adminWithoutAssignment.status, 403);
+
+  const assignResponse = await request("/api/admin/annual-courses", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      action: "assign",
+      annualCourseId,
+      teacherId: "teacher-demo-current",
+      role: "PRIMARY",
+      validFrom: activeYear.startsOn ?? "2026-08-01",
+      forceIncompatible: true,
+      overrideReason: "E2E déroulement",
+    }),
+  });
+  const assignPayload = await assignResponse.json();
+  assert.ok(assignResponse.status < 300, assignPayload.reason ?? "attribution");
+
+  const allowed = await request(
+    `/api/teacher/course-timeline?annualCourseId=${encodeURIComponent(annualCourseId)}&teacherId=teacher-chf`,
+    { headers: { cookie: teacherCookie } },
+  );
+  assert.equal(allowed.status, 200);
+  const allowedPayload = await allowed.json();
+  assert.equal(allowedPayload.ok, true);
+  assert.equal(allowedPayload.course.annualCourseId, annualCourseId);
+  assert.ok(Array.isArray(allowedPayload.timeline.entries));
+  assert.equal(allowedPayload.timeline.referencePathExists, false);
+});
+
+

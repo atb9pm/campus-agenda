@@ -14,6 +14,7 @@ interface MesCoursPanelProps {
   schoolYearLabel?: string | null;
   loading?: boolean;
   onOpenClass?: (classSetup: TeacherClassSetup) => void;
+  onOpenCourse?: (course: TeacherCourseWorkspaceEntry) => void;
   displaySetups?: TeacherClassSetup[];
 }
 
@@ -22,6 +23,7 @@ export function MesCoursPanel({
   schoolYearLabel,
   loading = false,
   onOpenClass,
+  onOpenCourse,
   displaySetups = [],
 }: MesCoursPanelProps) {
   const groups = groupTeacherCoursesByClass(courses);
@@ -60,6 +62,15 @@ export function MesCoursPanel({
                         <strong>{course.branchLabel}</strong>
                         <span className="mes-cours-role">{WORKSPACE_ASSIGNMENT_ROLE_LABELS[course.role]}</span>
                       </div>
+                      {onOpenCourse ? (
+                        <button
+                          type="button"
+                          className="workspace-action secondary"
+                          onClick={() => onOpenCourse(course)}
+                        >
+                          Voir le déroulement
+                        </button>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
