@@ -337,42 +337,41 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
   }
 
   useEffect(() => {
-    if (datesCourseId && !datesCourses.some((entry) => entry.id === datesCourseId)) {
-      setDatesCourseId("");
-    }
-  }, [datesCourseId, datesCourses]);
-
-  useEffect(() => {
     if (view !== "dates" || !selectedYearId) return;
     let cancelled = false;
-    setDatesLoading(true);
     const params = new URLSearchParams({ schoolYearId: selectedYearId });
     if (datesClassId) params.set("classId", datesClassId);
-    if (datesCourseId) params.set("annualCourseId", datesCourseId);
-    void fetch(`/api/admin/course-sessions?${params.toString()}`, { credentials: "include" })
-      .then(async (response) => {
-        const payload = (await response.json()) as { ok: boolean; reason?: string; sessions?: CourseSession[] };
-        if (!response.ok || !payload.ok) {
-          throw new Error(payload.reason ?? "Chargement des dates réelles impossible.");
-        }
-        if (!cancelled) {
-          setDateSessions(payload.sessions ?? []);
-          setError("");
-        }
-      })
-      .catch((loadError: unknown) => {
-        if (!cancelled) {
-          setDateSessions([]);
-          setError(loadError instanceof Error ? loadError.message : "Chargement impossible.");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setDatesLoading(false);
-      });
+    if (datesCourseId && datesCourses.some((entry) => entry.id === datesCourseId)) {
+      params.set("annualCourseId", datesCourseId);
+    }
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setDatesLoading(true);
+      void fetch(`/api/admin/course-sessions?${params.toString()}`, { credentials: "include" })
+        .then(async (response) => {
+          const payload = (await response.json()) as { ok: boolean; reason?: string; sessions?: CourseSession[] };
+          if (!response.ok || !payload.ok) {
+            throw new Error(payload.reason ?? "Chargement des dates réelles impossible.");
+          }
+          if (!cancelled) {
+            setDateSessions(payload.sessions ?? []);
+            setError("");
+          }
+        })
+        .catch((loadError: unknown) => {
+          if (!cancelled) {
+            setDateSessions([]);
+            setError(loadError instanceof Error ? loadError.message : "Chargement impossible.");
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setDatesLoading(false);
+        });
+    });
     return () => {
       cancelled = true;
     };
-  }, [view, selectedYearId, datesClassId, datesCourseId]);
+  }, [view, selectedYearId, datesClassId, datesCourseId, datesCourses]);
 
   if (loading) return <p className="admin-loading">Chargement de l’horaire des classes…</p>;
   if (!data) return <p className="admin-error">{error || "Données indisponibles."}</p>;
