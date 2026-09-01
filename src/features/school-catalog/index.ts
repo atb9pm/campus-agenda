@@ -111,6 +111,7 @@ export { CTX_IN_USE_DELETE_REASON, contextDeleteBlockers } from "./ctx-guards.ts
 export {
   filterProfessionsForPlanSearch,
   findActiveContextForCell,
+  findContextForCell,
   formatBranchUsageLine,
   formatPedagogicalContextLabel,
   isActiveTrainingPlanContext,

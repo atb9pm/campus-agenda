@@ -34,7 +34,7 @@ export function isActiveTrainingPlanContext(context: PedagogicalContextRecord): 
   return context.isActive && !context.isArchived;
 }
 
-export function findActiveContextForCell(options: {
+export function findContextForCell(options: {
   contexts: PedagogicalContextRecord[];
   professionId: string;
   trainingYear: number;
@@ -43,12 +43,22 @@ export function findActiveContextForCell(options: {
   return (
     options.contexts.find(
       (entry) =>
-        isActiveTrainingPlanContext(entry) &&
         entry.professionId === options.professionId &&
         entry.trainingYear === options.trainingYear &&
         entry.branchId === options.branchId,
     ) ?? null
   );
+}
+
+export function findActiveContextForCell(options: {
+  contexts: PedagogicalContextRecord[];
+  professionId: string;
+  trainingYear: number;
+  branchId: string;
+}): PedagogicalContextRecord | null {
+  const context = findContextForCell(options);
+  if (!context || !isActiveTrainingPlanContext(context)) return null;
+  return context;
 }
 
 export function sortBranchesForTrainingPlan(branches: SchoolBranchRecord[]): SchoolBranchRecord[] {

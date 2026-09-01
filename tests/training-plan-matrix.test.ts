@@ -413,3 +413,34 @@ test("CTX archivé n’est plus une case cochée", async () => {
   });
   assert.equal(checkedYears(matrix, moteur.id)[0], false);
 });
+
+test("CTX archivé : recréation refusée, restauration du même identifiant", async () => {
+  const { catalog, ma, moteur } = await setupPlanWorld();
+  const created = await catalog.createContext({
+    professionId: ma.id,
+    trainingYear: 1,
+    branchId: moteur.id,
+  });
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+  await catalog.updateContext(created.value.id, { isArchived: true });
+  const duplicate = await catalog.createContext({
+    professionId: ma.id,
+    trainingYear: 1,
+    branchId: moteur.id,
+  });
+  assert.equal(duplicate.ok, false);
+  const restored = await catalog.updateContext(created.value.id, {
+    isArchived: false,
+    isActive: true,
+  });
+  assert.ok(restored);
+  assert.equal(restored.id, created.value.id);
+  assert.equal(restored.isArchived, false);
+  const matrix = projectTrainingPlanMatrix({
+    profession: ma,
+    branches: await catalog.listBranches(),
+    contexts: await catalog.listContexts(),
+  });
+  assert.equal(checkedYears(matrix, moteur.id)[0], true);
+});

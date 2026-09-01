@@ -11,7 +11,7 @@ Une branche reste un élément unique du catalogue, par exemple « Moteur ». So
 ### Ajouté
 
 - Matrice de plan de formation (branches × années) dans Administration / Plans de formation. Les colonnes viennent de `durationYears` (2, 3, 4 ans ou durée générique).
-- Cocher une case crée un CTX via l’API existante ; décocher retire un CTX inutilisé, ou archive avec confirmation s’il est déjà utilisé (cours, notes, parcours).
+- Cocher une case crée un CTX via l’API existante ; décocher retire un CTX inutilisé, ou archive avec confirmation s’il est déjà utilisé (cours, notes, parcours). Recocher une affectation archivée la restaure (même `contextId`) au lieu de créer un doublon.
 - Synthèse calculée des usages d’une branche dans le catalogue (`MA · années 1, 2, 3, 4`).
 - Libellés contextuels `formatPedagogicalContextLabel` : court (`Moteur · 3e année`) et complet (`Moteur · Mécatronicien automobile · 3e année`).
 - Filtrage des branches de classe inchangé : `listPlannedBranchesForClass` / CTX.

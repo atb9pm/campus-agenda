@@ -9,6 +9,7 @@ import type {
 } from "@campus/features/school-catalog";
 import {
   filterProfessionsForPlanSearch,
+  findContextForCell,
   formatPedagogicalContextLabel,
   formatProfessionOptionLabel,
   formatTrainingYearLabel,
@@ -158,6 +159,39 @@ export function TrainingPlansAdminPanel({ onNotice, onOpenBranches }: TrainingPl
     }
   }
 
+  async function restoreAssignment(context: PedagogicalContextRecord, branchLabel: string) {
+    const key = cellKey(context.branchId, context.trainingYear);
+    const confirmed = window.confirm(
+      `Cette affectation existe déjà en archive (${context.adminCode}). ` +
+        `Elle ne peut pas être recréée : l’identité pédagogique est conservée.\n\n` +
+        `Restaurer ${formatPedagogicalContextLabel({
+          branchLabel,
+          trainingYear: context.trainingYear,
+          mode: "short",
+        })} ?`,
+    );
+    if (!confirmed) return;
+    setPendingCell(key);
+    setError("");
+    try {
+      const response = await fetch(`/api/admin/catalog/${context.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "context", isArchived: false, isActive: true }),
+      });
+      const payload = (await response.json()) as { ok: boolean; reason?: string };
+      if (!response.ok || !payload.ok) {
+        setError(payload.reason ?? "Restauration impossible.");
+        return;
+      }
+      onNotice("Enregistré");
+      await refresh({ silent: true });
+    } finally {
+      setPendingCell("");
+    }
+  }
+
   async function removeAssignment(context: PedagogicalContextRecord, branchLabel: string) {
     const key = cellKey(context.branchId, context.trainingYear);
     setPendingCell(key);
@@ -221,6 +255,16 @@ export function TrainingPlansAdminPanel({ onNotice, onOpenBranches }: TrainingPl
     );
     if (checked) {
       if (context) return;
+      const existing = findContextForCell({
+        contexts,
+        professionId: selectedProfession.id,
+        trainingYear,
+        branchId: branch.id,
+      });
+      if (existing) {
+        await restoreAssignment(existing, branch.label);
+        return;
+      }
       await createAssignment(branch, trainingYear);
       return;
     }
