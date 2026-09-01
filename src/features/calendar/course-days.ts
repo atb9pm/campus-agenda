@@ -39,6 +39,11 @@ export function courseDayKey(slot: CourseDaySlot): string {
   return `${slot.schoolWeekNumber}-${slot.weekKind}-${slot.dayIndex}-${iso}`;
 }
 
+/**
+ * LEGACY ADAPTER — jours TMA historiques (lundi toutes les semaines, jeudi en B).
+ * Les vues runtime d'une classe structurée doivent utiliser
+ * `getCourseDaysForAttendanceWeek` (ClassAttendanceDay), pas ce défaut.
+ */
 export function getCourseDaysForWeek(
   week: SchoolWeek,
   schedule: TmaCourseSchedule = DEFAULT_TMA_SCHEDULE,

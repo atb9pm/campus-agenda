@@ -4,10 +4,8 @@ import {
   jsonResponse,
   logoutResponse,
 } from "../../../../lib/server/api.ts";
+import { listRuntimeClassrooms } from "@campus/lib/persistence/store-factory.ts";
 import { getAgendaStore } from "@campus/lib/persistence/store-factory.ts";
-import { getTeacherById } from "@campus/features/classes/queries.ts";
-import { DEMO_CATALOG } from "@campus/features/classes/demo-data.ts";
-import { getClassroomById } from "@campus/features/classes/queries.ts";
 
 export async function GET(request: Request) {
   const session = await getRequestSession(request);
@@ -18,7 +16,6 @@ export async function GET(request: Request) {
   if (session.kind === "teacher") {
     const accounts = await getTeacherAccountsStore();
     const account = await accounts.findAccount(session.teacherId);
-    const fallback = getTeacherById(DEMO_CATALOG, session.teacherId);
     const store = await getAgendaStore();
     const isAdmin = await store.teacherIsAdmin(session.teacherId);
     return jsonResponse({
@@ -26,19 +23,21 @@ export async function GET(request: Request) {
       session: {
         kind: "teacher",
         teacherId: session.teacherId,
-        displayName: account?.displayName ?? fallback?.displayName ?? "Enseignant · démo",
-        initials: account?.initials ?? fallback?.initials ?? "??",
+        displayName: account?.displayName ?? "Enseignant",
+        initials: account?.initials ?? "??",
         isAdmin,
         mustChangePassword: Boolean(account?.mustChangePassword),
       },
     });
   }
 
-  const classroom = getClassroomById(DEMO_CATALOG, session.classroomId);
+  const classrooms = await listRuntimeClassrooms();
+  const classroom = classrooms.find((entry) => entry.id === session.classroomId);
   return jsonResponse({
     ok: true,
     session: {
       kind: "student",
+      accessId: session.accessId,
       label: session.label,
       classroomId: session.classroomId,
       classroomName: classroom?.name ?? "Classe",

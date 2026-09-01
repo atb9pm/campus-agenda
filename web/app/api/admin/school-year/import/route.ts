@@ -1,10 +1,10 @@
 import { isReceivableWeekPlan, parseWeekPlanPdf } from "@campus/features/school-year";
 import { getSchoolYearStore } from "@campus/lib/persistence/store-factory.ts";
-import { jsonResponse, requireTeacherSession } from "../../../../../lib/server/api.ts";
+import { jsonResponse, requireAdminSession } from "../../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../../lib/server/observability.ts";
 
 async function handlePost(request: Request) {
-  const auth = await requireTeacherSession(request);
+  const auth = await requireAdminSession(request);
   if ("error" in auth && auth.error) return auth.error;
 
   const formData = await request.formData();

@@ -2,7 +2,7 @@ import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
 import type { ClassroomCatalog } from "../classes/queries.ts";
 import { getSubjectById, getTeacherById } from "../classes/queries.ts";
 import type { CourseDaySlot, SchoolWeek } from "../calendar/types.ts";
-import { getCourseDaysForWeek, listAllCourseDays } from "../calendar/course-days.ts";
+import { getCourseDaysForWeek } from "../calendar/course-days.ts";
 
 export const TEST_ALERT_THRESHOLD = 3;
 export const STUDENT_UPCOMING_TESTS_LIMIT = 8;
@@ -89,6 +89,17 @@ function slotTimestamp(slot: CourseDaySlot): number {
   return slot.date.getTime();
 }
 
+function slotFromWeekAndDay(week: SchoolWeek, dayIndex: number): CourseDaySlot {
+  const date = new Date(week.monday);
+  date.setDate(date.getDate() + dayIndex);
+  return {
+    schoolWeekNumber: week.number,
+    weekKind: week.kind,
+    date,
+    dayIndex,
+  };
+}
+
 export function listUpcomingTestsForClass(
   items: PrototypeAgendaItem[],
   catalog: ClassroomCatalog,
@@ -98,17 +109,14 @@ export function listUpcomingTestsForClass(
   limit = STUDENT_UPCOMING_TESTS_LIMIT,
 ): UpcomingTestEntry[] {
   const fromTime = slotTimestamp(fromSlot);
-  const courseDays = listAllCourseDays(weeks);
-  const slotByKey = new Map(
-    courseDays.map((slot) => [`${slot.schoolWeekNumber}-${slot.dayIndex}`, slot] as const),
-  );
-
   const entries: UpcomingTestEntry[] = [];
 
   for (const item of items) {
     if (item.classroomId !== classroomId || item.type !== "TEST") continue;
-    const slot = slotByKey.get(`${item.schoolWeekNumber}-${item.day}`);
-    if (!slot || slotTimestamp(slot) < fromTime) continue;
+    const week = weeks.find((entry) => entry.number === item.schoolWeekNumber);
+    if (!week || !Number.isInteger(item.day) || item.day < 0 || item.day > 4) continue;
+    const slot = slotFromWeekAndDay(week, item.day);
+    if (slotTimestamp(slot) < fromTime) continue;
 
     entries.push({
       item,

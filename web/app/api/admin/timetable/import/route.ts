@@ -1,11 +1,11 @@
 import { parseTimetablePdf } from "@campus/features/timetable";
 import { resolveClassroomIdForClassCode } from "@campus/features/timetable/demo-mappings.ts";
 import { getTimetableStore } from "@campus/lib/persistence/store-factory.ts";
-import { getActiveSchoolYearId, jsonResponse, requireTeacherSession } from "../../../../../lib/server/api.ts";
+import { getActiveSchoolYearId, jsonResponse, requireAdminSession } from "../../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../../lib/server/observability.ts";
 
 async function handlePost(request: Request) {
-  const auth = await requireTeacherSession(request);
+  const auth = await requireAdminSession(request);
   if ("error" in auth && auth.error) return auth.error;
 
   const formData = await request.formData();

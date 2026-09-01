@@ -44,7 +44,8 @@ async function verifySignature(payload: string, signature: string): Promise<bool
     false,
     ["verify"],
   );
-  return crypto.subtle.verify("HMAC", key, decodeBase64Url(signature), new TextEncoder().encode(payload));
+  const mac = decodeBase64Url(signature);
+  return crypto.subtle.verify("HMAC", key, mac as BufferSource, new TextEncoder().encode(payload));
 }
 
 export async function createSessionToken(session: AppSession, remember = false): Promise<string> {
@@ -56,25 +57,51 @@ export async function createSessionToken(session: AppSession, remember = false):
   return `${payload}.${signature}`;
 }
 
+function isFiniteIssuedAt(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
 export async function parseSessionToken(token: string | null | undefined): Promise<AppSession | null> {
   if (!token) return null;
-  const [payload, signature] = token.split(".");
-  if (!payload || !signature) return null;
-  if (!(await verifySignature(payload, signature))) return null;
+  try {
+    const [payload, signature] = token.split(".");
+    if (!payload || !signature) return null;
+    if (!(await verifySignature(payload, signature))) return null;
 
-  const decoded = JSON.parse(new TextDecoder().decode(decodeBase64Url(payload))) as AppSession & { expiresAt: number };
-  if (decoded.expiresAt < Date.now()) return null;
+    const decoded = JSON.parse(new TextDecoder().decode(decodeBase64Url(payload))) as Record<string, unknown>;
+    const expiresAt = decoded.expiresAt;
+    if (typeof expiresAt !== "number" || !Number.isFinite(expiresAt) || expiresAt < Date.now()) {
+      return null;
+    }
 
-  if (decoded.kind === "teacher") {
-    return { kind: "teacher", teacherId: decoded.teacherId, issuedAt: decoded.issuedAt };
+    if (decoded.kind === "teacher") {
+      if (typeof decoded.teacherId !== "string" || !decoded.teacherId || !isFiniteIssuedAt(decoded.issuedAt)) {
+        return null;
+      }
+      return { kind: "teacher", teacherId: decoded.teacherId, issuedAt: decoded.issuedAt };
+    }
+
+    if (decoded.kind !== "student") return null;
+    if (
+      typeof decoded.accessId !== "string" ||
+      !decoded.accessId ||
+      typeof decoded.classroomId !== "string" ||
+      !decoded.classroomId ||
+      typeof decoded.label !== "string" ||
+      !isFiniteIssuedAt(decoded.issuedAt)
+    ) {
+      return null;
+    }
+    return {
+      kind: "student",
+      accessId: decoded.accessId,
+      classroomId: decoded.classroomId,
+      label: decoded.label,
+      issuedAt: decoded.issuedAt,
+    };
+  } catch {
+    return null;
   }
-  return {
-    kind: "student",
-    accessId: decoded.accessId,
-    classroomId: decoded.classroomId,
-    label: decoded.label,
-    issuedAt: decoded.issuedAt,
-  };
 }
 
 export function getSessionCookieName(): string {

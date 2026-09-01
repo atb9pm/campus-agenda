@@ -2,6 +2,7 @@ import {
   assertAgendaItemMutable,
   assertAgendaClassMutableForItem,
   assertAgendaPublicationBranchAllowed,
+  assertValidAgendaScheduleTarget,
   forbiddenResponse,
   jsonResponse,
   requireTeacherSession,
@@ -58,6 +59,17 @@ export async function PATCH(request: Request, context: RouteContext) {
       "update",
     );
     if (branchGuard) return branchGuard;
+
+    const nextWeek = body.schoolWeekNumber ?? existing.schoolWeekNumber;
+    const nextDay = body.day ?? existing.day;
+    const scheduleGuard = await assertValidAgendaScheduleTarget({
+      classroomId: existing.classroomId,
+      subjectId: body.subjectId ?? existing.subjectId,
+      schoolWeekNumber: Number(nextWeek),
+      dayIndex: Number(nextDay),
+      schoolYearId: existing.schoolYearId,
+    });
+    if (scheduleGuard) return scheduleGuard;
   }
 
   const result = await auth.store!.updateAgendaItem(itemId, auth.session!.teacherId, body);

@@ -18,7 +18,8 @@ async function handleGet(request: Request) {
   const url = new URL(request.url);
   const activeOnly = url.searchParams.get("active") === "1";
   const classId = url.searchParams.get("classId")?.trim() || null;
-  // Liste active : tout enseignant (Configuration). Liste complète : admin seulement.
+  // Exception architecturale : GET ?active=1 alimente la Configuration enseignant
+  // (branches/classes actives). Toute mutation et la liste complète restent admin.
   const auth = activeOnly ? await requireTeacherSession(request) : await requireAdminSession(request);
   if ("error" in auth && auth.error) return auth.error;
 

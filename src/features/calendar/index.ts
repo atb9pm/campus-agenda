@@ -24,6 +24,16 @@ export {
   type CourseDayOption,
 } from "./course-days.ts";
 export {
+  agendaDayIndexFromIsoWeekday,
+  attendanceCoversAgendaDay,
+  getCourseDaysForAttendanceWeek,
+  isoWeekdayFromAgendaDayIndex,
+  listAllAttendanceCourseDays,
+  listPreviousAttendanceCourseDays,
+  resolveDisplayCourseDayFromAttendance,
+  scheduleSlotAllowsAgendaDay,
+} from "./attendance-course-days.ts";
+export {
   DEFAULT_TMA_SCHEDULE,
   type CourseDaySlot,
   type SchoolWeek,

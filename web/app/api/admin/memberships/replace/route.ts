@@ -1,13 +1,8 @@
-import { jsonResponse, requireTeacherSession, getMembershipsStore } from "../../../../../lib/server/api.ts";
+import { jsonResponse, requireAdminSession, getMembershipsStore } from "../../../../../lib/server/api.ts";
 
 export async function POST(request: Request) {
-  const auth = await requireTeacherSession(request);
+  const auth = await requireAdminSession(request);
   if ("error" in auth && auth.error) return auth.error;
-
-  const isAdmin = await auth.store!.teacherIsAdmin(auth.session!.teacherId);
-  if (!isAdmin) {
-    return jsonResponse({ ok: false, reason: "Action réservée à l'administrateur." }, { status: 403 });
-  }
 
   const body = await request.json() as {
     classroomId?: string;

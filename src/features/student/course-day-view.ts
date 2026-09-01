@@ -24,12 +24,24 @@ export function groupItemsBySubject(
   const grouped = new Map<string, PrototypeAgendaItem[]>();
 
   for (const item of items) {
+    if (!subjectById.has(item.subjectId)) {
+      subjectById.set(item.subjectId, {
+        id: item.subjectId,
+        classroomId: item.classroomId,
+        name: item.subjectId,
+      });
+    }
     const bucket = grouped.get(item.subjectId) ?? [];
     bucket.push(item);
     grouped.set(item.subjectId, bucket);
   }
 
-  return subjects
+  const ordered = [...subjects];
+  for (const subject of subjectById.values()) {
+    if (!ordered.some((entry) => entry.id === subject.id)) ordered.push(subject);
+  }
+
+  return ordered
     .map((subject) => ({
       subject,
       items: grouped.get(subject.id) ?? [],
