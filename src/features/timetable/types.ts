@@ -39,7 +39,7 @@ export interface TimetableImportRecord {
   schoolYearId: string | null;
   sourceFilename: string;
   schoolYearLabel: string;
-  status: "draft" | "active";
+  status: "draft" | "active" | "archived";
   importedAt: string;
   slotCount: number;
 }

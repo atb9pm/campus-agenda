@@ -2,13 +2,18 @@ import { attachRequestId, logApiEvent, readRequestId } from "@campus/lib/observa
 
 import { jsonResponse } from "./api.ts";
 
-type ApiHandler = (request: Request, context?: unknown) => Response | Promise<Response>;
+export interface RouteHandlerContext {
+  params?: Promise<Record<string, string>>;
+}
 
-export function withApiObservability(route: string, handler: ApiHandler): ApiHandler {
-  return async (request: Request, context?: unknown) => {
+/** Accepte les handlers dont `context.params` est plus précis que `Record<string, string>`. */
+type ObservabilityHandler = (request: Request, context?: never) => Response | Promise<Response>;
+
+export function withApiObservability<H extends ObservabilityHandler>(route: string, handler: H): H {
+  const wrapped = (async (request: Request, context?: Parameters<H>[1]) => {
     const requestId = readRequestId(request);
     const startedAt = performance.now();
-    const response = await handler(request, context);
+    const response = await handler(request, context as never);
     const headers = new Headers(response.headers);
     attachRequestId(headers, requestId);
     logApiEvent({
@@ -23,7 +28,8 @@ export function withApiObservability(route: string, handler: ApiHandler): ApiHan
       statusText: response.statusText,
       headers,
     });
-  };
+  }) as H;
+  return wrapped;
 }
 
 export function jsonResponseWithRequestId(request: Request, body: unknown, init: ResponseInit = {}) {

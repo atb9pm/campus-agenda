@@ -1,12 +1,14 @@
 import { AGENDA_ITEM_TYPES } from "@campus/types/agenda.ts";
 import {
   assertAgendaPublicationBranchAllowed,
+  assertValidAgendaScheduleTarget,
   forbiddenResponse,
   getArchivedSchoolYearIds,
   jsonResponse,
+  listAttendanceDaysForLegacyClassroom,
   requireClassroomReadAccess,
   requireTeacherSession,
-  getActiveSchoolYearId,
+  getActiveSchoolYear,
   authorizeTeacherAgendaPublish,
 } from "../../../lib/server/api.ts";
 
@@ -28,8 +30,9 @@ export async function GET(request: Request) {
 
   const archivedIds = await getArchivedSchoolYearIds();
   const readOnly = Boolean(schoolYearId && archivedIds.has(schoolYearId));
+  const attendanceDays = await listAttendanceDaysForLegacyClassroom(classroomId);
 
-  return jsonResponse({ ok: true, items, readOnly, schoolYearId });
+  return jsonResponse({ ok: true, items, readOnly, schoolYearId, attendanceDays });
 }
 
 export async function POST(request: Request) {
@@ -56,7 +59,8 @@ export async function POST(request: Request) {
     return jsonResponse({ ok: false, reason: "Données de publication invalides." }, { status: 400 });
   }
 
-  const activeSchoolYearId = await getActiveSchoolYearId();
+  const activeYear = await getActiveSchoolYear();
+  const activeSchoolYearId = activeYear?.id ?? null;
   if (!(await authorizeTeacherAgendaPublish(auth.session!.teacherId, classroomId, subjectId, auth.store!, activeSchoolYearId))) {
     return forbiddenResponse("Vous ne pouvez pas publier dans cette branche.");
   }
@@ -65,14 +69,15 @@ export async function POST(request: Request) {
   if (branchGuard) return branchGuard;
 
   const schoolWeekNumber = Number(body.schoolWeekNumber ?? 0);
-  if (!Number.isFinite(schoolWeekNumber) || schoolWeekNumber < 1 || schoolWeekNumber > 38) {
-    return jsonResponse({ ok: false, reason: "Semaine scolaire invalide." }, { status: 400 });
-  }
-
   const day = Number(body.day ?? 0);
-  if (day !== 0 && day !== 3) {
-    return jsonResponse({ ok: false, reason: "Jour de cours invalide." }, { status: 400 });
-  }
+  const scheduleGuard = await assertValidAgendaScheduleTarget({
+    classroomId,
+    subjectId,
+    schoolWeekNumber,
+    dayIndex: day,
+    schoolYearId: activeSchoolYearId,
+  });
+  if (scheduleGuard) return scheduleGuard;
 
   const item = await auth.store!.createAgendaItem({
     classroomId,
@@ -85,7 +90,7 @@ export async function POST(request: Request) {
     type: type as typeof AGENDA_ITEM_TYPES[number],
     title: String(body.title ?? ""),
     detail: String(body.detail ?? ""),
-    schoolYearId: await getActiveSchoolYearId(),
+    schoolYearId: activeSchoolYearId,
   });
 
   return jsonResponse({ ok: true, item }, { status: 201 });

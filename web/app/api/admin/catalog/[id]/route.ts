@@ -18,11 +18,12 @@ import {
 import { jsonResponse, requireAdminSession } from "../../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../../lib/server/observability.ts";
 
-async function handlePatch(request: Request, context: { params: Promise<{ id: string }> }) {
+async function handlePatch(request: Request, context?: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminSession(request);
   if ("error" in auth && auth.error) return auth.error;
 
-  const { id } = await context.params;
+  const { id } = await (context?.params ?? Promise.resolve({ id: "" }));
+  if (!id) return jsonResponse({ ok: false, reason: "Identifiant manquant." }, { status: 400 });
   const body = (await request.json()) as {
     kind?: "class" | "branch" | "profession" | "context";
     code?: string;
@@ -127,11 +128,12 @@ async function handlePatch(request: Request, context: { params: Promise<{ id: st
   return jsonResponse({ ok: true, context: updated });
 }
 
-async function handleDelete(request: Request, context: { params: Promise<{ id: string }> }) {
+async function handleDelete(request: Request, context?: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminSession(request);
   if ("error" in auth && auth.error) return auth.error;
 
-  const { id } = await context.params;
+  const { id } = await (context?.params ?? Promise.resolve({ id: "" }));
+  if (!id) return jsonResponse({ ok: false, reason: "Identifiant manquant." }, { status: 400 });
   const url = new URL(request.url);
   const kind = url.searchParams.get("kind")?.trim() as
     | "branch"

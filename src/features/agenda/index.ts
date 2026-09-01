@@ -10,6 +10,11 @@ export {
   type PublicationPatch,
 } from "./publications.ts";
 export {
+  legacyTmaPublicationDayAllowed,
+  validateAgendaScheduleTarget,
+  type AgendaScheduleTargetResult,
+} from "./schedule-target.ts";
+export {
   ALL_FILTER,
   WORKLOAD_LEVEL_LABELS,
   applySharedAgendaFilters,

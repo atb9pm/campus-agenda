@@ -18,7 +18,7 @@ interface ControlsModalProps {
 }
 
 function formatControlDay(week: SchoolWeek, dayIndex: number): string {
-  const options = getCourseDayOptionsForSchoolWeek(week);
+  const options = getCourseDayOptionsForSchoolWeek(week.number);
   return options.find((option) => option.dayIndex === dayIndex)?.label ?? (dayIndex === 3 ? "Jeudi" : "Lundi");
 }
 
@@ -45,7 +45,7 @@ export function ControlsModal({
   );
 
   const dayOptions = useMemo(
-    () => (selectedWeek ? getCourseDayOptionsForSchoolWeek(selectedWeek) : []),
+    () => (selectedWeek ? getCourseDayOptionsForSchoolWeek(selectedWeek.number) : []),
     [selectedWeek],
   );
 
@@ -95,7 +95,7 @@ export function ControlsModal({
                   setSchoolWeekNumber(nextWeek);
                   const week = schoolWeeks.find((entry) => entry.number === nextWeek);
                   if (week) {
-                    const options = getCourseDayOptionsForSchoolWeek(week);
+                    const options = getCourseDayOptionsForSchoolWeek(week.number);
                     setDay(options[0]?.dayIndex ?? 0);
                   }
                 }}

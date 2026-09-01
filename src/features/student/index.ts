@@ -4,6 +4,7 @@ export {
   maskStudentIdentity,
   normalizeStudentAccessCode,
   resolveStudentAccess,
+  studentAccessFromApiSession,
 } from "./access.ts";
 export {
   filterItemsForCourseDay,

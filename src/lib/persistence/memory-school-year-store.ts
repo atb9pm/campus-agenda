@@ -138,6 +138,14 @@ export function resetMemorySchoolYearStore(): void {
   memoryDayExceptions = new Map();
 }
 
+export function replaceMemorySchoolYears(
+  years: SchoolYearWithWeeks[],
+  exceptions = new Map<string, SchoolDayException[]>(),
+): void {
+  memorySchoolYears = years.map((year) => ({ ...year, weeks: year.weeks.map((week) => ({ ...week })) }));
+  memoryDayExceptions = exceptions;
+}
+
 export async function hydrateMemorySchoolCalendar(): Promise<SchoolWeekEntry[]> {
   const store = new MemorySchoolYearStore();
   await store.seedDefaultActiveYearIfEmpty();

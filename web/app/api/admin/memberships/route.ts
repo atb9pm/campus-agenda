@@ -1,8 +1,8 @@
-import { jsonResponse, requireTeacherSession, getMembershipsStore } from "../../../../lib/server/api.ts";
+import { jsonResponse, requireAdminSession, getMembershipsStore } from "../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../lib/server/observability.ts";
 
 async function handleGet(request: Request) {
-  const auth = await requireTeacherSession(request);
+  const auth = await requireAdminSession(request);
   if ("error" in auth && auth.error) return auth.error;
 
   const url = new URL(request.url);

@@ -19,7 +19,7 @@ export class MemoryMembershipStore implements MembershipStore {
     | { ok: false; reason: string }
   > {
     const outcome = replaceTeacherMemberships(memoryMemberships, input);
-    if ("ok" in outcome && outcome.ok === false) {
+    if ("ok" in outcome) {
       return outcome;
     }
     memoryMemberships = outcome.memberships;

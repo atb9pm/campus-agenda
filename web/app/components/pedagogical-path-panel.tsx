@@ -79,7 +79,9 @@ export function PedagogicalPathPanel({
   }, [contextId]);
 
   useEffect(() => {
-    void refresh();
+    queueMicrotask(() => {
+      void refresh();
+    });
   }, [refresh]);
 
   async function run(

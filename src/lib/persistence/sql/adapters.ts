@@ -1,22 +1,27 @@
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 
 import type { SqlBatchStatement, SqlDatabase, SqlStatement } from "./types.ts";
 
+function asSqlValues(values: unknown[]): SQLInputValue[] {
+  return values as SQLInputValue[];
+}
+
 function wrapStatement(statement: ReturnType<DatabaseSync["prepare"]>, values: unknown[]): SqlStatement {
+  const params = asSqlValues(values);
   return {
     async all<T>() {
-      return { results: statement.all(...values) as T[] };
+      return { results: statement.all(...params) as T[] };
     },
     async first<T>() {
-      return (statement.get(...values) as T | undefined) ?? null;
+      return (statement.get(...params) as T | undefined) ?? null;
     },
     async run() {
-      const result = statement.run(...values);
+      const result = statement.run(...params);
       return {
-        success: true,
+        success: true as const,
         meta: {
           last_row_id: Number(result.lastInsertRowid),
-          changes: result.changes,
+          changes: Number(result.changes),
         },
       };
     },
@@ -45,7 +50,7 @@ export class NodeSqliteDatabase implements SqlDatabase {
     this.db.exec("BEGIN");
     try {
       for (const statement of statements) {
-        this.db.prepare(statement.sql).run(...statement.values);
+        this.db.prepare(statement.sql).run(...asSqlValues(statement.values));
       }
       this.db.exec("COMMIT");
     } catch (error) {
@@ -67,7 +72,7 @@ export function createNodeSqliteDatabase(path = ":memory:"): NodeSqliteDatabase 
   return new NodeSqliteDatabase(path);
 }
 
-export function wrapD1Database(d1: D1Database): SqlDatabase {
+export function wrapD1Database(d1: D1DatabaseLike): SqlDatabase {
   return {
     prepare(query: string) {
       return {
@@ -90,7 +95,7 @@ export function wrapD1Database(d1: D1Database): SqlDatabase {
   };
 }
 
-interface D1Database {
+export interface D1DatabaseLike {
   prepare(query: string): {
     bind(...values: unknown[]): {
       all<T>(): Promise<{ results: T[] }>;

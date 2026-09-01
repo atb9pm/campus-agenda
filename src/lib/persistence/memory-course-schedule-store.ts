@@ -56,6 +56,12 @@ export class MemoryCourseScheduleStore implements CourseScheduleStore {
     this.attendanceDays = next;
     return this.listAttendanceDaysByClass(classId);
   }
+
+  replaceSnapshot(slots: CourseScheduleSlot[], days: ClassAttendanceDay[]): void {
+    this.slots.clear();
+    for (const slot of slots) this.slots.set(slot.id, { ...slot });
+    this.attendanceDays = new Map(days.map((day) => [day.id, { ...day }]));
+  }
 }
 
 let memoryCourseScheduleStore: MemoryCourseScheduleStore | null = null;

@@ -33,6 +33,21 @@ function extractCookie(response) {
   return header.split(";")[0] ?? "";
 }
 
+async function loginTeacher(teacherId) {
+  const response = await request("/api/auth/teacher", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ teacherId, password: "campus-demo" }),
+  });
+  assert.equal(response.status, 200, `login ${teacherId}`);
+  return extractCookie(response);
+}
+
+/** Administrateur réel du seed (ChF), pas l'enseignant démo historique. */
+function loginAdmin() {
+  return loginTeacher("teacher-chf");
+}
+
 test("phase 0.8 — E2E health check", async () => {
   const response = await request("/api/health");
   assert.equal(response.status, 200);
@@ -43,13 +58,8 @@ test("phase 0.8 — E2E health check", async () => {
 });
 
 test("phase 0.8 — E2E enseignant publie puis élève consulte", async () => {
-  const loginResponse = await request("/api/auth/teacher", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ teacherId: "teacher-demo-current", password: "campus-demo" }),
-  });
-  assert.equal(loginResponse.status, 200);
-  const teacherCookie = extractCookie(loginResponse);
+  const teacherCookie = await loginTeacher("teacher-demo-current");
+  const adminCookie = await loginAdmin();
 
   const createResponse = await request("/api/agenda", {
     method: "POST",
@@ -71,11 +81,11 @@ test("phase 0.8 — E2E enseignant publie puis élève consulte", async () => {
   assert.equal(created.item.title, "E2E devoir");
 
   const backupResponse = await request("/api/admin/backup", {
-    headers: { cookie: teacherCookie },
+    headers: { cookie: adminCookie },
   });
   assert.equal(backupResponse.status, 200);
   const backupPayload = await backupResponse.json();
-  assert.equal(backupPayload.snapshot.version, 3);
+  assert.equal(backupPayload.snapshot.version, 4);
   assert.ok(backupPayload.snapshot.itemCount >= 1);
   assert.ok(Array.isArray(backupPayload.snapshot.teacherSetups));
   assert.ok(Array.isArray(backupPayload.snapshot.teacherNotes));
@@ -104,15 +114,11 @@ test("phase 0.8 — E2E enseignant publie puis élève consulte", async () => {
 });
 
 test("phase 0.8 — E2E restauration de sauvegarde", async () => {
-  const loginResponse = await request("/api/auth/teacher", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ teacherId: "teacher-demo-current", password: "campus-demo" }),
-  });
-  const teacherCookie = extractCookie(loginResponse);
+  const teacherCookie = await loginTeacher("teacher-demo-current");
+  const adminCookie = await loginAdmin();
 
   const backupResponse = await request("/api/admin/backup", {
-    headers: { cookie: teacherCookie },
+    headers: { cookie: adminCookie },
   });
   const backupPayload = await backupResponse.json();
 
@@ -134,7 +140,7 @@ test("phase 0.8 — E2E restauration de sauvegarde", async () => {
 
   const restoreResponse = await request("/api/admin/restore", {
     method: "POST",
-    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    headers: { "Content-Type": "application/json", cookie: adminCookie },
     body: JSON.stringify({ snapshot: backupPayload.snapshot }),
   });
   assert.equal(restoreResponse.status, 200);
@@ -268,13 +274,7 @@ test("comptes enseignant — E2E création, mot de passe provisoire, première c
 });
 
 test("phase 2.0 — E2E calendrier scolaire et liste admin", async () => {
-  const loginResponse = await request("/api/auth/teacher", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ teacherId: "teacher-demo-current", password: "campus-demo" }),
-  });
-  assert.equal(loginResponse.status, 200);
-  const teacherCookie = extractCookie(loginResponse);
+  const teacherCookie = await loginAdmin();
 
   const calendarResponse = await request("/api/school-year/calendar", {
     headers: { Cookie: teacherCookie },
@@ -291,6 +291,54 @@ test("phase 2.0 — E2E calendrier scolaire et liste admin", async () => {
   const years = await yearsResponse.json();
   assert.equal(years.ok, true);
   assert.ok(Array.isArray(years.years));
+});
+
+test("2.26.0 — matrice admin : anonyme 401, enseignant 403, admin 200", async () => {
+  const adminCookie = await loginAdmin();
+  const teacherCookie = await loginTeacher("teacher-demo-martin");
+
+  const sensitive = [
+    "/api/admin/backup",
+    "/api/admin/memberships",
+    "/api/admin/timetable",
+    "/api/admin/school-year",
+    "/api/admin/annual-courses",
+    "/api/admin/course-schedule",
+    "/api/admin/catalog",
+  ];
+  for (const path of sensitive) {
+    const anon = await request(path);
+    assert.equal(anon.status, 401, `${path} anonyme`);
+    const staff = await request(path, { headers: { cookie: teacherCookie } });
+    assert.equal(staff.status, 403, `${path} enseignant`);
+    const admin = await request(path, { headers: { cookie: adminCookie } });
+    assert.ok(admin.status !== 401 && admin.status !== 403, `${path} admin ${admin.status}`);
+  }
+
+  const restoreAnon = await request("/api/admin/restore", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  assert.equal(restoreAnon.status, 401);
+  const restoreStaff = await request("/api/admin/restore", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: "{}",
+  });
+  assert.equal(restoreStaff.status, 403);
+
+  const catalogTeacher = await request("/api/admin/catalog?active=1", {
+    headers: { cookie: teacherCookie },
+  });
+  assert.ok(catalogTeacher.status < 400, "GET catalog?active=1 autorisé aux enseignants");
+
+  const invalidRestore = await request("/api/admin/restore", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: adminCookie },
+    body: JSON.stringify({ snapshot: { version: 4, tables: { teachers: [] } } }),
+  });
+  assert.equal(invalidRestore.status, 400);
 });
 
 test("2.24.0 — E2E Mes cours : session uniquement, teacherId client ignoré", async () => {

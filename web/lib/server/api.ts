@@ -7,10 +7,12 @@ import {
   forbiddenResponse,
   parseSessionToken,
   readSessionTokenFromRequest,
+  revalidateLiveSession,
   unauthorizedResponse,
 } from "@campus/lib/auth/index.ts";
 import { checkClassroomExists, getAgendaStore, getAnnualCourseNotesStore, getAnnualCourseStore, getCourseScheduleStore, getMembershipStore, getPedagogicalPathStore, getSchoolCatalogStore, getSchoolYearStore, getTeacherAccountStore, getTeacherNotesStore as resolveTeacherNotesStore, getTeacherSetupStore, getTemplateStore, resolveClassroomSubjectNames } from "@campus/lib/persistence/store-factory.ts";
 import { decideAgendaPublishAccess, resolveAnnualCourseForPublication } from "@campus/features/annual-courses/index.ts";
+import { validateAgendaScheduleTarget } from "@campus/features/agenda/schedule-target.ts";
 import type { AnnualCourseServiceDeps } from "@campus/features/annual-courses/index.ts";
 import type { CourseScheduleServiceDeps } from "@campus/features/course-schedule/index.ts";
 import { evaluateAgendaBranchForClass, assertAgendaClassMutable } from "@campus/features/school-catalog/index.ts";
@@ -19,7 +21,14 @@ import { ARCHIVED_YEAR_READONLY_REASON, getArchivedYearIds, isArchivedYearItem }
 import type { AppSession } from "@campus/lib/persistence/types.ts";
 
 export async function getRequestSession(request: Request): Promise<AppSession | null> {
-  return parseSessionToken(readSessionTokenFromRequest(request));
+  const parsed = await parseSessionToken(readSessionTokenFromRequest(request));
+  if (!parsed) return null;
+  const accounts = await getTeacherAccountStore();
+  const store = await getAgendaStore();
+  return revalidateLiveSession(parsed, {
+    findAccount: (teacherId) => accounts.findAccount(teacherId),
+    findStudentAccessById: (accessId) => store.findStudentAccessById(accessId),
+  });
 }
 
 export async function jsonWithSession(
@@ -152,10 +161,74 @@ export async function authorizeTeacherAgendaPublish(
 export const PASSWORD_CHANGE_REQUIRED_REASON =
   "Changement de mot de passe requis avant d'utiliser Campus Agenda.";
 
-export async function getActiveSchoolYearId(): Promise<string | null> {
+export async function getActiveSchoolYear() {
   const schoolYearStore = await getSchoolYearStore();
-  const active = await schoolYearStore.getActiveSchoolYear();
+  return schoolYearStore.getActiveSchoolYear();
+}
+
+export async function getActiveSchoolYearId(): Promise<string | null> {
+  const active = await getActiveSchoolYear();
   return active?.id ?? null;
+}
+
+/**
+ * Semaine + jour d'une publication : année scolaire réelle, puis
+ * CourseScheduleSlot / ClassAttendanceDay si résolus, sinon fallback TMA isolé.
+ */
+export async function assertValidAgendaScheduleTarget(options: {
+  classroomId: string;
+  subjectId: string;
+  schoolWeekNumber: number;
+  dayIndex: number;
+  schoolYearId?: string | null;
+}): Promise<Response | null> {
+  const yearStore = await getSchoolYearStore();
+  const year = options.schoolYearId
+    ? await yearStore.getSchoolYearById(options.schoolYearId)
+    : await yearStore.getActiveSchoolYear();
+  if (!year) {
+    return jsonResponse({ ok: false, reason: "Aucune année scolaire active." }, { status: 400 });
+  }
+
+  const names = await resolveClassroomSubjectNames(options.classroomId, options.subjectId);
+  const catalog = await getSchoolCatalogStore();
+  await catalog.ensureSeeded();
+  const [classes, branches, contexts, courses, scheduleStore] = await Promise.all([
+    catalog.listClasses(),
+    catalog.listBranches(),
+    catalog.listContexts(),
+    getAnnualCourseStore().then((entry) => entry.listCourses()),
+    getCourseScheduleStore(),
+  ]);
+  const resolved = resolveAnnualCourseForPublication({
+    classroomName: names.classroomName,
+    subjectName: names.subjectName,
+    classes,
+    branches,
+    contexts,
+    courses,
+    schoolYearId: year.id,
+  });
+
+  let attendanceDays = null;
+  let slots = null;
+  if (resolved) {
+    attendanceDays = await scheduleStore.listAttendanceDaysByClass(resolved.schoolClass.id);
+    slots = await scheduleStore.listSlotsByAnnualCourse(resolved.course.id);
+  }
+
+  const result = validateAgendaScheduleTarget({
+    schoolWeekNumber: options.schoolWeekNumber,
+    dayIndex: options.dayIndex,
+    weeks: year.weeks,
+    attendanceDays,
+    slots,
+    resolvedStructuredCourse: Boolean(resolved),
+  });
+  if (!result.ok) {
+    return jsonResponse({ ok: false, reason: result.reason }, { status: 400 });
+  }
+  return null;
 }
 
 export async function getArchivedSchoolYearIds(): Promise<Set<string>> {
@@ -219,6 +292,20 @@ export async function assertAgendaPublicationBranchAllowed(
     return forbiddenResponse(result.reason);
   }
   return null;
+}
+
+export async function listAttendanceDaysForLegacyClassroom(classroomId: string) {
+  const names = await resolveClassroomSubjectNames(classroomId, "");
+  const catalog = await getSchoolCatalogStore();
+  await catalog.ensureSeeded();
+  const classes = await catalog.listClasses();
+  const name = names.classroomName;
+  const schoolClass = name
+    ? classes.find((entry) => entry.label === name || entry.code === name) ?? null
+    : null;
+  if (!schoolClass) return [];
+  const schedules = await getCourseScheduleStore();
+  return schedules.listAttendanceDaysByClass(schoolClass.id);
 }
 
 export async function requireClassroomReadAccess(request: Request, classroomId: string) {

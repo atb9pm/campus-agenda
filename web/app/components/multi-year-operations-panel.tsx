@@ -79,13 +79,17 @@ export function MultiYearOperationsPanel({
   }, [classroomId]);
 
   useEffect(() => {
-    void refresh();
+    queueMicrotask(() => {
+      void refresh();
+    });
   }, [refresh]);
 
   useEffect(() => {
     if (!selectedYearId) {
-      setArchivedItems([]);
-      setStats(null);
+      queueMicrotask(() => {
+        setArchivedItems([]);
+        setStats(null);
+      });
       return;
     }
 

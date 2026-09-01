@@ -9,8 +9,8 @@ import {
   updateTemplateRecord,
 } from "../../../features/library/templates.ts";
 import type { DuplicatePreviousYearOptions, PublicationTemplate, TemplateDeploymentInput } from "../../../features/library/types.ts";
-import type { PrototypeAgendaItem } from "../../features/agenda/demo-items.ts";
-import type { TemplateStore } from "../types.ts";
+import type { PrototypeAgendaItem } from "../../../features/agenda/demo-items.ts";
+import type { CreateAgendaInput, TemplateStore } from "../types.ts";
 import type { SqlDatabase } from "./types.ts";
 
 const TEMPLATE_COLUMNS =
@@ -53,6 +53,7 @@ export class SqlTemplateStore implements TemplateStore {
   private readonly agenda: {
     exportAllItems(): Promise<PrototypeAgendaItem[]>;
     findAgendaItem(itemId: number): Promise<PrototypeAgendaItem | undefined>;
+    createAgendaItem(input: CreateAgendaInput): Promise<PrototypeAgendaItem>;
     replaceAllItems(items: PrototypeAgendaItem[]): Promise<void>;
     teacherCanPublish(teacherId: string, classroomId: string, subjectId: string): Promise<boolean>;
   };
@@ -105,29 +106,22 @@ export class SqlTemplateStore implements TemplateStore {
       .run();
   }
 
-  private async persistItem(item: PrototypeAgendaItem): Promise<void> {
-    await this.db
-      .prepare(
-        `INSERT INTO agenda_items
-          (id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        item.id,
-        item.classroomId,
-        item.subjectId,
-        item.authorTeacherId,
-        item.day,
-        item.hour,
-        item.weekOffset,
-        item.schoolWeekNumber,
-        item.type,
-        item.title,
-        item.detail,
-        item.templateId ?? null,
-        item.schoolYearId ?? null,
-      )
-      .run();
+  private async persistItem(item: PrototypeAgendaItem): Promise<PrototypeAgendaItem> {
+    const created = await this.agenda.createAgendaItem({
+      classroomId: item.classroomId,
+      subjectId: item.subjectId,
+      authorTeacherId: item.authorTeacherId,
+      day: item.day,
+      hour: item.hour,
+      weekOffset: item.weekOffset,
+      schoolWeekNumber: item.schoolWeekNumber,
+      type: item.type,
+      title: item.title,
+      detail: item.detail,
+      templateId: item.templateId ?? null,
+      schoolYearId: item.schoolYearId ?? null,
+    });
+    return created;
   }
 
   async createTemplateFromItem(itemId: number, teacherId: string, activeSchoolYearId: string | null) {
@@ -240,11 +234,12 @@ export class SqlTemplateStore implements TemplateStore {
     const result = deployTemplatesToAgenda(items, templates, deployments, teacherId, activeSchoolYearId, nextId);
     if (!result.ok) return { ok: false as const, reason: result.reason, status: 400 as const };
 
-    for (const created of result.created) {
-      await this.persistItem(created);
+    const created: PrototypeAgendaItem[] = [];
+    for (const item of result.created) {
+      created.push(await this.persistItem(item));
     }
 
-    return { ok: true as const, created: result.created };
+    return { ok: true as const, created };
   }
 
   async duplicateFromArchivedYear(
@@ -269,13 +264,14 @@ export class SqlTemplateStore implements TemplateStore {
     for (const template of result.templatesCreated) {
       await this.insertTemplate(template);
     }
-    for (const created of result.created) {
-      await this.persistItem(created);
+    const created: PrototypeAgendaItem[] = [];
+    for (const item of result.created) {
+      created.push(await this.persistItem(item));
     }
 
     return {
       ok: true as const,
-      created: result.created,
+      created,
       templatesCreated: result.templatesCreated,
     };
   }

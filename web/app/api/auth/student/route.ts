@@ -3,6 +3,7 @@ import {
   jsonWithSession,
 } from "../../../../lib/server/api.ts";
 import { getStore } from "../../../../lib/server/api.ts";
+import { listRuntimeClassrooms } from "@campus/lib/persistence/store-factory.ts";
 import { enforceAuthRateLimit } from "../../../../lib/server/rate-limit.ts";
 
 export async function POST(request: Request) {
@@ -18,6 +19,9 @@ export async function POST(request: Request) {
     return jsonResponse({ ok: false, reason: "Code d'accès invalide." }, { status: 401 });
   }
 
+  const classrooms = await listRuntimeClassrooms();
+  const classroom = classrooms.find((entry) => entry.id === access.classroomId);
+
   return jsonWithSession(
     {
       kind: "student",
@@ -30,8 +34,10 @@ export async function POST(request: Request) {
       ok: true,
       session: {
         kind: "student",
+        accessId: access.id,
         label: access.label,
         classroomId: access.classroomId,
+        classroomName: classroom?.name ?? "Classe",
       },
     },
     {},

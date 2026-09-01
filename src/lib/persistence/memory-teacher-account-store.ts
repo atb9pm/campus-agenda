@@ -281,6 +281,8 @@ export class MemoryTeacherAccountStore implements TeacherAccountStore {
         passwordHash: account.passwordHash,
         createdAt: account.createdAt,
         passwordUpdatedAt: account.passwordUpdatedAt,
+        archivedAt: account.archivedAt,
+        lastLoginAt: account.lastLoginAt,
       }));
   }
 
@@ -297,6 +299,8 @@ export class MemoryTeacherAccountStore implements TeacherAccountStore {
         existing.passwordHash = entry.passwordHash;
         existing.createdAt = entry.createdAt ?? existing.createdAt;
         existing.passwordUpdatedAt = entry.passwordUpdatedAt;
+        if (entry.archivedAt !== undefined) existing.archivedAt = entry.archivedAt;
+        if (entry.lastLoginAt !== undefined) existing.lastLoginAt = entry.lastLoginAt;
       } else {
         this.accounts.push({
           id: entry.id,
@@ -304,8 +308,8 @@ export class MemoryTeacherAccountStore implements TeacherAccountStore {
           initials: entry.initials,
           isAdmin: entry.isAdmin,
           isActive: entry.isActive,
-          archivedAt: null,
-          lastLoginAt: null,
+          archivedAt: entry.archivedAt ?? null,
+          lastLoginAt: entry.lastLoginAt ?? null,
           mustChangePassword: entry.mustChangePassword,
           passwordHash: entry.passwordHash,
           createdAt: entry.createdAt ?? new Date().toISOString(),

@@ -18,6 +18,14 @@ export function resetMemoryTemplates(seed: PublicationTemplate[] = []): void {
   memoryTemplates = seed.map((entry) => ({ ...entry }));
 }
 
+export function exportMemoryTemplates(): PublicationTemplate[] {
+  return memoryTemplates.map((entry) => ({ ...entry }));
+}
+
+export function replaceMemoryTemplates(templates: PublicationTemplate[]): void {
+  memoryTemplates = templates.map((entry) => ({ ...entry }));
+}
+
 export class MemoryTemplateStore implements TemplateStore {
   private readonly agenda: MemoryAgendaStore;
 

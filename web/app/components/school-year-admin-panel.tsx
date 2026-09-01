@@ -64,7 +64,9 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
   }, []);
 
   useEffect(() => {
-    void refresh();
+    queueMicrotask(() => {
+      void refresh();
+    });
   }, [refresh]);
 
   async function handleFileChange(file: File | null) {

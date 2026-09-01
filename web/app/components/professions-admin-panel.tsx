@@ -77,7 +77,9 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
   }, []);
 
   useEffect(() => {
-    void refresh();
+    queueMicrotask(() => {
+      void refresh();
+    });
   }, [refresh]);
 
   const archivedCount = useMemo(

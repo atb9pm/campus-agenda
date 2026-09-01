@@ -18,7 +18,8 @@ async function handleGet(request: Request) {
   const url = new URL(request.url);
   const activeOnly = url.searchParams.get("active") === "1";
   const classId = url.searchParams.get("classId")?.trim() || null;
-  // Liste active : tout enseignant (Configuration). Liste complète : admin seulement.
+  // Exception architecturale : GET ?active=1 alimente la Configuration enseignant
+  // (branches/classes actives). Toute mutation et la liste complète restent admin.
   const auth = activeOnly ? await requireTeacherSession(request) : await requireAdminSession(request);
   if ("error" in auth && auth.error) return auth.error;
 
@@ -116,6 +117,9 @@ async function handlePost(request: Request) {
       return jsonResponse({ ok: false, reason: organization.reason }, { status: 400 });
     }
     const years = await getSchoolYearStore().then((store) => store.listSchoolYears());
+    if (typeof body.trainingYear !== "number") {
+      return jsonResponse({ ok: false, reason: "Année de formation invalide." }, { status: 400 });
+    }
     const created = await createStructuredClasses(catalog, {
       years,
       input: {
@@ -133,7 +137,7 @@ async function handlePost(request: Request) {
   }
 
   if (body.kind === "context") {
-    if (!body.professionId?.trim() || !body.branchId?.trim() || body.trainingYear === undefined) {
+    if (!body.professionId?.trim() || !body.branchId?.trim() || typeof body.trainingYear !== "number") {
       return jsonResponse({ ok: false, reason: "Données invalides." }, { status: 400 });
     }
     const created = await catalog.createContext({

@@ -56,6 +56,10 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
   private counters: Record<AdminCodeKind, number> = { PRF: 1, BR: 1, CTX: 1 };
   private seeded = false;
 
+  getAdminCounters(): Record<AdminCodeKind, number> {
+    return { ...this.counters };
+  }
+
   async ensureSeeded(): Promise<void> {
     if (this.seeded) return;
     this.classes = buildDefaultSchoolClasses();
@@ -107,6 +111,21 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
   async listContexts(): Promise<PedagogicalContextRecord[]> {
     await this.ensureSeeded();
     return [...this.contexts];
+  }
+
+  replaceSnapshot(options: {
+    classes: SchoolClassRecord[];
+    branches: SchoolBranchRecord[];
+    professions: SchoolProfessionRecord[];
+    contexts: PedagogicalContextRecord[];
+    counters?: Record<AdminCodeKind, number>;
+  }): void {
+    this.classes = options.classes.map((entry) => ({ ...entry }));
+    this.branches = options.branches.map((entry) => ({ ...entry }));
+    this.professions = options.professions.map((entry) => ({ ...entry }));
+    this.contexts = options.contexts.map((entry) => ({ ...entry }));
+    if (options.counters) this.counters = { ...options.counters };
+    this.seeded = true;
   }
 
   async createClass(input: SchoolClassInput): Promise<SchoolClassRecord> {

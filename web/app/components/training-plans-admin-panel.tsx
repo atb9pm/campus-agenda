@@ -76,7 +76,9 @@ export function TrainingPlansAdminPanel({ onNotice }: TrainingPlansAdminPanelPro
   }, []);
 
   useEffect(() => {
-    void refresh();
+    queueMicrotask(() => {
+      void refresh();
+    });
   }, [refresh]);
 
   const selectableProfessions = useMemo(

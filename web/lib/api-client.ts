@@ -22,6 +22,7 @@ export interface ApiStudentSession {
   label: string;
   classroomId: string;
   classroomName?: string;
+  accessId?: string;
 }
 
 export type ApiSession = ApiTeacherSession | ApiStudentSession | null;
@@ -90,7 +91,18 @@ export async function changeTeacherPasswordApi(
   }
 }
 
-export async function fetchTeacherCoursesApi(schoolYearId?: string): Promise<{
+export async function fetchTeacherClassroomsApi(): Promise<Array<{ id: string; name: string }>> {
+  const response = await fetch("/api/teacher/classrooms", { credentials: "include" });
+  const payload = await parseJson<{ ok: boolean; classrooms?: Array<{ id: string; name: string }>; reason?: string }>(
+    response,
+  );
+  if (!response.ok || !payload.ok || !payload.classrooms) {
+    throw new Error(payload.reason ?? "Chargement des classes impossible.");
+  }
+  return payload.classrooms;
+}
+
+export async function fetchTeacherCoursesApi(schoolYearId?: string | null): Promise<{
   schoolYearId: string | null;
   courses: TeacherCourseWorkspaceEntry[];
 }> {
@@ -254,14 +266,27 @@ export async function loginStudentApi(code: string, remember = true): Promise<Ap
 }
 
 export async function fetchAgendaItems(classroomId: string): Promise<PrototypeAgendaItem[]> {
+  const view = await fetchAgendaView(classroomId);
+  return view.items;
+}
+
+export async function fetchAgendaView(classroomId: string): Promise<{
+  items: PrototypeAgendaItem[];
+  attendanceDays: Array<{ dayOfWeek: number; weekKind: "all" | "A" | "B"; role: string }>;
+}> {
   const response = await fetch(`/api/agenda?classroomId=${encodeURIComponent(classroomId)}`, {
     credentials: "include",
   });
-  const payload = await parseJson<{ ok: boolean; items?: PrototypeAgendaItem[]; reason?: string }>(response);
+  const payload = await parseJson<{
+    ok: boolean;
+    items?: PrototypeAgendaItem[];
+    attendanceDays?: Array<{ dayOfWeek: number; weekKind: "all" | "A" | "B"; role: string }>;
+    reason?: string;
+  }>(response);
   if (!response.ok || !payload.ok || !payload.items) {
     throw new Error(payload.reason ?? "Impossible de charger l'agenda.");
   }
-  return payload.items;
+  return { items: payload.items, attendanceDays: payload.attendanceDays ?? [] };
 }
 
 export async function createAgendaItemApi(input: {
