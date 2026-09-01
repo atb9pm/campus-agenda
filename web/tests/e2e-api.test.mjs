@@ -33,6 +33,21 @@ function extractCookie(response) {
   return header.split(";")[0] ?? "";
 }
 
+async function loginTeacher(teacherId) {
+  const response = await request("/api/auth/teacher", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ teacherId, password: "campus-demo" }),
+  });
+  assert.equal(response.status, 200, `login ${teacherId}`);
+  return extractCookie(response);
+}
+
+/** Administrateur réel du seed (ChF), pas l'enseignant démo historique. */
+function loginAdmin() {
+  return loginTeacher("teacher-chf");
+}
+
 test("phase 0.8 — E2E health check", async () => {
   const response = await request("/api/health");
   assert.equal(response.status, 200);
@@ -43,13 +58,8 @@ test("phase 0.8 — E2E health check", async () => {
 });
 
 test("phase 0.8 — E2E enseignant publie puis élève consulte", async () => {
-  const loginResponse = await request("/api/auth/teacher", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ teacherId: "teacher-demo-current", password: "campus-demo" }),
-  });
-  assert.equal(loginResponse.status, 200);
-  const teacherCookie = extractCookie(loginResponse);
+  const teacherCookie = await loginTeacher("teacher-demo-current");
+  const adminCookie = await loginAdmin();
 
   const createResponse = await request("/api/agenda", {
     method: "POST",
@@ -71,7 +81,7 @@ test("phase 0.8 — E2E enseignant publie puis élève consulte", async () => {
   assert.equal(created.item.title, "E2E devoir");
 
   const backupResponse = await request("/api/admin/backup", {
-    headers: { cookie: teacherCookie },
+    headers: { cookie: adminCookie },
   });
   assert.equal(backupResponse.status, 200);
   const backupPayload = await backupResponse.json();
@@ -104,15 +114,11 @@ test("phase 0.8 — E2E enseignant publie puis élève consulte", async () => {
 });
 
 test("phase 0.8 — E2E restauration de sauvegarde", async () => {
-  const loginResponse = await request("/api/auth/teacher", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ teacherId: "teacher-demo-current", password: "campus-demo" }),
-  });
-  const teacherCookie = extractCookie(loginResponse);
+  const teacherCookie = await loginTeacher("teacher-demo-current");
+  const adminCookie = await loginAdmin();
 
   const backupResponse = await request("/api/admin/backup", {
-    headers: { cookie: teacherCookie },
+    headers: { cookie: adminCookie },
   });
   const backupPayload = await backupResponse.json();
 
@@ -134,7 +140,7 @@ test("phase 0.8 — E2E restauration de sauvegarde", async () => {
 
   const restoreResponse = await request("/api/admin/restore", {
     method: "POST",
-    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    headers: { "Content-Type": "application/json", cookie: adminCookie },
     body: JSON.stringify({ snapshot: backupPayload.snapshot }),
   });
   assert.equal(restoreResponse.status, 200);
@@ -268,13 +274,7 @@ test("comptes enseignant — E2E création, mot de passe provisoire, première c
 });
 
 test("phase 2.0 — E2E calendrier scolaire et liste admin", async () => {
-  const loginResponse = await request("/api/auth/teacher", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ teacherId: "teacher-demo-current", password: "campus-demo" }),
-  });
-  assert.equal(loginResponse.status, 200);
-  const teacherCookie = extractCookie(loginResponse);
+  const teacherCookie = await loginAdmin();
 
   const calendarResponse = await request("/api/school-year/calendar", {
     headers: { Cookie: teacherCookie },
@@ -294,21 +294,8 @@ test("phase 2.0 — E2E calendrier scolaire et liste admin", async () => {
 });
 
 test("2.26.0 — matrice admin : anonyme 401, enseignant 403, admin 200", async () => {
-  const adminLogin = await request("/api/auth/teacher", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ teacherId: "teacher-demo-current", password: "campus-demo" }),
-  });
-  assert.equal(adminLogin.status, 200);
-  const adminCookie = extractCookie(adminLogin);
-
-  const teacherLogin = await request("/api/auth/teacher", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ teacherId: "teacher-demo-martin", password: "campus-demo" }),
-  });
-  assert.equal(teacherLogin.status, 200);
-  const teacherCookie = extractCookie(teacherLogin);
+  const adminCookie = await loginAdmin();
+  const teacherCookie = await loginTeacher("teacher-demo-martin");
 
   const sensitive = [
     "/api/admin/backup",

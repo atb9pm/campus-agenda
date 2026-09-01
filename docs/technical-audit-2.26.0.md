@@ -191,7 +191,10 @@ CI : `npm ci` (racine + web), `typecheck` (`scripts/typecheck-ci.mjs`), `lint` (
 
 `tsc` global du dossier `web/` reste non vert : extensions `.ts` désormais acceptées (`allowImportingTsExtensions`), mais des erreurs historiques hors surface (PDF horaire, D1/cloudflare, panneaux UI, memberships) restent en **P2**. Elles ne bloquent pas la CI.
 
-`npm audit` : exécuté au moment de la PR ; pas de `npm audit fix --force`. Résultat consigné dans le rapport Cursor final.
+`npm audit` (sans `--force`) :
+
+- racine : 0 vulnérabilité
+- `web/` : 11 vulnérabilités (1 low, 10 high), toutes en chaîne **dev** (vite 8.0.13, wrangler, vinext, react-server-dom-webpack, miniflare/undici/ws/sharp/image-size). Correctifs disponibles via montées de versions d’outillage, hors périmètre de cette PR.
 
 ---
 
