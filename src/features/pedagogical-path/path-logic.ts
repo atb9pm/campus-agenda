@@ -176,12 +176,13 @@ export function addItem(
   }
   const title = input.title.trim();
   if (!title) return { ok: false, reason: "Le titre est obligatoire." };
+  const itemType = input.type;
 
   const sessions = path.sessions.map((session) => {
     if (session.id !== sessionId) return session;
     const item: ReferencePedagogicalItem = {
       id: input.id,
-      type: input.type,
+      type: itemType,
       title,
       detail: (input.detail ?? "").trim(),
       position: session.items.length + 1,

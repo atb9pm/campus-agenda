@@ -126,7 +126,9 @@ export function AdministrationPanel({
   }, [tab]);
 
   useEffect(() => {
-    void refresh();
+    queueMicrotask(() => {
+      void refresh();
+    });
   }, [refresh]);
 
   const archivedBranchCount = useMemo(

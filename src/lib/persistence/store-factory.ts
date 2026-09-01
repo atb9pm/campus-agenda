@@ -235,7 +235,7 @@ async function createStore(): Promise<ResolvedStore> {
   }
 
   try {
-    const { env } = await import("cloudflare:workers") as { env: { CAMPUS_DB?: D1Database } };
+    const { env } = await import("cloudflare:workers");
     if (env.CAMPUS_DB) {
       const db = wrapD1Database(env.CAMPUS_DB);
       const {
@@ -412,6 +412,8 @@ export async function exportStoreSnapshot(): Promise<CampusBackupSnapshot> {
     memberships: resolved.membershipStore,
     paths: resolved.pedagogicalPathStore,
     courseNotes: resolved.annualCourseNotesStore,
+    templates: resolved.templateStore,
+    timetable: resolved.timetableStore,
     sqlDb: resolved.sqlDb,
   });
 }
@@ -431,6 +433,8 @@ export async function restoreStoreSnapshot(payload: unknown): Promise<CampusBack
       memberships: resolved.membershipStore,
       paths: resolved.pedagogicalPathStore,
       courseNotes: resolved.annualCourseNotesStore,
+      templates: resolved.templateStore,
+      timetable: resolved.timetableStore,
       sqlDb: resolved.sqlDb,
     },
     payload,

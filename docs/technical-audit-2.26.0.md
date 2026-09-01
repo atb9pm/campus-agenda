@@ -15,7 +15,7 @@ Fichiers inspectés (ordre de grandeur) : `src/features/**`, `src/lib/**`, `web/
 | Routes `web/app/api/admin/**` | 23 |
 | Migrations `0001`→`0023` | 23 (inchangées) |
 
-**Aucun P0/P1 restant BLOCKER.** Tous les P0/P1 identifiés sont corrigés dans cette PR, ou classés P2 lorsqu’ils ne créent pas d’erreur produit immédiate.
+**Aucun P0/P1 restant BLOCKER** (après les corrections de merge : typecheck/lint globaux réels, backup v4 strict, présence ≠ cours). Tous les P0/P1 identifiés sont corrigés dans cette PR, ou classés P2 lorsqu’ils ne créent pas d’erreur produit immédiate.
 
 ---
 
@@ -88,7 +88,7 @@ Tables mutables incluses dans **backup v4** (`CAMPUS_BACKUP_INSERT_ORDER`) :
 
 `teachers`, `classrooms`, `school_years`, `school_weeks`, `school_day_exceptions`, `subjects`, `memberships`, `membership_subjects`, `student_accesses`, `publication_templates`, `agenda_items`, `timetable_imports`, `timetable_slots`, `timetable_class_mappings`, `timetable_teacher_codes`, `school_branches`, `school_professions`, `pedagogical_contexts`, `admin_code_counters`, `school_classes`, `pedagogical_paths`, `annual_courses`, `teacher_course_assignments`, `teacher_course_assignment_events`, `annual_course_notes`, `course_schedule_slots`, `class_attendance_days`, `teacher_setups`, `teacher_notes`.
 
-Memory : dump équivalent (templates/timetable souvent vides). SQLite/D1 : `SELECT *` de chaque table.
+Memory : dump/restore des **29 tables**, y compris `publication_templates` et `timetable_*` (singletons Memory). SQLite/D1 : `SELECT *` de chaque table. Une table peut être `[]` ; elle ne peut pas être absente.
 
 ---
 
@@ -128,6 +128,7 @@ Memory : dump équivalent (templates/timetable souvent vides). SQLite/D1 : `SELE
 | P1-3 | CI | `npm test` seul | types/lint absents | typecheck + lint + `npm ci` | workflow |
 | P1-4 | publications | semaine 5 valide si 1..38 | semaines absentes du plan | comparaison à `year.weeks` | `dynamic-schedule.test.ts` |
 | P1-5 | contrôles à venir élève | `listAllCourseDays` TMA | tests hors lun/jeu invisibles | créneau depuis semaine+dayIndex | `evaluations-coordination.test.ts` |
+| P1-6 | `schedule-target.ts` | `ClassAttendanceDay` suffisait | publication sans `CourseScheduleSlot` | AnnualCourse résolu ⇒ slot obligatoire ; TMA seulement sans cours structuré | `dynamic-schedule.test.ts` A–E |
 
 ### P2 AMÉLIORATION — documentés, hors refonte
 
@@ -141,7 +142,7 @@ Memory : dump équivalent (templates/timetable souvent vides). SQLite/D1 : `SELE
 | P2-6 | `page.tsx` / library / multi-year | DEMO_CATALOG filet UI | affichage démo si API vide | filet isolé | — |
 | P2-7 | `teacherCanAccessClassroom` | memberships only | cours structurés sans membership | Agenda publish utilise déjà assignments | — |
 | P2-8 | `listUpcomingTestsForTeacher` | TMA | vue enseignant historique | LEGACY | — |
-| P2-9 | `tsc --noEmit` / `eslint` globaux `web/` | dette historique (PDF, D1, UI, setState-in-effect) | typecheck/lint complets non verts | CI filtre la surface 2.26.0 | `typecheck-ci.mjs`, `lint-ci.mjs` |
+| P2-9 | *(annulé)* | Les 38 erreurs TypeScript historiques sont **corrigées**. `npm run typecheck` = `tsc --noEmit` sur tout `web/`. `npm run lint` = eslint global. **0 erreur.** | — | — |
 
 ### P3 DETTE — non touchée volontairement
 
@@ -160,9 +161,13 @@ Aucun `ON DELETE CASCADE` ajouté dans cette PR.
 - Admin uniquement, `Cache-Control: no-store`
 - Logs : version, comptes d’éléments, `adminId`, succès/échec — **jamais** `passwordHash` / `accessCodeHash` / snapshot
 - Empreintes dans le fichier : **SENSIBLE**
-- Validation intégrale avant écriture : types tableaux, FK, dates `YYYY-MM-DD`, IDs uniques agenda, **≥ 1 admin actif non archivé**
+- **29 tables obligatoires** (`CAMPUS_BACKUP_INSERT_ORDER`) : chacune doit être un tableau présent (`[]` autorisé, `undefined` = restore refusé, aucune écriture)
+- **Colonnes whitelistées** (`CAMPUS_BACKUP_COLUMNS`) : colonne inconnue / mal nommée ⇒ refus ; les `INSERT` n’utilisent que les colonnes du schéma, jamais `Object.keys(row)`
+- **Booléens** : uniquement `0` / `1` et booléens JS `true` / `false`. Jamais `Boolean(value)` (`Boolean("0") === true`)
+- **FK avant mutation** : une FK non nulle doit exister dans le snapshot, **même si la table parent est vide**
+- Dates `YYYY-MM-DD`, IDs agenda uniques, **≥ 1 admin actif non archivé**
 - SQLite/D1 : `db.batch` (BEGIN/COMMIT ou D1 batch) ; échec → base précédente
-- Memory : snapshot précédent + restore inverse
+- Memory : dump/restore des 29 tables (templates + timetable inclus) ; snapshot précédent + restore inverse
 - Lecture v1/v2/v3 conservée (`restoreAgendaSnapshot`)
 
 ---
@@ -187,9 +192,9 @@ Helpers date-only (`parseLocalDate` midi local). Pas de `new Date("YYYY-MM-DD").
 
 ## CI / npm audit
 
-CI : `npm ci` (racine + web), `typecheck` (`scripts/typecheck-ci.mjs`), `lint` (`scripts/lint-ci.mjs`), `npm test` (qui inclut le build). Les scripts CI échouent seulement si la surface 2.26.0 est touchée.
+CI : `npm ci` (racine + web), `npm run typecheck` (`tsc --noEmit` **global**, aucune liste SURFACE), `npm run lint` (eslint **global**), `npm test` (unitaires + vinext build + rendu/API + smoke preview).
 
-`tsc` global du dossier `web/` reste non vert : extensions `.ts` désormais acceptées (`allowImportingTsExtensions`), mais des erreurs historiques hors surface (PDF horaire, D1/cloudflare, panneaux UI, memberships) restent en **P2**. Elles ne bloquent pas la CI.
+TypeScript global : **0 erreur**. Lint global : **0 erreur**. Les scripts `typecheck-ci.mjs` / `lint-ci.mjs` (filtre de surface) sont **supprimés**.
 
 `npm audit` (sans `--force`) :
 

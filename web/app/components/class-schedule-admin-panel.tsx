@@ -121,6 +121,7 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
   }, []);
 
   useEffect(() => {
+    queueMicrotask(() => {
     void refresh()
       .then((payload) => {
         const active = payload.schoolYears.find((year) => year.status === "active") ?? payload.schoolYears[0];
@@ -130,6 +131,7 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
         setError(loadError instanceof Error ? loadError.message : "Chargement impossible.");
       })
       .finally(() => setLoading(false));
+    });
   }, [refresh]);
 
   const yearClasses = useMemo(() => {

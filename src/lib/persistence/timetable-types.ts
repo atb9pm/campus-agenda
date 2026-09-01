@@ -1,4 +1,4 @@
-import type { ParsedTimetable, TimetableImportRecord, TimetableSlot } from "./types.ts";
+import type { ParsedTimetable, TimetableImportRecord, TimetableSlot } from "../../features/timetable/types.ts";
 
 export interface TimetableStore {
   getActiveImport(): Promise<TimetableImportRecord | null>;

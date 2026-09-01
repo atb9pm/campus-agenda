@@ -23,6 +23,9 @@ export function legacyTmaPublicationDayAllowed(weekKind: "A" | "B", dayIndex: nu
 /**
  * Validation commune POST/PATCH : la semaine doit exister dans l'année scolaire
  * et le jour doit correspondre à un créneau réel (structured) ou au fallback TMA.
+ *
+ * `resolvedStructuredCourse` : un AnnualCourse fiable a été identifié.
+ * Dans ce cas le fallback TMA est interdit, même sans CourseScheduleSlot.
  */
 export function validateAgendaScheduleTarget(options: {
   schoolWeekNumber: number;
@@ -30,6 +33,7 @@ export function validateAgendaScheduleTarget(options: {
   weeks: SchoolWeekEntry[];
   attendanceDays?: Array<Pick<ClassAttendanceDay, "dayOfWeek" | "weekKind" | "role">> | null;
   slots?: CourseScheduleSlot[] | null;
+  resolvedStructuredCourse?: boolean;
 }): AgendaScheduleTargetResult {
   if (!Number.isInteger(options.schoolWeekNumber)) {
     return { ok: false, reason: "Semaine scolaire invalide." };
@@ -43,13 +47,24 @@ export function validateAgendaScheduleTarget(options: {
   }
 
   const hasAttendance = Boolean(options.attendanceDays && options.attendanceDays.length > 0);
-  const hasSlots = Boolean(options.slots && options.slots.length > 0);
+  const slots = options.slots ?? [];
+  const hasCompatibleSlot = scheduleSlotAllowsAgendaDay(slots, week.kind, options.dayIndex);
 
-  if (hasAttendance || hasSlots) {
+  if (options.resolvedStructuredCourse) {
     if (hasAttendance && !attendanceCoversAgendaDay(options.attendanceDays!, week.kind, options.dayIndex)) {
       return { ok: false, reason: "La classe n'est pas présente ce jour-là." };
     }
-    if (hasSlots && !scheduleSlotAllowsAgendaDay(options.slots!, week.kind, options.dayIndex)) {
+    if (!hasCompatibleSlot) {
+      return { ok: false, reason: "Aucun créneau d'horaire pour cette branche ce jour-là." };
+    }
+    return { ok: true, week, source: "structured" };
+  }
+
+  if (hasAttendance || slots.length > 0) {
+    if (hasAttendance && !attendanceCoversAgendaDay(options.attendanceDays!, week.kind, options.dayIndex)) {
+      return { ok: false, reason: "La classe n'est pas présente ce jour-là." };
+    }
+    if (slots.length > 0 && !hasCompatibleSlot) {
       return { ok: false, reason: "Aucun créneau d'horaire pour cette branche ce jour-là." };
     }
     return { ok: true, week, source: "structured" };

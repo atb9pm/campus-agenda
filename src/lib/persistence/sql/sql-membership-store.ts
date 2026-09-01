@@ -1,6 +1,6 @@
 import { replaceTeacherMemberships } from "../../../features/memberships/replacement.ts";
 import type { ReplaceTeacherInput } from "../../../features/memberships/replacement.ts";
-import type { Membership } from "../../types/membership.ts";
+import type { Membership } from "../../../types/membership.ts";
 import type { MembershipStore } from "../membership-types.ts";
 import type { SqlDatabase } from "./types.ts";
 
@@ -55,7 +55,7 @@ export class SqlMembershipStore implements MembershipStore {
   > {
     const current = await this.listMemberships(input.classroomId);
     const outcome = replaceTeacherMemberships(current, input);
-    if ("ok" in outcome && outcome.ok === false) {
+    if ("ok" in outcome) {
       return outcome;
     }
 

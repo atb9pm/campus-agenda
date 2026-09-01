@@ -37,7 +37,9 @@ export function TimetableImportPanel({ onNotice }: TimetableImportPanelProps) {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    queueMicrotask(() => {
+      void refresh();
+    });
   }, [refresh]);
 
   async function handleFileChange(file: File | null) {

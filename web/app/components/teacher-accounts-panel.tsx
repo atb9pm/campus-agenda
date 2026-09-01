@@ -71,12 +71,11 @@ export function TeacherAccountsPanel({ currentTeacherId, onNotice }: TeacherAcco
     }
   }, []);
 
-  // Chargement initial de la liste : l'état ne peut être rempli qu'après montage.
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    void refresh();
+    queueMicrotask(() => {
+      void refresh();
+    });
   }, [refresh]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const archivedCount = useMemo(
     () => accounts.filter((account) => account.isArchived).length,

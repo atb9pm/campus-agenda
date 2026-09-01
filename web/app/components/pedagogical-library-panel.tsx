@@ -65,7 +65,7 @@ export function PedagogicalLibraryPanel({
   const teacherClassrooms = getClassroomsForTeacher(DEMO_CATALOG, teacherId);
   const deploySubjects = getSubjectsForTeacherInClassroom(DEMO_CATALOG, teacherId, deployClassroomId);
   const deployWeek = schoolWeeks.find((week) => week.number === deployWeekNumber) ?? schoolWeeks[0];
-  const deployCourseDays = deployWeek ? getCourseDayOptionsForSchoolWeek(deployWeek) : [];
+  const deployCourseDays = deployWeek ? getCourseDayOptionsForSchoolWeek(deployWeek.number) : [];
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -84,12 +84,16 @@ export function PedagogicalLibraryPanel({
   }, []);
 
   useEffect(() => {
-    void refresh();
+    queueMicrotask(() => {
+      void refresh();
+    });
   }, [refresh]);
 
   useEffect(() => {
-    setDeployClassroomId(defaultClassroomId);
-    setDuplicateClassroomId(defaultClassroomId);
+    queueMicrotask(() => {
+      setDeployClassroomId(defaultClassroomId);
+      setDuplicateClassroomId(defaultClassroomId);
+    });
   }, [defaultClassroomId]);
 
   function toggleTemplate(templateId: string) {

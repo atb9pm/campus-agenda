@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import { filterSlotsForCourseDay } from "../../../features/timetable/slot-logic.ts";
 import type { ParsedTimetable, TimetableImportRecord, TimetableSlot } from "../../../features/timetable/types.ts";
-import type { TimetableStore } from "./timetable-types.ts";
-import type { SqlDatabase } from "./sql/types.ts";
+import type { TimetableStore } from "../timetable-types.ts";
+import type { SqlDatabase } from "./types.ts";
 
 interface ImportRow {
   id: string;

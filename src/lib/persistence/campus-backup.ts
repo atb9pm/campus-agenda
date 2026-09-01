@@ -23,6 +23,11 @@ import { BACKUP_FORMAT_VERSION_V4, CAMPUS_BACKUP_INSERT_ORDER } from "./campus-b
 import { dumpCampusTables, restoreCampusTables, validateCampusTables, type CampusTableDump } from "./sql/sql-campus-backup.ts";
 import { getMemoryLegacySchool, replaceMemoryLegacySchool } from "./memory-legacy-school.ts";
 import { setMemoryMemberships } from "./memory-membership-store.ts";
+import { exportMemoryTemplates, replaceMemoryTemplates } from "./memory-template-store.ts";
+import {
+  exportMemoryTimetableTables,
+  replaceMemoryTimetableTables,
+} from "./memory-timetable-store.ts";
 import { MemorySchoolCatalogStore } from "./memory-school-catalog-store.ts";
 import { MemoryAnnualCourseStore } from "./memory-annual-course-store.ts";
 import { MemoryCourseScheduleStore } from "./memory-course-schedule-store.ts";
@@ -36,7 +41,10 @@ import type { PrototypeAgendaItem } from "../../features/agenda/demo-items.ts";
 import type { SchoolClassRecord, SchoolBranchRecord } from "../../features/school-catalog/types.ts";
 import type { SchoolProfessionRecord, PedagogicalContextRecord } from "../../features/school-catalog/profession-types.ts";
 import type { AnnualCourseNote, ReferencePedagogicalPath } from "../../features/pedagogical-path/index.ts";
+import type { PublicationTemplate } from "../../features/library/types.ts";
 import type { AdminCodeKind } from "../../features/school-catalog/admin-codes.ts";
+import type { TemplateStore } from "./types.ts";
+import type { TimetableStore } from "./timetable-types.ts";
 
 export const BACKUP_FORMAT_VERSION = BACKUP_FORMAT_VERSION_V4;
 
@@ -58,6 +66,10 @@ export interface CampusBackupDeps extends BackupStoreDeps {
   memberships: MembershipStore;
   paths?: PedagogicalPathStore;
   courseNotes?: AnnualCourseNotesStore;
+  /** Memory : dump/restore des modèles. SQL : déjà dans dumpCampusTables. */
+  templates?: TemplateStore | null;
+  /** Memory : dump/restore horaire. SQL : déjà dans dumpCampusTables. */
+  timetable?: TimetableStore | null;
 }
 
 function asString(value: unknown, fallback = ""): string {
@@ -344,6 +356,27 @@ async function buildMemoryTables(deps: CampusBackupDeps): Promise<CampusTableDum
       updated_at: note.updatedAt,
     }));
   }
+
+  dump.publication_templates = exportMemoryTemplates().map((entry) => ({
+    id: entry.id,
+    owner_teacher_id: entry.ownerTeacherId,
+    title: entry.title,
+    detail: entry.detail,
+    type: entry.type,
+    subject_id: entry.subjectId,
+    default_school_week_number: entry.defaultSchoolWeekNumber,
+    default_day: entry.defaultDay,
+    source_school_year_id: entry.sourceSchoolYearId,
+    source_item_id: entry.sourceItemId,
+    created_at: entry.createdAt,
+    updated_at: entry.updatedAt,
+  }));
+
+  const timetable = exportMemoryTimetableTables();
+  dump.timetable_imports = timetable.timetable_imports;
+  dump.timetable_slots = timetable.timetable_slots;
+  dump.timetable_class_mappings = timetable.timetable_class_mappings;
+  dump.timetable_teacher_codes = timetable.timetable_teacher_codes;
 
   return dump;
 }
@@ -666,6 +699,33 @@ async function restoreMemoryTables(deps: CampusBackupDeps, dump: CampusTableDump
       })),
     );
   }
+
+  replaceMemoryTemplates(
+    (dump.publication_templates ?? []).map((row) => ({
+      id: asString(row.id),
+      ownerTeacherId: asString(row.owner_teacher_id ?? row.ownerTeacherId),
+      title: asString(row.title),
+      detail: asString(row.detail),
+      type: asString(row.type) as PublicationTemplate["type"],
+      subjectId: asNullableString(row.subject_id ?? row.subjectId),
+      defaultSchoolWeekNumber:
+        row.default_school_week_number == null && row.defaultSchoolWeekNumber == null
+          ? null
+          : asNumber(row.default_school_week_number ?? row.defaultSchoolWeekNumber),
+      defaultDay: row.default_day == null && row.defaultDay == null ? null : asNumber(row.default_day ?? row.defaultDay),
+      sourceSchoolYearId: asNullableString(row.source_school_year_id ?? row.sourceSchoolYearId),
+      sourceItemId: row.source_item_id == null && row.sourceItemId == null ? null : asNumber(row.source_item_id ?? row.sourceItemId),
+      createdAt: asString(row.created_at ?? row.createdAt),
+      updatedAt: asString(row.updated_at ?? row.updatedAt),
+    })),
+  );
+
+  replaceMemoryTimetableTables({
+    timetable_imports: dump.timetable_imports,
+    timetable_slots: dump.timetable_slots,
+    timetable_class_mappings: dump.timetable_class_mappings,
+    timetable_teacher_codes: dump.timetable_teacher_codes,
+  });
 }
 
 export async function restoreCampusSnapshot(

@@ -6,7 +6,18 @@ process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
 import { hashPassword } from "../src/lib/auth/password.ts";
 import { exportCampusSnapshot, restoreCampusSnapshot } from "../src/lib/persistence/campus-backup.ts";
 import { restoreAgendaSnapshot } from "../src/lib/persistence/backup.ts";
-import { dumpCampusTables, validateCampusTables } from "../src/lib/persistence/sql/sql-campus-backup.ts";
+import {
+  canonicalizeCampusDump,
+  dumpCampusTables,
+  parseBackupFlag,
+  validateCampusTables,
+} from "../src/lib/persistence/sql/sql-campus-backup.ts";
+import { CAMPUS_BACKUP_INSERT_ORDER } from "../src/lib/persistence/campus-backup-tables.ts";
+import { getMemoryTemplateStore, resetMemoryTemplateStore } from "../src/lib/persistence/memory-template-store.ts";
+import { getMemoryTimetableStore, resetMemoryTimetableStore } from "../src/lib/persistence/memory-timetable-store.ts";
+import { SqlTemplateStore } from "../src/lib/persistence/sql/sql-template-store.ts";
+import { SqlTimetableStore } from "../src/lib/persistence/sql/sql-timetable-store.ts";
+import type { CampusTableDump } from "../src/lib/persistence/sql/sql-campus-backup.ts";
 import { createNodeSqliteDatabase } from "../src/lib/persistence/sql/adapters.ts";
 import { applyMigrations } from "../src/lib/persistence/sql/migrate.ts";
 import { seedDemoDatabase } from "../src/lib/persistence/sql/seed.ts";
@@ -42,6 +53,29 @@ import { replaceAttendanceDaysForClass, createCourseScheduleSlot } from "../src/
 import type { CampusBackupDeps } from "../src/lib/persistence/campus-backup.ts";
 import type { SqlDatabase } from "../src/lib/persistence/sql/types.ts";
 
+function emptyCampusTables(): CampusTableDump {
+  const tables: CampusTableDump = {};
+  for (const name of CAMPUS_BACKUP_INSERT_ORDER) tables[name] = [];
+  return tables;
+}
+
+function tablesWithAdmin(overrides: Partial<CampusTableDump> = {}): CampusTableDump {
+  return {
+    ...emptyCampusTables(),
+    teachers: [
+      {
+        id: "admin-1",
+        display_name: "Admin",
+        initials: "Ad",
+        password_hash: "x",
+        is_admin: 1,
+        is_active: 1,
+      },
+    ],
+    ...overrides,
+  };
+}
+
 function memoryDeps(): CampusBackupDeps {
   return {
     agenda: getMemoryAgendaStore(),
@@ -55,6 +89,8 @@ function memoryDeps(): CampusBackupDeps {
     memberships: new MemoryMembershipStore(),
     paths: getMemoryPedagogicalPathStore(),
     courseNotes: getMemoryAnnualCourseNotesStore(),
+    templates: getMemoryTemplateStore(),
+    timetable: getMemoryTimetableStore(),
     sqlDb: null,
   };
 }
@@ -71,11 +107,14 @@ function resetMemoryWorld() {
   resetMemoryMembershipStore();
   resetMemoryPedagogicalPathStore();
   resetMemoryLegacySchool();
+  resetMemoryTemplateStore();
+  resetMemoryTimetableStore();
 }
 
 function sqlDeps(db: SqlDatabase): CampusBackupDeps {
+  const agenda = new SqlAgendaStore(db);
   return {
-    agenda: new SqlAgendaStore(db),
+    agenda,
     teacherSetups: new SqlTeacherSetupStore(db),
     teacherNotes: new SqlTeacherNotesStore(db),
     teacherAccounts: new SqlTeacherAccountStore(db),
@@ -86,8 +125,56 @@ function sqlDeps(db: SqlDatabase): CampusBackupDeps {
     memberships: new SqlMembershipStore(db),
     paths: new SqlPedagogicalPathStore(db),
     courseNotes: new SqlAnnualCourseNotesStore(db),
+    templates: new SqlTemplateStore(db, agenda),
+    timetable: new SqlTimetableStore(db),
     sqlDb: db,
   };
+}
+
+async function populateLibraryAndTimetable(deps: CampusBackupDeps, yearId: string) {
+  const source = await deps.agenda.createAgendaItem({
+    classroomId: "classe-demo-tma-2a",
+    subjectId: "subject-demo-moteur-2a",
+    authorTeacherId: DEMO_CURRENT_TEACHER_ID,
+    day: 0,
+    hour: 8,
+    weekOffset: 0,
+    schoolWeekNumber: 12,
+    type: "INFORMATION",
+    title: "Modèle backup v4",
+    detail: "Roundtrip",
+    schoolYearId: yearId,
+  });
+  if (deps.templates) {
+    const created = await deps.templates.createTemplateFromItem(source.id, DEMO_CURRENT_TEACHER_ID, yearId);
+    assert.equal(created.ok, true, created.ok ? "" : created.reason);
+  }
+  if (deps.timetable) {
+    const imported = await deps.timetable.importTimetable(
+      {
+        schoolYearLabel: "2025-2026",
+        sourceVersion: "test-v4",
+        slots: [
+          {
+            classCode: "2A",
+            dayOfWeek: 0,
+            period: 1,
+            branchLabel: "Moteur",
+            teacherCode: "ChF",
+            weekKind: "all",
+          },
+        ],
+        classes: [{ classCode: "2A", slotCount: 1, branches: ["Moteur"], teacherCodes: ["ChF"] }],
+        warnings: [],
+        excludedSpsCount: 0,
+      },
+      "horaire-test.pdf",
+      yearId,
+    );
+    await deps.timetable.activateImport(imported.importRecord.id);
+    await deps.timetable.mapClassToClassroom(imported.importRecord.id, "2A", "classe-demo-tma-2a");
+    await deps.timetable.mapTeacherCode(imported.importRecord.id, "ChF", DEMO_CURRENT_TEACHER_ID);
+  }
 }
 
 async function populateStructured(deps: CampusBackupDeps, teacherId: string) {
@@ -195,15 +282,23 @@ test("backup v4 — roundtrip mémoire", async () => {
     version: 1,
     classes: [{ id: "c1", name: "2A", programLabel: "TMA", dayOfWeek: 1, branchNames: ["Moteur"], icon: "wrench" }],
   });
-  await populateStructured(deps, DEMO_CURRENT_TEACHER_ID);
+  const structured = await populateStructured(deps, DEMO_CURRENT_TEACHER_ID);
+  await populateLibraryAndTimetable(deps, structured.yearId);
 
   const snapshot = await exportCampusSnapshot(deps);
   assert.equal(snapshot.version, 4);
+  assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 29);
+  for (const table of CAMPUS_BACKUP_INSERT_ORDER) {
+    assert.ok(Array.isArray(snapshot.tables[table]), table);
+  }
   assert.ok(snapshot.tables.school_years?.length);
   assert.ok(snapshot.tables.school_weeks?.length);
   assert.ok(snapshot.tables.class_attendance_days?.length);
   assert.ok(snapshot.tables.course_schedule_slots?.length);
   assert.ok(snapshot.tables.annual_courses?.length);
+  assert.ok(snapshot.tables.publication_templates?.length);
+  assert.ok(snapshot.tables.timetable_imports?.length);
+  assert.ok(snapshot.tables.timetable_slots?.length);
 
   await deps.agenda.createAgendaItem({
     classroomId: "classe-demo-tma-2a",
@@ -223,8 +318,7 @@ test("backup v4 — roundtrip mémoire", async () => {
   if (!restored.ok) return;
   assert.equal(restored.restoredTables, true);
   const again = await exportCampusSnapshot(deps);
-  assert.equal(again.tables.annual_courses?.length, snapshot.tables.annual_courses?.length);
-  assert.equal(again.tables.class_attendance_days?.length, snapshot.tables.class_attendance_days?.length);
+  assert.deepEqual(canonicalizeCampusDump(again.tables), canonicalizeCampusDump(snapshot.tables));
   assert.equal((await deps.agenda.exportAllItems()).length, snapshot.itemCount);
 });
 
@@ -233,9 +327,14 @@ test("backup v4 — roundtrip SQLite", async () => {
   await applyMigrations(db);
   await seedDemoDatabase(db);
   const deps = sqlDeps(db);
-  await populateStructured(deps, DEMO_CURRENT_TEACHER_ID);
+  const structured = await populateStructured(deps, DEMO_CURRENT_TEACHER_ID);
+  await populateLibraryAndTimetable(deps, structured.yearId);
   const snapshot = await exportCampusSnapshot(deps);
   assert.equal(snapshot.version, 4);
+  assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 29);
+  for (const table of CAMPUS_BACKUP_INSERT_ORDER) {
+    assert.ok(Array.isArray(snapshot.tables[table]), table);
+  }
   for (const table of [
     "teachers",
     "school_years",
@@ -246,6 +345,11 @@ test("backup v4 — roundtrip SQLite", async () => {
     "course_schedule_slots",
     "class_attendance_days",
     "agenda_items",
+    "publication_templates",
+    "timetable_imports",
+    "timetable_slots",
+    "timetable_class_mappings",
+    "timetable_teacher_codes",
   ]) {
     assert.ok((snapshot.tables[table] ?? []).length > 0, table);
   }
@@ -254,20 +358,95 @@ test("backup v4 — roundtrip SQLite", async () => {
   await applyMigrations(db2);
   const deps2 = sqlDeps(db2);
   const restored = await restoreCampusSnapshot(deps2, snapshot);
-  assert.equal(restored.ok, true);
+  assert.equal(restored.ok, true, restored.ok ? "" : restored.reason);
   const dump = await dumpCampusTables(db2);
-  assert.equal(dump.annual_courses.length, snapshot.tables.annual_courses?.length);
-  assert.equal(dump.class_attendance_days.length, snapshot.tables.class_attendance_days?.length);
-  assert.equal(dump.course_schedule_slots.length, snapshot.tables.course_schedule_slots?.length);
-  assert.equal(dump.teachers.length, snapshot.tables.teachers?.length);
+  assert.deepEqual(canonicalizeCampusDump(dump), canonicalizeCampusDump(snapshot.tables));
 });
 
 test("backup v4 — snapshot sans admin actif refusé", async () => {
-  const result = validateCampusTables({
-    teachers: [{ id: "t1", is_admin: 0, is_active: 1 }],
-  });
+  const result = validateCampusTables(
+    tablesWithAdmin({
+      teachers: [{ id: "t1", display_name: "X", initials: "Xx", password_hash: "x", is_admin: 0, is_active: 1 }],
+    }),
+  );
   assert.equal(result.ok, false);
   if (!result.ok) assert.match(result.reason, /administrateur/);
+});
+
+test("backup v4 — table absente refusée, DB inchangée", async () => {
+  const db = createNodeSqliteDatabase(":memory:");
+  await applyMigrations(db);
+  await seedDemoDatabase(db);
+  const deps = sqlDeps(db);
+  const snapshot = await exportCampusSnapshot(deps);
+  const before = canonicalizeCampusDump(await dumpCampusTables(db));
+  delete snapshot.tables.course_schedule_slots;
+  const restored = await restoreCampusSnapshot(deps, snapshot);
+  assert.equal(restored.ok, false);
+  if (!restored.ok) assert.match(restored.reason, /absente/);
+  assert.deepEqual(canonicalizeCampusDump(await dumpCampusTables(db)), before);
+});
+
+test("backup v4 — colonne inconnue refusée, batch jamais exécuté", async () => {
+  const db = createNodeSqliteDatabase(":memory:");
+  await applyMigrations(db);
+  await seedDemoDatabase(db);
+  const deps = sqlDeps(db);
+  const snapshot = await exportCampusSnapshot(deps);
+  const before = canonicalizeCampusDump(await dumpCampusTables(db));
+  let batchCalls = 0;
+  const originalBatch = db.batch.bind(db);
+  db.batch = async (statements) => {
+    batchCalls += 1;
+    return originalBatch(statements);
+  };
+  snapshot.tables.teachers = snapshot.tables.teachers.map((row, index) =>
+    index === 0 ? { ...row, evil_drop: "1); DROP TABLE teachers;--" } : row,
+  );
+  const restored = await restoreCampusSnapshot(deps, snapshot);
+  assert.equal(restored.ok, false);
+  if (!restored.ok) assert.match(restored.reason, /inconnue/);
+  assert.equal(batchCalls, 0);
+  assert.deepEqual(canonicalizeCampusDump(await dumpCampusTables(db)), before);
+});
+
+test("backup v4 — booléens : 0/1 et boolean JS uniquement", () => {
+  assert.deepEqual(parseBackupFlag(0), { ok: true, value: 0 });
+  assert.deepEqual(parseBackupFlag(1), { ok: true, value: 1 });
+  assert.deepEqual(parseBackupFlag(false), { ok: true, value: 0 });
+  assert.deepEqual(parseBackupFlag(true), { ok: true, value: 1 });
+  assert.equal(parseBackupFlag("0").ok, false);
+  assert.equal(parseBackupFlag("1").ok, false);
+  assert.equal(parseBackupFlag("false").ok, false);
+  assert.equal(Boolean("0"), true);
+  const result = validateCampusTables(
+    tablesWithAdmin({
+      teachers: [
+        {
+          id: "admin-1",
+          display_name: "Admin",
+          initials: "Ad",
+          password_hash: "x",
+          is_admin: "0",
+          is_active: 1,
+        },
+      ],
+    }),
+  );
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /booléen invalide/);
+});
+
+test("backup v4 — FK orpheline même si table parent vide", () => {
+  const result = validateCampusTables(
+    tablesWithAdmin({
+      school_weeks: [
+        { school_year_id: "year-absente", week_number: 1, week_kind: "A", monday: "2026-01-05" },
+      ],
+    }),
+  );
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /Référence school_weeks.school_year_id/);
 });
 
 test("backup v4 — FK incohérente refusée, SQL inchangé", async () => {

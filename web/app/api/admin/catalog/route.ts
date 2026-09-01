@@ -117,6 +117,9 @@ async function handlePost(request: Request) {
       return jsonResponse({ ok: false, reason: organization.reason }, { status: 400 });
     }
     const years = await getSchoolYearStore().then((store) => store.listSchoolYears());
+    if (typeof body.trainingYear !== "number") {
+      return jsonResponse({ ok: false, reason: "Année de formation invalide." }, { status: 400 });
+    }
     const created = await createStructuredClasses(catalog, {
       years,
       input: {
@@ -134,7 +137,7 @@ async function handlePost(request: Request) {
   }
 
   if (body.kind === "context") {
-    if (!body.professionId?.trim() || !body.branchId?.trim() || body.trainingYear === undefined) {
+    if (!body.professionId?.trim() || !body.branchId?.trim() || typeof body.trainingYear !== "number") {
       return jsonResponse({ ok: false, reason: "Données invalides." }, { status: 400 });
     }
     const created = await catalog.createContext({

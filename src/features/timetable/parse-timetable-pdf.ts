@@ -169,13 +169,15 @@ export async function parseTimetablePdf(bytes: Uint8Array): Promise<ParsedTimeta
   const doc = await getDocument({ data: bytes, useSystemFonts: true }).promise;
   const page = await doc.getPage(1);
   const content = await page.getTextContent();
-  const items: TextItem[] = content.items
-    .map((item) => ({
-      x: item.transform[4],
-      y: item.transform[5],
-      text: ("str" in item ? item.str : "").trim(),
-    }))
-    .filter((item) => item.text.length > 0);
+  const items: TextItem[] = content.items.flatMap((item) => {
+    if (!("transform" in item) || !item.transform || !("str" in item)) return [];
+    const transform = item.transform;
+    return [{
+      x: transform[4],
+      y: transform[5],
+      text: String(item.str).trim(),
+    }];
+  }).filter((item) => item.text.length > 0);
 
   const { schoolYearLabel, sourceVersion } = extractHeaderMetadata(items);
   const rows = clusterRows(items);

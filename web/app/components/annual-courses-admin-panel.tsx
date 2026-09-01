@@ -95,11 +95,13 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
   }, []);
 
   useEffect(() => {
-    void refresh()
-      .catch((loadError: unknown) => {
-        setError(loadError instanceof Error ? loadError.message : "Chargement impossible.");
-      })
-      .finally(() => setLoading(false));
+    queueMicrotask(() => {
+      void refresh()
+        .catch((loadError: unknown) => {
+          setError(loadError instanceof Error ? loadError.message : "Chargement impossible.");
+        })
+        .finally(() => setLoading(false));
+    });
   }, [refresh]);
 
   const structuredClasses = useMemo(() => {

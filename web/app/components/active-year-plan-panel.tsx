@@ -58,7 +58,9 @@ export function ActiveYearPlanPanel({ onCalendarUpdated, onNotice }: ActiveYearP
   }, []);
 
   useEffect(() => {
-    void load();
+    queueMicrotask(() => {
+      void load();
+    });
   }, [load]);
 
   const hasWeekChanges = useMemo(() => {
@@ -277,7 +279,6 @@ export function ActiveYearPlanPanel({ onCalendarUpdated, onNotice }: ActiveYearP
                 {row.days.map((day) => (
                   <button
                     type="button"
-                    role="cell"
                     key={day.date}
                     className={[
                       "day-cell",

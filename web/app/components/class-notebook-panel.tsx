@@ -332,11 +332,15 @@ export function ClassNotebookPanel({
                         key={item.id}
                         draggable
                         onDragStart={(event) => handlePublicationDragStart(event, item.id)}
-                        onClick={() =>
-                          setSelection({ kind: "publication", itemId: item.id, weekNumber: week.number })
-                        }
                       >
-                        <span>📅 {item.title}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelection({ kind: "publication", itemId: item.id, weekNumber: week.number })
+                          }
+                        >
+                          <span>📅 {item.title}</span>
+                        </button>
                         <small>{item.day === 3 ? "jeudi" : "lundi"}</small>
                         <button
                           type="button"
@@ -366,12 +370,16 @@ export function ClassNotebookPanel({
                       key={item.id}
                       draggable={canPublish}
                       onDragStart={(event) => handlePublicationDragStart(event, item.id)}
-                      onClick={() =>
-                        setSelection({ kind: "publication", itemId: item.id, weekNumber: week.number })
-                      }
                       className={selection?.kind === "publication" && selection.itemId === item.id ? "selected" : ""}
                     >
-                      <span>{item.title}</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelection({ kind: "publication", itemId: item.id, weekNumber: week.number })
+                        }
+                      >
+                        <span>{item.title}</span>
+                      </button>
                       <button
                         type="button"
                         aria-label={`Supprimer ${item.title}`}
@@ -407,10 +415,14 @@ export function ClassNotebookPanel({
                       key={note.id}
                       draggable
                       onDragStart={(event) => handleNoteDragStart(event, note.id)}
-                      onClick={() => setSelection({ kind: "note", noteId: note.id, weekNumber: week.number })}
                       className={selection?.kind === "note" && selection.noteId === note.id ? "selected" : ""}
                     >
-                      <span>{note.text}</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelection({ kind: "note", noteId: note.id, weekNumber: week.number })}
+                      >
+                        <span>{note.text}</span>
+                      </button>
                       <button
                         type="button"
                         aria-label={`Supprimer la note ${note.text}`}

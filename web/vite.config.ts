@@ -72,7 +72,7 @@ export default defineConfig(async () => {
       sites(),
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
-        config: localBindingConfig,
+        config: localBindingConfig as never,
       }),
     ],
   };

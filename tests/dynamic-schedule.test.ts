@@ -124,3 +124,145 @@ test("classe hors DEMO_CATALOG — les helpers ne la transforment pas en TMA", (
   const days = getCourseDaysForAttendanceWeek(week(3, "A"), tuesdayFriday);
   assert.deepEqual(days.map((slot) => slot.dayIndex).sort(), [1, 4]);
 });
+
+const structuredWeeks = [
+  { number: 1, kind: "A" as const, monday: "2026-01-05" },
+  { number: 2, kind: "B" as const, monday: "2026-01-12" },
+];
+
+const tuesdayAttendance = [{ dayOfWeek: 2 as const, weekKind: "all" as const, role: "PRIMARY" as const }];
+
+function tuesdaySlot(): CourseScheduleSlot {
+  return {
+    id: "slot-mardi",
+    annualCourseId: "ac-structure",
+    dayOfWeek: 2,
+    periodStart: 1,
+    periodEnd: 2,
+    weekKind: "all",
+    validFrom: null,
+    validTo: null,
+    createdAt: "",
+    updatedAt: "",
+  };
+}
+
+function fridayASlot(): CourseScheduleSlot {
+  return {
+    id: "slot-vendredi-a",
+    annualCourseId: "ac-structure",
+    dayOfWeek: 5,
+    periodStart: 1,
+    periodEnd: 2,
+    weekKind: "A",
+    validFrom: null,
+    validTo: null,
+    createdAt: "",
+    updatedAt: "",
+  };
+}
+
+test("A — AnnualCourse résolu + présence mardi + 0 slot → publication refusée", () => {
+  const result = validateAgendaScheduleTarget({
+    schoolWeekNumber: 1,
+    dayIndex: 1,
+    weeks: structuredWeeks,
+    attendanceDays: tuesdayAttendance,
+    slots: [],
+    resolvedStructuredCourse: true,
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reason, /Aucun créneau d'horaire pour cette branche ce jour-là/);
+});
+
+test("B — même cours + slot mardi all → publication autorisée", () => {
+  const result = validateAgendaScheduleTarget({
+    schoolWeekNumber: 1,
+    dayIndex: 1,
+    weeks: structuredWeeks,
+    attendanceDays: tuesdayAttendance,
+    slots: [tuesdaySlot()],
+    resolvedStructuredCourse: true,
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.source, "structured");
+});
+
+test("C — slot vendredi A : semaine A autorisée, semaine B refusée", () => {
+  const weekA = validateAgendaScheduleTarget({
+    schoolWeekNumber: 1,
+    dayIndex: 4,
+    weeks: structuredWeeks,
+    attendanceDays: [
+      { dayOfWeek: 5, weekKind: "A", role: "ADDITIONAL" },
+    ],
+    slots: [fridayASlot()],
+    resolvedStructuredCourse: true,
+  });
+  const weekB = validateAgendaScheduleTarget({
+    schoolWeekNumber: 2,
+    dayIndex: 4,
+    weeks: structuredWeeks,
+    attendanceDays: [
+      { dayOfWeek: 5, weekKind: "A", role: "ADDITIONAL" },
+    ],
+    slots: [fridayASlot()],
+    resolvedStructuredCourse: true,
+  });
+  assert.equal(weekA.ok, true);
+  if (weekA.ok) assert.equal(weekA.source, "structured");
+  assert.equal(weekB.ok, false);
+  if (!weekB.ok) assert.match(weekB.reason, /créneau|présente/i);
+});
+
+test("D — aucun AnnualCourse structuré fiable → fallback TMA conservé", () => {
+  const mondayA = validateAgendaScheduleTarget({
+    schoolWeekNumber: 1,
+    dayIndex: 0,
+    weeks: structuredWeeks,
+    resolvedStructuredCourse: false,
+  });
+  const thursdayB = validateAgendaScheduleTarget({
+    schoolWeekNumber: 2,
+    dayIndex: 3,
+    weeks: structuredWeeks,
+    resolvedStructuredCourse: false,
+  });
+  const thursdayA = validateAgendaScheduleTarget({
+    schoolWeekNumber: 1,
+    dayIndex: 3,
+    weeks: structuredWeeks,
+    resolvedStructuredCourse: false,
+  });
+  assert.equal(mondayA.ok, true);
+  if (mondayA.ok) assert.equal(mondayA.source, "legacy-tma");
+  assert.equal(thursdayB.ok, true);
+  if (thursdayB.ok) assert.equal(thursdayB.source, "legacy-tma");
+  assert.equal(thursdayA.ok, false);
+});
+
+test("E — AnnualCourse structuré sans slot → jamais fallback TMA", () => {
+  const mondayWithoutSlots = validateAgendaScheduleTarget({
+    schoolWeekNumber: 1,
+    dayIndex: 0,
+    weeks: structuredWeeks,
+    slots: [],
+    resolvedStructuredCourse: true,
+  });
+  const mondayWithAttendanceOnly = validateAgendaScheduleTarget({
+    schoolWeekNumber: 1,
+    dayIndex: 0,
+    weeks: structuredWeeks,
+    attendanceDays: tuesdayAttendance,
+    slots: [],
+    resolvedStructuredCourse: true,
+  });
+  assert.equal(mondayWithoutSlots.ok, false);
+  if (!mondayWithoutSlots.ok) {
+    assert.match(mondayWithoutSlots.reason, /Aucun créneau d'horaire pour cette branche ce jour-là/);
+  }
+  assert.equal(mondayWithAttendanceOnly.ok, false);
+  if (!mondayWithAttendanceOnly.ok) {
+    assert.doesNotMatch(mondayWithAttendanceOnly.reason, /Jour de cours invalide/);
+  }
+});

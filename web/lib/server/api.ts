@@ -223,6 +223,7 @@ export async function assertValidAgendaScheduleTarget(options: {
     weeks: year.weeks,
     attendanceDays,
     slots,
+    resolvedStructuredCourse: Boolean(resolved),
   });
   if (!result.ok) {
     return jsonResponse({ ok: false, reason: result.reason }, { status: 400 });
