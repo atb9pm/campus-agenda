@@ -23,7 +23,7 @@ import {
   getStudentAgendaItems,
   getStudentClassroom,
   groupItemsBySubject,
-  resolveStudentAccess,
+  studentAccessFromApiSession,
 } from "@campus/features/student";
 import type { StudentAccess } from "@campus/types/student-access";
 import {
@@ -34,8 +34,10 @@ import {
   formatCourseDayHeading,
   formatCourseDayMenuLabel,
   formatSchoolWeekLabel,
+  listPreviousAttendanceCourseDays,
   listPreviousCourseDays,
   resolveDisplayCourseDay,
+  resolveDisplayCourseDayFromAttendance,
   type CourseDaySlot,
   type SchoolWeek,
 } from "@campus/features/calendar";
@@ -52,12 +54,14 @@ import {
   fetchAgendaItems,
   fetchApiSession,
   fetchSchoolCalendar,
+  fetchTeacherClassroomsApi,
   fetchTeacherCoursesApi,
   fetchTeacherNotesApi,
   fetchTeacherSetupApi,
   loginStudentApi,
   loginTeacherApi,
   logoutApiSession,
+  fetchAgendaView,
   saveTeacherNotesApi,
   saveTeacherSetupApi,
   updateAgendaItemApi,
@@ -149,10 +153,19 @@ function sectionDescription(activeSection: TeacherNavSection, isStudentView: boo
 
 export default function Home() {
   const [currentTeacherId, setCurrentTeacherId] = useState(DEMO_CURRENT_TEACHER_ID);
-  const teacherClassrooms = useMemo(
-    () => getClassroomsForTeacher(DEMO_CATALOG, currentTeacherId),
-    [currentTeacherId],
-  );
+  const [runtimeClassrooms, setRuntimeClassrooms] = useState<Array<{ id: string; name: string }>>([]);
+  const teacherClassrooms = useMemo(() => {
+    if (runtimeClassrooms.length) {
+      return runtimeClassrooms.map((classroom) => ({
+        id: classroom.id,
+        name: classroom.name,
+        programLabel: "",
+        accessCodeHint: "",
+      }));
+    }
+    // LEGACY ADAPTER — catalogue démo uniquement tant qu'aucune classe runtime n'est chargée.
+    return getClassroomsForTeacher(DEMO_CATALOG, currentTeacherId);
+  }, [currentTeacherId, runtimeClassrooms]);
   const defaultClassroomId = teacherClassrooms[0]?.id ?? DEMO_CATALOG.classrooms[0].id;
   const currentTeacher = getTeacherById(DEMO_CATALOG, currentTeacherId);
 
@@ -160,6 +173,12 @@ export default function Home() {
   const [selectedClassroomId, setSelectedClassroomId] = useState(defaultClassroomId);
   const [appMode, setAppMode] = useState<AppMode>("teacher");
   const [studentSession, setStudentSession] = useState<StudentAccess | null>(null);
+  const [studentClassroomName, setStudentClassroomName] = useState("");
+  const [attendanceDays, setAttendanceDays] = useState<Array<{
+    dayOfWeek: 1 | 2 | 3 | 4 | 5;
+    weekKind: "all" | "A" | "B";
+    role: "PRIMARY" | "ADDITIONAL";
+  }>>([]);
   const [studentEntry, setStudentEntry] = useState<StudentEntry | null>(null);
   const [studentCodeModalOpen, setStudentCodeModalOpen] = useState(false);
   const [selectedSchoolWeekNumber, setSelectedSchoolWeekNumber] = useState(
@@ -220,7 +239,17 @@ export default function Home() {
     setStudentSession(null);
     setStudentEntry(null);
     setLoginError("");
-    const classroomIds = getClassroomsForTeacher(DEMO_CATALOG, session.teacherId).map((classroom) => classroom.id);
+    const fallbackIds = getClassroomsForTeacher(DEMO_CATALOG, session.teacherId).map((classroom) => classroom.id);
+    let classroomIds = fallbackIds;
+    try {
+      const runtime = await fetchTeacherClassroomsApi();
+      setRuntimeClassrooms(runtime);
+      const runtimeIds = runtime.map((entry) => entry.id);
+      // Les classes runtime (membership + store) priment ; le catalogue démo n'est qu'un filet.
+      classroomIds = runtimeIds.length ? runtimeIds : fallbackIds;
+    } catch {
+      classroomIds = fallbackIds;
+    }
     const loadedItems = await loadTeacherAgendaItems(classroomIds);
     setItems(loadedItems);
     if (classroomIds.length) {
@@ -433,15 +462,22 @@ export default function Home() {
         }
 
         if (session?.kind === "student") {
-          const access = resolveStudentAccess(DEMO_CATALOG, session.label);
-          if (!access) return;
+          const access = studentAccessFromApiSession(session);
           setStudentSession(access);
+          setStudentClassroomName(session.classroomName ?? "");
           setSelectedClassroomId(session.classroomId);
           setStudentEntry("code");
           setAppMode("student");
-          void fetchAgendaItems(session.classroomId)
-            .then((loadedItems) => {
-              if (!cancelled) setItems(loadedItems);
+          void fetchAgendaView(session.classroomId)
+            .then((view) => {
+              if (!cancelled) {
+                setItems(view.items);
+                setAttendanceDays(view.attendanceDays.map((day) => ({
+                  dayOfWeek: day.dayOfWeek as 1 | 2 | 3 | 4 | 5,
+                  weekKind: day.weekKind,
+                  role: day.role === "PRIMARY" ? "PRIMARY" : "ADDITIONAL",
+                })));
+              }
             })
             .catch((error) => {
               if (!cancelled) {
@@ -464,9 +500,19 @@ export default function Home() {
   }, []);
 
   const isStudentView = appMode === "student" && studentSession !== null;
-  const studentClassroom = studentSession ? getStudentClassroom(DEMO_CATALOG, studentSession) : null;
+  const studentClassroom = studentSession
+    ? (getStudentClassroom(DEMO_CATALOG, studentSession) ?? {
+        id: studentSession.classroomId,
+        name: studentClassroomName || studentSession.classroomId,
+        programLabel: "",
+        accessCodeHint: "",
+      })
+    : null;
 
-  const selectedClassroom = (isStudentView ? studentClassroom : getClassroomById(DEMO_CATALOG, selectedClassroomId)) ?? DEMO_CATALOG.classrooms[0];
+  const selectedClassroom = (isStudentView ? studentClassroom : (
+    teacherClassrooms.find((classroom) => classroom.id === selectedClassroomId)
+    ?? getClassroomById(DEMO_CATALOG, selectedClassroomId)
+  )) ?? teacherClassrooms[0] ?? DEMO_CATALOG.classrooms[0];
 
   const schoolWeeksMemo = schoolWeeks;
   const assignedDisplaySetups = useMemo(
@@ -509,18 +555,24 @@ export default function Home() {
         : undefined;
 
   const studentAutoCourseDay = useMemo(
-    () => resolveDisplayCourseDay(new Date(), schoolWeeksMemo),
-    [schoolWeeksMemo],
+    () =>
+      (attendanceDays.length
+        ? resolveDisplayCourseDayFromAttendance(new Date(), schoolWeeksMemo, attendanceDays)
+        : null) ?? resolveDisplayCourseDay(new Date(), schoolWeeksMemo),
+    [attendanceDays, schoolWeeksMemo],
   );
 
   const studentCourseDayCatalog = useMemo(() => {
-    const all = [studentAutoCourseDay, ...listPreviousCourseDays(studentAutoCourseDay.date, 20, schoolWeeksMemo)];
+    const previous = attendanceDays.length
+      ? listPreviousAttendanceCourseDays(studentAutoCourseDay.date, 20, schoolWeeksMemo, attendanceDays)
+      : listPreviousCourseDays(studentAutoCourseDay.date, 20, schoolWeeksMemo);
+    const all = [studentAutoCourseDay, ...previous];
     const unique = new Map<string, CourseDaySlot>();
     for (const slot of all) {
       unique.set(courseDayKey(slot), slot);
     }
     return unique;
-  }, [studentAutoCourseDay, schoolWeeksMemo]);
+  }, [studentAutoCourseDay, schoolWeeksMemo, attendanceDays]);
 
   const studentDisplayCourseDay = useMemo(() => {
     if (studentCourseDayKey && studentCourseDayCatalog.has(studentCourseDayKey)) {
@@ -530,8 +582,11 @@ export default function Home() {
   }, [studentAutoCourseDay, studentCourseDayCatalog, studentCourseDayKey]);
 
   const studentPreviousCourseDays = useMemo(
-    () => listPreviousCourseDays(studentDisplayCourseDay.date, 12, schoolWeeksMemo),
-    [studentDisplayCourseDay, schoolWeeksMemo],
+    () =>
+      attendanceDays.length
+        ? listPreviousAttendanceCourseDays(studentDisplayCourseDay.date, 12, schoolWeeksMemo, attendanceDays)
+        : listPreviousCourseDays(studentDisplayCourseDay.date, 12, schoolWeeksMemo),
+    [attendanceDays, studentDisplayCourseDay, schoolWeeksMemo],
   );
 
   const studentCourseDayGroups = useMemo(() => {
@@ -581,14 +636,10 @@ export default function Home() {
       setStudentLoginError("");
       try {
         const session = await loginStudentApi(code);
-        const access = resolveStudentAccess(DEMO_CATALOG, code.trim());
-        if (!access) {
-          setStudentLoginError("Code de classe inconnu.");
-          showNotice("Code d'accès invalide. Utilisez un identifiant de démonstration.");
-          return;
-        }
+        const access = studentAccessFromApiSession(session);
         writeStoredValue(LAST_STUDENT_CODE_KEY, code.trim().toLowerCase());
         setStudentSession(access);
+        setStudentClassroomName(session.classroomName ?? "");
         setSelectedClassroomId(session.classroomId);
         setStudentEntry("code");
         setAppMode("student");
@@ -596,8 +647,13 @@ export default function Home() {
         setStudentHistoryOpen(false);
         setStudentCodeModalOpen(false);
         resetSelectedWeek();
-        const loadedItems = await fetchAgendaItems(session.classroomId);
-        setItems(loadedItems);
+        const view = await fetchAgendaView(session.classroomId);
+        setItems(view.items);
+        setAttendanceDays(view.attendanceDays.map((day) => ({
+          dayOfWeek: day.dayOfWeek as 1 | 2 | 3 | 4 | 5,
+          weekKind: day.weekKind,
+          role: day.role === "PRIMARY" ? "PRIMARY" : "ADDITIONAL",
+        })));
       } catch (error) {
         const message = error instanceof Error ? error.message : "Connexion élève impossible.";
         setStudentLoginError(message);

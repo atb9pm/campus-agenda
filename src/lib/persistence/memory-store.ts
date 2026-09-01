@@ -1,14 +1,11 @@
 import { DEMO_PROTOTYPE_ITEMS } from "../../features/agenda/demo-items.ts";
 import { createPublication, deletePublication, updatePublication } from "../../features/agenda/publications.ts";
-import { DEMO_CATALOG } from "../../features/classes/demo-data.ts";
 import {
-  getClassroomById,
-  getSubjectById,
   getMembershipsForTeacher,
   teacherTeachesSubject,
 } from "../../features/classes/queries.ts";
 import { getMemoryMembershipsSnapshot } from "./memory-membership-store.ts";
-import { resolveStudentAccess } from "../../features/student/access.ts";
+import { getMemoryLegacySchool } from "./memory-legacy-school.ts";
 import { getMemoryTeacherAccountStore } from "./memory-teacher-account-store.ts";
 import type { AgendaMutationResult, AgendaStore, CreateAgendaInput } from "./types.ts";
 import type { PrototypeAgendaItem } from "../../features/agenda/demo-items.ts";
@@ -86,11 +83,20 @@ export class MemoryAgendaStore implements AgendaStore {
 
   async teacherIsAdmin(teacherId: string): Promise<boolean> {
     const account = await getMemoryTeacherAccountStore().findAccount(teacherId);
-    return Boolean(account?.isAdmin && account.isActive);
+    return Boolean(account?.isAdmin && account.isActive && !account.isArchived);
   }
 
   async resolveStudentAccess(label: string) {
-    const access = resolveStudentAccess(DEMO_CATALOG, label);
+    const needle = label.trim().toLowerCase();
+    const access = getMemoryLegacySchool().studentAccesses.find(
+      (entry) => entry.label.trim().toLowerCase() === needle,
+    );
+    if (!access) return undefined;
+    return { id: access.id, classroomId: access.classroomId, label: access.label };
+  }
+
+  async findStudentAccessById(accessId: string) {
+    const access = getMemoryLegacySchool().studentAccesses.find((entry) => entry.id === accessId);
     if (!access) return undefined;
     return { id: access.id, classroomId: access.classroomId, label: access.label };
   }
@@ -116,7 +122,14 @@ export class MemoryAgendaStore implements AgendaStore {
 let singletonStore: MemoryAgendaStore | null = null;
 
 function getRuntimeCatalog() {
-  return { ...DEMO_CATALOG, memberships: getMemoryMembershipsSnapshot() };
+  const legacy = getMemoryLegacySchool();
+  return {
+    classrooms: legacy.classrooms,
+    subjects: legacy.subjects,
+    teachers: [],
+    memberships: getMemoryMembershipsSnapshot(),
+    studentAccesses: legacy.studentAccesses,
+  };
 }
 
 export function getMemoryAgendaStore(): MemoryAgendaStore {
@@ -129,24 +142,24 @@ export function resetMemoryAgendaStore(seedItems?: PrototypeAgendaItem[]): void 
 }
 
 export async function classroomExists(classroomId: string): Promise<boolean> {
-  return Boolean(getClassroomById(DEMO_CATALOG, classroomId));
+  return getMemoryLegacySchool().classrooms.some((entry) => entry.id === classroomId);
 }
 
 export async function listRuntimeClassrooms(): Promise<Array<{ id: string; name: string }>> {
-  return DEMO_CATALOG.classrooms.map((entry) => ({ id: entry.id, name: entry.name }));
+  return getMemoryLegacySchool().classrooms.map((entry) => ({ id: entry.id, name: entry.name }));
 }
 
 export async function listStudentAccesses(): Promise<Array<{ classroomId: string }>> {
-  return DEMO_CATALOG.studentAccesses.map((entry) => ({ classroomId: entry.classroomId }));
+  return getMemoryLegacySchool().studentAccesses.map((entry) => ({ classroomId: entry.classroomId }));
 }
-
 
 export async function resolveClassroomSubjectNames(
   classroomId: string,
   subjectId: string,
 ): Promise<{ classroomName: string | null; subjectName: string | null }> {
-  const classroom = getClassroomById(DEMO_CATALOG, classroomId);
-  const subject = getSubjectById(DEMO_CATALOG, subjectId);
+  const legacy = getMemoryLegacySchool();
+  const classroom = legacy.classrooms.find((entry) => entry.id === classroomId);
+  const subject = legacy.subjects.find((entry) => entry.id === subjectId);
   return {
     classroomName: classroom?.name ?? null,
     subjectName: subject?.name ?? null,

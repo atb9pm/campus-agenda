@@ -1,4 +1,4 @@
-import { createPublication, deletePublication, updatePublication } from "../../../features/agenda/publications.ts";
+import { deletePublication, updatePublication } from "../../../features/agenda/publications.ts";
 import { verifyPassword } from "../../auth/password.ts";
 import type { AgendaMutationResult, AgendaStore, CreateAgendaInput } from "../types.ts";
 import type { PrototypeAgendaItem } from "../../../features/agenda/demo-items.ts";
@@ -53,49 +53,36 @@ export class SqlAgendaStore implements AgendaStore {
   }
 
   async createAgendaItem(input: CreateAgendaInput): Promise<PrototypeAgendaItem> {
-    const items = await this.exportAllItems();
-    const id = Math.max(0, ...items.map((item) => item.id)) + 1;
-    const nextItems = createPublication(items, {
-      id,
-      classroomId: input.classroomId,
-      subjectId: input.subjectId,
-      authorTeacherId: input.authorTeacherId,
-      day: input.day,
-      hour: input.hour,
-      weekOffset: input.weekOffset ?? 0,
-      schoolWeekNumber: input.schoolWeekNumber,
-      type: input.type,
-      title: input.title,
-      detail: input.detail,
-      templateId: input.templateId ?? null,
-      schoolYearId: input.schoolYearId ?? null,
-    });
-    const created = nextItems.find((item) => item.id === id);
-    if (!created) throw new Error("Publication créée mais introuvable.");
-
-    await this.db
+    const title = input.title.trim();
+    if (!title) throw new Error("Le titre est obligatoire.");
+    const detail = input.detail.trim() || "Aucune précision";
+    const result = await this.db
       .prepare(
         `INSERT INTO agenda_items
-          (id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
-        created.id,
-        created.classroomId,
-        created.subjectId,
-        created.authorTeacherId,
-        created.day,
-        created.hour,
-        created.weekOffset,
-        created.schoolWeekNumber,
-        created.type,
-        created.title,
-        created.detail,
-        created.templateId ?? null,
-        created.schoolYearId ?? null,
+        input.classroomId,
+        input.subjectId,
+        input.authorTeacherId,
+        input.day,
+        input.hour,
+        input.weekOffset ?? 0,
+        input.schoolWeekNumber,
+        input.type,
+        title,
+        detail,
+        input.templateId ?? null,
+        input.schoolYearId ?? null,
       )
       .run();
-
+    const id = Number(result.meta?.last_row_id);
+    if (!Number.isFinite(id) || id <= 0) {
+      throw new Error("Identifiant de publication introuvable.");
+    }
+    const created = await this.findAgendaItem(id);
+    if (!created) throw new Error("Publication créée mais introuvable.");
     return created;
   }
 
@@ -170,10 +157,11 @@ export class SqlAgendaStore implements AgendaStore {
 
   async teacherIsAdmin(teacherId: string): Promise<boolean> {
     const row = await this.db
-      .prepare("SELECT is_admin, is_active FROM teachers WHERE id = ? LIMIT 1")
+      .prepare("SELECT is_admin, is_active, archived_at FROM teachers WHERE id = ? LIMIT 1")
       .bind(teacherId)
-      .first<{ is_admin: number; is_active: number | null }>();
+      .first<{ is_admin: number; is_active: number | null; archived_at: string | null }>();
     if (!row?.is_admin) return false;
+    if (row.archived_at) return false;
     return row.is_active === null ? true : Boolean(row.is_active);
   }
 
@@ -181,6 +169,15 @@ export class SqlAgendaStore implements AgendaStore {
     const row = await this.db
       .prepare("SELECT id, classroom_id, label FROM student_accesses WHERE lower(label) = lower(?) LIMIT 1")
       .bind(label.trim())
+      .first<StudentAccessRow>();
+    if (!row) return undefined;
+    return { id: row.id, classroomId: row.classroom_id, label: row.label };
+  }
+
+  async findStudentAccessById(accessId: string) {
+    const row = await this.db
+      .prepare("SELECT id, classroom_id, label FROM student_accesses WHERE id = ? LIMIT 1")
+      .bind(accessId)
       .first<StudentAccessRow>();
     if (!row) return undefined;
     return { id: row.id, classroomId: row.classroom_id, label: row.label };

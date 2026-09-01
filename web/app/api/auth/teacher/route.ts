@@ -1,5 +1,3 @@
-import { getTeacherById } from "@campus/features/classes/queries.ts";
-import { DEMO_CATALOG } from "@campus/features/classes/demo-data.ts";
 import {
   getTeacherAccountsStore,
   jsonResponse,
@@ -33,9 +31,8 @@ export async function POST(request: Request) {
 
   const teacherId = outcome.teacherId;
   const account = await accounts.findAccount(teacherId);
-  const fallback = getTeacherById(DEMO_CATALOG, teacherId);
-  const displayName = account?.displayName ?? fallback?.displayName;
-  const initials = account?.initials ?? fallback?.initials;
+  const displayName = account?.displayName;
+  const initials = account?.initials;
   if (!displayName || !initials) {
     return jsonResponse({ ok: false, reason: "Enseignant introuvable." }, { status: 404 });
   }

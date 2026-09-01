@@ -21,6 +21,18 @@ export function findStudentAccessForClassroom(
   return catalog.studentAccesses.find((access) => access.classroomId === classroomId);
 }
 
+export function studentAccessFromApiSession(session: {
+  accessId?: string;
+  label: string;
+  classroomId: string;
+}): StudentAccess {
+  return {
+    id: session.accessId ?? session.label,
+    classroomId: session.classroomId,
+    label: session.label,
+  };
+}
+
 export function getStudentClassroom(
   catalog: ClassroomCatalog & { studentAccesses: StudentAccess[] },
   access: StudentAccess,
