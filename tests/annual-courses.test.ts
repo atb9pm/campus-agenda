@@ -636,7 +636,9 @@ test("CTX — suppression refusée si dépendances, archivage possible", async (
   const blockedCourse = await fx.catalog.deleteContext(fx.context.id);
   assert.equal(blockedCourse.ok, false);
   const archived = await fx.catalog.updateContext(fx.context.id, { isArchived: true });
-  assert.equal(archived?.isArchived, true);
+  assert.equal(archived.ok, true);
+  if (!archived.ok) return;
+  assert.equal(archived.value.isArchived, true);
 });
 
 test("compat — membership et teacher-setup inchangés", () => {

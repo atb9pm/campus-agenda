@@ -8,6 +8,7 @@ import type {
   SchoolProfessionRecord,
 } from "@campus/features/school-catalog";
 import {
+  CTX_IN_USE_DELETE_REASON,
   filterProfessionsForPlanSearch,
   findContextForCell,
   formatPedagogicalContextLabel,
@@ -120,7 +121,7 @@ export function TrainingPlansAdminPanel({ onNotice, onOpenBranches }: TrainingPl
     return matrix.years.filter((year) => year === yearFilter);
   }, [matrix, yearFilter]);
 
-  const readOnly = Boolean(selectedProfession?.isArchived);
+  const readOnly = Boolean(selectedProfession?.isArchived || selectedProfession?.isActive === false);
   const activeContextCount = useMemo(() => {
     if (!selectedProfession) return 0;
     return contexts.filter(
@@ -201,10 +202,24 @@ export function TrainingPlansAdminPanel({ onNotice, onOpenBranches }: TrainingPl
         method: "DELETE",
         credentials: "include",
       });
-      const deletePayload = (await deleteResponse.json()) as { ok: boolean; reason?: string };
+      const deletePayload = (await deleteResponse.json().catch(() => ({}))) as {
+        ok?: boolean;
+        reason?: string;
+      };
       if (deleteResponse.ok && deletePayload.ok) {
         onNotice("Enregistré");
         await refresh({ silent: true });
+        return;
+      }
+
+      const inUse = deleteResponse.status === 409 && deletePayload.reason === CTX_IN_USE_DELETE_REASON;
+      if (!inUse) {
+        setError(
+          deletePayload.reason ??
+            (deleteResponse.status
+              ? `Retrait impossible (${deleteResponse.status}).`
+              : "Retrait impossible."),
+        );
         return;
       }
 
@@ -236,6 +251,8 @@ export function TrainingPlansAdminPanel({ onNotice, onOpenBranches }: TrainingPl
       }
       onNotice("Affectation archivée. L’historique pédagogique est conservé.");
       await refresh({ silent: true });
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : "Retrait impossible.");
     } finally {
       setPendingCell("");
     }
@@ -322,7 +339,11 @@ export function TrainingPlansAdminPanel({ onNotice, onOpenBranches }: TrainingPl
                       Durée : {profession.durationYears} an
                       {profession.durationYears > 1 ? "s" : ""}
                       {profession.classCodePrefix ? ` · ${profession.classCodePrefix}` : ""}
-                      {profession.isArchived ? " · Archivée" : ""}
+                      {profession.isArchived
+                        ? " · Archivée"
+                        : profession.isActive
+                          ? ""
+                          : " · Désactivée"}
                     </span>
                   </button>
                 </li>
@@ -355,11 +376,15 @@ export function TrainingPlansAdminPanel({ onNotice, onOpenBranches }: TrainingPl
                 ) : null}
               </header>
 
-              {readOnly ? (
+              {selectedProfession.isArchived ? (
                 <p className="admin-class-config-warn">
-                  Profession archivée : consultation uniquement, aucune nouvelle affectation.
+                  Profession archivée : plan historique en lecture seule.
                 </p>
-              ) : null}
+              ) : selectedProfession.isActive ? null : (
+                <p className="admin-class-config-warn">
+                  Profession désactivée : réactivez la profession pour modifier son plan.
+                </p>
+              )}
 
               <div className="admin-training-toolbar">
                 <label>

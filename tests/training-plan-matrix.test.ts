@@ -434,9 +434,10 @@ test("CTX archivé : recréation refusée, restauration du même identifiant", a
     isArchived: false,
     isActive: true,
   });
-  assert.ok(restored);
-  assert.equal(restored.id, created.value.id);
-  assert.equal(restored.isArchived, false);
+  assert.equal(restored.ok, true);
+  if (!restored.ok) return;
+  assert.equal(restored.value.id, created.value.id);
+  assert.equal(restored.value.isArchived, false);
   const matrix = projectTrainingPlanMatrix({
     profession: ma,
     branches: await catalog.listBranches(),

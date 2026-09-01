@@ -36,7 +36,7 @@ export interface SchoolCatalogStore {
   updateContext(
     id: string,
     patch: Partial<Pick<PedagogicalContextInput, "isActive" | "isArchived">>,
-  ): Promise<PedagogicalContextRecord | null>;
+  ): Promise<PedagogyMutationResult<PedagogicalContextRecord>>;
   deleteContext(id: string): Promise<PedagogyMutationResult<{ id: string }>>;
 
   ensureSeeded(): Promise<void>;

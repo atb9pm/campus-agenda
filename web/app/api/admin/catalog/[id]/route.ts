@@ -122,10 +122,11 @@ async function handlePatch(request: Request, context?: { params: Promise<{ id: s
     isActive: body.isActive,
     isArchived: body.isArchived,
   });
-  if (!updated) {
-    return jsonResponse({ ok: false, reason: "Contexte pédagogique introuvable." }, { status: 404 });
+  if (!updated.ok) {
+    const status = updated.reason.includes("introuvable") ? 404 : 400;
+    return jsonResponse({ ok: false, reason: updated.reason }, { status });
   }
-  return jsonResponse({ ok: true, context: updated });
+  return jsonResponse({ ok: true, context: updated.value });
 }
 
 async function handleDelete(request: Request, context?: { params: Promise<{ id: string }> }) {

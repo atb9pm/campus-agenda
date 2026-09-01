@@ -371,3 +371,115 @@ test("2.24.0 — E2E Mes cours : session uniquement, teacherId client ignoré", 
   assert.equal(studentForbidden.status, 401);
 });
 
+test("2.27.0 — API CTX refuse profession désactivée et restaure le même id", async () => {
+  const adminCookie = await loginAdmin();
+  const headers = { "Content-Type": "application/json", cookie: adminCookie };
+
+  const professionResponse = await request("/api/admin/catalog", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      kind: "profession",
+      label: "Profession API cycle de vie",
+      durationYears: 4,
+      classCodePrefix: "LCY",
+    }),
+  });
+  assert.equal(professionResponse.status, 200, await professionResponse.text());
+  const professionPayload = await professionResponse.json();
+  assert.equal(professionPayload.ok, true);
+  const professionId = professionPayload.profession.id;
+
+  const catalogResponse = await request("/api/admin/catalog", { headers: { cookie: adminCookie } });
+  assert.equal(catalogResponse.status, 200);
+  const catalog = await catalogResponse.json();
+  const branch = (catalog.branches ?? []).find((entry) => entry.isActive && !entry.isArchived);
+  assert.ok(branch, "une branche active est requise");
+
+  const disableProfession = await request(`/api/admin/catalog/${professionId}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ kind: "profession", isActive: false }),
+  });
+  assert.equal(disableProfession.status, 200);
+
+  const blockedCreate = await request("/api/admin/catalog", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      kind: "context",
+      professionId,
+      trainingYear: 1,
+      branchId: branch.id,
+    }),
+  });
+  assert.equal(blockedCreate.status, 400);
+  const blockedCreatePayload = await blockedCreate.json();
+  assert.equal(blockedCreatePayload.ok, false);
+  assert.match(blockedCreatePayload.reason, /profession désactivée/i);
+
+  const enableProfession = await request(`/api/admin/catalog/${professionId}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ kind: "profession", isActive: true }),
+  });
+  assert.equal(enableProfession.status, 200);
+
+  const created = await request("/api/admin/catalog", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      kind: "context",
+      professionId,
+      trainingYear: 1,
+      branchId: branch.id,
+    }),
+  });
+  assert.equal(created.status, 200, await created.text());
+  const createdPayload = await created.json();
+  assert.equal(createdPayload.ok, true);
+  const contextId = createdPayload.context.id;
+
+  const archived = await request(`/api/admin/catalog/${contextId}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ kind: "context", isArchived: true }),
+  });
+  assert.equal(archived.status, 200);
+
+  const disableAgain = await request(`/api/admin/catalog/${professionId}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ kind: "profession", isActive: false }),
+  });
+  assert.equal(disableAgain.status, 200);
+
+  const blockedRestore = await request(`/api/admin/catalog/${contextId}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ kind: "context", isArchived: false, isActive: true }),
+  });
+  assert.equal(blockedRestore.status, 400);
+  const blockedRestorePayload = await blockedRestore.json();
+  assert.equal(blockedRestorePayload.ok, false);
+  assert.match(blockedRestorePayload.reason, /profession désactivée/i);
+
+  const enableAgain = await request(`/api/admin/catalog/${professionId}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ kind: "profession", isActive: true }),
+  });
+  assert.equal(enableAgain.status, 200);
+
+  const restored = await request(`/api/admin/catalog/${contextId}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ kind: "context", isArchived: false, isActive: true }),
+  });
+  assert.equal(restored.status, 200, await restored.text());
+  const restoredPayload = await restored.json();
+  assert.equal(restoredPayload.ok, true);
+  assert.equal(restoredPayload.context.id, contextId);
+  assert.equal(restoredPayload.context.isArchived, false);
+});
+

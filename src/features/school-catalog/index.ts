@@ -107,7 +107,20 @@ export {
   type StructuredClassBatchInput,
   type ValidatedStructuredClassBatch,
 } from "./structured-class-batch.ts";
-export { CTX_IN_USE_DELETE_REASON, contextDeleteBlockers } from "./ctx-guards.ts";
+export {
+  CTX_CREATE_ARCHIVED_BRANCH_REASON,
+  CTX_CREATE_ARCHIVED_PROFESSION_REASON,
+  CTX_CREATE_INACTIVE_BRANCH_REASON,
+  CTX_CREATE_INACTIVE_PROFESSION_REASON,
+  CTX_IN_USE_DELETE_REASON,
+  CTX_RESTORE_ARCHIVED_BRANCH_REASON,
+  CTX_RESTORE_ARCHIVED_PROFESSION_REASON,
+  CTX_RESTORE_INACTIVE_BRANCH_REASON,
+  CTX_RESTORE_INACTIVE_PROFESSION_REASON,
+  contextCreateParentBlocker,
+  contextDeleteBlockers,
+  contextRestoreParentBlocker,
+} from "./ctx-guards.ts";
 export {
   filterProfessionsForPlanSearch,
   findActiveContextForCell,
