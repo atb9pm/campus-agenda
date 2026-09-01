@@ -1,6 +1,6 @@
 {
   "name": "campus-agenda-web",
-  "version": "2.25.2",
+  "version": "2.26.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -14,9 +14,11 @@
     "preview:node": "node ../scripts/preview-local.mjs",
     "preview:free-port": "node ../scripts/free-preview-port.mjs",
     "preview:fresh": "node ../scripts/free-preview-port.mjs && node ../scripts/preview-local.mjs",
-    "test": "CAMPUS_STORE=memory node --experimental-strip-types --test ../tests/classes.test.ts ../tests/chf-catalog.test.ts ../tests/teacher.test.ts ../tests/teacher-setup.test.ts ../tests/class-notebook.test.ts ../tests/school-catalog.test.ts ../tests/professions-pedagogy.test.ts ../tests/pedagogical-path.test.ts ../tests/class-school-year.test.ts ../tests/admin-referential.test.ts ../tests/annual-courses.test.ts ../tests/annual-courses-review.test.ts ../tests/teacher-courses.test.ts ../tests/course-schedule.test.ts ../tests/class-attendance.test.ts ../tests/schedule-ux.test.ts ../tests/school-class-structure.test.ts ../tests/school-class-lifecycle.test.ts ../tests/school-days.test.ts ../tests/auth-entry.test.ts ../tests/teacher-accounts.test.ts ../tests/publications.test.ts ../tests/shared-agenda.test.ts ../tests/student.test.ts ../tests/auth.test.ts ../tests/persistence.test.ts ../tests/api-auth.test.ts ../tests/backup.test.ts ../tests/observability.test.ts ../tests/accessibility.test.ts ../tests/sqlite-store.test.ts ../tests/rate-limit.test.ts ../tests/school-calendar.test.ts ../tests/student-course-day.test.ts ../tests/school-year-pdf.test.ts ../tests/evaluations-coordination.test.ts ../tests/pedagogical-library.test.ts ../tests/timetable-import.test.ts ../tests/multi-year-operations.test.ts && pnpm run build && CAMPUS_STORE=memory AUTH_SECRET=test-secret-e2e-phase-08 node --test tests/rendered-html.test.mjs tests/e2e-api.test.mjs && CAMPUS_STORE=memory AUTH_SECRET=test-secret-e2e-phase-08 node --test tests/preview-smoke.test.mjs",
+    "test": "CAMPUS_STORE=memory node --experimental-strip-types --test ../tests/classes.test.ts ../tests/chf-catalog.test.ts ../tests/teacher.test.ts ../tests/teacher-setup.test.ts ../tests/class-notebook.test.ts ../tests/school-catalog.test.ts ../tests/professions-pedagogy.test.ts ../tests/pedagogical-path.test.ts ../tests/class-school-year.test.ts ../tests/admin-referential.test.ts ../tests/annual-courses.test.ts ../tests/annual-courses-review.test.ts ../tests/teacher-courses.test.ts ../tests/course-schedule.test.ts ../tests/class-attendance.test.ts ../tests/schedule-ux.test.ts ../tests/school-class-structure.test.ts ../tests/school-class-lifecycle.test.ts ../tests/school-days.test.ts ../tests/auth-entry.test.ts ../tests/teacher-accounts.test.ts ../tests/publications.test.ts ../tests/shared-agenda.test.ts ../tests/student.test.ts ../tests/auth.test.ts ../tests/persistence.test.ts ../tests/api-auth.test.ts ../tests/backup.test.ts ../tests/observability.test.ts ../tests/accessibility.test.ts ../tests/sqlite-store.test.ts ../tests/rate-limit.test.ts ../tests/school-calendar.test.ts ../tests/student-course-day.test.ts ../tests/school-year-pdf.test.ts ../tests/evaluations-coordination.test.ts ../tests/pedagogical-library.test.ts ../tests/timetable-import.test.ts ../tests/multi-year-operations.test.ts ../tests/admin-auth-matrix.test.ts ../tests/dynamic-schedule.test.ts ../tests/campus-backup-v4.test.ts ../tests/agenda-concurrency.test.ts && pnpm run build && CAMPUS_STORE=memory AUTH_SECRET=test-secret-e2e-phase-08 node --test tests/rendered-html.test.mjs tests/e2e-api.test.mjs && CAMPUS_STORE=memory AUTH_SECRET=test-secret-e2e-phase-08 node --test tests/preview-smoke.test.mjs",
     "db:local": "CAMPUS_STORE=sqlite CAMPUS_SQLITE_PATH=.data/campus-agenda.sqlite node --experimental-strip-types ../scripts/init-local-db.ts",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
+    "lint": "node ../scripts/lint-ci.mjs",
+    "lint:all": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "typecheck": "node ../scripts/typecheck-ci.mjs"
   },
   "dependencies": {
     "pdfjs-dist": "^6.2.108",

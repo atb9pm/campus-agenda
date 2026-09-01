@@ -1,5 +1,4 @@
 # Tests automatiques sur chaque pull request (avant merge).
-# Une seule source de vérité : le script `npm test` de web/package.json.
 name: CI
 
 on:
@@ -12,7 +11,7 @@ on:
 
 jobs:
   test:
-    name: Tests
+    name: Tests, typecheck, lint
     runs-on: ubuntu-latest
 
     steps:
@@ -23,6 +22,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
 
       # `npm test` enchaîne `pnpm run build` : pnpm doit être disponible.
       - name: Activer pnpm
@@ -30,14 +30,21 @@ jobs:
 
       # pdfjs-dist est résolu depuis `src/` (node_modules à la racine du dépôt).
       - name: Installer les dépendances racine
-        run: npm install
+        run: npm ci
 
       - name: Installer les dépendances web
         working-directory: web
-        run: npm install
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: web
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: web
+        run: npm run lint
 
       # Suite de référence : unitaires + build + rendu/API + smoke preview.
-      # Tout nouveau fichier ajouté à `npm test` est couvert automatiquement.
       - name: Suite de tests (npm test)
         working-directory: web
         run: npm test
