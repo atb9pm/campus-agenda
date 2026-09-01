@@ -10,8 +10,8 @@ import type { SchoolBranchRecord } from "./types.ts";
  * COURT : profession déjà connue par l’écran.
  * COMPLET : listes mélangeant plusieurs professions.
  *
- * Future CourseSession : rattachée à AnnualCourse (qui a `contextId`).
- * Aucun `trainingYear` supplémentaire dans CourseSession.
+ * Future CourseSession : calculée depuis AnnualCourse (`contextId`) + CourseScheduleSlot
+ * + calendrier scolaire. Aucun `trainingYear` supplémentaire dans CourseSession.
  */
 export type PedagogicalContextLabelMode = "short" | "full";
 

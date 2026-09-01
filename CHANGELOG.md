@@ -2,6 +2,29 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.28.0] — CourseSession calculée depuis l’horaire et le calendrier
+
+Une séance n’est pas un créneau d’horaire. Elle est **calculée** :
+
+Plan de formation (Profession + année + branche = CTX)
+→ Classe + CTX + année scolaire → AnnualCourse
+→ CourseScheduleSlot (ex. Moteur lundi P2+P3)
+→ calendrier scolaire (A/B, vacances, fériés, exceptions)
+→ CourseSession (ex. Moteur — lundi 07.09.2026, séance n° 5, P2-P3).
+
+Aucun `trainingYear` sur la séance : l’identité pédagogique reste `contextId` / `annualCourseId`. Aucune table, aucune migration.
+
+### Ajouté
+
+- `computeCourseSessions` : projection des créneaux sur les jours de classe du plan.
+- Fusion des périodes adjacentes (P2+P3 = une séance) ; P4 et P6 restent distincts (pause de midi).
+- Numérotation chronologique des séances ; fériés et exceptions retirent ou rajoutent un jour.
+- Libellés `Moteur — lundi 07.09.2026` / `Séance n° 5` / `P2-P3`.
+
+### Non inclus
+
+Persistance de CourseSession, CourseOccurrence, Agenda rattaché à une séance, N→N+1, salles.
+
 ## [2.27.0] — Référentiel : organiser les branches par année de formation
 
 Cette version améliore la gestion du plan de formation **sans modifier l’identité des branches**.
