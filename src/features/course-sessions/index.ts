@@ -1,5 +1,10 @@
-export type { CourseSession } from "./types.ts";
-export { computeCourseSessions, type ComputeCourseSessionsInput } from "./compute.ts";
+export type { CourseSession, CourseSessionSegment } from "./types.ts";
+export {
+  computeCourseSessions,
+  courseSessionKey,
+  type ComputeCourseSessionsCourse,
+  type ComputeCourseSessionsInput,
+} from "./compute.ts";
 export {
   formatCourseSessionHeading,
   formatCourseSessionNumber,
@@ -7,3 +12,4 @@ export {
   formatCourseSessionSummary,
   formatSwissDate,
 } from "./format.ts";
+export { listComputedCourseSessions, type ListCourseSessionsQuery } from "./service.ts";

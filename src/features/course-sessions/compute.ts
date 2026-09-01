@@ -1,17 +1,27 @@
 import { slotAppliesToWeekView } from "../course-schedule/preview.ts";
-import { LUNCH_PERIOD } from "../course-schedule/periods.ts";
 import type { CourseScheduleSlot, CourseWeekday } from "../course-schedule/types.ts";
 import { buildSchoolDayPlan } from "../school-days/day-plan.ts";
-import type { PublicHoliday, SchoolDayException, SchoolDayWeekRow } from "../school-days/types.ts";
+import type { PublicHoliday, SchoolDayException } from "../school-days/types.ts";
 import type { SchoolWeekEntry } from "../school-year/types.ts";
-import type { CourseSession } from "./types.ts";
+import type { CourseSession, CourseSessionSegment } from "./types.ts";
+
+export interface ComputeCourseSessionsCourse {
+  id: string;
+  classId: string;
+  contextId: string;
+}
 
 export interface ComputeCourseSessionsInput {
-  annualCourse: { id: string; contextId: string };
+  schoolYearId: string;
+  courses: ComputeCourseSessionsCourse[];
   slots: CourseScheduleSlot[];
   weeks: SchoolWeekEntry[];
   holidays?: PublicHoliday[];
   exceptions?: SchoolDayException[];
+}
+
+export function courseSessionKey(schoolYearId: string, annualCourseId: string, date: string): string {
+  return `${schoolYearId}|${annualCourseId}|${date}`;
 }
 
 function slotActiveOnDate(slot: CourseScheduleSlot, date: string): boolean {
@@ -20,91 +30,101 @@ function slotActiveOnDate(slot: CourseScheduleSlot, date: string): boolean {
   return true;
 }
 
-function periodsAreAdjacent(leftEnd: number, rightStart: number): boolean {
-  if (rightStart <= leftEnd) return true;
-  if (leftEnd + 1 === rightStart) return leftEnd !== LUNCH_PERIOD && rightStart !== LUNCH_PERIOD;
-  return false;
+function compareSegments(left: CourseSessionSegment, right: CourseSessionSegment): number {
+  return (
+    left.periodStart - right.periodStart ||
+    left.periodEnd - right.periodEnd ||
+    left.scheduleSlotId.localeCompare(right.scheduleSlotId)
+  );
 }
 
-function mergeRanges(
-  ranges: Array<{ periodStart: number; periodEnd: number; slotIds: string[] }>,
-): Array<{ periodStart: number; periodEnd: number; slotIds: string[] }> {
-  const ordered = [...ranges].sort(
-    (left, right) => left.periodStart - right.periodStart || left.periodEnd - right.periodEnd,
-  );
-  const merged: Array<{ periodStart: number; periodEnd: number; slotIds: string[] }> = [];
-  for (const range of ordered) {
-    const last = merged[merged.length - 1];
-    if (last && periodsAreAdjacent(last.periodEnd, range.periodStart)) {
-      last.periodEnd = Math.max(last.periodEnd, range.periodEnd);
-      for (const id of range.slotIds) {
-        if (!last.slotIds.includes(id)) last.slotIds.push(id);
-      }
-      continue;
-    }
-    merged.push({
-      periodStart: range.periodStart,
-      periodEnd: range.periodEnd,
-      slotIds: [...range.slotIds],
-    });
-  }
-  return merged;
-}
-
-function sessionsForClassDay(options: {
-  annualCourse: { id: string; contextId: string };
-  slots: CourseScheduleSlot[];
-  week: SchoolDayWeekRow;
-  day: SchoolDayWeekRow["days"][number];
-}): Omit<CourseSession, "sessionNumber">[] {
-  const dayOfWeek = options.day.weekdayIndex as CourseWeekday;
-  const applicable = options.slots.filter(
-    (slot) =>
-      slot.annualCourseId === options.annualCourse.id &&
-      slot.dayOfWeek === dayOfWeek &&
-      slotAppliesToWeekView(slot, options.week.weekKind) &&
-      slotActiveOnDate(slot, options.day.date),
-  );
-  return mergeRanges(
-    applicable.map((slot) => ({
-      periodStart: slot.periodStart,
-      periodEnd: slot.periodEnd,
-      slotIds: [slot.id],
-    })),
-  ).map((range) => ({
-    annualCourseId: options.annualCourse.id,
-    contextId: options.annualCourse.contextId,
-    date: options.day.date,
-    dayOfWeek,
-    schoolWeekNumber: options.week.number,
-    weekKind: options.week.weekKind,
-    periodStart: range.periodStart,
-    periodEnd: range.periodEnd,
-    slotIds: range.slotIds,
-  }));
+interface SessionAccumulator {
+  course: ComputeCourseSessionsCourse;
+  date: string;
+  dayOfWeek: CourseWeekday;
+  schoolWeekNumber: number;
+  weekKind: CourseSession["weekKind"];
+  segments: CourseSessionSegment[];
 }
 
 /**
- * Projette les créneaux d’un AnnualCourse sur le calendrier scolaire.
+ * Projette les créneaux des AnnualCourse sur le calendrier scolaire.
  * Vacances = semaines absentes du plan. Fériés / exceptions = état du jour.
+ * Groupement : une séance par couple (annualCourseId, date).
+ * La date réelle vient de SchoolWeekEntry, jamais de schoolYear.endsOn.
  */
 export function computeCourseSessions(input: ComputeCourseSessionsInput): CourseSession[] {
+  const courseById = new Map(input.courses.map((course) => [course.id, course]));
   const plan = buildSchoolDayPlan(input.weeks, input.holidays ?? [], input.exceptions ?? []);
-  const raw: Omit<CourseSession, "sessionNumber">[] = [];
+  const groups = new Map<string, SessionAccumulator>();
+
   for (const row of plan) {
     if (row.kind !== "week") continue;
     for (const day of row.days) {
       if (day.state !== "class") continue;
-      raw.push(
-        ...sessionsForClassDay({
-          annualCourse: input.annualCourse,
-          slots: input.slots,
-          week: row,
-          day,
-        }),
-      );
+      const dayOfWeek = day.weekdayIndex as CourseWeekday;
+      for (const slot of input.slots) {
+        const course = courseById.get(slot.annualCourseId);
+        if (!course) continue;
+        if (slot.dayOfWeek !== dayOfWeek) continue;
+        if (!slotAppliesToWeekView(slot, row.weekKind)) continue;
+        if (!slotActiveOnDate(slot, day.date)) continue;
+
+        const key = courseSessionKey(input.schoolYearId, course.id, day.date);
+        let group = groups.get(key);
+        if (!group) {
+          group = {
+            course,
+            date: day.date,
+            dayOfWeek,
+            schoolWeekNumber: row.number,
+            weekKind: row.weekKind,
+            segments: [],
+          };
+          groups.set(key, group);
+        }
+        group.segments.push({
+          scheduleSlotId: slot.id,
+          periodStart: slot.periodStart,
+          periodEnd: slot.periodEnd,
+        });
+      }
     }
   }
-  raw.sort((left, right) => left.date.localeCompare(right.date) || left.periodStart - right.periodStart);
-  return raw.map((session, index) => ({ ...session, sessionNumber: index + 1 }));
+
+  const byCourse = new Map<string, SessionAccumulator[]>();
+  for (const group of groups.values()) {
+    const list = byCourse.get(group.course.id) ?? [];
+    list.push(group);
+    byCourse.set(group.course.id, list);
+  }
+
+  const sessions: CourseSession[] = [];
+  for (const [annualCourseId, list] of byCourse) {
+    list.sort((left, right) => left.date.localeCompare(right.date));
+    list.forEach((group, index) => {
+      const segments = [...group.segments].sort(compareSegments);
+      sessions.push({
+        key: courseSessionKey(input.schoolYearId, annualCourseId, group.date),
+        schoolYearId: input.schoolYearId,
+        annualCourseId,
+        classId: group.course.classId,
+        contextId: group.course.contextId,
+        date: group.date,
+        schoolWeekNumber: group.schoolWeekNumber,
+        weekKind: group.weekKind,
+        dayOfWeek: group.dayOfWeek,
+        sequenceNumber: index + 1,
+        segments,
+      });
+    });
+  }
+
+  sessions.sort(
+    (left, right) =>
+      left.date.localeCompare(right.date) ||
+      left.annualCourseId.localeCompare(right.annualCourseId) ||
+      left.sequenceNumber - right.sequenceNumber,
+  );
+  return sessions;
 }

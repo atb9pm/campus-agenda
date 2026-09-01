@@ -36,7 +36,12 @@ export {
   includeArchivedCoursesInScheduleView,
   isOperationalAnnualCourse,
 } from "./operational.ts";
-export { isCourseWeekKind, isCourseWeekday, validateCourseScheduleSlotInput } from "./validation.ts";
+export {
+  isCourseWeekKind,
+  isCourseWeekday,
+  isIsoCalendarDate,
+  validateCourseScheduleSlotInput,
+} from "./validation.ts";
 export {
   ATTENDANCE_DAY_MISMATCH_CODE,
   ATTENDANCE_DAY_MISMATCH_REASON,

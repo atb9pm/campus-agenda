@@ -8,22 +8,29 @@ Une séance n’est pas un créneau d’horaire. Elle est **calculée** :
 
 Plan de formation (Profession + année + branche = CTX)
 → Classe + CTX + année scolaire → AnnualCourse
-→ CourseScheduleSlot (ex. Moteur lundi P2+P3)
+→ CourseScheduleSlot (segments horaires)
 → calendrier scolaire (A/B, vacances, fériés, exceptions)
-→ CourseSession (ex. Moteur — lundi 07.09.2026, séance n° 5, P2-P3).
+→ CourseSession (ex. Moteur — lundi 07.09.2026, séance n° 7, P4 · P6).
+
+**Tous les segments d’un même AnnualCourse à une même date constituent une seule séance pédagogique.**
+
+Exemples : P2 + P3 → 1 séance. P4 + P6 → également 1 séance, avec deux segments séparés. Les périodes ne déterminent pas le nombre de séances.
 
 Aucun `trainingYear` sur la séance : l’identité pédagogique reste `contextId` / `annualCourseId`. Aucune table, aucune migration.
 
 ### Ajouté
 
-- `computeCourseSessions` : projection des créneaux sur les jours de classe du plan.
-- Fusion des périodes adjacentes (P2+P3 = une séance) ; P4 et P6 restent distincts (pause de midi).
-- Numérotation chronologique des séances ; fériés et exceptions retirent ou rajoutent un jour.
-- Libellés `Moteur — lundi 07.09.2026` / `Séance n° 5` / `P2-P3`.
+- `computeCourseSessions` : fonction pure ; groupement par `annualCourseId + date` ; clé déterministe `schoolYearId|annualCourseId|date`.
+- `CourseSession.segments[]` (`scheduleSlotId`, `periodStart`, `periodEnd`) : P4 et P6 restent deux créneaux, une seule séance.
+- Numérotation `sequenceNumber` par AnnualCourse après exclusions calendrier ; un jour P4+P6 compte une fois.
+- `listComputedCourseSessions` + `GET /api/admin/course-sessions` (lecture seule).
+- Administration → Horaire des classes → Dates réelles.
+- Présentation : P2+P3 → `P2-P3` ; P4+P6 → `P4 · P6` (jamais `P4-P6`).
+- `validFrom` / `validTo` inclusifs, format AAAA-MM-JJ, `validFrom <= validTo` à l’écriture.
 
 ### Non inclus
 
-Persistance de CourseSession, CourseOccurrence, Agenda rattaché à une séance, N→N+1, salles.
+Persistance de CourseSession, AgendaItem → CourseSession, coordination des contrôles, N→N+1, salles, optimisation horaire.
 
 ## [2.27.0] — Référentiel : organiser les branches par année de formation
 
