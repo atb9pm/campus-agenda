@@ -385,8 +385,8 @@ test("2.27.0 — API CTX refuse profession désactivée et restaure le même id"
       classCodePrefix: "LCY",
     }),
   });
-  assert.equal(professionResponse.status, 200, await professionResponse.text());
   const professionPayload = await professionResponse.json();
+  assert.equal(professionResponse.status, 200, professionPayload.reason ?? "création profession");
   assert.equal(professionPayload.ok, true);
   const professionId = professionPayload.profession.id;
 
@@ -435,8 +435,8 @@ test("2.27.0 — API CTX refuse profession désactivée et restaure le même id"
       branchId: branch.id,
     }),
   });
-  assert.equal(created.status, 200, await created.text());
   const createdPayload = await created.json();
+  assert.equal(created.status, 200, createdPayload.reason ?? "création CTX");
   assert.equal(createdPayload.ok, true);
   const contextId = createdPayload.context.id;
 
@@ -476,8 +476,8 @@ test("2.27.0 — API CTX refuse profession désactivée et restaure le même id"
     headers,
     body: JSON.stringify({ kind: "context", isArchived: false, isActive: true }),
   });
-  assert.equal(restored.status, 200, await restored.text());
   const restoredPayload = await restored.json();
+  assert.equal(restored.status, 200, restoredPayload.reason ?? "restauration CTX");
   assert.equal(restoredPayload.ok, true);
   assert.equal(restoredPayload.context.id, contextId);
   assert.equal(restoredPayload.context.isArchived, false);
