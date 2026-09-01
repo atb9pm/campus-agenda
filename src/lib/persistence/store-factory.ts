@@ -1,5 +1,5 @@
-import type { AgendaBackupSnapshot, BackupRestoreResult } from "./backup.ts";
-import { exportAgendaSnapshot, restoreAgendaSnapshot } from "./backup.ts";
+import type { CampusBackupRestoreResult, CampusBackupSnapshot } from "./campus-backup.ts";
+import { exportCampusSnapshot, restoreCampusSnapshot } from "./campus-backup.ts";
 import type { AgendaStore, StoreKind, TemplateStore } from "./types.ts";
 import { createNodeSqliteDatabase, wrapD1Database } from "./sql/adapters.ts";
 import { applyMigrations, isDatabaseSeeded } from "./sql/migrate.ts";
@@ -66,6 +66,7 @@ interface ResolvedStore {
   annualCourseStore: AnnualCourseStore;
   courseScheduleStore: CourseScheduleStore;
   kind: StoreKind;
+  sqlDb: import("./sql/types.ts").SqlDatabase | null;
   classroomExists: (classroomId: string) => Promise<boolean>;
   listRuntimeClassrooms: () => Promise<Array<{ id: string; name: string }>>;
   listStudentAccesses: () => Promise<Array<{ classroomId: string }>>;
@@ -187,6 +188,7 @@ async function createStore(): Promise<ResolvedStore> {
       annualCourseStore,
       courseScheduleStore,
       kind: "memory",
+      sqlDb: null,
       classroomExists: memoryClassroomExists,
       listRuntimeClassrooms: memoryListRuntimeClassrooms,
       listStudentAccesses: memoryListStudentAccesses,
@@ -223,6 +225,7 @@ async function createStore(): Promise<ResolvedStore> {
       annualCourseStore,
       courseScheduleStore,
       kind: "sqlite",
+      sqlDb: sqlite,
       classroomExists: (classroomId) => classroomExistsInDatabase(sqlite, classroomId),
       listRuntimeClassrooms: () => listClassroomsInDatabase(sqlite),
       listStudentAccesses: () => listStudentAccessesInDatabase(sqlite),
@@ -262,6 +265,7 @@ async function createStore(): Promise<ResolvedStore> {
         annualCourseStore,
         courseScheduleStore,
         kind: "d1",
+        sqlDb: db,
         classroomExists: (classroomId) => classroomExistsInDatabase(db, classroomId),
         listRuntimeClassrooms: () => listClassroomsInDatabase(db),
         listStudentAccesses: () => listStudentAccessesInDatabase(db),
@@ -299,6 +303,7 @@ async function createStore(): Promise<ResolvedStore> {
     annualCourseStore,
     courseScheduleStore,
     kind: "memory",
+    sqlDb: null,
     classroomExists: memoryClassroomExists,
     listRuntimeClassrooms: memoryListRuntimeClassrooms,
     listStudentAccesses: memoryListStudentAccesses,
@@ -393,24 +398,40 @@ export async function listStudentAccesses(): Promise<Array<{ classroomId: string
   return resolved.listStudentAccesses();
 }
 
-export async function exportStoreSnapshot(): Promise<AgendaBackupSnapshot> {
+export async function exportStoreSnapshot(): Promise<CampusBackupSnapshot> {
   const resolved = await resolveAgendaStore();
-  return exportAgendaSnapshot({
+  return exportCampusSnapshot({
     agenda: resolved.store,
     teacherSetups: resolved.teacherSetupStore,
     teacherNotes: resolved.teacherNotesStore,
     teacherAccounts: resolved.teacherAccountStore,
+    catalog: resolved.schoolCatalogStore,
+    years: resolved.schoolYearStore,
+    courses: resolved.annualCourseStore,
+    schedules: resolved.courseScheduleStore,
+    memberships: resolved.membershipStore,
+    paths: resolved.pedagogicalPathStore,
+    courseNotes: resolved.annualCourseNotesStore,
+    sqlDb: resolved.sqlDb,
   });
 }
 
-export async function restoreStoreSnapshot(payload: unknown): Promise<BackupRestoreResult> {
+export async function restoreStoreSnapshot(payload: unknown): Promise<CampusBackupRestoreResult> {
   const resolved = await resolveAgendaStore();
-  return restoreAgendaSnapshot(
+  return restoreCampusSnapshot(
     {
       agenda: resolved.store,
       teacherSetups: resolved.teacherSetupStore,
       teacherNotes: resolved.teacherNotesStore,
       teacherAccounts: resolved.teacherAccountStore,
+      catalog: resolved.schoolCatalogStore,
+      years: resolved.schoolYearStore,
+      courses: resolved.annualCourseStore,
+      schedules: resolved.courseScheduleStore,
+      memberships: resolved.membershipStore,
+      paths: resolved.pedagogicalPathStore,
+      courseNotes: resolved.annualCourseNotesStore,
+      sqlDb: resolved.sqlDb,
     },
     payload,
   );

@@ -309,6 +309,8 @@ export class SqlTeacherAccountStore implements TeacherAccountStore {
         passwordHash: row.password_hash,
         createdAt: row.created_at,
         passwordUpdatedAt: row.password_updated_at,
+        archivedAt: row.archived_at,
+        lastLoginAt: row.last_login_at,
       }));
   }
 
@@ -316,9 +318,9 @@ export class SqlTeacherAccountStore implements TeacherAccountStore {
     for (const entry of entries) {
       await this.db
         .prepare(
-          `INSERT INTO teachers
-            (id, display_name, initials, password_hash, is_admin, is_active, must_change_password, created_at, password_updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), ?)
+           `INSERT INTO teachers
+            (id, display_name, initials, password_hash, is_admin, is_active, must_change_password, created_at, password_updated_at, archived_at, last_login_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, COALESCE(?, datetime('now')), ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              display_name = excluded.display_name,
              initials = excluded.initials,
@@ -326,7 +328,9 @@ export class SqlTeacherAccountStore implements TeacherAccountStore {
              is_admin = excluded.is_admin,
              is_active = excluded.is_active,
              must_change_password = excluded.must_change_password,
-             password_updated_at = excluded.password_updated_at`,
+             password_updated_at = excluded.password_updated_at,
+             archived_at = excluded.archived_at,
+             last_login_at = excluded.last_login_at`,
         )
         .bind(
           entry.id,
@@ -338,6 +342,8 @@ export class SqlTeacherAccountStore implements TeacherAccountStore {
           entry.mustChangePassword ? 1 : 0,
           entry.createdAt,
           entry.passwordUpdatedAt,
+          entry.archivedAt ?? null,
+          entry.lastLoginAt ?? null,
         )
         .run();
     }

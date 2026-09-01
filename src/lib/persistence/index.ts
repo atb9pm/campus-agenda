@@ -25,6 +25,15 @@ export {
   type BackupRestoreResult,
   type BackupStoreDeps,
 } from "./backup.ts";
+export {
+  BACKUP_FORMAT_VERSION as CAMPUS_BACKUP_FORMAT_VERSION,
+  exportCampusSnapshot,
+  restoreCampusSnapshot,
+  type CampusBackupSnapshot,
+  type CampusBackupRestoreResult,
+  type CampusBackupDeps,
+} from "./campus-backup.ts";
+export { BACKUP_FORMAT_VERSION_V4, CAMPUS_BACKUP_INSERT_ORDER } from "./campus-backup-tables.ts";
 export type { TeacherSetupBackupEntry } from "./teacher-setup-types.ts";
 export type { TeacherNotesBackupEntry } from "./teacher-notes-types.ts";
 export type { TeacherAccountBackupEntry } from "./teacher-account-types.ts";

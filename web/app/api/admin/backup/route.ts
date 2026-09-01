@@ -1,40 +1,25 @@
-import { exportAgendaSnapshot } from "@campus/lib/persistence/backup.ts";
+import { exportStoreSnapshot } from "@campus/lib/persistence/store-factory.ts";
 import { logOperationalEvent } from "@campus/lib/observability/index.ts";
-import {
-  getTeacherAccountsStore,
-  getTeacherNotesStore,
-  getTeacherSetupsStore,
-  jsonResponse,
-  requireTeacherSession,
-} from "../../../../lib/server/api.ts";
+import { jsonResponse, requireAdminSession } from "../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../lib/server/observability.ts";
 
 async function handleGet(request: Request) {
-  const auth = await requireTeacherSession(request);
+  const auth = await requireAdminSession(request);
   if ("error" in auth && auth.error) return auth.error;
 
-  const [teacherSetups, teacherNotes, teacherAccounts] = await Promise.all([
-    getTeacherSetupsStore(),
-    getTeacherNotesStore(),
-    getTeacherAccountsStore(),
-  ]);
-
-  const snapshot = await exportAgendaSnapshot({
-    agenda: auth.store!,
-    teacherSetups,
-    teacherNotes,
-    teacherAccounts,
-  });
+  const snapshot = await exportStoreSnapshot();
 
   logOperationalEvent("agenda_backup_export", {
+    version: snapshot.version,
     itemCount: snapshot.itemCount,
     teacherSetupCount: snapshot.teacherSetupCount,
     teacherNotesCount: snapshot.teacherNotesCount,
     teacherAccountCount: snapshot.teacherAccountCount,
-    teacherId: auth.session!.teacherId,
+    tableCount: Object.keys(snapshot.tables ?? {}).length,
+    adminId: auth.session!.teacherId,
   });
 
-  return jsonResponse({ ok: true, snapshot });
+  return jsonResponse({ ok: true, snapshot }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export const GET = withApiObservability("/api/admin/backup", handleGet);

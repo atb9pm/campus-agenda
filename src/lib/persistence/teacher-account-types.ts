@@ -19,6 +19,8 @@ export interface TeacherAccountBackupEntry {
   passwordHash: string;
   createdAt: string | null;
   passwordUpdatedAt: string | null;
+  archivedAt?: string | null;
+  lastLoginAt?: string | null;
 }
 
 export interface TeacherAccountStore {

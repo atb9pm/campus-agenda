@@ -33,6 +33,11 @@ export class MemoryPedagogicalPathStore implements PedagogicalPathStore {
   async deletePathByContextId(contextId: string): Promise<boolean> {
     return this.byContext.delete(contextId);
   }
+
+  replaceAll(paths: ReferencePedagogicalPath[]): void {
+    this.byContext.clear();
+    for (const path of paths) this.byContext.set(path.contextId, structuredClone(path));
+  }
 }
 
 export class MemoryAnnualCourseNotesStore implements AnnualCourseNotesStore {
@@ -102,6 +107,15 @@ export class MemoryAnnualCourseNotesStore implements AnnualCourseNotesStore {
       updated += 1;
     }
     return updated;
+  }
+
+  exportAllNotes(): AnnualCourseNote[] {
+    return [...this.notes.values()].map((note) => structuredClone(note));
+  }
+
+  replaceAllNotes(notes: AnnualCourseNote[]): void {
+    this.notes.clear();
+    for (const note of notes) this.notes.set(note.id, structuredClone(note));
   }
 }
 

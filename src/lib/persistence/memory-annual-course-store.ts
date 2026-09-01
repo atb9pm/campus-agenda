@@ -105,6 +105,19 @@ export class MemoryAnnualCourseStore implements AnnualCourseStore {
   async appendEvent(event: TeacherCourseAssignmentEvent): Promise<void> {
     this.events.push({ ...event });
   }
+
+  replaceSnapshot(options: {
+    courses: AnnualCourse[];
+    assignments: TeacherCourseAssignment[];
+    events: TeacherCourseAssignmentEvent[];
+  }): void {
+    this.courses.clear();
+    this.assignments.clear();
+    this.events.length = 0;
+    for (const course of options.courses) this.courses.set(course.id, { ...course });
+    for (const assignment of options.assignments) this.assignments.set(assignment.id, { ...assignment });
+    this.events.push(...options.events.map((entry) => ({ ...entry })));
+  }
 }
 
 let memoryAnnualCourseStore: MemoryAnnualCourseStore | null = null;
