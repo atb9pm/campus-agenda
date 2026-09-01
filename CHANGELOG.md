@@ -2,7 +2,42 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.26.0] — Stabilisation : audit global, sécurité et cohérence des données
+
+Point de stabilisation après le référentiel, les cours annuels, les attributions et l’horaire.
+
+Aucune nouvelle fonctionnalité pédagogique. Pas de `CourseOccurrence`. Aucune migration SQL.
+
+### Sécurité
+
+- Les routes `/api/admin/**` exigent `requireAdminSession`, sauf `GET /api/admin/catalog?active=1` (configuration enseignant).
+- Les sessions enseignant et élève sont revalidées à chaque accès : compte désactivé, archivé ou accès élève révoqué → 401.
+- `parseSessionToken` ne lève plus sur un cookie corrompu.
+- Backup/restore : admin uniquement, `Cache-Control: no-store`, journaux sans empreintes ni snapshot.
+
+### Persistence
+
+- Backup format v4 : reconstruction des tables 0001→0023. Restauration validée avant écriture, transactionnelle (batch SQLite/D1). Au moins un administrateur actif obligatoire.
+- `agenda_items.id` généré par SQLite (`last_row_id`), plus `MAX(id)+1`.
+- Validation commune POST/PATCH des publications : semaine réelle de l’année, jour via `ClassAttendanceDay` + `CourseScheduleSlot`, fallback TMA isolé.
+
+### Runtime
+
+- Catalogue démo n’est plus la source de vérité des classes/accès authentifiés.
+- Jours de cours dynamiques depuis `ClassAttendanceDay` (plus de lundi/jeudi B générique).
+
+### CI
+
+- `npm test`, `npm run typecheck`, `npm run lint`. Installations `npm ci`.
+
+### Compatibilité
+
+- Migrations `0001`→`0023` inchangées.
+- Restauration des backups v1/v2/v3 selon leur périmètre historique.
+- PR54 (horaire), PR53 (présence), PR52 (créneaux), PR51 (attributions) inchangées.
+
 ## [2.25.2] — Horaire : clarifier la trame A/B et regrouper les créneaux par cours
+
 
 Cette version améliore l’ergonomie de l’horaire des classes sans modifier le modèle de données.
 
