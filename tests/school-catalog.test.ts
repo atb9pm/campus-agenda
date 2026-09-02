@@ -112,10 +112,11 @@ test("school catalog — édition et archivage de branche", async () => {
 });
 
 test("navigation — Administration réservée aux admins", () => {
-  assert.deepEqual([...TEACHER_NAV_SECTIONS], ["mes-cours", "ma-semaine", "configuration", "administration"]);
-  assert.deepEqual(teacherNavSectionsForRole(false), ["mes-cours", "ma-semaine", "configuration"]);
+  assert.deepEqual([...TEACHER_NAV_SECTIONS], ["mes-cours", "controles", "ma-semaine", "configuration", "administration"]);
+  assert.deepEqual(teacherNavSectionsForRole(false), ["mes-cours", "controles", "ma-semaine", "configuration"]);
   assert.deepEqual(teacherNavSectionsForRole(true), [
     "mes-cours",
+    "controles",
     "ma-semaine",
     "configuration",
     "administration",

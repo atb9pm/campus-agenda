@@ -102,6 +102,7 @@ import { PasswordChangePanel } from "./components/password-change-panel.tsx";
 import { ClassNotebookPanel } from "./components/class-notebook-panel.tsx";
 import { MaSemainePanel } from "./components/ma-semaine-panel.tsx";
 import { MesCoursPanel } from "./components/mes-cours-panel.tsx";
+import { ControlPlanningPanel } from "./components/control-planning-panel.tsx";
 import { TeacherCourseTimelinePanel } from "./components/teacher-course-timeline-panel.tsx";
 
 type AppMode = "teacher" | "student";
@@ -126,10 +127,22 @@ function BrandEmblem() {
   return <span className="brand-emblem-image" aria-hidden="true">CA</span>;
 }
 
-function sectionTitle(activeSection: TeacherNavSection, isStudentView: boolean, notebookClassName?: string) {
+function formatTeacherYearHeading(label: string): string {
+  return label.replace(/^(\d{4})-(\d{4})$/, "$1–$2");
+}
+
+function sectionTitle(
+  activeSection: TeacherNavSection,
+  isStudentView: boolean,
+  notebookClassName?: string,
+  schoolYearLabel?: string | null,
+) {
   if (isStudentView) return "Mon agenda";
   if (notebookClassName) return `Carnet · ${notebookClassName}`;
   if (activeSection === "mes-cours") return "Mes cours";
+  if (activeSection === "controles") {
+    return schoolYearLabel ? `Contrôles — ${formatTeacherYearHeading(schoolYearLabel)}` : "Contrôles";
+  }
   if (activeSection === "ma-semaine") return "Ma semaine";
   if (activeSection === "administration") return "Administration";
   return "Préférences";
@@ -142,6 +155,9 @@ function sectionDescription(activeSection: TeacherNavSection, isStudentView: boo
   }
   if (activeSection === "mes-cours") {
     return "Cours qui vous sont attribués pour l’année scolaire active.";
+  }
+  if (activeSection === "controles") {
+    return "Planification des contrôles publiés dans l’agenda.";
   }
   if (activeSection === "ma-semaine") {
     return "Vos cours attribués, organisés selon vos préférences d’affichage.";
@@ -1145,7 +1161,7 @@ export default function Home() {
           <div className="mobile-lockup"><BrandEmblem /><strong>CAMPUS AGENDA</strong></div>
           <div className="class-identity">
             <span className="eyebrow">Espace enseignant</span>
-            <h1>{sectionTitle(activeSection, false, openNotebookClass?.name)}</h1>
+            <h1>{sectionTitle(activeSection, false, openNotebookClass?.name, teacherCoursesYearLabel)}</h1>
             <p>{sectionDescription(activeSection, false, Boolean(openNotebookClass))}</p>
           </div>
           <div className="header-actions">
@@ -1176,6 +1192,8 @@ export default function Home() {
             }}
           />
         )}
+
+        {activeSection === "controles" && <ControlPlanningPanel />}
 
         {activeSection === "ma-semaine" && openNotebookClass && (
           <ClassNotebookPanel

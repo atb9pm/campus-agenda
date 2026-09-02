@@ -360,8 +360,8 @@ async function seedAssignedCourse(
   return course.value;
 }
 
-test("version 2.30.0 — déroulement, migration 0024, aucune table CourseSession", () => {
-  assert.equal(APP_VERSION, "2.30.0");
+test("version 2.31.0 — déroulement conservé, nav Contrôles, migration 0024", () => {
+  assert.equal(APP_VERSION, "2.31.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
   assert.equal(
     SQL_MIGRATION_FILES.some((file) => file.startsWith("0025")),
@@ -369,6 +369,7 @@ test("version 2.30.0 — déroulement, migration 0024, aucune table CourseSessio
   );
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",
+    "controles",
     "ma-semaine",
     "configuration",
     "administration",

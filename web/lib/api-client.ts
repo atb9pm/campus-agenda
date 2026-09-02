@@ -7,6 +7,10 @@ import type {
   TeacherCourseTimelineCourse,
 } from "@campus/features/course-timeline";
 import type { ClassNotesDocument } from "@campus/features/class-notebook";
+import type {
+  ControlPlanningMode,
+  ControlPlanningView,
+} from "@campus/features/control-planning";
 import type { AgendaItemType } from "@campus/types/agenda";
 
 export type { TeacherAccountRecord };
@@ -104,6 +108,32 @@ export async function fetchTeacherClassroomsApi(): Promise<Array<{ id: string; n
     throw new Error(payload.reason ?? "Chargement des classes impossible.");
   }
   return payload.classrooms;
+}
+
+export async function fetchTeacherControlPlanningApi(
+  query: {
+    schoolYearId?: string | null;
+    classroomId?: string | null;
+    mode?: ControlPlanningMode | null;
+    week?: number | null;
+  } = {},
+  signal?: AbortSignal,
+): Promise<ControlPlanningView> {
+  const params = new URLSearchParams();
+  if (query.schoolYearId) params.set("schoolYearId", query.schoolYearId);
+  if (query.classroomId) params.set("classroomId", query.classroomId);
+  if (query.mode) params.set("mode", query.mode);
+  if (query.week != null) params.set("week", String(query.week));
+  const suffix = params.size ? `?${params.toString()}` : "";
+  const response = await fetch(`/api/teacher/controls/planning${suffix}`, {
+    credentials: "include",
+    signal,
+  });
+  const payload = await parseJson<ControlPlanningView & { ok: boolean; reason?: string }>(response);
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.reason ?? "Chargement du planning des contrôles impossible.");
+  }
+  return payload;
 }
 
 export async function fetchTeacherCoursesApi(schoolYearId?: string | null): Promise<{

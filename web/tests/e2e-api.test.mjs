@@ -5,6 +5,9 @@ process.env.AUTH_SECRET ??= "test-secret-e2e-phase-08";
 // Les comptes de démonstration n'ont pas de mot de passe personnel : le parcours
 // E2E autorise explicitement l'empreinte héritée `campus-demo`.
 process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
+// Les tests E2E enchaînent plusieurs connexions enseignant ; le plafond 10/min
+// ferait échouer les scénarios ajoutés en fin de fichier.
+process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER ??= "40";
 
 const env = {
   ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
@@ -541,6 +544,97 @@ test("PR59 — publication structurée sans session → 401", async () => {
     }),
   });
   assert.equal(response.status, 401);
+});
+
+test("2.31.0 — E2E planning des contrôles : session, années, 403, TEST", async () => {
+  const anon = await request("/api/teacher/controls/planning");
+  assert.equal(anon.status, 401);
+
+  const studentLogin = await request("/api/auth/student", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code: "eleve-test-001" }),
+  });
+  assert.equal(studentLogin.status, 200);
+  const studentForbidden = await request("/api/teacher/controls/planning", {
+    headers: { cookie: extractCookie(studentLogin) },
+  });
+  assert.equal(studentForbidden.status, 401);
+
+  const teacherCookie = await loginTeacher("teacher-demo-current");
+  const forged = await request(
+    "/api/teacher/controls/planning?teacherId=teacher-demo-martin&week=12&mode=mine",
+    { headers: { cookie: teacherCookie } },
+  );
+  assert.equal(forged.status, 200);
+  const payload = await forged.json();
+  assert.equal(payload.ok, true);
+  assert.ok(payload.week);
+  assert.equal(payload.week.days.length, 5);
+  assert.ok(Array.isArray(payload.years));
+  assert.ok(payload.years.length >= 1);
+  assert.ok(payload.years.every((year) => year.status === "active" || year.status === "archived"));
+  assert.equal(
+    payload.years.some((year) => year.status === "draft"),
+    false,
+  );
+  const activeYear = payload.years.find((year) => year.status === "active");
+  assert.ok(activeYear);
+  assert.equal(payload.schoolYearId, activeYear.id);
+
+  for (const day of payload.week.days) {
+    assert.equal("hour" in day, false);
+    for (const card of day.controls) {
+      assert.ok(card.classroomName);
+      assert.equal("hour" in card, false);
+      assert.notEqual(card.title, "Système de freinage");
+      assert.notEqual(card.title, "Dossier technique");
+      assert.notEqual(card.title, "Tenue de travail");
+    }
+  }
+
+  const sameYear = await request(
+    `/api/teacher/controls/planning?schoolYearId=${encodeURIComponent(payload.schoolYearId)}&week=12`,
+    { headers: { cookie: teacherCookie } },
+  );
+  assert.equal(sameYear.status, 200);
+  const samePayload = await sameYear.json();
+  assert.equal(samePayload.schoolYearId, payload.schoolYearId);
+  assert.deepEqual(
+    (samePayload.classes ?? []).map((entry) => entry.id).sort(),
+    (payload.classes ?? []).map((entry) => entry.id).sort(),
+  );
+
+  const unknownYear = await request("/api/teacher/controls/planning?schoolYearId=year-inexistante", {
+    headers: { cookie: teacherCookie },
+  });
+  assert.equal(unknownYear.status, 404);
+
+  const unknownClass = await request(
+    "/api/teacher/controls/planning?classroomId=classe-inconnue&mode=mine",
+    { headers: { cookie: teacherCookie } },
+  );
+  assert.equal(unknownClass.status, 403);
+
+  const classAllUnknown = await request(
+    "/api/teacher/controls/planning?classroomId=classe-inconnue&mode=class-all",
+    { headers: { cookie: teacherCookie } },
+  );
+  assert.equal(classAllUnknown.status, 403);
+
+  const classroomId = payload.classes?.[0]?.id;
+  if (classroomId) {
+    const classAll = await request(
+      `/api/teacher/controls/planning?week=12&mode=class-all&classroomId=${encodeURIComponent(classroomId)}&schoolYearId=${encodeURIComponent(payload.schoolYearId)}`,
+      { headers: { cookie: teacherCookie } },
+    );
+    assert.equal(classAll.status, 200);
+    const classPayload = await classAll.json();
+    assert.equal(classPayload.ok, true);
+    assert.equal(classPayload.mode, "class-all");
+    assert.equal(classPayload.schoolYearId, payload.schoolYearId);
+    assert.equal(classPayload.week.days.length, 5);
+  }
 });
 
 
