@@ -16,6 +16,7 @@ Un enseignant peut déplacer un contrôle existant vers une autre séance de cou
 - Choix explicite de la CourseSession lorsqu’une case en contient plusieurs.
 - Action tactile « Déplacer » si le drag & drop n’est pas fiable.
 - Conservation de l’`agendaItemId`, de l’auteur, du titre, du détail et du type.
+- Refus explicite des déplacements N → N+1 : le `schoolYearId` source doit être identique à celui de la CourseSession destination.
 
 ### Non inclus
 

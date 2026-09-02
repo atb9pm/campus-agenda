@@ -21,6 +21,7 @@ import {
   STRUCTURED_CONTROL_MOVE_FREE_PLACEMENT_REASON,
   STRUCTURED_CONTROL_MOVE_NOT_STRUCTURED_REASON,
   STRUCTURED_CONTROL_MOVE_NOT_TEST_REASON,
+  STRUCTURED_CONTROL_MOVE_YEAR_MISMATCH_REASON,
   STRUCTURED_PUBLISH_FORBIDDEN_REASON,
   STRUCTURED_PUBLISH_SESSION_GONE_REASON,
   STRUCTURED_PUBLISH_YEAR_ARCHIVED_REASON,
@@ -91,6 +92,17 @@ function mondayWeeks(startMonday: string, count: number) {
 }
 
 function yearsStub(status: SchoolYearRecord["status"] = "active"): SchoolYearStore {
+  const previous: SchoolYearRecord = {
+    id: "year-2026",
+    label: "2026-2027",
+    status: "archived",
+    startsOn: "2026-08-01",
+    endsOn: "2027-07-31",
+    sourceFilename: null,
+    importedAt: null,
+    activatedAt: "2026-08-01T00:00:00.000Z",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  };
   const year: SchoolYearRecord = {
     id: "year-2027",
     label: "2027-2028",
@@ -102,11 +114,16 @@ function yearsStub(status: SchoolYearRecord["status"] = "active"): SchoolYearSto
     activatedAt: status === "active" ? "2027-08-01T00:00:00.000Z" : null,
     createdAt: "2027-01-01T00:00:00.000Z",
   };
+  const weeks2026 = mondayWeeks("2026-08-17", 16);
   const weeks2027 = mondayWeeks("2027-08-16", 16);
   return {
-    listSchoolYears: async () => [year],
+    listSchoolYears: async () => [previous, year],
     getActiveSchoolYear: async () => (status === "active" ? { ...year, weeks: weeks2027 } : null),
-    getSchoolYearById: async (id: string) => (id === "year-2027" ? { ...year, weeks: weeks2027 } : null),
+    getSchoolYearById: async (id: string) => {
+      if (id === "year-2026") return { ...previous, weeks: weeks2026 };
+      if (id === "year-2027") return { ...year, weeks: weeks2027 };
+      return null;
+    },
     listDayExceptions: async () => [],
   } as SchoolYearStore;
 }
@@ -181,7 +198,9 @@ async function sqliteWorld(): Promise<World> {
   await applyMigrations(db);
   await db.exec(
     `INSERT OR IGNORE INTO school_years (id, label, status, starts_on, ends_on, created_at)
-     VALUES ('year-2027', '2027-2028', 'active', '2027-08-01', '2028-07-31', datetime('now'))`,
+     VALUES
+       ('year-2026', '2026-2027', 'archived', '2026-08-01', '2027-07-31', datetime('now')),
+       ('year-2027', '2027-2028', 'active', '2027-08-01', '2028-07-31', datetime('now'))`,
   );
   const catalog = new SqlSchoolCatalogStore(db);
   await catalog.ensureSeeded();
@@ -671,6 +690,72 @@ test("rejet — année archivée, no-op même séance", async () => {
   });
 });
 
+test("rejet — aucun déplacement N → N+1, données source inchangées", async () => {
+  await withWorlds(async (world) => {
+    const seeded = await seedCourse(world);
+    const [source, dest] = await sessionsFor(world, seeded.course.id);
+    assert.notEqual(source!.key, dest!.key);
+    const created = await publishTest(world, seeded.teacher.id, seeded.course.id, source!.key, "Contrôle N");
+    const previousYearItem = { ...created, schoolYearId: "year-2026" };
+    await world.agenda.replaceAllItems(
+      (await world.agenda.exportAllItems()).map((item) => (item.id === created.id ? previousYearItem : item)),
+    );
+    const before = await world.agenda.findAgendaItem(created.id);
+    assert.ok(before);
+    assert.equal(before?.schoolYearId, "year-2026");
+    assert.equal(before?.annualCourseId, created.annualCourseId);
+    assert.equal(before?.courseSessionKey, source!.key);
+
+    const refused = await moveStructuredControlToCourseSession(world.publishDeps, {
+      teacherId: seeded.teacher.id,
+      agendaItemId: created.id,
+      annualCourseId: seeded.course.id,
+      courseSessionKey: dest!.key,
+    });
+    assert.equal(refused.ok, false);
+    if (!refused.ok) {
+      assert.equal(refused.status, 409);
+      assert.equal(refused.reason, STRUCTURED_CONTROL_MOVE_YEAR_MISMATCH_REASON);
+    }
+
+    const after = await world.agenda.findAgendaItem(created.id);
+    assert.deepEqual(after, before);
+    assert.equal(after?.id, created.id);
+    assert.equal(after?.annualCourseId, created.annualCourseId);
+    assert.equal(after?.courseSessionKey, source!.key);
+    assert.equal(after?.courseSessionDate, source!.date);
+    assert.equal(after?.schoolYearId, "year-2026");
+    assert.equal(after?.title, "Contrôle N");
+    assert.equal(after?.detail, created.detail);
+    assert.equal(after?.authorTeacherId, seeded.teacher.id);
+    assert.equal(after?.type, "TEST");
+    assert.equal(after?.classroomId, created.classroomId);
+    assert.equal(after?.subjectId, created.subjectId);
+    assert.equal(after?.schoolWeekNumber, created.schoolWeekNumber);
+    assert.equal(after?.day, created.day);
+
+    const unscoped = { ...previousYearItem, schoolYearId: null };
+    await world.agenda.replaceAllItems(
+      (await world.agenda.exportAllItems()).map((item) => (item.id === created.id ? unscoped : item)),
+    );
+    const missingYear = await moveStructuredControlToCourseSession(world.publishDeps, {
+      teacherId: seeded.teacher.id,
+      agendaItemId: created.id,
+      annualCourseId: seeded.course.id,
+      courseSessionKey: dest!.key,
+    });
+    assert.equal(missingYear.ok, false);
+    if (!missingYear.ok) {
+      assert.equal(missingYear.status, 409);
+      assert.equal(missingYear.reason, STRUCTURED_CONTROL_MOVE_YEAR_MISMATCH_REASON);
+    }
+    const stillUnscoped = await world.agenda.findAgendaItem(created.id);
+    assert.equal(stillUnscoped?.schoolYearId, null);
+    assert.equal(stillUnscoped?.courseSessionKey, source!.key);
+    assert.equal(stillUnscoped?.id, created.id);
+  });
+});
+
 test("coordination destination — classe cible seule, exclusion source, confirmation puis acceptation", async () => {
   await withWorlds(async (world) => {
     const first = await seedCourse(world, { classCode: "MA2A" });
@@ -839,6 +924,9 @@ test("PATCH générique inchangé — déplacement via API dédiée seulement", 
   assert.match(panel, /Déplacer/);
   assert.match(service, /moveStructuredControlPlacement/);
   assert.match(service, /excludeItemId/);
+  assert.match(service, /STRUCTURED_CONTROL_MOVE_YEAR_MISMATCH_REASON/);
+  assert.match(service, /item\.schoolYearId/);
+  assert.match(service, /context\.courseSession\.schoolYearId/);
   assert.doesNotMatch(service, /CREATE TABLE/);
 
   const item = {

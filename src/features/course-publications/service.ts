@@ -55,6 +55,8 @@ export const STRUCTURED_CONTROL_MOVE_FORBIDDEN_REASON =
   "Vous ne pouvez déplacer que vos propres contrôles.";
 export const STRUCTURED_CONTROL_MOVE_FREE_PLACEMENT_REASON =
   "La destination doit être une séance réelle (annualCourseId + courseSessionKey).";
+export const STRUCTURED_CONTROL_MOVE_YEAR_MISMATCH_REASON =
+  "Un contrôle ne peut pas être déplacé vers une autre année scolaire.";
 
 export function structuredPublishReferentialGuard(options: {
   year: SchoolYearRecord | null | undefined;
@@ -514,6 +516,11 @@ export async function moveStructuredControlToCourseSession(
   });
   if (!resolved.ok) return resolved;
   const context = resolved.value;
+
+  const sourceYearId = item.schoolYearId?.trim() || "";
+  if (!sourceYearId || sourceYearId !== context.courseSession.schoolYearId) {
+    return { ok: false, reason: STRUCTURED_CONTROL_MOVE_YEAR_MISMATCH_REASON, status: 409 };
+  }
 
   if (item.annualCourseId === context.course.id && item.courseSessionKey === context.courseSession.key) {
     const coordination = await coordinationForResolved(deps, context, "TEST");
