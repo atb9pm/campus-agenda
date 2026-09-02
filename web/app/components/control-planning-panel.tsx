@@ -192,10 +192,6 @@ function ControlCard({
     };
   }, [menuOpen]);
 
-  useEffect(() => {
-    if (dragging) setMenuOpen(false);
-  }, [dragging]);
-
   function stopCardGesture(event: { preventDefault(): void; stopPropagation(): void }) {
     event.preventDefault();
     event.stopPropagation();
@@ -215,7 +211,14 @@ function ControlCard({
       data-course-session-date={card.courseSessionDate ?? card.date ?? ""}
       title={title}
       draggable={movable}
-      onDragStart={movable ? onDragStart : undefined}
+      onDragStart={
+        movable
+          ? (event) => {
+              setMenuOpen(false);
+              onDragStart?.(event);
+            }
+          : undefined
+      }
       onDragEnd={movable ? onDragEnd : undefined}
     >
       <div className="control-planning-card-head">
