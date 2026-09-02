@@ -653,7 +653,7 @@ async function jsonRequest(path, init = {}) {
   return { response, payload };
 }
 
-async function seedInteractiveControlCourse(adminCookie, teacherId) {
+async function seedInteractiveControlCourse(adminCookie, teacherId, classCodePrefix = "CTL") {
   const headers = { "Content-Type": "application/json", cookie: adminCookie };
   const years = await jsonRequest("/api/admin/school-year", { headers: { cookie: adminCookie } });
   assert.equal(years.response.status, 200, years.payload.reason);
@@ -679,7 +679,7 @@ async function seedInteractiveControlCourse(adminCookie, teacherId) {
       kind: "profession",
       label: `Contrôles interactifs ${Date.now()}`,
       durationYears: 4,
-      classCodePrefix: "CTL",
+      classCodePrefix,
     }),
   });
   assert.equal(profession.response.status, 200, profession.payload.reason);
@@ -1011,7 +1011,7 @@ test("2.34.0 — E2E déplacement structuré vers une autre CourseSession", asyn
   const adminCookie = await loginAdmin();
   const teacherCookie = await loginTeacher("teacher-demo-current");
   const otherCookie = await loginTeacher("teacher-demo-martin");
-  const seeded = await seedInteractiveControlCourse(adminCookie, "teacher-demo-current");
+  const seeded = await seedInteractiveControlCourse(adminCookie, "teacher-demo-current", "MOV");
 
   const semester = await jsonRequest(
     `/api/teacher/controls/planning?view=semester&schoolYearId=${encodeURIComponent(seeded.schoolYearId)}`,
