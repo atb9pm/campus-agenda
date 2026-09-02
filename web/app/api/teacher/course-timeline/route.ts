@@ -54,10 +54,15 @@ async function handleGet(request: Request) {
   const schoolClass = course ? classes.find((entry) => entry.id === course.classId) ?? null : null;
   const branchInfo = course ? contextBranchForCourse({ course, contexts, branches }) : null;
   if (course && schoolClass && branchInfo) {
+    const allCourses = await courses.listCourses();
     await ensureRuntimeSubjectForAnnualCourse(adapters, {
       schoolClass,
       course,
       branch: branchInfo.branch,
+      allSchoolClasses: classes,
+      courses: allCourses,
+      contexts,
+      branches,
     });
   }
 

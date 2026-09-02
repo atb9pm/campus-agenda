@@ -1,7 +1,11 @@
+import { decideAgendaPublishAccess } from "../annual-courses/agenda-access.ts";
 import { isAssignmentActiveAt } from "../annual-courses/assignments.ts";
+import type { ResolvedPublicationCourse } from "../annual-courses/resolve.ts";
 import type { AnnualCourse, TeacherCourseAssignment } from "../annual-courses/types.ts";
+import type { TeacherAccountRecord } from "../teacher-accounts/types.ts";
 import type { SchoolClassRecord } from "../school-catalog/types.ts";
 import type { SchoolYearRecord } from "../school-year/types.ts";
+import type { ClassroomAgendaBinding } from "./reconcile.ts";
 
 export function assignmentInstantForSessionDate(date: string): string {
   return `${date}T12:00:00.000Z`;
@@ -50,4 +54,40 @@ export function teacherHasStructuredPublishAccess(options: {
       assignment.teacherId === options.teacherId &&
       isAssignmentActiveAt(assignment, options.at),
   );
+}
+
+/**
+ * Classroom structuré : TCA à la date cible uniquement. Membership et noms interdits.
+ * Classroom legacy (school_class_id null) : comportement historique.
+ */
+export function evaluateTeacherAgendaPublishAccess(options: {
+  binding: ClassroomAgendaBinding;
+  teacherId: string;
+  assignments: TeacherCourseAssignment[];
+  targetAt: string | null;
+  teacher: TeacherAccountRecord | null | undefined;
+  legacyResolved: ResolvedPublicationCourse | null;
+  legacyMembershipAllows: boolean;
+}): boolean {
+  if (options.binding.kind === "structured-incomplete") return false;
+  if (options.binding.kind === "structured") {
+    if (options.binding.target.schoolClass.isArchived || options.binding.target.course.isArchived) {
+      return false;
+    }
+    if (!options.targetAt) return false;
+    return teacherHasStructuredPublishAccess({
+      teacherId: options.teacherId,
+      annualCourseId: options.binding.target.course.id,
+      assignments: options.assignments,
+      at: options.targetAt,
+    });
+  }
+
+  return decideAgendaPublishAccess({
+    resolved: options.legacyResolved,
+    teacher: options.teacher,
+    assignments: options.assignments,
+    legacyMembershipAllows: options.legacyMembershipAllows,
+    at: options.targetAt ?? undefined,
+  });
 }

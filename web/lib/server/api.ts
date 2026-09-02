@@ -11,19 +11,21 @@ import {
   unauthorizedResponse,
 } from "@campus/lib/auth/index.ts";
 import { checkClassroomExists, getAgendaStore, getAnnualCourseNotesStore, getAnnualCourseStore, getCourseScheduleStore, getMembershipStore, getPedagogicalPathStore, getRuntimeAgendaAdapterStore, getSchoolCatalogStore, getSchoolYearStore, getTeacherAccountStore, getTeacherNotesStore as resolveTeacherNotesStore, getTeacherSetupStore, getTemplateStore, resolveClassroomSubjectNames } from "@campus/lib/persistence/store-factory.ts";
-import { decideAgendaPublishAccess, resolveAnnualCourseForPublication } from "@campus/features/annual-courses/index.ts";
+import { resolveAnnualCourseForPublication } from "@campus/features/annual-courses/index.ts";
 import { validateAgendaScheduleTarget } from "@campus/features/agenda/schedule-target.ts";
 import type { AnnualCourseServiceDeps } from "@campus/features/annual-courses/index.ts";
 import type { CourseScheduleServiceDeps } from "@campus/features/course-schedule/index.ts";
 import type { CourseTimelineServiceDeps } from "@campus/features/course-timeline/index.ts";
 import type { StructuredPublishDeps } from "@campus/features/course-publications/index.ts";
 import {
+  assignmentInstantForSessionDate,
+  evaluateTeacherAgendaPublishAccess,
+  loadClassroomAgendaBinding,
   reconcileStructuredClassrooms,
-  resolveStructuredAgendaTarget,
   resolveStructuredSchoolClassForClassroom,
   teacherHasStructuredClassroomReadAccess,
-  teacherHasStructuredPublishAccess,
 } from "@campus/features/agenda-bridge/index.ts";
+import { isoDateForSchoolWeekDay } from "@campus/features/school-days/index.ts";
 import { evaluateAgendaBranchForClass, assertAgendaClassMutable } from "@campus/features/school-catalog/index.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import { ARCHIVED_YEAR_READONLY_REASON, getArchivedYearIds, isArchivedYearItem } from "@campus/features/school-year/archived-readonly.ts";
@@ -161,10 +163,11 @@ export async function authorizeTeacherAgendaPublish(
   subjectId: string,
   store: { teacherCanPublish(teacherId: string, classroomId: string, subjectId: string): Promise<boolean> },
   schoolYearId?: string | null,
+  schedule?: { schoolWeekNumber: number; dayIndex: number } | null,
 ): Promise<boolean> {
   const catalog = await getSchoolCatalogStore();
   await catalog.ensureSeeded();
-  const [classes, branches, contexts, courses, assignments, teacher, adapters] = await Promise.all([
+  const [classes, branches, contexts, courses, assignments, teacher, adapters, yearStore] = await Promise.all([
     catalog.listClasses(),
     catalog.listBranches(),
     catalog.listContexts(),
@@ -172,24 +175,37 @@ export async function authorizeTeacherAgendaPublish(
     getAnnualCourseStore().then((entry) => entry.listAssignments()),
     getTeacherAccountStore().then((entry) => entry.findAccount(teacherId)),
     getRuntimeAgendaAdapterStore(),
+    getSchoolYearStore(),
   ]);
-  const structured = await resolveStructuredAgendaTarget(adapters, {
+  const binding = await loadClassroomAgendaBinding(adapters, {
     classroomId,
     subjectId,
     classes,
     courses,
   });
-  if (structured) {
-    if (structured.schoolClass.isArchived || structured.course.isArchived) return false;
-    return teacherHasStructuredPublishAccess({
+  if (binding.kind === "structured-incomplete") return false;
+  if (binding.kind === "structured") {
+    const yearId = binding.target.schoolClass.schoolYearId ?? schoolYearId ?? null;
+    const year = yearId
+      ? await yearStore.getSchoolYearById(yearId)
+      : await yearStore.getActiveSchoolYear();
+    const targetDate =
+      schedule && year
+        ? isoDateForSchoolWeekDay(year.weeks, schedule.schoolWeekNumber, schedule.dayIndex)
+        : null;
+    if (!targetDate) return false;
+    return evaluateTeacherAgendaPublishAccess({
+      binding,
       teacherId,
-      annualCourseId: structured.course.id,
       assignments,
-      at: new Date().toISOString(),
+      targetAt: assignmentInstantForSessionDate(targetDate),
+      teacher,
+      legacyResolved: null,
+      legacyMembershipAllows: false,
     });
   }
 
-  // LEGACY ADAPTER — correspondance par noms uniquement sans lien explicite.
+  // LEGACY ADAPTER — uniquement si classroom.school_class_id IS NULL.
   const names = await resolveClassroomSubjectNames(classroomId, subjectId);
   const resolved = resolveAnnualCourseForPublication({
     classroomName: names.classroomName,
@@ -203,12 +219,38 @@ export async function authorizeTeacherAgendaPublish(
   const legacyMembershipAllows = resolved
     ? false
     : await store.teacherCanPublish(teacherId, classroomId, subjectId);
-  return decideAgendaPublishAccess({
-    resolved,
-    teacher,
+  return evaluateTeacherAgendaPublishAccess({
+    binding,
+    teacherId,
     assignments,
+    targetAt: null,
+    teacher,
+    legacyResolved: resolved,
     legacyMembershipAllows,
   });
+}
+
+export async function assertStructuredAgendaSubjectLinked(
+  classroomId: string,
+  subjectId: string,
+): Promise<Response | null> {
+  const catalog = await getSchoolCatalogStore();
+  await catalog.ensureSeeded();
+  const [classes, courses, adapters] = await Promise.all([
+    catalog.listClasses(),
+    getAnnualCourseStore().then((entry) => entry.listCourses()),
+    getRuntimeAgendaAdapterStore(),
+  ]);
+  const binding = await loadClassroomAgendaBinding(adapters, {
+    classroomId,
+    subjectId,
+    classes,
+    courses,
+  });
+  if (binding.kind === "structured-incomplete") {
+    return jsonResponse({ ok: false, reason: binding.reason }, { status: 409 });
+  }
+  return null;
 }
 
 /** Message unique côté client pour déclencher l'écran de changement obligatoire. */
@@ -254,20 +296,23 @@ export async function assertValidAgendaScheduleTarget(options: {
     getCourseScheduleStore(),
     getRuntimeAgendaAdapterStore(),
   ]);
-  const structured = await resolveStructuredAgendaTarget(adapters, {
+  const binding = await loadClassroomAgendaBinding(adapters, {
     classroomId: options.classroomId,
     subjectId: options.subjectId,
     classes,
     courses,
   });
+  if (binding.kind === "structured-incomplete") {
+    return jsonResponse({ ok: false, reason: binding.reason }, { status: 409 });
+  }
   let attendanceDays = null;
   let slots = null;
-  let resolvedStructuredCourse = Boolean(structured);
-  if (structured) {
-    attendanceDays = await scheduleStore.listAttendanceDaysByClass(structured.schoolClass.id);
-    slots = await scheduleStore.listSlotsByAnnualCourse(structured.course.id);
+  let resolvedStructuredCourse = binding.kind === "structured";
+  if (binding.kind === "structured") {
+    attendanceDays = await scheduleStore.listAttendanceDaysByClass(binding.target.schoolClass.id);
+    slots = await scheduleStore.listSlotsByAnnualCourse(binding.target.course.id);
   } else {
-    // LEGACY ADAPTER — résolution par noms uniquement sans lien explicite.
+    // LEGACY ADAPTER — uniquement si classroom.school_class_id IS NULL.
     const names = await resolveClassroomSubjectNames(options.classroomId, options.subjectId);
     const resolved = resolveAnnualCourseForPublication({
       classroomName: names.classroomName,
@@ -363,22 +408,25 @@ export async function assertAgendaPublicationBranchAllowed(
     getAnnualCourseStore().then((entry) => entry.listCourses()),
     getRuntimeAgendaAdapterStore(),
   ]);
-  const structured = await resolveStructuredAgendaTarget(adapters, {
+  const binding = await loadClassroomAgendaBinding(adapters, {
     classroomId,
     subjectId,
     classes,
     courses,
   });
-  if (structured) {
-    if (structured.schoolClass.isArchived) {
+  if (binding.kind === "structured-incomplete") {
+    return forbiddenResponse(binding.reason);
+  }
+  if (binding.kind === "structured") {
+    if (binding.target.schoolClass.isArchived) {
       return forbiddenResponse("Cette classe est archivée. Impossible de publier un nouvel élément.");
     }
-    if (purpose !== "update" && !structured.schoolClass.isActive) {
+    if (purpose !== "update" && !binding.target.schoolClass.isActive) {
       return forbiddenResponse("Cette classe est désactivée. Impossible de publier un nouvel élément.");
     }
     return null;
   }
-  // LEGACY ADAPTER
+  // LEGACY ADAPTER — uniquement si classroom.school_class_id IS NULL.
   const names = await resolveClassroomSubjectNames(classroomId, subjectId);
   const result = evaluateAgendaBranchForClass({
     classroomName: names.classroomName,

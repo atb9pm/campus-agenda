@@ -54,7 +54,7 @@ function ReferenceItems({
   entry: CourseTimelineEntry;
   publishedByItemId: Map<string, CourseTimelinePublicationSummary>;
   publishingItemId: string | null;
-  publishError: string;
+  publishError: { itemId: string; message: string } | null;
   onPublish: (referenceItemId: string, courseSessionKey: string) => void;
 }) {
   const reference = entry.referenceSession;
@@ -93,8 +93,8 @@ function ReferenceItems({
                     {busy ? "Publication…" : "Publier dans l’Agenda"}
                   </button>
                 )}
-                {publishError && publishingItemId === item.id ? (
-                  <p className="course-timeline-publish-error">{publishError}</p>
+                {publishError?.itemId === item.id ? (
+                  <p className="course-timeline-publish-error">{publishError.message}</p>
                 ) : null}
               </li>
             );
@@ -115,7 +115,7 @@ function TimelineCards({
   timeline: CourseTimelineProjection;
   publishedByItemId: Map<string, CourseTimelinePublicationSummary>;
   publishingItemId: string | null;
-  publishError: string;
+  publishError: { itemId: string; message: string } | null;
   onPublish: (referenceItemId: string, courseSessionKey: string) => void;
 }) {
   if (timeline.entries.length === 0) {
@@ -170,7 +170,7 @@ export function TeacherCourseTimelinePanel({
   const [timeline, setTimeline] = useState<CourseTimelineProjection | null>(null);
   const [publications, setPublications] = useState<CourseTimelinePublicationSummary[]>([]);
   const [publishingItemId, setPublishingItemId] = useState<string | null>(null);
-  const [publishError, setPublishError] = useState("");
+  const [publishError, setPublishError] = useState<{ itemId: string; message: string } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -209,13 +209,14 @@ export function TeacherCourseTimelinePanel({
 
   async function handlePublish(referenceItemId: string, courseSessionKey: string) {
     setPublishingItemId(referenceItemId);
-    setPublishError("");
+    setPublishError(null);
     try {
       const item = await publishTeacherCoursePublicationApi({
         annualCourseId,
         courseSessionKey,
         referenceItemId,
       });
+      setPublishError(null);
       setPublications((previous) => [
         ...previous.filter((entry) => entry.referenceItemId !== referenceItemId),
         {
@@ -229,7 +230,7 @@ export function TeacherCourseTimelinePanel({
       onAgendaItemCreated?.(item);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Publication impossible.";
-      setPublishError(message);
+      setPublishError({ itemId: referenceItemId, message });
     } finally {
       setPublishingItemId(null);
     }

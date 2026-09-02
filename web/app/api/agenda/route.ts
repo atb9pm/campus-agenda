@@ -1,6 +1,7 @@
 import { AGENDA_ITEM_TYPES } from "@campus/types/agenda.ts";
 import {
   assertAgendaPublicationBranchAllowed,
+  assertStructuredAgendaSubjectLinked,
   assertValidAgendaScheduleTarget,
   forbiddenResponse,
   getArchivedSchoolYearIds,
@@ -82,15 +83,26 @@ export async function POST(request: Request) {
 
   const activeYear = await getActiveSchoolYear();
   const activeSchoolYearId = activeYear?.id ?? null;
-  if (!(await authorizeTeacherAgendaPublish(auth.session!.teacherId, classroomId, subjectId, auth.store!, activeSchoolYearId))) {
+  const schoolWeekNumber = Number(body.schoolWeekNumber ?? 0);
+  const day = Number(body.day ?? 0);
+  const subjectLinkGuard = await assertStructuredAgendaSubjectLinked(classroomId, subjectId);
+  if (subjectLinkGuard) return subjectLinkGuard;
+  if (
+    !(await authorizeTeacherAgendaPublish(
+      auth.session!.teacherId,
+      classroomId,
+      subjectId,
+      auth.store!,
+      activeSchoolYearId,
+      { schoolWeekNumber, dayIndex: day },
+    ))
+  ) {
     return forbiddenResponse("Vous ne pouvez pas publier dans cette branche.");
   }
 
   const branchGuard = await assertAgendaPublicationBranchAllowed(classroomId, subjectId, activeSchoolYearId);
   if (branchGuard) return branchGuard;
 
-  const schoolWeekNumber = Number(body.schoolWeekNumber ?? 0);
-  const day = Number(body.day ?? 0);
   const scheduleGuard = await assertValidAgendaScheduleTarget({
     classroomId,
     subjectId,

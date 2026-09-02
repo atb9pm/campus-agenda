@@ -67,6 +67,10 @@ export async function PATCH(request: Request, context: RouteContext) {
       body.subjectId ?? existing.subjectId,
       auth.store!,
       existing.schoolYearId,
+      {
+        schoolWeekNumber: Number(body.schoolWeekNumber ?? existing.schoolWeekNumber),
+        dayIndex: Number(body.day ?? existing.day),
+      },
     ))
   ) {
     return forbiddenResponse("Branche non autorisée.");

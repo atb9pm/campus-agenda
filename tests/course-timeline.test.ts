@@ -1128,6 +1128,7 @@ test("sources — GET enseignant lecture seule, pas d’ensurePath, pas de calen
   assert.match(timelineUi, /REFERENCE_ITEM_TYPE_LABELS/);
   assert.match(timelineUi, /AbortController/);
   assert.match(timelineUi, /publishTeacherCoursePublicationApi/);
+  assert.match(timelineUi, /publishError\?\.itemId === item\.id/);
   assert.doesNotMatch(timelineUi, /Créer devoir/);
   assert.doesNotMatch(timelineUi, /Créer contrôle/);
   assert.doesNotMatch(timelineUi, /Passée/);

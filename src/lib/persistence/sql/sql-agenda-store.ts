@@ -95,8 +95,18 @@ export class SqlAgendaStore implements AgendaStore {
         )
         .run();
     } catch (error) {
-      if (isUniqueConstraintError(error)) {
-        throw new Error("Cet élément de référence a déjà été publié dans l’Agenda pour ce cours.");
+      if (
+        isUniqueConstraintError(error) &&
+        input.annualCourseId?.trim() &&
+        input.referenceItemId?.trim()
+      ) {
+        const existing = await this.findAgendaItemByReferenceItem(
+          input.annualCourseId.trim(),
+          input.referenceItemId.trim(),
+        );
+        if (existing) {
+          throw new Error("Cet élément de référence a déjà été publié dans l’Agenda pour ce cours.");
+        }
       }
       throw error;
     }

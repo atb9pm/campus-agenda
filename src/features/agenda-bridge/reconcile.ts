@@ -7,10 +7,17 @@ import type {
   RuntimeSubject,
 } from "../../lib/persistence/runtime-agenda-types.ts";
 import { runtimeClassroomIdForSchoolClass, runtimeSubjectIdForAnnualCourse } from "./ids.ts";
-import { findUniqueAdoptableClassroom, findUniqueAdoptableSubject } from "./match.ts";
+import {
+  findUniqueAdoptableClassroom,
+  findUniqueAdoptableSubject,
+  subjectNameMatchesBranchLabel,
+} from "./match.ts";
 
 export const UNSAFE_AGENDA_BRIDGE_REASON =
   "Impossible d'établir le pont Agenda de manière sûre.";
+
+export const STRUCTURED_SUBJECT_UNLINKED_REASON =
+  "Cette branche Agenda n’est pas encore reliée à un cours annuel.";
 
 export type AgendaBridgeOk<T> = { ok: true; value: T };
 export type AgendaBridgeErr = { ok: false; reason: string };
@@ -22,6 +29,11 @@ export interface StructuredAgendaTarget {
   schoolClass: SchoolClassRecord;
   course: AnnualCourse;
 }
+
+export type ClassroomAgendaBinding =
+  | { kind: "legacy"; classroom: RuntimeClassroom | null }
+  | { kind: "structured"; target: StructuredAgendaTarget }
+  | { kind: "structured-incomplete"; reason: string; classroom: RuntimeClassroom };
 
 function linked(value: string | null | undefined): string | null {
   const trimmed = value?.trim() ?? "";
@@ -37,16 +49,72 @@ async function catchUnsafe<T>(work: () => Promise<T>): Promise<AgendaBridgeResul
   }
 }
 
+export function candidateAnnualCourseIdsForSubject(options: {
+  schoolClassId: string;
+  branchLabel: string;
+  courses: AnnualCourse[];
+  contexts: PedagogicalContextRecord[];
+  branches: SchoolBranchRecord[];
+}): string[] {
+  return options.courses
+    .filter((course) => course.classId === options.schoolClassId)
+    .filter((course) => {
+      const info = contextBranchForCourse({
+        course,
+        contexts: options.contexts,
+        branches: options.branches,
+      });
+      return info ? subjectNameMatchesBranchLabel(info.branch.label, options.branchLabel) : false;
+    })
+    .map((course) => course.id);
+}
+
+/**
+ * Classroom lié → monde structuré. Subject doit être explicitement lié à un
+ * AnnualCourse de CETTE SchoolClass. Jamais de fallback par noms.
+ */
+export function inspectClassroomAgendaBinding(options: {
+  classroom: RuntimeClassroom | null | undefined;
+  subject: RuntimeSubject | null | undefined;
+  classes: SchoolClassRecord[];
+  courses: AnnualCourse[];
+}): ClassroomAgendaBinding {
+  const classroom = options.classroom ?? null;
+  const schoolClassId = linked(classroom?.schoolClassId);
+  if (!classroom || !schoolClassId) {
+    return { kind: "legacy", classroom };
+  }
+
+  const schoolClass = options.classes.find((entry) => entry.id === schoolClassId) ?? null;
+  if (!schoolClass) {
+    return { kind: "structured-incomplete", reason: STRUCTURED_SUBJECT_UNLINKED_REASON, classroom };
+  }
+
+  const subject = options.subject ?? null;
+  const annualCourseId = linked(subject?.annualCourseId);
+  if (!subject || !annualCourseId || subject.classroomId !== classroom.id) {
+    return { kind: "structured-incomplete", reason: STRUCTURED_SUBJECT_UNLINKED_REASON, classroom };
+  }
+
+  const course = options.courses.find((entry) => entry.id === annualCourseId) ?? null;
+  if (!course || course.classId !== schoolClass.id) {
+    return { kind: "structured-incomplete", reason: STRUCTURED_SUBJECT_UNLINKED_REASON, classroom };
+  }
+
+  return { kind: "structured", target: { classroom, subject, schoolClass, course } };
+}
+
 export async function ensureRuntimeClassroomForSchoolClass(
   adapters: RuntimeAgendaAdapterStore,
   schoolClass: SchoolClassRecord,
+  allSchoolClasses: SchoolClassRecord[],
 ): Promise<AgendaBridgeResult<RuntimeClassroom>> {
   return catchUnsafe(async () => {
     const already = await adapters.findClassroomBySchoolClassId(schoolClass.id);
     if (already) return already;
 
     const classrooms = await adapters.listClassrooms();
-    const adoptable = findUniqueAdoptableClassroom(classrooms, schoolClass);
+    const adoptable = findUniqueAdoptableClassroom(classrooms, schoolClass, allSchoolClasses);
     if (adoptable) {
       return adapters.upsertClassroom({
         ...adoptable,
@@ -83,9 +151,17 @@ export async function ensureRuntimeSubjectForAnnualCourse(
     schoolClass: SchoolClassRecord;
     course: AnnualCourse;
     branch: SchoolBranchRecord;
+    allSchoolClasses: SchoolClassRecord[];
+    courses: AnnualCourse[];
+    contexts: PedagogicalContextRecord[];
+    branches: SchoolBranchRecord[];
   },
 ): Promise<AgendaBridgeResult<{ classroom: RuntimeClassroom; subject: RuntimeSubject }>> {
-  const classroomResult = await ensureRuntimeClassroomForSchoolClass(adapters, options.schoolClass);
+  const classroomResult = await ensureRuntimeClassroomForSchoolClass(
+    adapters,
+    options.schoolClass,
+    options.allSchoolClasses,
+  );
   if (!classroomResult.ok) return classroomResult;
 
   return catchUnsafe(async () => {
@@ -98,8 +174,20 @@ export async function ensureRuntimeSubjectForAnnualCourse(
       return { classroom, subject: already };
     }
 
+    const candidateIds = candidateAnnualCourseIdsForSubject({
+      schoolClassId: options.schoolClass.id,
+      branchLabel: options.branch.label,
+      courses: options.courses,
+      contexts: options.contexts,
+      branches: options.branches,
+    });
     const subjects = await adapters.listSubjects();
-    const adoptable = findUniqueAdoptableSubject(subjects, classroom.id, options.branch.label);
+    const adoptable = findUniqueAdoptableSubject(
+      subjects,
+      classroom.id,
+      options.branch.label,
+      candidateIds,
+    );
     if (adoptable) {
       const subject = await adapters.upsertSubject({
         ...adoptable,
@@ -158,17 +246,34 @@ export async function resolveStructuredAgendaTarget(
 ): Promise<StructuredAgendaTarget | null> {
   const classroom = await adapters.findClassroomById(options.classroomId);
   const subject = await adapters.findSubjectById(options.subjectId);
-  const schoolClassId = linked(classroom?.schoolClassId);
-  const annualCourseId = linked(subject?.annualCourseId);
-  if (!classroom || !subject || !schoolClassId || !annualCourseId) return null;
-  if (subject.classroomId !== classroom.id) return null;
+  const binding = inspectClassroomAgendaBinding({
+    classroom,
+    subject,
+    classes: options.classes,
+    courses: options.courses,
+  });
+  return binding.kind === "structured" ? binding.target : null;
+}
 
-  const schoolClass = options.classes.find((entry) => entry.id === schoolClassId) ?? null;
-  const course = options.courses.find((entry) => entry.id === annualCourseId) ?? null;
-  if (!schoolClass || !course) return null;
-  if (course.classId !== schoolClass.id) return null;
-
-  return { classroom, subject, schoolClass, course };
+export async function loadClassroomAgendaBinding(
+  adapters: RuntimeAgendaAdapterStore,
+  options: {
+    classroomId: string;
+    subjectId: string;
+    classes: SchoolClassRecord[];
+    courses: AnnualCourse[];
+  },
+): Promise<ClassroomAgendaBinding> {
+  const [classroom, subject] = await Promise.all([
+    adapters.findClassroomById(options.classroomId),
+    adapters.findSubjectById(options.subjectId),
+  ]);
+  return inspectClassroomAgendaBinding({
+    classroom,
+    subject,
+    classes: options.classes,
+    courses: options.courses,
+  });
 }
 
 export async function reconcileStructuredClassrooms(
@@ -177,7 +282,7 @@ export async function reconcileStructuredClassrooms(
 ): Promise<void> {
   const sorted = [...classes].sort((left, right) => left.id.localeCompare(right.id));
   for (const schoolClass of sorted) {
-    await ensureRuntimeClassroomForSchoolClass(adapters, schoolClass);
+    await ensureRuntimeClassroomForSchoolClass(adapters, schoolClass, classes);
   }
 }
 

@@ -16,6 +16,11 @@ Pont explicite entre le référentiel SchoolClass / AnnualCourse et le runtime A
 - Correction jours mardi/mercredi/vendredi du carnet (`weekdayToCourseDayIndex`).
 - Parité Memory / SQLite sur les mutations administrateur.
 - Backup compatible avec les nouveaux liens (colonnes optionnelles, anciens snapshots v4 acceptés).
+- Adoption legacy uniquement si la correspondance est unique des deux côtés (pas d’année attribuée par ordre d’IDs).
+- Classroom structuré : plus aucun fallback membership / noms si le subject n’est pas lié.
+- POST `/api/agenda` : TeacherCourseAssignment évaluée à la date cible, pas à l’horloge courante.
+- Publication CourseTimeline : année `active` uniquement, garde-fous référentiel complets.
+- Erreur UI de publication visible sous l’élément ; conflit UNIQUE concurrent → 409 métier.
 
 ### Non inclus
 

@@ -11,24 +11,34 @@ import {
   type AnnualCourseServiceDeps,
 } from "../src/features/annual-courses/index.ts";
 import {
+  assignmentInstantForSessionDate,
   ensureRuntimeClassroomForSchoolClass,
   ensureRuntimeSubjectForAnnualCourse,
+  evaluateTeacherAgendaPublishAccess,
+  findUniqueAdoptableSubject,
+  inspectClassroomAgendaBinding,
   reconcileStructuredClassrooms,
   resolveStructuredAgendaTarget,
   resolveStructuredSchoolClassForClassroom,
   runtimeClassroomIdForSchoolClass,
   runtimeSubjectIdForAnnualCourse,
+  STRUCTURED_SUBJECT_UNLINKED_REASON,
 } from "../src/features/agenda-bridge/index.ts";
+import { isoDateForSchoolWeekDay } from "../src/features/school-days/index.ts";
 import {
   STRUCTURED_AGENDA_PATCH_FORBIDDEN_REASON,
   structuredAgendaPatchGuard,
 } from "../src/features/agenda/index.ts";
 import {
   STRUCTURED_PUBLISH_ALREADY_REASON,
+  STRUCTURED_PUBLISH_COURSE_ARCHIVED_REASON,
   STRUCTURED_PUBLISH_FORBIDDEN_REASON,
   STRUCTURED_PUBLISH_ITEM_MOVED_REASON,
   STRUCTURED_PUBLISH_SESSION_GONE_REASON,
+  STRUCTURED_PUBLISH_YEAR_ARCHIVED_REASON,
+  STRUCTURED_PUBLISH_YEAR_DRAFT_REASON,
   publishReferenceItemToAgenda,
+  recoverStructuredPublishUniqueConflict,
   structuredPublishIdsFromBody,
   type StructuredPublishDeps,
 } from "../src/features/course-publications/index.ts";
@@ -161,6 +171,7 @@ interface World {
   notes: ReturnType<typeof getMemoryAnnualCourseNotesStore> | SqlAnnualCourseNotesStore;
   courseDeps: AnnualCourseServiceDeps;
   publishDeps: StructuredPublishDeps;
+  persistSchoolYearRow?: (id: string, label: string) => Promise<void>;
   close?: () => void;
 }
 
@@ -264,6 +275,12 @@ async function sqliteWorld(): Promise<World> {
     notes,
     courseDeps,
     publishDeps,
+    persistSchoolYearRow: async (id: string, label: string) => {
+      await db.exec(
+        `INSERT OR IGNORE INTO school_years (id, label, status, starts_on, ends_on, created_at)
+         VALUES ('${id.replace(/'/g, "")}', '${label.replace(/'/g, "")}', 'active', '2027-08-01', '2028-07-31', datetime('now'))`,
+      );
+    },
     close: () => db.close(),
   };
 }
@@ -362,6 +379,26 @@ async function seedPathAndSlots(
   return path;
 }
 
+async function bridgeSubjectOptions(world: World, seeded: Awaited<ReturnType<typeof seedStructuredCourse>>) {
+  return {
+    schoolClass: seeded.schoolClass,
+    course: seeded.course,
+    branch: seeded.moteur,
+    allSchoolClasses: await world.catalog.listClasses(),
+    courses: await world.courses.listCourses(),
+    contexts: await world.catalog.listContexts(),
+    branches: await world.catalog.listBranches(),
+  };
+}
+
+async function ensureClassroom(world: World, schoolClass: Awaited<ReturnType<typeof seedStructuredCourse>>["schoolClass"]) {
+  return ensureRuntimeClassroomForSchoolClass(
+    world.adapters,
+    schoolClass,
+    await world.catalog.listClasses(),
+  );
+}
+
 function emptyCampusTables(): CampusTableDump {
   const tables: CampusTableDump = {};
   for (const name of CAMPUS_BACKUP_INSERT_ORDER) tables[name] = [];
@@ -388,8 +425,8 @@ for (const factory of [
     const world = await factory.build();
     try {
       const seeded = await seedStructuredCourse(world);
-      const first = await ensureRuntimeClassroomForSchoolClass(world.adapters, seeded.schoolClass);
-      const second = await ensureRuntimeClassroomForSchoolClass(world.adapters, seeded.schoolClass);
+      const first = await ensureClassroom(world, seeded.schoolClass);
+      const second = await ensureClassroom(world, seeded.schoolClass);
       assert.equal(first.ok, true);
       assert.equal(second.ok, true);
       if (!first.ok || !second.ok) return;
@@ -400,16 +437,14 @@ for (const factory of [
       );
       assert.equal(classrooms.length, 1);
 
-      const subjectFirst = await ensureRuntimeSubjectForAnnualCourse(world.adapters, {
-        schoolClass: seeded.schoolClass,
-        course: seeded.course,
-        branch: seeded.moteur,
-      });
-      const subjectSecond = await ensureRuntimeSubjectForAnnualCourse(world.adapters, {
-        schoolClass: seeded.schoolClass,
-        course: seeded.course,
-        branch: seeded.moteur,
-      });
+      const subjectFirst = await ensureRuntimeSubjectForAnnualCourse(
+        world.adapters,
+        await bridgeSubjectOptions(world, seeded),
+      );
+      const subjectSecond = await ensureRuntimeSubjectForAnnualCourse(
+        world.adapters,
+        await bridgeSubjectOptions(world, seeded),
+      );
       assert.equal(subjectFirst.ok, true);
       assert.equal(subjectSecond.ok, true);
       if (!subjectFirst.ok || !subjectSecond.ok) return;
@@ -423,12 +458,8 @@ for (const factory of [
       assert.equal(subjects.length, 1);
 
       for (let index = 0; index < 8; index += 1) {
-        await ensureRuntimeClassroomForSchoolClass(world.adapters, seeded.schoolClass);
-        await ensureRuntimeSubjectForAnnualCourse(world.adapters, {
-          schoolClass: seeded.schoolClass,
-          course: seeded.course,
-          branch: seeded.moteur,
-        });
+        await ensureClassroom(world, seeded.schoolClass);
+        await ensureRuntimeSubjectForAnnualCourse(world.adapters, await bridgeSubjectOptions(world, seeded));
       }
       assert.equal(
         (await world.adapters.listClassrooms()).filter((entry) => entry.schoolClassId === seeded.schoolClass.id)
@@ -464,8 +495,8 @@ for (const factory of [
     try {
       const first = await seedStructuredCourse(world, { classCode: "MMA1A", schoolYearId: "year-2027" });
       const second = await seedStructuredCourse(world, { classCode: "MMA1A", schoolYearId: "year-2026" });
-      const a = await ensureRuntimeClassroomForSchoolClass(world.adapters, first.schoolClass);
-      const b = await ensureRuntimeClassroomForSchoolClass(world.adapters, second.schoolClass);
+      const a = await ensureClassroom(world, first.schoolClass);
+      const b = await ensureClassroom(world, second.schoolClass);
       assert.equal(a.ok && b.ok, true);
       if (!a.ok || !b.ok) return;
       assert.notEqual(a.value.id, b.value.id);
@@ -487,7 +518,7 @@ for (const factory of [
         accessCodeHint: "",
         schoolClassId: null,
       });
-      const adopted = await ensureRuntimeClassroomForSchoolClass(world.adapters, seeded.schoolClass);
+      const adopted = await ensureClassroom(world, seeded.schoolClass);
       assert.equal(adopted.ok, true);
       if (!adopted.ok) return;
       assert.equal(adopted.value.id, "legacy-unique-adpt1");
@@ -508,7 +539,7 @@ for (const factory of [
         accessCodeHint: "",
         schoolClassId: null,
       });
-      const ambiguous = await ensureRuntimeClassroomForSchoolClass(world.adapters, other.schoolClass);
+      const ambiguous = await ensureClassroom(world, other.schoolClass);
       assert.equal(ambiguous.ok, true);
       if (!ambiguous.ok) return;
       assert.equal(ambiguous.value.id, runtimeClassroomIdForSchoolClass(other.schoolClass.id));
@@ -522,11 +553,10 @@ for (const factory of [
         name: "Con. Prof I",
         annualCourseId: null,
       });
-      const subject = await ensureRuntimeSubjectForAnnualCourse(world.adapters, {
-        schoolClass: seeded.schoolClass,
-        course: seeded.course,
-        branch: seeded.moteur,
-      });
+      const subject = await ensureRuntimeSubjectForAnnualCourse(
+        world.adapters,
+        await bridgeSubjectOptions(world, seeded),
+      );
       assert.equal(subject.ok, true);
       if (!subject.ok) return;
       assert.notEqual(subject.value.subject.id, "legacy-con-prof");
@@ -1148,11 +1178,10 @@ test("reconciliation classrooms structurés — aucun doublon", async () => {
 test("backup Memory / SQLite — liens et provenance conservés", async () => {
   const world = await memoryWorld();
   const seeded = await seedStructuredCourse(world);
-  const linked = await ensureRuntimeSubjectForAnnualCourse(world.adapters, {
-    schoolClass: seeded.schoolClass,
-    course: seeded.course,
-    branch: seeded.moteur,
-  });
+  const linked = await ensureRuntimeSubjectForAnnualCourse(
+    world.adapters,
+    await bridgeSubjectOptions(world, seeded),
+  );
   assert.equal(linked.ok, true);
   if (!linked.ok) return;
   await world.agenda.createAgendaItem({
@@ -1244,18 +1273,520 @@ test("backup Memory / SQLite — liens et provenance conservés", async () => {
 });
 
 test("E2E sources — UI et API publication dédiée", async () => {
-  const [panel, route, agendaPost] = await Promise.all([
+  const [panel, route, agendaPost, agendaApi] = await Promise.all([
     readFile(new URL("../web/app/components/teacher-course-timeline-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/api/teacher/course-publications/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../web/app/api/agenda/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../web/lib/server/api.ts", import.meta.url), "utf8"),
   ]);
   assert.match(panel, /Publier dans l’Agenda/);
   assert.match(panel, /Publié dans l’Agenda/);
   assert.match(panel, /publishTeacherCoursePublicationApi/);
   assert.match(panel, /Aucun contenu de référence prévu pour cette séance/);
+  assert.match(panel, /itemId: string;\s*message: string/);
+  assert.match(panel, /publishError\?\.itemId === item\.id/);
+  assert.match(panel, /setPublishError\(\{ itemId: referenceItemId, message \}\)/);
+  assert.doesNotMatch(panel, /publishError && publishingItemId === item\.id/);
   assert.match(route, /requireTeacherSession/);
   assert.match(route, /publishReferenceItemToAgenda/);
   assert.match(route, /auth\.session!\.teacherId/);
   assert.doesNotMatch(route, /body\.teacherId/);
   assert.match(agendaPost, /provenance structurée ne peut être écrite/);
+  assert.match(agendaPost, /assertStructuredAgendaSubjectLinked/);
+  assert.match(agendaPost, /schoolWeekNumber, dayIndex: day/);
+  assert.match(agendaApi, /isoDateForSchoolWeekDay/);
+  assert.match(agendaApi, /loadClassroomAgendaBinding/);
+  assert.match(agendaApi, /structured-incomplete/);
+  assert.doesNotMatch(agendaApi, /at: new Date\(\)\.toISOString\(\)/);
+});
+
+function yearsWithStatus(status: "draft" | "active" | "archived", exceptions: SchoolDayException[] = []): SchoolYearStore {
+  const inner = yearsStub(exceptions);
+  return {
+    ...inner,
+    getSchoolYearById: async (id: string) => {
+      const year = await inner.getSchoolYearById(id);
+      return year ? { ...year, status } : null;
+    },
+    getActiveSchoolYear: async () => {
+      const year = await inner.getActiveSchoolYear();
+      return year ? { ...year, status } : null;
+    },
+  } as SchoolYearStore;
+}
+
+async function preparePublishableCourse(world: World) {
+  const seeded = await seedStructuredCourse(world);
+  const admin = await world.teachers.createAccount({
+    displayName: "Admin cycle",
+    initials: `Ac${Math.random().toString(36).slice(2, 4)}`,
+    teachingType: "TECHNICAL",
+    isAdmin: true,
+  });
+  assert.equal(admin.ok, true);
+  if (!admin.ok) throw new Error(admin.reason);
+  await assignTeacherToCourse(world.courseDeps, {
+    annualCourseId: seeded.course.id,
+    teacherId: seeded.teacher.id,
+    role: "PRIMARY",
+    createdByAdminId: admin.account.id,
+    validFrom: "2027-08-01",
+  });
+  await seedPathAndSlots(world, seeded.course.id, seeded.context.id, [
+    { id: `ref-life-${seeded.course.id}`, type: "HOMEWORK", title: "Réviser", detail: "ok" },
+  ]);
+  const sessions = await listComputedCourseSessions(world.publishDeps, {
+    schoolYearId: "year-2027",
+    annualCourseId: seeded.course.id,
+  });
+  assert.equal(sessions.ok, true);
+  if (!sessions.ok) throw new Error(sessions.reason);
+  const session = sessions.value[0];
+  assert.ok(session);
+  return { seeded, admin: admin.account, session };
+}
+
+for (const factory of [
+  { name: "Memory", build: memoryWorld },
+  { name: "SQLite", build: sqliteWorld },
+]) {
+  test(`${factory.name} — MMA1A multi-années : classroom legacy jamais adopté`, async () => {
+    const world = await factory.build();
+    try {
+      await world.adapters.upsertClassroom({
+        id: "legacy-mma1a",
+        name: "MMA1A",
+        programLabel: "historique",
+        accessCodeHint: "",
+        schoolClassId: null,
+      });
+      const year2027 = await seedStructuredCourse(world, { classCode: "MMA1A", schoolYearId: "year-2027" });
+      const year2026 = await seedStructuredCourse(world, { classCode: "MMA1A", schoolYearId: "year-2026" });
+      await reconcileStructuredClassrooms(world.adapters, await world.catalog.listClasses());
+      await ensureClassroom(world, year2026.schoolClass);
+      await ensureClassroom(world, year2027.schoolClass);
+
+      const legacy = await world.adapters.findClassroomById("legacy-mma1a");
+      assert.equal(legacy?.schoolClassId, null);
+      const adapter2027 = await world.adapters.findClassroomBySchoolClassId(year2027.schoolClass.id);
+      const adapter2026 = await world.adapters.findClassroomBySchoolClassId(year2026.schoolClass.id);
+      assert.ok(adapter2027 && adapter2026);
+      assert.notEqual(adapter2027.id, "legacy-mma1a");
+      assert.notEqual(adapter2026.id, "legacy-mma1a");
+      assert.equal(adapter2027.id, runtimeClassroomIdForSchoolClass(year2027.schoolClass.id));
+      assert.equal(adapter2026.id, runtimeClassroomIdForSchoolClass(year2026.schoolClass.id));
+      assert.notEqual(adapter2027.id, adapter2026.id);
+    } finally {
+      world.close?.();
+    }
+  });
+
+  test(`${factory.name} — classroom structuré sans subject lié : pas de membership / noms`, async () => {
+    const world = await factory.build();
+    try {
+      const seeded = await seedStructuredCourse(world);
+      const classroom = await ensureClassroom(world, seeded.schoolClass);
+      assert.equal(classroom.ok, true);
+      if (!classroom.ok) return;
+      await world.adapters.upsertSubject({
+        id: "legacy-unlinked-subject",
+        classroomId: classroom.value.id,
+        name: "Con. Prof I",
+        annualCourseId: null,
+      });
+      const binding = inspectClassroomAgendaBinding({
+        classroom: classroom.value,
+        subject: await world.adapters.findSubjectById("legacy-unlinked-subject"),
+        classes: await world.catalog.listClasses(),
+        courses: await world.courses.listCourses(),
+      });
+      assert.equal(binding.kind, "structured-incomplete");
+      if (binding.kind !== "structured-incomplete") return;
+      assert.equal(binding.reason, STRUCTURED_SUBJECT_UNLINKED_REASON);
+      assert.equal(
+        evaluateTeacherAgendaPublishAccess({
+          binding,
+          teacherId: seeded.teacher.id,
+          assignments: [],
+          targetAt: assignmentInstantForSessionDate("2027-08-16"),
+          teacher: seeded.teacher,
+          legacyResolved: null,
+          legacyMembershipAllows: true,
+        }),
+        false,
+      );
+
+      const tcaBinding = inspectClassroomAgendaBinding({
+        classroom: classroom.value,
+        subject: await world.adapters.findSubjectById("legacy-unlinked-subject"),
+        classes: await world.catalog.listClasses(),
+        courses: await world.courses.listCourses(),
+      });
+      const assignments = [
+        {
+          id: "tca-ignored",
+          annualCourseId: seeded.course.id,
+          teacherId: seeded.teacher.id,
+          role: "PRIMARY" as const,
+          validFrom: "2027-01-01T00:00:00.000Z",
+          validTo: null,
+          createdByAdminId: "admin",
+          createdAt: "2027-01-01T00:00:00.000Z",
+          endedAt: null,
+          overrideReason: null,
+          overrideByAdminId: null,
+        },
+      ];
+      assert.equal(
+        evaluateTeacherAgendaPublishAccess({
+          binding: tcaBinding,
+          teacherId: seeded.teacher.id,
+          assignments,
+          targetAt: assignmentInstantForSessionDate("2027-08-16"),
+          teacher: seeded.teacher,
+          legacyResolved: null,
+          legacyMembershipAllows: false,
+        }),
+        false,
+      );
+
+      const linked = await ensureRuntimeSubjectForAnnualCourse(
+        world.adapters,
+        await bridgeSubjectOptions(world, seeded),
+      );
+      assert.equal(linked.ok, true);
+      if (!linked.ok) return;
+      const complete = inspectClassroomAgendaBinding({
+        classroom: linked.value.classroom,
+        subject: linked.value.subject,
+        classes: await world.catalog.listClasses(),
+        courses: await world.courses.listCourses(),
+      });
+      assert.equal(complete.kind, "structured");
+      assert.equal(
+        evaluateTeacherAgendaPublishAccess({
+          binding: complete,
+          teacherId: seeded.teacher.id,
+          assignments,
+          targetAt: assignmentInstantForSessionDate("2027-08-16"),
+          teacher: seeded.teacher,
+          legacyResolved: null,
+          legacyMembershipAllows: false,
+        }),
+        true,
+      );
+
+      const legacyClassroom = await world.adapters.upsertClassroom({
+        id: "pure-legacy-room",
+        name: "OLD1",
+        programLabel: "legacy",
+        accessCodeHint: "",
+        schoolClassId: null,
+      });
+      const legacyBinding = inspectClassroomAgendaBinding({
+        classroom: legacyClassroom,
+        subject: { id: "s-legacy", classroomId: legacyClassroom.id, name: "Con. Prof I", annualCourseId: null },
+        classes: await world.catalog.listClasses(),
+        courses: await world.courses.listCourses(),
+      });
+      assert.equal(legacyBinding.kind, "legacy");
+      assert.equal(
+        evaluateTeacherAgendaPublishAccess({
+          binding: legacyBinding,
+          teacherId: seeded.teacher.id,
+          assignments: [],
+          targetAt: null,
+          teacher: seeded.teacher,
+          legacyResolved: null,
+          legacyMembershipAllows: true,
+        }),
+        true,
+      );
+    } finally {
+      world.close?.();
+    }
+  });
+}
+
+test("subject legacy : plusieurs AnnualCourse candidats → pas d’adoption", () => {
+  const subjects = [
+    { id: "legacy-moteur", classroomId: "c1", name: "Moteur", annualCourseId: null },
+  ];
+  assert.equal(findUniqueAdoptableSubject(subjects, "c1", "Moteur", ["ac-1", "ac-2"]), null);
+  assert.equal(findUniqueAdoptableSubject(subjects, "c1", "Moteur", ["ac-1"])?.id, "legacy-moteur");
+});
+
+test("TCA générique : date cible du calendrier, pas l’horloge courante", async () => {
+  const weeks = mondayWeeks("2027-08-16", 8);
+  const week1Monday = isoDateForSchoolWeekDay(weeks, 1, 0);
+  const week5Monday = isoDateForSchoolWeekDay(weeks, 5, 0);
+  assert.equal(week1Monday, "2027-08-16");
+  assert.equal(week5Monday, "2027-09-13");
+
+  const world = await memoryWorld();
+  const seeded = await seedStructuredCourse(world);
+  const admin = await world.teachers.createAccount({
+    displayName: "Admin TCA date",
+    initials: "AdD",
+    teachingType: "TECHNICAL",
+    isAdmin: true,
+  });
+  const replacement = await world.teachers.createAccount({
+    displayName: "Remplaçant date",
+    initials: "ReD",
+    teachingType: "TECHNICAL",
+  });
+  assert.ok(admin.ok && replacement.ok);
+  if (!admin.ok || !replacement.ok) return;
+  await assignTeacherToCourse(world.courseDeps, {
+    annualCourseId: seeded.course.id,
+    teacherId: seeded.teacher.id,
+    role: "PRIMARY",
+    createdByAdminId: admin.account.id,
+    validFrom: "2027-08-01",
+  });
+  const coteacher = await world.teachers.createAccount({
+    displayName: "Co date",
+    initials: "CoD",
+    teachingType: "TECHNICAL",
+  });
+  assert.equal(coteacher.ok, true);
+  if (!coteacher.ok) return;
+  await assignTeacherToCourse(world.courseDeps, {
+    annualCourseId: seeded.course.id,
+    teacherId: coteacher.account.id,
+    role: "CO_TEACHER",
+    createdByAdminId: admin.account.id,
+    validFrom: "2027-08-01",
+  });
+  await assignTemporaryReplacement(world.courseDeps, {
+    annualCourseId: seeded.course.id,
+    teacherId: replacement.account.id,
+    createdByAdminId: admin.account.id,
+    validFrom: week1Monday!,
+    validTo: week1Monday!,
+  });
+  const assignments = await world.courses.listAssignments(seeded.course.id);
+  const classroom = await ensureRuntimeSubjectForAnnualCourse(
+    world.adapters,
+    await bridgeSubjectOptions(world, seeded),
+  );
+  assert.equal(classroom.ok, true);
+  if (!classroom.ok) return;
+  const binding = inspectClassroomAgendaBinding({
+    classroom: classroom.value.classroom,
+    subject: classroom.value.subject,
+    classes: await world.catalog.listClasses(),
+    courses: await world.courses.listCourses(),
+  });
+  assert.equal(binding.kind, "structured");
+
+  const atWeek1 = assignmentInstantForSessionDate(week1Monday!);
+  const atWeek5 = assignmentInstantForSessionDate(week5Monday!);
+  const future = assignmentInstantForSessionDate("2027-06-01");
+
+  assert.equal(
+    evaluateTeacherAgendaPublishAccess({
+      binding,
+      teacherId: replacement.account.id,
+      assignments,
+      targetAt: atWeek1,
+      teacher: replacement.account,
+      legacyResolved: null,
+      legacyMembershipAllows: false,
+    }),
+    true,
+  );
+  assert.equal(
+    evaluateTeacherAgendaPublishAccess({
+      binding,
+      teacherId: replacement.account.id,
+      assignments,
+      targetAt: atWeek5,
+      teacher: replacement.account,
+      legacyResolved: null,
+      legacyMembershipAllows: false,
+    }),
+    false,
+  );
+  assert.equal(
+    evaluateTeacherAgendaPublishAccess({
+      binding,
+      teacherId: replacement.account.id,
+      assignments,
+      targetAt: future,
+      teacher: replacement.account,
+      legacyResolved: null,
+      legacyMembershipAllows: false,
+    }),
+    false,
+  );
+  assert.equal(
+    evaluateTeacherAgendaPublishAccess({
+      binding,
+      teacherId: seeded.teacher.id,
+      assignments,
+      targetAt: atWeek5,
+      teacher: seeded.teacher,
+      legacyResolved: null,
+      legacyMembershipAllows: false,
+    }),
+    true,
+  );
+  assert.equal(
+    evaluateTeacherAgendaPublishAccess({
+      binding,
+      teacherId: coteacher.account.id,
+      assignments,
+      targetAt: atWeek5,
+      teacher: coteacher.account,
+      legacyResolved: null,
+      legacyMembershipAllows: false,
+    }),
+    true,
+  );
+});
+
+test("publication dédiée — année draft / archived + référentiel inactif", async () => {
+  async function publishWithYearStatus(status: "draft" | "archived") {
+    const world = await memoryWorld();
+    const prepared = await preparePublishableCourse(world);
+    world.years = yearsWithStatus(status);
+    world.publishDeps = { ...world.publishDeps, years: world.years };
+    world.courseDeps = { ...world.courseDeps, years: world.years };
+    const result = await publishReferenceItemToAgenda(world.publishDeps, {
+      teacherId: prepared.seeded.teacher.id,
+      annualCourseId: prepared.seeded.course.id,
+      courseSessionKey: prepared.session.key,
+      referenceItemId: `ref-life-${prepared.seeded.course.id}`,
+    });
+    return result;
+  }
+
+  const draft = await publishWithYearStatus("draft");
+  assert.equal(draft.ok, false);
+  if (!draft.ok) {
+    assert.equal(draft.status, 409);
+    assert.equal(draft.reason, STRUCTURED_PUBLISH_YEAR_DRAFT_REASON);
+  }
+
+  const archived = await publishWithYearStatus("archived");
+  assert.equal(archived.ok, false);
+  if (!archived.ok) {
+    assert.equal(archived.status, 409);
+    assert.equal(archived.reason, STRUCTURED_PUBLISH_YEAR_ARCHIVED_REASON);
+  }
+
+  async function refuseAfter(mutate: (world: World, seeded: Awaited<ReturnType<typeof seedStructuredCourse>>) => Promise<void>) {
+    const world = await memoryWorld();
+    const prepared = await preparePublishableCourse(world);
+    await mutate(world, prepared.seeded);
+    const result = await publishReferenceItemToAgenda(world.publishDeps, {
+      teacherId: prepared.seeded.teacher.id,
+      annualCourseId: prepared.seeded.course.id,
+      courseSessionKey: prepared.session.key,
+      referenceItemId: `ref-life-${prepared.seeded.course.id}`,
+    });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.status, 409);
+    assert.equal((await world.agenda.listAgendaItemsByAnnualCourse(prepared.seeded.course.id)).length, 0);
+    return result;
+  }
+
+  const ctxInactive = await refuseAfter(async (world, seeded) => {
+    const updated = await world.catalog.updateContext(seeded.context.id, { isActive: false });
+    assert.equal(updated.ok, true);
+  });
+  if (!ctxInactive.ok) assert.match(ctxInactive.reason, /CTX/);
+
+  const ctxArchived = await refuseAfter(async (world, seeded) => {
+    const updated = await world.catalog.updateContext(seeded.context.id, { isArchived: true });
+    assert.equal(updated.ok, true);
+  });
+  if (!ctxArchived.ok) assert.match(ctxArchived.reason, /CTX/);
+
+  const branchInactive = await refuseAfter(async (world, seeded) => {
+    await world.catalog.updateBranch(seeded.moteur.id, { isActive: false });
+  });
+  if (!branchInactive.ok) assert.match(branchInactive.reason, /branche/i);
+
+  const branchArchived = await refuseAfter(async (world, seeded) => {
+    await world.catalog.updateBranch(seeded.moteur.id, { isArchived: true });
+  });
+  if (!branchArchived.ok) assert.match(branchArchived.reason, /branche/i);
+
+  const professionInactive = await refuseAfter(async (world, seeded) => {
+    const updated = await world.catalog.updateProfession(seeded.profession.id, {
+      label: seeded.profession.label,
+      durationYears: seeded.profession.durationYears,
+      isActive: false,
+    });
+    assert.equal(updated.ok, true);
+  });
+  if (!professionInactive.ok) assert.match(professionInactive.reason, /profession/i);
+
+  const professionArchived = await refuseAfter(async (world, seeded) => {
+    const updated = await world.catalog.updateProfession(seeded.profession.id, {
+      label: seeded.profession.label,
+      durationYears: seeded.profession.durationYears,
+      isArchived: true,
+    });
+    assert.equal(updated.ok, true);
+  });
+  if (!professionArchived.ok) assert.match(professionArchived.reason, /profession/i);
+
+  const classInactive = await refuseAfter(async (world, seeded) => {
+    await world.catalog.updateClass(seeded.schoolClass.id, { isActive: false });
+  });
+  if (!classInactive.ok) assert.match(classInactive.reason, /classe/i);
+
+  const courseArchived = await refuseAfter(async (world, seeded) => {
+    await world.courses.archiveCourse(seeded.course.id);
+  });
+  if (!courseArchived.ok) {
+    assert.equal(courseArchived.reason, STRUCTURED_PUBLISH_COURSE_ARCHIVED_REASON);
+  }
+});
+
+test("SQLite — concurrence UNIQUE annualCourse + referenceItem → 409 métier", async () => {
+  const world = await sqliteWorld();
+  try {
+    const prepared = await preparePublishableCourse(world);
+    await world.persistSchoolYearRow?.("year-2027", "2027-2028");
+    const adapters = await ensureRuntimeSubjectForAnnualCourse(
+      world.adapters,
+      await bridgeSubjectOptions(world, prepared.seeded),
+    );
+    assert.equal(adapters.ok, true);
+    const input = {
+      teacherId: prepared.seeded.teacher.id,
+      annualCourseId: prepared.seeded.course.id,
+      courseSessionKey: prepared.session.key,
+      referenceItemId: `ref-life-${prepared.seeded.course.id}`,
+    };
+    const [first, second] = await Promise.all([
+      publishReferenceItemToAgenda(world.publishDeps, input),
+      publishReferenceItemToAgenda(world.publishDeps, input),
+    ]);
+    const successes = [first, second].filter((entry) => entry.ok);
+    const failures = [first, second].filter((entry) => !entry.ok);
+    assert.equal(successes.length, 1);
+    assert.equal(failures.length, 1);
+    if (!failures[0]!.ok) {
+      assert.equal(failures[0].status, 409);
+      assert.equal(failures[0].reason, STRUCTURED_PUBLISH_ALREADY_REASON);
+    }
+    assert.equal((await world.agenda.listAgendaItemsByAnnualCourse(prepared.seeded.course.id)).length, 1);
+
+    const recovered = await recoverStructuredPublishUniqueConflict(
+      world.agenda,
+      prepared.seeded.course.id,
+      `ref-life-${prepared.seeded.course.id}`,
+    );
+    assert.equal(recovered?.reason, STRUCTURED_PUBLISH_ALREADY_REASON);
+    const missing = await recoverStructuredPublishUniqueConflict(world.agenda, prepared.seeded.course.id, "absent");
+    assert.equal(missing, null);
+  } finally {
+    world.close?.();
+  }
 });
