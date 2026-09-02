@@ -50,6 +50,7 @@ import type { AgendaItemType } from "@campus/types/agenda";
 import {
   changeTeacherPasswordApi,
   createAgendaItemApi,
+  ControlCoordinationRequiredError,
   deleteAgendaItemApi,
   fetchAgendaItems,
   fetchApiSession,
@@ -113,6 +114,16 @@ const TYPE_LABELS: Record<AgendaItemType, string> = {
   TEST: "Contrôle",
   INFORMATION: "Information",
 };
+
+function upsertAgendaItem(previous: PrototypeAgendaItem[], item: PrototypeAgendaItem): PrototypeAgendaItem[] {
+  const index = previous.findIndex((entry) => entry.id === item.id);
+  if (index >= 0) {
+    const next = previous.slice();
+    next[index] = item;
+    return next;
+  }
+  return [...previous, item];
+}
 
 async function loadTeacherAgendaItems(classroomIds: string[]): Promise<PrototypeAgendaItem[]> {
   const batches = await Promise.all(classroomIds.map((classroomId) => fetchAgendaItems(classroomId)));
@@ -802,7 +813,7 @@ export default function Home() {
     if (!pendingNotebookControl) return;
     void (async () => {
       try {
-        await performNotebookControl(pendingNotebookControl);
+        await performNotebookControl(pendingNotebookControl, true);
         dismissControlAlert();
       } catch (error) {
         showNotice(error instanceof Error ? error.message : "Publication impossible.");
@@ -831,13 +842,16 @@ export default function Home() {
     if (target) setNotebookCenterWeek(target.number);
   }
 
-  async function performNotebookControl(input: {
-    classroomId: string;
-    subjectId: string;
-    schoolWeekNumber: number;
-    day: number;
-    title: string;
-  }) {
+  async function performNotebookControl(
+    input: {
+      classroomId: string;
+      subjectId: string;
+      schoolWeekNumber: number;
+      day: number;
+      title: string;
+    },
+    confirmCoordination = false,
+  ) {
     const created = await createAgendaItemApi({
       classroomId: input.classroomId,
       subjectId: input.subjectId,
@@ -848,8 +862,9 @@ export default function Home() {
       type: "TEST",
       title: input.title.trim(),
       detail: "",
+      confirmCoordination,
     });
-    setItems((previous) => [...previous, created]);
+    setItems((previous) => upsertAgendaItem(previous, created));
     showNotice("Contrôle planifié.");
   }
 
@@ -866,7 +881,7 @@ export default function Home() {
       title: text.trim(),
       detail: "",
     });
-    setItems((previous) => [...previous, created]);
+    setItems((previous) => upsertAgendaItem(previous, created));
     showNotice("Publication ajoutée.");
   }
 
@@ -896,11 +911,33 @@ export default function Home() {
       });
       return;
     }
-    await performNotebookControl({
-      classroomId: notebookClassroomId,
-      subjectId: notebookSubjectId,
-      ...input,
-    });
+    try {
+      await performNotebookControl({
+        classroomId: notebookClassroomId,
+        subjectId: notebookSubjectId,
+        ...input,
+      });
+    } catch (error) {
+      if (error instanceof ControlCoordinationRequiredError) {
+        setControlAlert({
+          triggered: true,
+          courseDay: { schoolWeekNumber: input.schoolWeekNumber, dayIndex: input.day },
+          existingTests: error.coordination.classDayControls.map((entry) => ({
+            id: entry.agendaItemId,
+            title: entry.title,
+            subjectName: entry.branchLabel,
+            teacherName: entry.teacherName,
+          })),
+        });
+        setPendingNotebookControl({
+          classroomId: notebookClassroomId,
+          subjectId: notebookSubjectId,
+          ...input,
+        });
+        return;
+      }
+      showNotice(error instanceof Error ? error.message : "Publication impossible.");
+    }
   }
 
   if (passwordChange) {
@@ -1186,14 +1223,18 @@ export default function Home() {
             annualCourseId={openTimelineCourseId}
             onBack={() => setOpenTimelineCourseId(null)}
             onAgendaItemCreated={(item) => {
-              setItems((previous) =>
-                previous.some((entry) => entry.id === item.id) ? previous : [...previous, item],
-              );
+              setItems((previous) => upsertAgendaItem(previous, item));
             }}
           />
         )}
 
-        {activeSection === "controles" && <ControlPlanningPanel />}
+        {activeSection === "controles" && (
+          <ControlPlanningPanel
+            onPublicationCreated={(item) => {
+              setItems((previous) => upsertAgendaItem(previous, item));
+            }}
+          />
+        )}
 
         {activeSection === "ma-semaine" && openNotebookClass && (
           <ClassNotebookPanel

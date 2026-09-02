@@ -360,8 +360,8 @@ async function seedAssignedCourse(
   return course.value;
 }
 
-test("version 2.31.0 — déroulement conservé, nav Contrôles, migration 0024", () => {
-  assert.equal(APP_VERSION, "2.31.0");
+test("version 2.32.0 — déroulement conservé, nav Contrôles, migration 0024", () => {
+  assert.equal(APP_VERSION, "2.32.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
   assert.equal(
     SQL_MIGRATION_FILES.some((file) => file.startsWith("0025")),
@@ -1129,6 +1129,8 @@ test("sources — GET enseignant lecture seule, pas d’ensurePath, pas de calen
   assert.match(timelineUi, /REFERENCE_ITEM_TYPE_LABELS/);
   assert.match(timelineUi, /AbortController/);
   assert.match(timelineUi, /publishTeacherCoursePublicationApi/);
+  assert.match(timelineUi, /confirmCoordination/);
+  assert.match(timelineUi, /Publier quand même/);
   assert.match(timelineUi, /publishError\?\.itemId === item\.id/);
   assert.doesNotMatch(timelineUi, /Créer devoir/);
   assert.doesNotMatch(timelineUi, /Créer contrôle/);

@@ -7,7 +7,7 @@ process.env.AUTH_SECRET ??= "test-secret-e2e-phase-08";
 process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
 // Les tests E2E enchaînent plusieurs connexions enseignant ; le plafond 10/min
 // ferait échouer les scénarios ajoutés en fin de fichier.
-process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER ??= "40";
+process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER ??= "50";
 
 const env = {
   ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
@@ -546,7 +546,7 @@ test("PR59 — publication structurée sans session → 401", async () => {
   assert.equal(response.status, 401);
 });
 
-test("2.31.0 — E2E planning des contrôles : session, années, 403, TEST", async () => {
+test("2.32.0 — E2E planning des contrôles : session, années, 403, TEST", async () => {
   const anon = await request("/api/teacher/controls/planning");
   assert.equal(anon.status, 401);
 
@@ -635,6 +635,352 @@ test("2.31.0 — E2E planning des contrôles : session, années, 403, TEST", asy
     assert.equal(classPayload.schoolYearId, payload.schoolYearId);
     assert.equal(classPayload.week.days.length, 5);
   }
+});
+
+async function jsonRequest(path, init = {}) {
+  const response = await request(path, init);
+  const payload = await response.json();
+  return { response, payload };
+}
+
+async function seedInteractiveControlCourse(adminCookie, teacherId) {
+  const headers = { "Content-Type": "application/json", cookie: adminCookie };
+  const years = await jsonRequest("/api/admin/school-year", { headers: { cookie: adminCookie } });
+  assert.equal(years.response.status, 200, years.payload.reason);
+  const active = (years.payload.years ?? []).find((year) => year.status === "active") ?? years.payload.years?.[0];
+  assert.ok(active, "année active requise");
+
+  const catalog = await jsonRequest("/api/admin/catalog", { headers: { cookie: adminCookie } });
+  const branch =
+    (catalog.payload.branches ?? []).find((entry) => entry.label === "Moteur" && entry.isActive) ??
+    (catalog.payload.branches ?? []).find((entry) => entry.isActive && !entry.isArchived);
+  assert.ok(branch, "branche active requise");
+
+  const profession = await jsonRequest("/api/admin/catalog", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      kind: "profession",
+      label: `Contrôles interactifs ${Date.now()}`,
+      durationYears: 4,
+      classCodePrefix: "CTL",
+    }),
+  });
+  assert.equal(profession.response.status, 200, profession.payload.reason);
+  const professionId = profession.payload.profession.id;
+
+  const ctx = await jsonRequest("/api/admin/catalog", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      kind: "context",
+      professionId,
+      trainingYear: 1,
+      branchId: branch.id,
+    }),
+  });
+  assert.equal(ctx.response.status, 200, ctx.payload.reason);
+
+  const createdClass = await jsonRequest("/api/admin/catalog", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      kind: "class",
+      code: "MA2A",
+      label: "MA2A",
+      schoolYearId: active.id,
+      schoolYearLabel: active.label,
+      professionId,
+      trainingYear: 1,
+      parallelCode: "A",
+    }),
+  });
+  let schoolClass = createdClass.payload.class;
+  if (!createdClass.payload.ok) {
+    const unique = await jsonRequest("/api/admin/catalog", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        kind: "class",
+        code: `CTL${String(Date.now()).slice(-4)}`,
+        label: "MA2A",
+        schoolYearId: active.id,
+        schoolYearLabel: active.label,
+        professionId,
+        trainingYear: 1,
+        parallelCode: "A",
+      }),
+    });
+    assert.equal(unique.response.status, 200, unique.payload.reason ?? createdClass.payload.reason);
+    schoolClass = unique.payload.class;
+  }
+
+  const course = await jsonRequest("/api/admin/annual-courses", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      action: "create",
+      schoolYearId: active.id,
+      classId: schoolClass.id,
+      contextId: ctx.payload.context.id,
+    }),
+  });
+  assert.equal(course.response.status, 201, course.payload.reason);
+  const annualCourseId = course.payload.course.id;
+
+  const assigned = await jsonRequest("/api/admin/annual-courses", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      action: "assign",
+      annualCourseId,
+      teacherId,
+      role: "PRIMARY",
+      validFrom: "2026-08-01",
+      forceIncompatible: true,
+    }),
+  });
+  assert.ok(assigned.response.status === 201 || assigned.response.status === 200, assigned.payload.reason);
+
+  const attendance = await jsonRequest("/api/admin/course-schedule", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      action: "replaceAttendanceDays",
+      classId: schoolClass.id,
+      days: [{ dayOfWeek: 1, weekKind: "all", role: "PRIMARY" }],
+    }),
+  });
+  assert.equal(attendance.response.status, 200, attendance.payload.reason);
+
+  const slot = await jsonRequest("/api/admin/course-schedule", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      action: "create",
+      annualCourseId,
+      dayOfWeek: 1,
+      periodStart: 4,
+      periodEnd: 4,
+      weekKind: "all",
+    }),
+  });
+  assert.equal(slot.response.status, 201, slot.payload.reason);
+
+  const slot2 = await jsonRequest("/api/admin/course-schedule", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      action: "create",
+      annualCourseId,
+      dayOfWeek: 1,
+      periodStart: 6,
+      periodEnd: 6,
+      weekKind: "all",
+    }),
+  });
+  assert.equal(slot2.response.status, 201, slot2.payload.reason);
+
+  return { schoolYearId: active.id, annualCourseId, classId: schoolClass.id, classLabel: schoolClass.label ?? schoolClass.code };
+}
+
+test("2.32.0 — E2E planification interactive et coordination au 3e contrôle", async () => {
+  const anon = await request("/api/teacher/controls", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ annualCourseId: "x", courseSessionKey: "y", title: "z" }),
+  });
+  assert.equal(anon.status, 401);
+
+  const adminCookie = await loginAdmin();
+  const teacherCookie = await loginTeacher("teacher-demo-current");
+  const seeded = await seedInteractiveControlCourse(adminCookie, "teacher-demo-current");
+
+  const planningAll = await jsonRequest("/api/teacher/controls/planning?week=1", {
+    headers: { cookie: teacherCookie },
+  });
+  assert.equal(planningAll.response.status, 200, planningAll.payload.reason);
+  assert.equal(planningAll.payload.canCreate, false);
+  assert.ok(planningAll.payload.week.days.every((day) => day.canPlan === false));
+
+  const classrooms = planningAll.payload.classes ?? [];
+  let classroom;
+  let planning;
+  let option;
+  let weekNumber = 1;
+  for (const candidate of classrooms) {
+    for (let week = 1; week <= 8; week += 1) {
+      const next = await jsonRequest(
+        `/api/teacher/controls/planning?classroomId=${encodeURIComponent(candidate.id)}&week=${week}&schoolYearId=${encodeURIComponent(seeded.schoolYearId)}`,
+        { headers: { cookie: teacherCookie } },
+      );
+      if (next.response.status !== 200) continue;
+      const found = (next.payload.week?.days ?? [])
+        .flatMap((day) => day.placementOptions ?? [])
+        .find((entry) => entry.annualCourseId === seeded.annualCourseId);
+      if (found) {
+        classroom = candidate;
+        planning = next;
+        option = found;
+        weekNumber = week;
+        break;
+      }
+    }
+    if (option) break;
+  }
+  assert.ok(classroom, "classe structurée accessible");
+
+  const archivedYear = (planningAll.payload.years ?? []).find((year) => year.status === "archived");
+  if (archivedYear) {
+    const archived = await jsonRequest(
+      `/api/teacher/controls/planning?schoolYearId=${encodeURIComponent(archivedYear.id)}&classroomId=${encodeURIComponent(classroom.id)}&week=1`,
+      { headers: { cookie: teacherCookie } },
+    );
+    if (archived.response.status === 200) {
+      assert.equal(archived.payload.canCreate, false);
+      assert.ok((archived.payload.week?.days ?? []).every((day) => day.canPlan === false));
+    }
+  }
+
+  assert.ok(planning && option, "CourseSession de placement requise");
+  assert.equal(option.annualCourseId, seeded.annualCourseId);
+  const planDay = planning.payload.week.days.find((day) => day.dayIndex === option.dayIndex);
+  assert.equal(planDay.canPlan, true);
+  assert.equal(planDay.placementOptions.length, 1);
+
+  const loadBefore = planning.payload.teacherLoadThisWeek;
+
+  const forged = await jsonRequest("/api/teacher/controls", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      annualCourseId: option.annualCourseId,
+      courseSessionKey: option.courseSessionKey,
+      title: "Contrôle injection",
+      detail: "Chapitres 3 à 5",
+      teacherId: "teacher-demo-martin",
+      classroomId: "classe-inconnue",
+      type: "HOMEWORK",
+      date: "2099-01-01",
+      day: 4,
+      hour: 10,
+    }),
+  });
+  assert.equal(forged.response.status, 201, forged.payload.reason);
+  assert.equal(forged.payload.item.type, "TEST");
+  assert.equal(forged.payload.item.title, "Contrôle injection");
+  assert.equal(forged.payload.item.authorTeacherId, "teacher-demo-current");
+  assert.equal(forged.payload.item.annualCourseId, option.annualCourseId);
+  assert.equal(forged.payload.item.courseSessionKey, option.courseSessionKey);
+  assert.equal(forged.payload.item.courseSessionDate, option.date);
+  assert.equal(forged.payload.item.referenceSessionId, null);
+  assert.equal(forged.payload.item.referenceItemId, null);
+
+  const after = await jsonRequest(
+    `/api/teacher/controls/planning?classroomId=${encodeURIComponent(classroom.id)}&week=${weekNumber}&schoolYearId=${encodeURIComponent(seeded.schoolYearId)}`,
+    { headers: { cookie: teacherCookie } },
+  );
+  assert.equal(after.response.status, 200);
+  const cards = after.payload.week.days.flatMap((day) => day.controls);
+  assert.ok(cards.some((card) => card.title === "Contrôle injection"));
+  assert.equal(after.payload.teacherLoadThisWeek, loadBefore + 1);
+
+  const agenda = await jsonRequest(`/api/agenda?classroomId=${encodeURIComponent(forged.payload.item.classroomId)}`, {
+    headers: { cookie: teacherCookie },
+  });
+  assert.equal(agenda.response.status, 200);
+  assert.ok(agenda.payload.items.some((item) => item.id === forged.payload.item.id));
+
+  const second = await jsonRequest("/api/teacher/controls", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      annualCourseId: option.annualCourseId,
+      courseSessionKey: option.courseSessionKey,
+      title: "Contrôle 2",
+    }),
+  });
+  assert.equal(second.response.status, 201, second.payload.reason);
+
+  const blocked = await jsonRequest("/api/teacher/controls", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      annualCourseId: option.annualCourseId,
+      courseSessionKey: option.courseSessionKey,
+      title: "Contrôle 3",
+      confirmCoordination: false,
+    }),
+  });
+  assert.equal(blocked.response.status, 409);
+  assert.equal(blocked.payload.code, "CONTROL_COORDINATION_CONFIRM_REQUIRED");
+  assert.equal(blocked.payload.coordination.classDayCount, 2);
+
+  const confirmed = await jsonRequest("/api/teacher/controls", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      annualCourseId: option.annualCourseId,
+      courseSessionKey: option.courseSessionKey,
+      title: "Contrôle 3",
+      confirmCoordination: true,
+    }),
+  });
+  assert.equal(confirmed.response.status, 201, confirmed.payload.reason);
+  assert.equal(confirmed.payload.item.title, "Contrôle 3");
+
+  const homework = await jsonRequest("/api/agenda", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      classroomId: forged.payload.item.classroomId,
+      subjectId: forged.payload.item.subjectId,
+      day: forged.payload.item.day,
+      hour: 8,
+      weekOffset: 0,
+      schoolWeekNumber: forged.payload.item.schoolWeekNumber,
+      type: "HOMEWORK",
+      title: "Devoir hors coordination",
+      detail: "",
+    }),
+  });
+  assert.equal(homework.response.status, 201, homework.payload.reason);
+
+  const legacyBlocked = await jsonRequest("/api/agenda", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      classroomId: forged.payload.item.classroomId,
+      subjectId: forged.payload.item.subjectId,
+      day: forged.payload.item.day,
+      hour: 8,
+      weekOffset: 0,
+      schoolWeekNumber: forged.payload.item.schoolWeekNumber,
+      type: "TEST",
+      title: "Contrôle legacy 4",
+      detail: "",
+    }),
+  });
+  assert.equal(legacyBlocked.response.status, 409);
+  assert.equal(legacyBlocked.payload.code, "CONTROL_COORDINATION_CONFIRM_REQUIRED");
+
+  const legacyConfirmed = await jsonRequest("/api/agenda", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      classroomId: forged.payload.item.classroomId,
+      subjectId: forged.payload.item.subjectId,
+      day: forged.payload.item.day,
+      hour: 8,
+      weekOffset: 0,
+      schoolWeekNumber: forged.payload.item.schoolWeekNumber,
+      type: "TEST",
+      title: "Contrôle legacy 4",
+      detail: "",
+      confirmCoordination: true,
+    }),
+  });
+  assert.equal(legacyConfirmed.response.status, 201, legacyConfirmed.payload.reason);
 });
 
 

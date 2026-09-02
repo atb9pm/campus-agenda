@@ -13,6 +13,7 @@ import type {
   ControlPlanningYearOption,
 } from "./types.ts";
 import { CONTROL_PLANNING_MODES } from "./types.ts";
+import { confirmationRequiredForExistingTests } from "../evaluations/coordination.ts";
 
 export function isControlAgendaItem(item: Pick<PrototypeAgendaItem, "type">): boolean {
   return item.type === "TEST";
@@ -203,6 +204,11 @@ export function buildControlPlanningWeek(options: {
         .filter((card) => card.schoolWeekNumber === week.number && card.dayIndex === dayIndex)
         .slice()
         .sort(sortCards),
+      placementOptions: [],
+      canPlan: false,
+      noCourseHint: null,
+      classDayControls: [],
+      confirmationRequired: false,
     });
   }
   return {
@@ -303,9 +309,84 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
     schoolWeekNumber: weekNumber,
   });
 
+  const ownWeekItems = selectControlItems({
+    items: input.items,
+    teacherId: input.teacherId,
+    accessibleClassroomIds: input.accessibleClasses.map((entry) => entry.id),
+    classroomId: null,
+    mode: "mine",
+    schoolYearId: input.schoolYearId,
+    includeUnscopedYearItems: input.includeUnscopedYearItems,
+  }).filter((item) => weekNumber !== null && item.schoolWeekNumber === weekNumber);
+
+  const teacherWeekControls = ownWeekItems
+    .map((item) => {
+      const date =
+        weekNumber !== null
+          ? isoDateForSchoolWeekDay(
+              input.weeks.filter((entry) => entry.number === item.schoolWeekNumber),
+              item.schoolWeekNumber,
+              item.day,
+            )
+          : null;
+      return projectControlCard(item, {
+        teacherId: input.teacherId,
+        classrooms: input.catalog.classrooms,
+        subjects: input.catalog.subjects,
+        teachers: input.catalog.teachers,
+        date,
+      });
+    })
+    .sort((left, right) => left.dayIndex - right.dayIndex || sortCards(left, right));
+
+  const classAllItems = classroomId
+    ? selectControlItems({
+        items: input.items,
+        teacherId: input.teacherId,
+        accessibleClassroomIds: input.accessibleClasses.map((entry) => entry.id),
+        classroomId,
+        mode: "class-all",
+        schoolYearId: input.schoolYearId,
+        includeUnscopedYearItems: input.includeUnscopedYearItems,
+      })
+    : [];
+  const classDayCards = classAllItems.map((item) =>
+    projectControlCard(item, {
+      teacherId: input.teacherId,
+      classrooms: input.catalog.classrooms,
+      subjects: input.catalog.subjects,
+      teachers: input.catalog.teachers,
+      date:
+        weekNumber !== null
+          ? isoDateForSchoolWeekDay(
+              input.weeks.filter((entry) => entry.number === item.schoolWeekNumber),
+              item.schoolWeekNumber,
+              item.day,
+            )
+          : null,
+    }),
+  );
+
+  if (week) {
+    for (const day of week.days) {
+      const dayOptions = input.placementOptions.filter((option) => option.dayIndex === day.dayIndex);
+      const dayClassControls = classDayCards
+        .filter((card) => card.schoolWeekNumber === week.number && card.dayIndex === day.dayIndex)
+        .slice()
+        .sort(sortCards);
+      day.placementOptions = dayOptions;
+      day.canPlan = input.canCreate && dayOptions.length > 0;
+      day.noCourseHint =
+        input.canCreate && dayOptions.length === 0 ? "Aucun de vos cours ce jour-là" : null;
+      day.classDayControls = dayClassControls;
+      day.confirmationRequired = confirmationRequiredForExistingTests(dayClassControls.length);
+    }
+  }
+
   return {
     schoolYearId: input.schoolYearId,
     schoolYearLabel: input.schoolYearLabel,
+    yearStatus: input.yearStatus,
     mode,
     classroomId,
     classes: sortClasses(input.accessibleClasses),
@@ -324,6 +405,9 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
         })
       : [],
     teacherLoadThisWeek,
+    teacherWeekControls,
+    canCreate: input.canCreate,
+    guidedPlanningReason: input.guidedPlanningReason,
   };
 }
 

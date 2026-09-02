@@ -1,5 +1,6 @@
 export type {
   BuildControlPlanningInput,
+  ControlPlacementOption,
   ControlPlanningAlert,
   ControlPlanningCard,
   ControlPlanningClass,
@@ -31,6 +32,11 @@ export {
   listAccessibleRuntimeClassroomsForTeacher,
   structuredClassMatchesPlanningYear,
 } from "./classrooms.ts";
+export { listControlPlacementOptions } from "./placements.ts";
+export {
+  evaluateLiveControlCoordination,
+  type LiveCoordinationDeps,
+} from "./live-coordination.ts";
 export {
   getControlPlanning,
   type ControlPlanningQuery,

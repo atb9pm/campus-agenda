@@ -1,4 +1,11 @@
 import { AGENDA_ITEM_TYPES } from "@campus/types/agenda.ts";
+import { parseConfirmCoordination } from "@campus/features/course-publications/index.ts";
+import { evaluateLiveControlCoordination } from "@campus/features/control-planning/index.ts";
+import {
+  CONTROL_COORDINATION_CONFIRM_CODE,
+  CONTROL_COORDINATION_CONFIRM_REASON,
+  gateControlCoordination,
+} from "@campus/features/evaluations/index.ts";
 import {
   assertAgendaPublicationBranchAllowed,
   assertStructuredAgendaSubjectLinked,
@@ -12,6 +19,13 @@ import {
   getActiveSchoolYear,
   authorizeTeacherAgendaPublish,
 } from "../../../lib/server/api.ts";
+import {
+  getAnnualCourseStore,
+  getRuntimeAgendaAdapterStore,
+  getSchoolCatalogStore,
+  getSchoolYearStore,
+  getTeacherAccountStore,
+} from "@campus/lib/persistence/store-factory.ts";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -50,6 +64,7 @@ export async function POST(request: Request) {
     type?: string;
     title?: string;
     detail?: string;
+    confirmCoordination?: boolean;
     annualCourseId?: string;
     courseSessionKey?: string;
     courseSessionDate?: string;
@@ -111,6 +126,40 @@ export async function POST(request: Request) {
     schoolYearId: activeSchoolYearId,
   });
   if (scheduleGuard) return scheduleGuard;
+
+  if (type === "TEST") {
+    const coordination = await evaluateLiveControlCoordination(
+      {
+        agenda: auth.store!,
+        adapters: await getRuntimeAgendaAdapterStore(),
+        catalog: await getSchoolCatalogStore(),
+        courses: await getAnnualCourseStore(),
+        years: await getSchoolYearStore(),
+        teachers: await getTeacherAccountStore(),
+      },
+      {
+        teacherId: auth.session!.teacherId,
+        classroomId,
+        type: "TEST",
+        schoolYearId: activeSchoolYearId ?? "",
+        schoolWeekNumber,
+        dayIndex: day,
+        includeUnscopedYearItems: true,
+      },
+    );
+    const gate = gateControlCoordination(coordination, parseConfirmCoordination(body));
+    if (!gate.ok) {
+      return jsonResponse(
+        {
+          ok: false,
+          reason: CONTROL_COORDINATION_CONFIRM_REASON,
+          code: CONTROL_COORDINATION_CONFIRM_CODE,
+          coordination,
+        },
+        { status: 409 },
+      );
+    }
+  }
 
   const item = await auth.store!.createAgendaItem({
     classroomId,

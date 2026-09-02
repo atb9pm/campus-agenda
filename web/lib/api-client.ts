@@ -11,6 +11,10 @@ import type {
   ControlPlanningMode,
   ControlPlanningView,
 } from "@campus/features/control-planning";
+import {
+  CONTROL_COORDINATION_CONFIRM_CODE,
+  type ControlCoordinationSummary,
+} from "@campus/features/evaluations";
 import type { AgendaItemType } from "@campus/types/agenda";
 
 export type { TeacherAccountRecord };
@@ -136,6 +140,64 @@ export async function fetchTeacherControlPlanningApi(
   return payload;
 }
 
+export class ControlCoordinationRequiredError extends Error {
+  readonly code = CONTROL_COORDINATION_CONFIRM_CODE;
+  readonly coordination: ControlCoordinationSummary;
+
+  constructor(reason: string, coordination: ControlCoordinationSummary) {
+    super(reason);
+    this.name = "ControlCoordinationRequiredError";
+    this.coordination = coordination;
+  }
+}
+
+function throwIfCoordinationRequired(payload: {
+  ok?: boolean;
+  reason?: string;
+  code?: string;
+  coordination?: ControlCoordinationSummary;
+}): void {
+  if (payload.code === CONTROL_COORDINATION_CONFIRM_CODE && payload.coordination) {
+    throw new ControlCoordinationRequiredError(
+      payload.reason ?? "Confirmation de coordination requise.",
+      payload.coordination,
+    );
+  }
+}
+
+export async function createTeacherControlApi(input: {
+  annualCourseId: string;
+  courseSessionKey: string;
+  title: string;
+  detail?: string;
+  confirmCoordination?: boolean;
+}): Promise<{ item: PrototypeAgendaItem; coordination?: ControlCoordinationSummary }> {
+  const response = await fetch("/api/teacher/controls", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      annualCourseId: input.annualCourseId,
+      courseSessionKey: input.courseSessionKey,
+      title: input.title,
+      detail: input.detail ?? "",
+      confirmCoordination: input.confirmCoordination === true,
+    }),
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    code?: string;
+    item?: PrototypeAgendaItem;
+    coordination?: ControlCoordinationSummary;
+  }>(response);
+  throwIfCoordinationRequired(payload);
+  if (!response.ok || !payload.ok || !payload.item) {
+    throw new Error(payload.reason ?? "Publication du contrôle impossible.");
+  }
+  return { item: payload.item, coordination: payload.coordination };
+}
+
 export async function fetchTeacherCoursesApi(schoolYearId?: string | null): Promise<{
   schoolYearId: string | null;
   courses: TeacherCourseWorkspaceEntry[];
@@ -199,6 +261,7 @@ export async function publishTeacherCoursePublicationApi(input: {
   annualCourseId: string;
   courseSessionKey: string;
   referenceItemId: string;
+  confirmCoordination?: boolean;
 }): Promise<PrototypeAgendaItem> {
   const response = await fetch("/api/teacher/course-publications", {
     method: "POST",
@@ -208,9 +271,17 @@ export async function publishTeacherCoursePublicationApi(input: {
       annualCourseId: input.annualCourseId,
       courseSessionKey: input.courseSessionKey,
       referenceItemId: input.referenceItemId,
+      confirmCoordination: input.confirmCoordination === true,
     }),
   });
-  const payload = await parseJson<{ ok: boolean; reason?: string; item?: PrototypeAgendaItem }>(response);
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    code?: string;
+    item?: PrototypeAgendaItem;
+    coordination?: ControlCoordinationSummary;
+  }>(response);
+  throwIfCoordinationRequired(payload);
   if (!response.ok || !payload.ok || !payload.item) {
     throw new Error(payload.reason ?? "Publication dans l’Agenda impossible.");
   }
@@ -393,6 +464,7 @@ export async function createAgendaItemApi(input: {
   type: AgendaItemType;
   title: string;
   detail: string;
+  confirmCoordination?: boolean;
 }): Promise<PrototypeAgendaItem> {
   const response = await fetch("/api/agenda", {
     method: "POST",
@@ -400,7 +472,14 @@ export async function createAgendaItemApi(input: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
-  const payload = await parseJson<{ ok: boolean; item?: PrototypeAgendaItem; reason?: string }>(response);
+  const payload = await parseJson<{
+    ok: boolean;
+    item?: PrototypeAgendaItem;
+    reason?: string;
+    code?: string;
+    coordination?: ControlCoordinationSummary;
+  }>(response);
+  throwIfCoordinationRequired(payload);
   if (!response.ok || !payload.ok || !payload.item) {
     throw new Error(payload.reason ?? "Publication impossible.");
   }
