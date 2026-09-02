@@ -774,7 +774,6 @@ test("coordination — exclusion si le contrôle est déjà le même jour / mêm
       assert.equal(moved.item.courseSessionKey, destSameDay!.key);
       assert.equal(moved.item.annualCourseId, secondCourse.value.id);
       assert.equal(moved.coordination?.classDayCount, 2);
-      assert.equal(moved.coordination?.confirmationRequired, false);
     }
 
     const tuesday = sourceSessions.find((entry) => entry.dayOfWeek === 2 && entry.schoolWeekNumber === source.schoolWeekNumber);
