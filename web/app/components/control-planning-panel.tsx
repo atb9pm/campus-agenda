@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import {
+  classDayControlsForPlacementOption,
+  confirmationRequiredForPlacementOption,
   formatControlPlanningYearLabel,
   toggleControlPlanningClassroomSelection,
   type ControlPlacementOption,
@@ -510,8 +512,13 @@ export function ControlPlanningPanel({
     modalOption?.classroomName ||
     (view?.classes.find((entry) => entry.id === modalOption?.classroomId)?.name) ||
     "Classe";
-  const modalConfirmation =
-    Boolean(serverCoordination?.confirmationRequired) || Boolean(modalDay?.confirmationRequired);
+  const targetClassDayControls =
+    modalDay && modalOption
+      ? classDayControlsForPlacementOption(modalDay.classDayControls, modalOption)
+      : [];
+  const modalConfirmation = serverCoordination
+    ? Boolean(serverCoordination.confirmationRequired)
+    : Boolean(modalOption && confirmationRequiredForPlacementOption(modalDay?.classDayControls ?? [], modalOption));
   const assignedIds = view?.classes.map((entry) => entry.id) ?? [];
 
   return (
@@ -872,7 +879,7 @@ export function ControlPlanningPanel({
           classDayControls={
             serverCoordination
               ? coordinationCardsFromSummary(serverCoordination.classDayControls)
-              : modalDay.classDayControls
+              : targetClassDayControls
           }
           teacherWeekControls={
             serverCoordination

@@ -363,6 +363,10 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
   assert.match(panel, /Publier quand même/);
   assert.match(panel, /createTeacherControlApi/);
   assert.match(panel, /confirmCoordination/);
+  assert.match(panel, /classDayControlsForPlacementOption/);
+  assert.match(panel, /confirmationRequiredForPlacementOption/);
+  assert.match(panel, /targetClassDayControls/);
+  assert.doesNotMatch(panel, /modalDay\?\.confirmationRequired/);
   assert.doesNotMatch(panel, /<span>Classe<\/span>/);
   assert.doesNotMatch(panel, /onDragStart/);
   assert.doesNotMatch(panel, /onDrop/);

@@ -63,6 +63,10 @@ export {
 export { resolveControlPlanningPeriodId, splitControlPlanningPeriods } from "./periods.ts";
 export { buildControlPlanningSemesterSummary, buildControlPlanningSemesterView } from "./semester.ts";
 export {
+  classDayControlsForPlacementOption,
+  confirmationRequiredForPlacementOption,
+} from "./target-coordination.ts";
+export {
   evaluateLiveControlCoordination,
   type LiveCoordinationDeps,
 } from "./live-coordination.ts";

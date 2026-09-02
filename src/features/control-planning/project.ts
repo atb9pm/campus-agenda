@@ -13,7 +13,6 @@ import type {
   ControlPlanningYearOption,
 } from "./types.ts";
 import { CONTROL_PLANNING_MODES } from "./types.ts";
-import { confirmationRequiredForExistingTests } from "../evaluations/coordination.ts";
 import {
   emptyControlPlanningWeekMessage,
   listVisibleControlPlanningDayIndexes,
@@ -449,7 +448,7 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
       day.noCourseHint =
         input.canCreate && dayOptions.length === 0 ? "Aucun de vos cours ce jour-là" : null;
       day.classDayControls = dayClassControls;
-      day.confirmationRequired = confirmationRequiredForExistingTests(dayClassControls.length);
+      day.confirmationRequired = false;
     }
   }
 

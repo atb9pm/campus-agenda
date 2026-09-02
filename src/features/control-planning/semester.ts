@@ -1,4 +1,3 @@
-import { confirmationRequiredForExistingTests } from "../evaluations/coordination.ts";
 import { isoDateForSchoolWeekDay } from "../school-days/index.ts";
 import type { CourseSession } from "../course-sessions/types.ts";
 import type { SchoolWeekEntry } from "../school-year/types.ts";
@@ -91,7 +90,7 @@ export function buildControlPlanningSemesterView(options: {
         classDayControls,
         hasCourse,
         canPlan: options.canCreate && placementOptions.length > 0,
-        confirmationRequired: confirmationRequiredForExistingTests(classDayControls.length),
+        confirmationRequired: false,
       };
     });
     return {

@@ -5,6 +5,8 @@ import type { PrototypeAgendaItem } from "../src/features/agenda/demo-items.ts";
 import type { AnnualCourse, TeacherCourseAssignment } from "../src/features/annual-courses/types.ts";
 import {
   buildControlPlanningView,
+  classDayControlsForPlacementOption,
+  confirmationRequiredForPlacementOption,
   getControlPlanning,
   listAssignedStructuredPlanningClassrooms,
   listControlPlacementOptions,
@@ -12,8 +14,10 @@ import {
   resolveAssignedClassroomSelection,
   splitControlPlanningPeriods,
   toggleControlPlanningClassroomSelection,
+  type ControlPlacementOption,
   type ControlPlanningServiceDeps,
 } from "../src/features/control-planning/index.ts";
+import { TEST_ALERT_THRESHOLD } from "../src/features/evaluations/index.ts";
 import { computeCourseSessions } from "../src/features/course-sessions/index.ts";
 import type { CourseScheduleSlot } from "../src/features/course-schedule/types.ts";
 import type { SchoolClassRecord } from "../src/features/school-catalog/types.ts";
@@ -641,6 +645,135 @@ test("semestre — férié inactif, exception attribuable, P4+P6 unique, semaine
   assert.equal(card?.annualCourseId, "ac-moteur");
   assert.equal(card?.courseSessionKey, thursday[0]?.key);
   assert.equal(view.week?.days.map((day) => day.weekdayLabel).join(), "Lundi,Jeudi");
+});
+
+function thursdayOption(classroomId: string, classroomName: string, annualCourseId: string): ControlPlacementOption {
+  return {
+    annualCourseId,
+    courseSessionKey: `${YEAR_ID}|${annualCourseId}|2026-08-20`,
+    date: "2026-08-20",
+    schoolWeekNumber: 1,
+    dayIndex: 3,
+    branchLabel: "Moteur",
+    classroomId,
+    classroomName,
+  };
+}
+
+function coordinationFixture(items: PrototypeAgendaItem[], layout: "week" | "semester") {
+  const weeks = mondayWeeks("2026-08-17", 2);
+  const ma3a = thursdayOption("rt-ma3a", "MA3A", "ac-ma3a");
+  const mecauto = thursdayOption("rt-mecauto", "MECAUTO3A", "ac-mecauto");
+  return {
+    ma3a,
+    mecauto,
+    view: buildControlPlanningView({
+      teacherId: TEACHER_ID,
+      items,
+      catalog: {
+        classrooms: [
+          { id: "rt-ma3a", name: "MA3A" },
+          { id: "rt-mecauto", name: "MECAUTO3A" },
+        ],
+        subjects: [{ id: "subject-moteur", name: "Moteur" }],
+        teachers: [
+          { id: TEACHER_ID, displayName: "François Martin", initials: "FM" },
+          { id: OTHER_ID, displayName: "Mme Dupont", initials: "MD" },
+        ],
+      },
+      accessibleClasses: [
+        { id: "rt-ma3a", name: "MA3A" },
+        { id: "rt-mecauto", name: "MECAUTO3A" },
+      ],
+      weeks,
+      schoolYearId: YEAR_ID,
+      schoolYearLabel: "2026-2027",
+      years: [{ id: YEAR_ID, label: "2026-2027", status: "active" }],
+      classroomId: null,
+      classroomIds: ["rt-ma3a", "rt-mecauto"],
+      requestedMode: "class-all",
+      schoolWeekNumber: 1,
+      todayIso: "2026-08-17",
+      includeUnscopedYearItems: true,
+      yearStatus: "active",
+      placementOptions: [ma3a, mecauto],
+      canCreate: true,
+      guidedPlanningReason: null,
+      layout,
+      periodId: "semester-1",
+    }),
+  };
+}
+
+function thursdayClassDayControls(view: ReturnType<typeof buildControlPlanningView>, layout: "week" | "semester") {
+  if (layout === "week") {
+    return view.week?.days.find((day) => day.dayIndex === 3)?.classDayControls ?? [];
+  }
+  return (
+    view.semester?.weeks
+      .find((week) => week.number === 1)
+      ?.days.find((day) => day.dayIndex === 3)?.classDayControls ?? []
+  );
+}
+
+function assertTargetCoordination(
+  classDayControls: ReturnType<typeof thursdayClassDayControls>,
+  option: ControlPlacementOption,
+  expectedTitles: string[],
+  confirmationRequired: boolean,
+) {
+  const target = classDayControlsForPlacementOption(classDayControls, option);
+  assert.deepEqual(
+    target.map((card) => card.title).sort(),
+    [...expectedTitles].sort(),
+  );
+  assert.equal(target.every((card) => card.classroomId === option.classroomId), true);
+  assert.equal(confirmationRequiredForPlacementOption(classDayControls, option), confirmationRequired);
+}
+
+test("coordination multi-classes — Semestre et Semaine, cible uniquement", () => {
+  assert.equal(TEST_ALERT_THRESHOLD, 3);
+  const caseA = [
+    testItem({ id: 1, classroomId: "rt-ma3a", title: "MA3A-1", day: 3, schoolWeekNumber: 1 }),
+    testItem({ id: 2, classroomId: "rt-mecauto", title: "MECAUTO-1", day: 3, schoolWeekNumber: 1 }),
+  ];
+  const caseB = [
+    testItem({ id: 1, classroomId: "rt-ma3a", title: "MA3A-1", day: 3, schoolWeekNumber: 1 }),
+    testItem({ id: 2, classroomId: "rt-ma3a", title: "MA3A-2", day: 3, schoolWeekNumber: 1 }),
+    testItem({ id: 3, classroomId: "rt-mecauto", title: "MECAUTO-1", day: 3, schoolWeekNumber: 1 }),
+  ];
+  const caseC = [
+    testItem({ id: 1, classroomId: "rt-mecauto", title: "MECAUTO-1", day: 3, schoolWeekNumber: 1 }),
+    testItem({ id: 2, classroomId: "rt-mecauto", title: "MECAUTO-2", day: 3, schoolWeekNumber: 1 }),
+  ];
+
+  for (const layout of ["week", "semester"] as const) {
+    const a = coordinationFixture(caseA, layout);
+    const aDay = thursdayClassDayControls(a.view, layout);
+    assert.equal(aDay.length, 2, `${layout} CAS A : la cellule visualise les 2 classes`);
+    assertTargetCoordination(aDay, a.ma3a, ["MA3A-1"], false);
+    assertTargetCoordination(aDay, a.mecauto, ["MECAUTO-1"], false);
+    assert.equal(a.view.teacherWeekControls.map((card) => card.title).sort().join(), "MA3A-1,MECAUTO-1");
+
+    const b = coordinationFixture(caseB, layout);
+    const bDay = thursdayClassDayControls(b.view, layout);
+    assertTargetCoordination(bDay, b.ma3a, ["MA3A-1", "MA3A-2"], true);
+    assertTargetCoordination(bDay, b.mecauto, ["MECAUTO-1"], false);
+    assert.equal(
+      b.view.teacherWeekControls.map((card) => card.classroomId).sort().join(),
+      "rt-ma3a,rt-ma3a,rt-mecauto",
+    );
+
+    const c = coordinationFixture(caseC, layout);
+    const cDay = thursdayClassDayControls(c.view, layout);
+    assertTargetCoordination(cDay, c.ma3a, [], false);
+    assert.equal(
+      classDayControlsForPlacementOption(cDay, c.ma3a).some((card) => card.classroomId === "rt-mecauto"),
+      false,
+    );
+    assertTargetCoordination(cDay, c.mecauto, ["MECAUTO-1", "MECAUTO-2"], true);
+    assert.equal(c.view.teacherWeekControls.map((card) => card.title).sort().join(), "MECAUTO-1,MECAUTO-2");
+  }
 });
 
 test("année change — aucune classroomId précédente dans la sélection résolue", () => {
