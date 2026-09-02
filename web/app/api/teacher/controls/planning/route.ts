@@ -3,7 +3,7 @@ import {
   jsonResponse,
   reconcileRuntimeStructuredClassrooms,
   requireTeacherSession,
-} from "../../../../lib/server/api.ts";
+} from "../../../../../lib/server/api.ts";
 import {
   getAnnualCourseStore,
   getRuntimeAgendaAdapterStore,
@@ -11,7 +11,7 @@ import {
   getSchoolYearStore,
   getTeacherAccountStore,
 } from "@campus/lib/persistence/store-factory.ts";
-import { withApiObservability } from "../../../../lib/server/observability.ts";
+import { withApiObservability } from "../../../../../lib/server/observability.ts";
 
 function parseWeek(value: string | null): number | null {
   if (!value) return null;
