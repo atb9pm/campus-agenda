@@ -209,6 +209,39 @@ export async function createTeacherControlApi(input: {
   return { item: payload.item, coordination: payload.coordination };
 }
 
+export async function moveTeacherControlApi(
+  agendaItemId: number,
+  input: {
+    annualCourseId: string;
+    courseSessionKey: string;
+    confirmCoordination?: boolean;
+  },
+): Promise<{ item: PrototypeAgendaItem; coordination?: ControlCoordinationSummary; moved: boolean }> {
+  const response = await fetch(`/api/teacher/controls/${encodeURIComponent(String(agendaItemId))}/move`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      annualCourseId: input.annualCourseId,
+      courseSessionKey: input.courseSessionKey,
+      confirmCoordination: input.confirmCoordination === true,
+    }),
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    code?: string;
+    item?: PrototypeAgendaItem;
+    coordination?: ControlCoordinationSummary;
+    moved?: boolean;
+  }>(response);
+  throwIfCoordinationRequired(payload);
+  if (!response.ok || !payload.ok || !payload.item) {
+    throw new Error(payload.reason ?? "Déplacement du contrôle impossible.");
+  }
+  return { item: payload.item, coordination: payload.coordination, moved: payload.moved !== false };
+}
+
 export async function fetchTeacherCoursesApi(schoolYearId?: string | null): Promise<{
   schoolYearId: string | null;
   courses: TeacherCourseWorkspaceEntry[];

@@ -17,8 +17,11 @@ export function classDayControlsForPlacementOption(
 export function confirmationRequiredForPlacementOption(
   classDayControls: readonly ControlPlanningCard[],
   option: Pick<ControlPlacementOption, "classroomId">,
+  excludeAgendaItemId?: number,
 ): boolean {
   return confirmationRequiredForExistingTests(
-    classDayControlsForPlacementOption(classDayControls, option).length,
+    classDayControlsForPlacementOption(classDayControls, option).filter(
+      (card) => card.agendaItemId !== excludeAgendaItemId,
+    ).length,
   );
 }

@@ -1,5 +1,6 @@
+import { isStructuredAgendaPublication } from "../agenda/publications.ts";
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
-import type { AgendaStore } from "../../lib/persistence/types.ts";
+import type { AgendaStore, StructuredControlPlacement } from "../../lib/persistence/types.ts";
 import type { AnnualCourseStore } from "../../lib/persistence/annual-course-types.ts";
 import type { CourseScheduleStore } from "../../lib/persistence/course-schedule-types.ts";
 import type { PedagogicalPathStore } from "../../lib/persistence/pedagogical-path-types.ts";
@@ -45,6 +46,15 @@ export const STRUCTURED_PUBLISH_YEAR_ARCHIVED_REASON =
   "Cette année scolaire est archivée. Impossible de publier un nouvel élément.";
 export const STRUCTURED_PUBLISH_COURSE_ARCHIVED_REASON =
   "Ce cours annuel est archivé. Impossible de publier.";
+export const STRUCTURED_CONTROL_MOVE_NOT_FOUND_REASON = "Contrôle introuvable.";
+export const STRUCTURED_CONTROL_MOVE_NOT_TEST_REASON =
+  "Seul un contrôle peut être déplacé vers une autre séance.";
+export const STRUCTURED_CONTROL_MOVE_NOT_STRUCTURED_REASON =
+  "Ce contrôle n’est pas rattaché à une séance de cours réelle.";
+export const STRUCTURED_CONTROL_MOVE_FORBIDDEN_REASON =
+  "Vous ne pouvez déplacer que vos propres contrôles.";
+export const STRUCTURED_CONTROL_MOVE_FREE_PLACEMENT_REASON =
+  "La destination doit être une séance réelle (annualCourseId + courseSessionKey).";
 
 export function structuredPublishReferentialGuard(options: {
   year: SchoolYearRecord | null | undefined;
@@ -132,6 +142,17 @@ export interface ManualControlPublishInput {
   confirmCoordination?: boolean;
 }
 
+export interface StructuredControlMoveInput {
+  teacherId: string;
+  agendaItemId: number;
+  annualCourseId: string;
+  courseSessionKey: string;
+  confirmCoordination?: boolean;
+}
+
+export type StructuredControlMoveOk = StructuredPublishOk & { moved: boolean };
+export type StructuredControlMoveResult = StructuredControlMoveOk | StructuredPublishErr;
+
 export interface ResolvedStructuredPublishContext {
   teacher: { id: string };
   course: AnnualCourse;
@@ -152,6 +173,27 @@ export function structuredPublishIdsFromBody(body: unknown): {
     annualCourseId: typeof record.annualCourseId === "string" ? record.annualCourseId.trim() : "",
     courseSessionKey: typeof record.courseSessionKey === "string" ? record.courseSessionKey.trim() : "",
     referenceItemId: typeof record.referenceItemId === "string" ? record.referenceItemId.trim() : "",
+  };
+}
+
+export function structuredControlMoveIdsFromBody(body: unknown): {
+  annualCourseId: string;
+  courseSessionKey: string;
+  confirmCoordination: boolean;
+  rejectedFreePlacement: boolean;
+} {
+  const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  const rejectedFreePlacement =
+    record.date !== undefined ||
+    record.day !== undefined ||
+    record.schoolWeekNumber !== undefined ||
+    record.classroomId !== undefined ||
+    record.courseSessionDate !== undefined;
+  return {
+    annualCourseId: typeof record.annualCourseId === "string" ? record.annualCourseId.trim() : "",
+    courseSessionKey: typeof record.courseSessionKey === "string" ? record.courseSessionKey.trim() : "",
+    confirmCoordination: record.confirmCoordination === true,
+    rejectedFreePlacement,
   };
 }
 
@@ -284,6 +326,7 @@ async function coordinationForResolved(
   deps: StructuredPublishDeps,
   resolved: ResolvedStructuredPublishContext,
   type: PrototypeAgendaItem["type"],
+  excludeItemId?: number,
 ): Promise<ControlCoordinationSummary> {
   const active = await deps.years.getActiveSchoolYear();
   return evaluateLiveControlCoordination(deps, {
@@ -294,7 +337,22 @@ async function coordinationForResolved(
     schoolWeekNumber: resolved.courseSession.schoolWeekNumber,
     dayIndex: resolved.courseSession.dayOfWeek - 1,
     includeUnscopedYearItems: resolved.year.id === active?.id,
+    excludeItemId,
   });
+}
+
+function placementFromResolved(context: ResolvedStructuredPublishContext): StructuredControlPlacement {
+  return {
+    classroomId: context.classroomId,
+    subjectId: context.subjectId,
+    schoolYearId: context.courseSession.schoolYearId,
+    annualCourseId: context.course.id,
+    courseSessionKey: context.courseSession.key,
+    courseSessionDate: context.courseSession.date,
+    schoolWeekNumber: context.courseSession.schoolWeekNumber,
+    day: context.courseSession.dayOfWeek - 1,
+    hour: STRUCTURED_AGENDA_COMPAT_HOUR,
+  };
 }
 
 function coordinationConflict(coordination: ControlCoordinationSummary): StructuredPublishErr {
@@ -423,4 +481,58 @@ export async function publishManualControlToAgenda(
   });
   const nextCoordination = await coordinationForResolved(deps, context, "TEST");
   return { ok: true, item, coordination: nextCoordination };
+}
+
+export async function moveStructuredControlToCourseSession(
+  deps: StructuredPublishDeps,
+  input: StructuredControlMoveInput,
+): Promise<StructuredControlMoveResult> {
+  const annualCourseId = input.annualCourseId.trim();
+  const courseSessionKey = input.courseSessionKey.trim();
+  if (!annualCourseId || !courseSessionKey || !Number.isInteger(input.agendaItemId) || input.agendaItemId <= 0) {
+    return { ok: false, reason: "Identifiants de déplacement incomplets.", status: 400 };
+  }
+
+  const item = await deps.agenda.findAgendaItem(input.agendaItemId);
+  if (!item) {
+    return { ok: false, reason: STRUCTURED_CONTROL_MOVE_NOT_FOUND_REASON, status: 404 };
+  }
+  if (item.type !== "TEST") {
+    return { ok: false, reason: STRUCTURED_CONTROL_MOVE_NOT_TEST_REASON, status: 400 };
+  }
+  if (!isStructuredAgendaPublication(item)) {
+    return { ok: false, reason: STRUCTURED_CONTROL_MOVE_NOT_STRUCTURED_REASON, status: 400 };
+  }
+  if (item.authorTeacherId !== input.teacherId) {
+    return { ok: false, reason: STRUCTURED_CONTROL_MOVE_FORBIDDEN_REASON, status: 403 };
+  }
+
+  const resolved = await resolveStructuredPublishContext(deps, {
+    teacherId: input.teacherId,
+    annualCourseId,
+    courseSessionKey,
+  });
+  if (!resolved.ok) return resolved;
+  const context = resolved.value;
+
+  if (item.annualCourseId === context.course.id && item.courseSessionKey === context.courseSession.key) {
+    const coordination = await coordinationForResolved(deps, context, "TEST");
+    return { ok: true, item, coordination, moved: false };
+  }
+
+  const coordination = await coordinationForResolved(deps, context, "TEST", item.id);
+  const gate = gateControlCoordination(coordination, input.confirmCoordination === true);
+  if (!gate.ok) return coordinationConflict(coordination);
+
+  const mutated = await deps.agenda.moveStructuredControlPlacement(
+    item.id,
+    input.teacherId,
+    placementFromResolved(context),
+  );
+  if (!mutated.ok) {
+    return { ok: false, reason: mutated.reason, status: mutated.status === 401 ? 403 : mutated.status };
+  }
+
+  const nextCoordination = await coordinationForResolved(deps, context, "TEST");
+  return { ok: true, item: mutated.item, coordination: nextCoordination, moved: true };
 }
