@@ -26,9 +26,9 @@ import { seedDemoDatabase } from "../src/lib/persistence/sql/seed.ts";
 import { SqlTeacherSetupStore } from "../src/lib/persistence/sql/sql-teacher-setup-store.ts";
 
 test("navigation — sections enseignant + administration admin", () => {
-  assert.deepEqual([...TEACHER_NAV_SECTIONS], ["mes-cours", "ma-semaine", "configuration", "administration"]);
+  assert.deepEqual([...TEACHER_NAV_SECTIONS], ["mes-cours", "controles", "ma-semaine", "configuration", "administration"]);
   assert.equal(DEFAULT_TEACHER_NAV_SECTION, "mes-cours");
-  assert.deepEqual(teacherNavSectionsForRole(false), ["mes-cours", "ma-semaine", "configuration"]);
+  assert.deepEqual(teacherNavSectionsForRole(false), ["mes-cours", "controles", "ma-semaine", "configuration"]);
   assert.ok(teacherNavSectionsForRole(true).includes("administration"));
 });
 

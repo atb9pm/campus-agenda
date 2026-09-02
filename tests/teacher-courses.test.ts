@@ -219,6 +219,7 @@ test("version 2.24.0 — Mes cours depuis les attributions", () => {
   assert.match(APP_VERSION, /^\d+\.\d+\.\d+$/);
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",
+    "controles",
     "ma-semaine",
     "configuration",
     "administration",

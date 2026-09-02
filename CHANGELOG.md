@@ -2,6 +2,24 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.31.0] — Contrôles : planning hebdomadaire et coordination par classe
+
+Module enseignant dédié aux publications Agenda de type TEST. Vue unique, par jours, sans axe horaire.
+
+### Ajouté
+
+- Nouveau module enseignant de planification des contrôles.
+- Vue hebdomadaire par jours (lundi à vendredi), sans axe horaire.
+- Filtres par classes attribuées (« Toutes mes classes » ou une classe précise).
+- Mode « Mes contrôles » / « Tous les contrôles de la classe ».
+- Alertes simples de coordination et charge enseignant de la semaine.
+- Affichage clair de la classe sur chaque contrôle.
+- Route `GET /api/teacher/controls/planning` (projection prête pour la vue).
+
+### Non inclus
+
+Blocage strict à 2 contrôles, moteur complet de coordination, vue élève détaillée, récupération N → N+1, table dédiée aux contrôles.
+
 ## [2.30.0] — Agenda structuré : relier les cours réels aux publications
 
 Pont explicite entre le référentiel SchoolClass / AnnualCourse et le runtime Agenda. Publication CourseTimeline → Agenda, provenance figée, déduplication AnnualCourse + ReferenceItem.
