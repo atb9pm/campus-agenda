@@ -206,6 +206,7 @@ export function projectControlCard(
     subjectId: item.subjectId,
     branchLabel: lookupName(options.subjects, item.subjectId, "Branche"),
     title: item.title.trim() || "Contrôle",
+    detail: item.detail?.trim() || "",
     teacherId: item.authorTeacherId,
     teacherName: lookupName(options.teachers, item.authorTeacherId, "Enseignant"),
     isOwn: item.authorTeacherId === options.teacherId,

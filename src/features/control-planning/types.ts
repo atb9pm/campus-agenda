@@ -25,6 +25,7 @@ export interface ControlPlanningCard {
   subjectId: string;
   branchLabel: string;
   title: string;
+  detail: string;
   teacherId: string;
   teacherName: string;
   isOwn: boolean;

@@ -2,6 +2,24 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.35.0] — Contrôles : modification et suppression sécurisées
+
+Un enseignant peut modifier le titre et le détail de ses contrôles, ou les supprimer, sans toucher au placement structuré ni aux contrôles d’un collègue.
+
+### Ajouté
+
+- Menu d’actions ⋯ (Modifier, Déplacer, Supprimer) sur les contrôles de l’enseignant connecté.
+- API `PATCH /api/teacher/controls/[agendaItemId]` limitée au titre et au détail.
+- API `DELETE /api/teacher/controls/[agendaItemId]` après confirmation explicite.
+- Conservation de l’`agendaItemId` et de tous les champs structurés lors d’une modification.
+- Suppression limitée à l’AgendaItem concerné (aucune CourseSession, AnnualCourse ou classe).
+- Refus serveur des années archivées, des items non TEST, et des contrôles d’un collègue.
+- Déplacement inchangé via le mécanisme PR64.
+
+### Non inclus
+
+Aucune nouvelle table `controls`. N → N+1, notes, notation, fichiers joints, notifications, duplication, solver, modification des CourseSessions.
+
 ## [2.34.0] — Contrôles : déplacement structuré vers une autre CourseSession
 
 Un enseignant peut déplacer un contrôle existant vers une autre séance de cours réelle, sans perdre l’identité Agenda et sans ouvrir le PATCH générique.

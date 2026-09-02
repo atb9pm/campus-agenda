@@ -143,8 +143,8 @@ function planningDeps(items: PrototypeAgendaItem[] = DEMO_PROTOTYPE_ITEMS): Cont
   } as unknown as ControlPlanningServiceDeps;
 }
 
-test("version 2.34.0 — planning semestriel, sans table dédiée", () => {
-  assert.equal(APP_VERSION, "2.34.0");
+test("version 2.35.0 — planning semestriel, sans table dédiée", () => {
+  assert.equal(APP_VERSION, "2.35.0");
   assert.equal(TEACHER_NAV_LABELS.controles, "Contrôles");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",
@@ -380,8 +380,12 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
   assert.doesNotMatch(panel, /08h00/);
   assert.doesNotMatch(panel, /10h00/);
   assert.doesNotMatch(panel, /hour-axis/);
-  assert.doesNotMatch(panel, /onDelete/);
-  assert.doesNotMatch(panel, /onEdit/);
+  assert.match(panel, /onDeleteClick/);
+  assert.match(panel, /onEditClick/);
+  assert.match(panel, /updateTeacherControlApi/);
+  assert.match(panel, /deleteTeacherControlApi/);
+  assert.match(panel, /data-control-menu/);
+  assert.match(panel, /Supprimer ce contrôle \? Cette action est définitive\./);
   assert.match(page, /upsertAgendaItem/);
   assert.match(page, /onPublicationCreated/);
   assert.match(css, /control-planning-week/);

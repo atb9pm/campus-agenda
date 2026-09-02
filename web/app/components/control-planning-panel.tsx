@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
 
 import {
+  canManageOwnStructuredControlCard,
   classDayControlsForPlacementOption,
   confirmationRequiredForPlacementOption,
   formatControlPlanningYearLabel,
@@ -24,8 +25,10 @@ import type { ControlCoordinationSummary } from "@campus/features/evaluations";
 import {
   ControlCoordinationRequiredError,
   createTeacherControlApi,
+  deleteTeacherControlApi,
   fetchTeacherControlPlanningApi,
   moveTeacherControlApi,
+  updateTeacherControlApi,
 } from "../../lib/api-client.ts";
 
 const CONTROL_DRAG_MIME = "application/x-campus-control";
@@ -115,6 +118,7 @@ function coordinationCardsFromSummary(
     subjectId: "",
     branchLabel: entry.branchLabel,
     title: entry.title,
+    detail: "",
     teacherId: "",
     teacherName: entry.teacherName,
     isOwn: false,
@@ -133,23 +137,31 @@ function ControlCard({
   showTeacher = true,
   toneIndex = 0,
   movable = false,
+  manageable = false,
   dragging = false,
   selected = false,
   onDragStart,
   onDragEnd,
+  onEditClick,
   onMoveClick,
+  onDeleteClick,
 }: {
   card: ControlPlanningCard;
   compact?: boolean;
   showTeacher?: boolean;
   toneIndex?: number;
   movable?: boolean;
+  manageable?: boolean;
   dragging?: boolean;
   selected?: boolean;
   onDragStart?: (event: DragEvent<HTMLElement>) => void;
   onDragEnd?: () => void;
+  onEditClick?: () => void;
   onMoveClick?: () => void;
+  onDeleteClick?: () => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const title = [card.classroomName, card.branchLabel, card.title, card.teacherName].filter(Boolean).join(" · ");
   const classes = [
     "control-planning-card",
@@ -161,6 +173,34 @@ function ControlCard({
   ]
     .filter(Boolean)
     .join(" ");
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onPointerDown(event: PointerEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenuOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (dragging) setMenuOpen(false);
+  }, [dragging]);
+
+  function stopCardGesture(event: { preventDefault(): void; stopPropagation(): void }) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
   return (
     <article
       className={classes}
@@ -178,24 +218,75 @@ function ControlCard({
       onDragStart={movable ? onDragStart : undefined}
       onDragEnd={movable ? onDragEnd : undefined}
     >
-      <span className="control-planning-class-badge">{card.classroomName}</span>
+      <div className="control-planning-card-head">
+        <span className="control-planning-class-badge">{card.classroomName}</span>
+        {manageable ? (
+          <div className="control-planning-card-actions" ref={menuRef} data-control-actions="">
+            <button
+              type="button"
+              className="control-planning-card-menu-trigger"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              aria-label="Actions du contrôle"
+              data-control-menu=""
+              onMouseDown={stopCardGesture}
+              onClick={(event) => {
+                stopCardGesture(event);
+                setMenuOpen((open) => !open);
+              }}
+            >
+              ⋯
+            </button>
+            {menuOpen ? (
+              <div className="control-planning-card-menu" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-control-edit=""
+                  onMouseDown={stopCardGesture}
+                  onClick={(event) => {
+                    stopCardGesture(event);
+                    setMenuOpen(false);
+                    onEditClick?.();
+                  }}
+                >
+                  Modifier
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-control-move=""
+                  onMouseDown={stopCardGesture}
+                  onClick={(event) => {
+                    stopCardGesture(event);
+                    setMenuOpen(false);
+                    onMoveClick?.();
+                  }}
+                >
+                  Déplacer
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="is-danger"
+                  data-control-delete=""
+                  onMouseDown={stopCardGesture}
+                  onClick={(event) => {
+                    stopCardGesture(event);
+                    setMenuOpen(false);
+                    onDeleteClick?.();
+                  }}
+                >
+                  Supprimer
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
       <span className="control-planning-branch">{card.branchLabel}</span>
       <strong>{card.title}</strong>
       {showTeacher ? <span className="control-planning-teacher">{card.teacherName}</span> : null}
-      {movable ? (
-        <button
-          type="button"
-          className="control-planning-move-action"
-          data-control-move=""
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onMoveClick?.();
-          }}
-        >
-          Déplacer
-        </button>
-      ) : null}
     </article>
   );
 }
@@ -437,6 +528,152 @@ function MoveModal({
   );
 }
 
+function EditModal({
+  card,
+  title,
+  detail,
+  submitting,
+  error,
+  onTitle,
+  onDetail,
+  onClose,
+  onSubmit,
+}: {
+  card: ControlPlanningCard;
+  title: string;
+  detail: string;
+  submitting: boolean;
+  error: string;
+  onTitle: (value: string) => void;
+  onDetail: (value: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const placement = [card.classroomName, card.branchLabel, formatIsoDay(card.courseSessionDate ?? card.date)]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <div className="technical-modal-backdrop" role="presentation">
+      <section
+        className="technical-modal control-plan-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="control-edit-title"
+        data-control-edit-modal=""
+      >
+        <header>
+          <div>
+            <span className="eyebrow">MODIFIER UN CONTRÔLE</span>
+            <h2 id="control-edit-title">Modifier un contrôle</h2>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fermer" disabled={submitting}>
+            ×
+          </button>
+        </header>
+        <p className="control-plan-fixed" data-control-edit-fixed="">
+          <strong>{placement}</strong>
+          <span>Classe, branche et séance inchangées.</span>
+        </p>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+        >
+          <label>
+            Titre *
+            <input
+              data-control-edit-title=""
+              value={title}
+              onChange={(event) => onTitle(event.target.value)}
+              required
+              disabled={submitting}
+            />
+          </label>
+          <label>
+            Détail
+            <textarea
+              data-control-edit-detail=""
+              value={detail}
+              onChange={(event) => onDetail(event.target.value)}
+              rows={3}
+              disabled={submitting}
+            />
+          </label>
+          {error ? <p className="control-plan-error">{error}</p> : null}
+          <footer>
+            <button type="button" onClick={onClose} disabled={submitting}>
+              Annuler
+            </button>
+            <button type="submit" data-control-edit-save="" disabled={submitting || !title.trim()}>
+              {submitting ? "Enregistrement…" : "Enregistrer"}
+            </button>
+          </footer>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function DeleteModal({
+  card,
+  submitting,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  card: ControlPlanningCard;
+  submitting: boolean;
+  error: string;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="technical-modal-backdrop" role="presentation">
+      <section
+        className="technical-modal control-plan-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="control-delete-title"
+        data-control-delete-modal=""
+      >
+        <header>
+          <div>
+            <span className="eyebrow">SUPPRIMER UN CONTRÔLE</span>
+            <h2 id="control-delete-title">Supprimer un contrôle</h2>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fermer" disabled={submitting}>
+            ×
+          </button>
+        </header>
+        <p data-control-delete-copy="">
+          Supprimer ce contrôle ? Cette action est définitive.
+        </p>
+        <p className="control-plan-fixed">
+          <strong>{card.title}</strong>
+          <span>{card.classroomName}</span>
+          <span>{card.branchLabel}</span>
+        </p>
+        {error ? <p className="control-plan-error">{error}</p> : null}
+        <footer>
+          <button type="button" onClick={onClose} disabled={submitting}>
+            Annuler
+          </button>
+          <button
+            type="button"
+            className="is-danger"
+            data-control-delete-confirm=""
+            disabled={submitting}
+            onClick={onConfirm}
+          >
+            {submitting ? "Suppression…" : "Supprimer le contrôle"}
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 export function ControlPlanningPanel({
   onPublicationCreated,
 }: {
@@ -468,6 +705,14 @@ export function ControlPlanningPanel({
   const [moveCard, setMoveCard] = useState<ControlPlanningCard | null>(null);
   const [moving, setMoving] = useState(false);
   const [moveError, setMoveError] = useState("");
+  const [editCard, setEditCard] = useState<ControlPlanningCard | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDetail, setEditDetail] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [deleteCard, setDeleteCard] = useState<ControlPlanningCard | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -565,6 +810,14 @@ export function ControlPlanningPanel({
     setMoveError("");
     setMoveSource(null);
     setDraggingCard(null);
+    setEditCard(null);
+    setEditTitle("");
+    setEditDetail("");
+    setEditing(false);
+    setEditError("");
+    setDeleteCard(null);
+    setDeleting(false);
+    setDeleteError("");
   }
 
   function cancelMoveMode() {
@@ -580,6 +833,74 @@ export function ControlPlanningPanel({
 
   function cardIsMovable(card: ControlPlanningCard): boolean {
     return isMovableStructuredControlCard(card, Boolean(view?.canCreate));
+  }
+
+  function cardIsManageable(card: ControlPlanningCard): boolean {
+    return canManageOwnStructuredControlCard(card, Boolean(view?.canCreate));
+  }
+
+  function openEdit(card: ControlPlanningCard) {
+    if (!cardIsManageable(card)) return;
+    cancelMoveMode();
+    setPickerDay(null);
+    setModalDay(null);
+    setModalOption(null);
+    setDeleteCard(null);
+    setDeleteError("");
+    setEditCard(card);
+    setEditTitle(card.title);
+    setEditDetail(card.detail ?? "");
+    setEditError("");
+  }
+
+  function openDelete(card: ControlPlanningCard) {
+    if (!cardIsManageable(card)) return;
+    cancelMoveMode();
+    setPickerDay(null);
+    setModalDay(null);
+    setModalOption(null);
+    setEditCard(null);
+    setEditError("");
+    setDeleteCard(card);
+    setDeleteError("");
+  }
+
+  async function submitEdit() {
+    if (!editCard) return;
+    const nextTitle = editTitle.trim();
+    if (!nextTitle) {
+      setEditError("Le titre du contrôle est obligatoire.");
+      return;
+    }
+    setEditing(true);
+    setEditError("");
+    try {
+      await updateTeacherControlApi(editCard.agendaItemId, {
+        title: nextTitle,
+        detail: editDetail,
+      });
+      closeModal();
+      setReloadToken((token) => token + 1);
+    } catch (caught) {
+      setEditError(caught instanceof Error ? caught.message : "Modification impossible.");
+    } finally {
+      setEditing(false);
+    }
+  }
+
+  async function submitDelete() {
+    if (!deleteCard) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await deleteTeacherControlApi(deleteCard.agendaItemId);
+      closeModal();
+      setReloadToken((token) => token + 1);
+    } catch (caught) {
+      setDeleteError(caught instanceof Error ? caught.message : "Suppression impossible.");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   function startCardDrag(card: ControlPlanningCard, event: DragEvent<HTMLElement>) {
@@ -1027,11 +1348,14 @@ export function ControlPlanningPanel({
                             showTeacher={mode === "class-all" || !card.isOwn}
                             toneIndex={classToneIndex(card.classroomId, assignedIds)}
                             movable={cardIsMovable(card)}
+                            manageable={cardIsManageable(card)}
                             dragging={draggingCard?.agendaItemId === card.agendaItemId}
                             selected={moveSource?.agendaItemId === card.agendaItemId}
                             onDragStart={(event) => startCardDrag(card, event)}
                             onDragEnd={() => setDraggingCard(null)}
+                            onEditClick={() => openEdit(card)}
                             onMoveClick={() => setMoveSource(card)}
+                            onDeleteClick={() => openDelete(card)}
                           />
                         </li>
                       ))}
@@ -1168,11 +1492,14 @@ export function ControlPlanningPanel({
                                 showTeacher={mode === "class-all" || !card.isOwn}
                                 toneIndex={classToneIndex(card.classroomId, assignedIds)}
                                 movable={cardIsMovable(card)}
+                                manageable={cardIsManageable(card)}
                                 dragging={draggingCard?.agendaItemId === card.agendaItemId}
                                 selected={moveSource?.agendaItemId === card.agendaItemId}
                                 onDragStart={(event) => startCardDrag(card, event)}
                                 onDragEnd={() => setDraggingCard(null)}
+                                onEditClick={() => openEdit(card)}
                                 onMoveClick={() => setMoveSource(card)}
+                                onDeleteClick={() => openDelete(card)}
                               />
                             </li>
                           ))}
@@ -1307,6 +1634,30 @@ export function ControlPlanningPanel({
           }
           onClose={cancelMoveMode}
           onSubmit={(confirm) => void executeMove(moveCard, moveOption, confirm, moveDay)}
+        />
+      ) : null}
+
+      {editCard ? (
+        <EditModal
+          card={editCard}
+          title={editTitle}
+          detail={editDetail}
+          submitting={editing}
+          error={editError}
+          onTitle={setEditTitle}
+          onDetail={setEditDetail}
+          onClose={closeModal}
+          onSubmit={() => void submitEdit()}
+        />
+      ) : null}
+
+      {deleteCard ? (
+        <DeleteModal
+          card={deleteCard}
+          submitting={deleting}
+          error={deleteError}
+          onClose={closeModal}
+          onConfirm={() => void submitDelete()}
         />
       ) : null}
     </section>
