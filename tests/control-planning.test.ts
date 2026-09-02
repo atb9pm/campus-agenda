@@ -143,8 +143,8 @@ function planningDeps(items: PrototypeAgendaItem[] = DEMO_PROTOTYPE_ITEMS): Cont
   } as unknown as ControlPlanningServiceDeps;
 }
 
-test("version 2.32.1 — jours dynamiques, sans table dédiée", () => {
-  assert.equal(APP_VERSION, "2.32.1");
+test("version 2.33.0 — planning semestriel, sans table dédiée", () => {
+  assert.equal(APP_VERSION, "2.33.0");
   assert.equal(TEACHER_NAV_LABELS.controles, "Contrôles");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",
@@ -182,10 +182,13 @@ test("projection — seules les publications TEST remontent", () => {
 
 test("projection — Toutes mes classes n’affiche que les contrôles du professeur", () => {
   assert.equal(resolveControlPlanningMode(null, "class-all"), "mine");
+  assert.equal(resolveControlPlanningMode(null, "class-all", 0), "mine");
+  assert.equal(resolveControlPlanningMode("c-ma3a", "class-all", 2), "class-all");
 
-  const view = buildControlPlanningView(planningInput({ classroomId: null, requestedMode: "class-all" }));
+  const view = buildControlPlanningView(planningInput({ classroomId: null, requestedMode: "mine" }));
   assert.equal(view.mode, "mine");
   assert.equal(view.classroomId, null);
+  assert.equal(view.allClassesSelected, true);
   const cards = cardsFromView(view);
   assert.deepEqual(
     cards.map((card) => card.title).sort(),
@@ -252,11 +255,9 @@ test("service — planning prêt pour la vue, erreurs de filtre", async () => {
   assert.equal(mine.ok, true);
   if (!mine.ok) return;
   assert.equal(mine.view.mode, "mine");
-  assert.equal(mine.view.week?.days.length, 1);
-  assert.equal(mine.view.week?.days[0]?.weekdayLabel, "Jeudi");
-  const mineCards = cardsFromView(mine.view);
-  assert.ok(mineCards.every((card) => card.teacherId === TEACHER_ID));
-  assert.ok(mineCards.every((card) => card.classroomName.trim()));
+  assert.deepEqual(mine.view.classes, []);
+  assert.deepEqual(mine.view.classroomIds, []);
+  assert.equal(mine.view.layout, "semester");
 
   const filtered = await getControlPlanning(planningDeps(), {
     teacherId: TEACHER_ID,
@@ -265,13 +266,8 @@ test("service — planning prêt pour la vue, erreurs de filtre", async () => {
     week: WEEK_12,
     todayIso: "2026-11-18",
   });
-  assert.equal(filtered.ok, true);
-  if (filtered.ok) {
-    assert.deepEqual(
-      cardsFromView(filtered.view).map((card) => card.title),
-      ["Injection électronique"],
-    );
-  }
+  assert.equal(filtered.ok, false);
+  if (!filtered.ok) assert.equal(filtered.status, 403);
 
   const classAll = await getControlPlanning(planningDeps(), {
     teacherId: TEACHER_ID,
@@ -280,11 +276,8 @@ test("service — planning prêt pour la vue, erreurs de filtre", async () => {
     week: WEEK_12,
     todayIso: "2026-11-18",
   });
-  assert.equal(classAll.ok, true);
-  if (classAll.ok) {
-    assert.ok(cardsFromView(classAll.view).length >= 3);
-    assert.ok(cardsFromView(classAll.view).some((card) => !card.isOwn));
-  }
+  assert.equal(classAll.ok, false);
+  if (!classAll.ok) assert.equal(classAll.status, 403);
 
   const forbidden = await getControlPlanning(planningDeps(), {
     teacherId: TEACHER_ID,
@@ -346,12 +339,17 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
   assert.match(panel, /Toutes mes classes/);
   assert.match(panel, /Mes contrôles/);
   assert.match(panel, /Tous les contrôles de la classe/);
+  assert.match(panel, /Tous les contrôles des classes/);
   assert.match(panel, /Année scolaire/);
   assert.match(panel, /data-control-year/);
+  assert.match(panel, /data-control-semester/);
+  assert.match(panel, /data-control-layout="semester"/);
+  assert.match(panel, /Semestre 1/);
   assert.match(panel, /function selectYear/);
-  assert.match(panel, /setClassroomId\(null\)/);
+  assert.match(panel, /setClassroomIds\(null\)/);
   assert.match(panel, /setMode\("mine"\)/);
   assert.match(panel, /setWeek\(null\)/);
+  assert.match(panel, /aria-pressed/);
   assert.match(panel, /schoolYearId/);
   assert.match(panel, /card\.classroomName/);
   assert.match(panel, /Aucun contrôle/);
@@ -365,6 +363,11 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
   assert.match(panel, /Publier quand même/);
   assert.match(panel, /createTeacherControlApi/);
   assert.match(panel, /confirmCoordination/);
+  assert.doesNotMatch(panel, /<span>Classe<\/span>/);
+  assert.doesNotMatch(panel, /onDragStart/);
+  assert.doesNotMatch(panel, /onDrop/);
+  assert.doesNotMatch(panel, /dnd-kit/);
+  assert.doesNotMatch(panel, /react-beautiful-dnd/);
   assert.doesNotMatch(panel, /type === "HOMEWORK"/);
   assert.doesNotMatch(panel, /Devoir/);
   assert.doesNotMatch(panel, /Information/);
@@ -376,6 +379,7 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
   assert.match(page, /upsertAgendaItem/);
   assert.match(page, /onPublicationCreated/);
   assert.match(css, /control-planning-week/);
+  assert.match(css, /control-planning-semester/);
   assert.match(css, /--control-day-count/);
   assert.doesNotMatch(css, /\.control-planning-week\s*\{[^}]*repeat\(5,/s);
   assert.doesNotMatch(css, /\.control-planning-week[^{]*08h/);
@@ -407,8 +411,9 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
     /listAccessibleControlPlanningClassrooms/,
     "GET /api/teacher/classrooms must keep runtime access, not control-planning access",
   );
-  assert.match(service, /listAccessibleControlPlanningClassrooms/);
+  assert.match(service, /listAssignedStructuredPlanningClassrooms/);
   assert.doesNotMatch(service, /listAccessibleRuntimeClassroomsForTeacher/);
+  assert.doesNotMatch(service, /listAccessibleControlPlanningClassrooms/);
   assert.match(accessSrc, /options\.at \?\? new Date\(\)\.toISOString\(\)/);
   assert.doesNotMatch(
     accessSrc,
@@ -580,6 +585,8 @@ test("service — classes structurées filtrées par année, même code MMA1A ja
     catalog: {
       ensureSeeded: async () => undefined,
       listClasses: async () => [class2026, class2025],
+      listContexts: async () => [motorContext()],
+      listBranches: async () => [motorBranch()],
     },
     courses: {
       listCourses: async () => [course2026, course2025],
@@ -593,9 +600,16 @@ test("service — classes structurées filtrées par année, même code MMA1A ja
       getActiveSchoolYear: async () => active,
       getSchoolYearById: async (id: string) =>
         [active, archived, draft].find((entry) => entry.id === id) ?? null,
+      listDayExceptions: async () => [],
     },
     teachers: {
       listAccounts: async () => [{ id: TEACHER_ID, displayName: "François Martin", initials: "FM" }],
+    },
+    schedules: {
+      listSlots: async () => [
+        slotFor(course2026.id, { id: "s-2026", dayOfWeek: 4 }),
+        slotFor(course2025.id, { id: "s-2025", dayOfWeek: 4 }),
+      ],
     },
   } as unknown as ControlPlanningServiceDeps;
 

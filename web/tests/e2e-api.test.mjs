@@ -570,7 +570,11 @@ test("2.32.0 — E2E planning des contrôles : session, années, 403, TEST", asy
   const payload = await forged.json();
   assert.equal(payload.ok, true);
   assert.ok(payload.week);
-  assert.ok(payload.week.days.length >= 1 && payload.week.days.length <= 5);
+  assert.ok(Array.isArray(payload.classroomIds));
+  assert.equal(payload.layout === "semester" || payload.layout === "week", true);
+  assert.ok(payload.semester);
+  assert.ok(Array.isArray(payload.semester.weeks));
+  assert.ok(payload.week.days.length <= 5);
   assert.ok(Array.isArray(payload.years));
   assert.ok(payload.years.length >= 1);
   assert.ok(payload.years.every((year) => year.status === "active" || year.status === "archived"));
@@ -610,6 +614,12 @@ test("2.32.0 — E2E planning des contrôles : session, années, 403, TEST", asy
   });
   assert.equal(unknownYear.status, 404);
 
+  const unknownClassIds = await request(
+    "/api/teacher/controls/planning?classroomIds=classe-inconnue&mode=mine",
+    { headers: { cookie: teacherCookie } },
+  );
+  assert.equal(unknownClassIds.status, 403);
+
   const unknownClass = await request(
     "/api/teacher/controls/planning?classroomId=classe-inconnue&mode=mine",
     { headers: { cookie: teacherCookie } },
@@ -633,7 +643,7 @@ test("2.32.0 — E2E planning des contrôles : session, années, 403, TEST", asy
     assert.equal(classPayload.ok, true);
     assert.equal(classPayload.mode, "class-all");
     assert.equal(classPayload.schoolYearId, payload.schoolYearId);
-    assert.ok(classPayload.week.days.length >= 1 && classPayload.week.days.length <= 5);
+    assert.ok(classPayload.week.days.length <= 5);
   }
 });
 

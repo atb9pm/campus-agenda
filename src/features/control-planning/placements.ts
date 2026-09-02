@@ -11,19 +11,30 @@ export function listControlPlacementOptions(options: {
   sessions: CourseSession[];
   assignments: TeacherCourseAssignment[];
   teacherId: string;
-  schoolWeekNumber: number;
+  schoolWeekNumber?: number | null;
   branchByCourseId: ReadonlyMap<string, string>;
   yearStatus: "active" | "archived" | "draft";
   classroomSelected: boolean;
   structured: boolean;
+  classroomByClassId?: ReadonlyMap<string, { id: string; name: string }>;
+  selectedSchoolClassIds?: readonly string[] | null;
 }): ControlPlacementOption[] {
   if (!options.classroomSelected || !options.structured || options.yearStatus !== "active") {
     return [];
   }
 
+  const classFilter =
+    options.selectedSchoolClassIds && options.selectedSchoolClassIds.length > 0
+      ? new Set(options.selectedSchoolClassIds)
+      : null;
+  const seen = new Set<string>();
   const placements: ControlPlacementOption[] = [];
   for (const session of options.sessions) {
-    if (session.schoolWeekNumber !== options.schoolWeekNumber) continue;
+    if (options.schoolWeekNumber != null && session.schoolWeekNumber !== options.schoolWeekNumber) {
+      continue;
+    }
+    if (classFilter && !classFilter.has(session.classId)) continue;
+    if (seen.has(session.key)) continue;
     const at = assignmentInstantForSessionDate(session.date);
     if (
       !teacherHasStructuredPublishAccess({
@@ -35,6 +46,8 @@ export function listControlPlacementOptions(options: {
     ) {
       continue;
     }
+    seen.add(session.key);
+    const classroom = options.classroomByClassId?.get(session.classId);
     const periods = formatCourseSessionPeriods(session.segments);
     placements.push({
       annualCourseId: session.annualCourseId,
@@ -44,12 +57,16 @@ export function listControlPlacementOptions(options: {
       dayIndex: session.dayOfWeek - 1,
       branchLabel: options.branchByCourseId.get(session.annualCourseId)?.trim() || "Branche",
       sessionLabel: periods || undefined,
+      classroomId: classroom?.id ?? "",
+      classroomName: classroom?.name ?? "",
     });
   }
 
   return placements.sort((left, right) => {
     const day = left.dayIndex - right.dayIndex;
     if (day !== 0) return day;
+    const classCmp = left.classroomName.localeCompare(right.classroomName, "fr");
+    if (classCmp !== 0) return classCmp;
     const branch = left.branchLabel.localeCompare(right.branchLabel, "fr");
     if (branch !== 0) return branch;
     return left.courseSessionKey.localeCompare(right.courseSessionKey);

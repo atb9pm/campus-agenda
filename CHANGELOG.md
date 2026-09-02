@@ -2,6 +2,24 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.33.0] — Contrôles : planning semestriel et filtres multi-classes
+
+Le planning des contrôles permet de voir un semestre entier, de filtrer plusieurs classes attribuées, et de planifier depuis une case réelle de CourseSession.
+
+### Ajouté
+
+- nouvelle vue semestrielle des contrôles
+- filtres multi-classes
+- classes limitées aux vraies attributions horaires
+- visualisation compacte des semaines A/B
+- visualisation des CourseSession disponibles
+- planification directe depuis une case du semestre
+- vue hebdomadaire conservée
+
+### Non inclus
+
+drag & drop, déplacement d’un contrôle, N → N+1, duplication annuelle, notes, notation, fichiers joints, notifications, solver.
+
 ## [2.32.1] — Contrôles : afficher uniquement les jours de cours pertinents
 
 Le planning des contrôles n’affiche plus une grille fixe lundi–vendredi. Les colonnes suivent les vraies CourseSession de la semaine consultée.

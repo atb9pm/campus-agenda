@@ -406,7 +406,7 @@ function emptyCampusTables(): CampusTableDump {
 }
 
 test("version 2.32.0 — dernière migration 0024, aucune table CourseSession", async () => {
-  assert.equal(APP_VERSION, "2.32.1");
+  assert.equal(APP_VERSION, "2.33.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
   assert.equal(SQL_MIGRATION_FILES.some((file) => file.startsWith("0025")), false);
   const sql = await readFile(new URL("../migrations/0024_structured_agenda_bridge.sql", import.meta.url), "utf8");

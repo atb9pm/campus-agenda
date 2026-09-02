@@ -2,6 +2,12 @@ import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
 import type { TeacherCourseAssignment } from "../annual-courses/types.ts";
 import type { CourseSession } from "../course-sessions/types.ts";
 import type { SchoolWeekEntry } from "../school-year/types.ts";
+import type {
+  ControlPlanningLayout,
+  ControlPlanningPeriodId,
+  ControlPlanningPeriodView,
+  ControlPlanningSemesterSummary,
+} from "./period-types.ts";
 
 export const CONTROL_PLANNING_MODES = ["mine", "class-all"] as const;
 
@@ -25,6 +31,9 @@ export interface ControlPlanningCard {
   schoolWeekNumber: number;
   dayIndex: number;
   date: string | null;
+  annualCourseId: string | null;
+  courseSessionKey: string | null;
+  courseSessionDate: string | null;
 }
 
 export interface ControlPlacementOption {
@@ -35,6 +44,8 @@ export interface ControlPlacementOption {
   dayIndex: number;
   branchLabel: string;
   sessionLabel?: string;
+  classroomId: string;
+  classroomName: string;
 }
 
 export interface ControlPlanningDay {
@@ -73,12 +84,18 @@ export interface ControlPlanningView {
   yearStatus: "active" | "archived";
   mode: ControlPlanningMode;
   classroomId: string | null;
+  classroomIds: string[];
+  allClassesSelected: boolean;
+  layout: ControlPlanningLayout;
+  periodId: ControlPlanningPeriodId;
   classes: ControlPlanningClass[];
   years: ControlPlanningYearOption[];
   summary: {
     controlCount: number;
     classCount: number;
   };
+  semesterSummary: ControlPlanningSemesterSummary | null;
+  semester: ControlPlanningPeriodView | null;
   week: ControlPlanningWeekView | null;
   weeks: Array<{ number: number; kind: "A" | "B" }>;
   alerts: ControlPlanningAlert[];
@@ -106,6 +123,8 @@ export interface BuildControlPlanningInput {
   schoolYearLabel: string;
   years: ControlPlanningYearOption[];
   classroomId: string | null;
+  /** Sélection multi. Vide / omis + classroomId null = toutes les classes accessibles. */
+  classroomIds?: string[] | null;
   requestedMode: string | null;
   schoolWeekNumber: number | null;
   todayIso: string;
@@ -120,4 +139,7 @@ export interface BuildControlPlanningInput {
   assignments?: readonly TeacherCourseAssignment[];
   /** SchoolClass liée à la classroom runtime sélectionnée. Null = legacy / toutes les classes. */
   selectedSchoolClassId?: string | null;
+  selectedSchoolClassIds?: readonly string[] | null;
+  layout?: ControlPlanningLayout;
+  periodId?: ControlPlanningPeriodId;
 }

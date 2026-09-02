@@ -8,7 +8,9 @@ import type {
 } from "@campus/features/course-timeline";
 import type { ClassNotesDocument } from "@campus/features/class-notebook";
 import type {
+  ControlPlanningLayout,
   ControlPlanningMode,
+  ControlPlanningPeriodId,
   ControlPlanningView,
 } from "@campus/features/control-planning";
 import {
@@ -118,16 +120,25 @@ export async function fetchTeacherControlPlanningApi(
   query: {
     schoolYearId?: string | null;
     classroomId?: string | null;
+    classroomIds?: string[] | null;
     mode?: ControlPlanningMode | null;
     week?: number | null;
+    view?: ControlPlanningLayout | null;
+    period?: ControlPlanningPeriodId | null;
   } = {},
   signal?: AbortSignal,
 ): Promise<ControlPlanningView> {
   const params = new URLSearchParams();
   if (query.schoolYearId) params.set("schoolYearId", query.schoolYearId);
-  if (query.classroomId) params.set("classroomId", query.classroomId);
+  if (query.classroomIds && query.classroomIds.length > 0) {
+    params.set("classroomIds", query.classroomIds.join(","));
+  } else if (query.classroomId) {
+    params.set("classroomId", query.classroomId);
+  }
   if (query.mode) params.set("mode", query.mode);
   if (query.week != null) params.set("week", String(query.week));
+  if (query.view) params.set("view", query.view);
+  if (query.period) params.set("period", query.period);
   const suffix = params.size ? `?${params.toString()}` : "";
   const response = await fetch(`/api/teacher/controls/planning${suffix}`, {
     credentials: "include",

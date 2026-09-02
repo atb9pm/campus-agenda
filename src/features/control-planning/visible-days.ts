@@ -25,48 +25,30 @@ export function teacherOwnsCourseSession(options: {
   });
 }
 
-/**
- * Jours affichés pour une semaine : CourseSession de la vue
- * + jours qui ont déjà un contrôle (filet legacy, sans autoriser une publication).
- */
-export function listVisibleControlPlanningDayIndexes(options: {
+function resolvedSchoolClassIds(options: {
+  selectedSchoolClassId: string | null;
+  selectedSchoolClassIds?: readonly string[] | null;
+}): string[] {
+  if (options.selectedSchoolClassIds && options.selectedSchoolClassIds.length > 0) {
+    return [...new Set(options.selectedSchoolClassIds)];
+  }
+  if (options.selectedSchoolClassId) return [options.selectedSchoolClassId];
+  return [];
+}
+
+function collectVisibleDayIndexes(options: {
   mode: ControlPlanningMode;
-  classroomId: string | null;
-  schoolWeekNumber: number;
   teacherId: string;
   sessions: readonly CourseSession[];
   assignments: readonly TeacherCourseAssignment[];
-  selectedSchoolClassId: string | null;
+  selectedSchoolClassIds: readonly string[];
   existingControlDayIndexes: readonly number[];
+  teacherWide: boolean;
 }): number[] {
-  const weekSessions = options.sessions.filter(
-    (session) => session.schoolWeekNumber === options.schoolWeekNumber,
-  );
   const visible = new Set<number>();
 
-  if (options.classroomId) {
-    if (options.selectedSchoolClassId) {
-      const classSessions = weekSessions.filter(
-        (session) => session.classId === options.selectedSchoolClassId,
-      );
-      if (options.mode === "class-all") {
-        for (const session of classSessions) visible.add(courseSessionDayIndex(session));
-      } else {
-        for (const session of classSessions) {
-          if (
-            teacherOwnsCourseSession({
-              teacherId: options.teacherId,
-              session,
-              assignments: options.assignments,
-            })
-          ) {
-            visible.add(courseSessionDayIndex(session));
-          }
-        }
-      }
-    }
-  } else {
-    for (const session of weekSessions) {
+  if (options.teacherWide) {
+    for (const session of options.sessions) {
       if (
         teacherOwnsCourseSession({
           teacherId: options.teacherId,
@@ -75,6 +57,24 @@ export function listVisibleControlPlanningDayIndexes(options: {
         })
       ) {
         visible.add(courseSessionDayIndex(session));
+      }
+    }
+  } else if (options.selectedSchoolClassIds.length > 0) {
+    const classIds = new Set(options.selectedSchoolClassIds);
+    const classSessions = options.sessions.filter((session) => classIds.has(session.classId));
+    if (options.mode === "class-all") {
+      for (const session of classSessions) visible.add(courseSessionDayIndex(session));
+    } else {
+      for (const session of classSessions) {
+        if (
+          teacherOwnsCourseSession({
+            teacherId: options.teacherId,
+            session,
+            assignments: options.assignments,
+          })
+        ) {
+          visible.add(courseSessionDayIndex(session));
+        }
       }
     }
   }
@@ -92,13 +92,78 @@ export function listVisibleControlPlanningDayIndexes(options: {
   return [...visible].sort((left, right) => left - right);
 }
 
+/**
+ * Jours affichés pour une semaine : CourseSession de la vue
+ * + jours qui ont déjà un contrôle (filet legacy, sans autoriser une publication).
+ */
+export function listVisibleControlPlanningDayIndexes(options: {
+  mode: ControlPlanningMode;
+  classroomId: string | null;
+  schoolWeekNumber: number;
+  teacherId: string;
+  sessions: readonly CourseSession[];
+  assignments: readonly TeacherCourseAssignment[];
+  selectedSchoolClassId: string | null;
+  selectedSchoolClassIds?: readonly string[] | null;
+  existingControlDayIndexes: readonly number[];
+}): number[] {
+  const weekSessions = options.sessions.filter(
+    (session) => session.schoolWeekNumber === options.schoolWeekNumber,
+  );
+  const selectedSchoolClassIds = resolvedSchoolClassIds(options);
+  const teacherWide = !options.classroomId && selectedSchoolClassIds.length === 0;
+  return collectVisibleDayIndexes({
+    mode: options.mode,
+    teacherId: options.teacherId,
+    sessions: weekSessions,
+    assignments: options.assignments,
+    selectedSchoolClassIds,
+    existingControlDayIndexes: options.existingControlDayIndexes,
+    teacherWide,
+  });
+}
+
+/** Union des jours pertinents sur un ensemble de semaines (vue semestre). */
+export function listVisibleControlPlanningDayIndexesForWeeks(options: {
+  mode: ControlPlanningMode;
+  teacherId: string;
+  sessions: readonly CourseSession[];
+  assignments: readonly TeacherCourseAssignment[];
+  selectedSchoolClassIds: readonly string[];
+  existingControlDayIndexes: readonly number[];
+  weekNumbers: readonly number[];
+}): number[] {
+  const weekSet = new Set(options.weekNumbers);
+  const scopedSessions = options.sessions.filter((session) => weekSet.has(session.schoolWeekNumber));
+  const days = collectVisibleDayIndexes({
+    mode: options.mode,
+    teacherId: options.teacherId,
+    sessions: scopedSessions,
+    assignments: options.assignments,
+    selectedSchoolClassIds: options.selectedSchoolClassIds,
+    existingControlDayIndexes: options.existingControlDayIndexes,
+    teacherWide: options.selectedSchoolClassIds.length === 0,
+  });
+  return days;
+}
+
+export const DEFAULT_SEMESTER_DAY_INDEXES = [...SCHOOL_DAY_INDEXES];
+
 export function emptyControlPlanningWeekMessage(options: {
   classroomId: string | null;
   mode: ControlPlanningMode;
   structured: boolean;
+  selectedCount?: number;
 }): string {
   if (options.classroomId && !options.structured) {
     return "Cette classe n’est pas reliée à l’horaire structuré.";
+  }
+  const selectedCount = options.selectedCount ?? (options.classroomId ? 1 : 0);
+  if (selectedCount > 1) {
+    if (options.mode === "class-all") {
+      return "Aucun cours n’est prévu pour ces classes cette semaine.";
+    }
+    return "Vous n’avez aucun cours avec ces classes cette semaine.";
   }
   if (!options.classroomId) {
     return "Aucun de vos cours n’est prévu cette semaine.";
