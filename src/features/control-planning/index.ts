@@ -29,8 +29,11 @@ export {
   selectControlItems,
 } from "./project.ts";
 export {
+  controlPlanningClassroomIdsCoveredInWeek,
+  listAccessibleControlPlanningClassrooms,
   listAccessibleRuntimeClassroomsForTeacher,
   structuredClassMatchesPlanningYear,
+  teacherHasControlPlanningClassAccess,
 } from "./classrooms.ts";
 export { listControlPlacementOptions } from "./placements.ts";
 export {
@@ -43,3 +46,4 @@ export {
   type ControlPlanningResult,
   type ControlPlanningServiceDeps,
 } from "./service.ts";
+export { loadControlPlanningYearSessions } from "./year-sessions.ts";

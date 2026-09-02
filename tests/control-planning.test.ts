@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import { teacherHasStructuredClassroomReadAccess } from "../src/features/agenda-bridge/access.ts";
 import { DEMO_PROTOTYPE_ITEMS, type PrototypeAgendaItem } from "../src/features/agenda/demo-items.ts";
+import { isAssignmentActiveAt } from "../src/features/annual-courses/assignments.ts";
 import { SCHOOL_WEEK_MONDAYS } from "../src/features/calendar/school-week-dates.ts";
 import { DEMO_CATALOG, TEACHER_DEMO_ID } from "../src/features/classes/index.ts";
 import { getMembershipsForTeacher } from "../src/features/classes/queries.ts";
@@ -13,9 +15,11 @@ import {
   formatControlTeacherName,
   getControlPlanning,
   isControlAgendaItem,
+  listAccessibleControlPlanningClassrooms,
   listAccessibleRuntimeClassroomsForTeacher,
   listConsultablePlanningYears,
   listControlPlacementOptions,
+  teacherHasControlPlanningClassAccess,
   resolveControlPlanningMode,
   selectControlItems,
   type BuildControlPlanningInput,
@@ -23,10 +27,13 @@ import {
 } from "../src/features/control-planning/index.ts";
 import { computeCourseSessions } from "../src/features/course-sessions/index.ts";
 import type { CourseScheduleSlot } from "../src/features/course-schedule/types.ts";
+import { TEST_ALERT_THRESHOLD } from "../src/features/evaluations/index.ts";
+import { valaisHolidaysForSchoolYear } from "../src/features/school-days/holidays-valais.ts";
 import { TEACHER_NAV_LABELS, TEACHER_NAV_SECTIONS } from "../src/features/teacher/index.ts";
 import { APP_VERSION } from "../src/lib/app-version.ts";
 import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
-import type { SchoolClassRecord } from "../src/features/school-catalog/types.ts";
+import type { PedagogicalContextRecord } from "../src/features/school-catalog/profession-types.ts";
+import type { SchoolBranchRecord, SchoolClassRecord } from "../src/features/school-catalog/types.ts";
 import type { AnnualCourse, TeacherCourseAssignment } from "../src/features/annual-courses/types.ts";
 import type { SchoolYearRecord, SchoolYearWithWeeks } from "../src/features/school-year/types.ts";
 
@@ -147,6 +154,7 @@ test("version 2.32.0 — module Contrôles, sans table dédiée", () => {
   assert.equal(formatControlTeacherName("François Martin", "FM"), "F. Martin");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
   assert.equal(SQL_MIGRATION_FILES.some((file) => file.startsWith("0025")), false);
+  assert.equal(TEST_ALERT_THRESHOLD, 3);
 });
 
 test("projection — seules les publications TEST remontent", () => {
@@ -298,7 +306,22 @@ test("service — planning prêt pour la vue, erreurs de filtre", async () => {
 });
 
 test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de table controls", async () => {
-  const [panel, css, page, nav, route, createRoute, service, agenda, agendaId, classrooms] = await Promise.all([
+  const [
+    panel,
+    css,
+    page,
+    nav,
+    route,
+    createRoute,
+    service,
+    agenda,
+    agendaId,
+    classrooms,
+    accessSrc,
+    timelineSrc,
+    workspaceSrc,
+    mesCoursRoute,
+  ] = await Promise.all([
     readFile(new URL("../web/app/components/control-planning-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
@@ -309,6 +332,10 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
     readFile(new URL("../web/app/api/agenda/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../web/app/api/agenda/[id]/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../web/app/api/teacher/classrooms/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/agenda-bridge/access.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/course-timeline/service.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/teacher-workspace/queries.ts", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/api/teacher/courses/route.ts", import.meta.url), "utf8"),
   ]);
 
   assert.match(nav, /controles: "Contrôles"/);
@@ -372,6 +399,28 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
   assert.match(agendaId, /export async function PATCH/);
   assert.match(agendaId, /export async function DELETE/);
   assert.match(classrooms, /listAccessibleRuntimeClassroomsForTeacher/);
+  assert.doesNotMatch(
+    classrooms,
+    /listAccessibleControlPlanningClassrooms/,
+    "GET /api/teacher/classrooms must keep runtime access, not control-planning access",
+  );
+  assert.match(service, /listAccessibleControlPlanningClassrooms/);
+  assert.doesNotMatch(service, /listAccessibleRuntimeClassroomsForTeacher/);
+  assert.match(accessSrc, /options\.at \?\? new Date\(\)\.toISOString\(\)/);
+  assert.doesNotMatch(
+    accessSrc,
+    /listComputedCourseSessions/,
+    "generic structured classroom read access must stay at 'now' on an active year",
+  );
+  assert.match(timelineSrc, /listTeacherCourses\(/);
+  assert.doesNotMatch(
+    timelineSrc,
+    /teacherHasControlPlanningClassAccess/,
+    "CourseTimeline must keep listTeacherCourses access",
+  );
+  assert.match(workspaceSrc, /isAssignmentActiveAt/);
+  assert.match(mesCoursRoute, /listTeacherCourses/);
+  assert.doesNotMatch(mesCoursRoute, /teacherHasControlPlanningClassAccess/);
 });
 
 function yearRecord(
@@ -449,6 +498,7 @@ function testItem(input: {
   type?: PrototypeAgendaItem["type"];
   schoolYearId?: string | null;
   day?: number;
+  schoolWeekNumber?: number;
 }): PrototypeAgendaItem {
   return {
     id: input.id,
@@ -458,7 +508,7 @@ function testItem(input: {
     day: input.day ?? 0,
     hour: 9,
     weekOffset: 0,
-    schoolWeekNumber: WEEK_12,
+    schoolWeekNumber: input.schoolWeekNumber ?? WEEK_12,
     type: input.type ?? "TEST",
     title: input.title,
     detail: "Contrôle",
@@ -923,6 +973,326 @@ test("placements — classe non sélectionnée, archived, legacy, férié, excep
 
   const noClass = buildControlPlanningView(planningInput({ canCreate: false, placementOptions: primary }));
   assert.equal(noClass.week?.days.every((day) => day.canPlan === false), true);
+});
+
+function motorBranch(): SchoolBranchRecord {
+  return {
+    id: "br-moteur",
+    code: "MOT",
+    label: "Moteur",
+    sortOrder: 1,
+    isActive: true,
+    adminCode: "BR-0001",
+    isArchived: false,
+    archivedAt: null,
+    teachingType: "TECHNICAL",
+  };
+}
+
+function motorContext(): PedagogicalContextRecord {
+  return {
+    id: "ctx-moteur",
+    adminCode: "CTX-0001",
+    professionId: "prof-mma",
+    trainingYear: 2,
+    branchId: "br-moteur",
+    isActive: true,
+    isArchived: false,
+    archivedAt: null,
+  };
+}
+
+test("service — getControlPlanning : remplacement futur visible maintenant, options strictes à la séance", async () => {
+  const REPLACEMENT_ID = "teacher-replacement";
+  const TODAY = "2026-09-02";
+  const weeks = [
+    { number: 8, kind: "A" as const, monday: "2026-10-19" },
+    { number: 11, kind: "A" as const, monday: "2026-11-09" },
+    { number: 14, kind: "B" as const, monday: "2026-11-30" },
+  ];
+  const year = yearRecord("year-2026", "2026-2027", "active", weeks);
+  const classMa2a = schoolClass("sc-ma2a", "MA2A", year.id);
+  const classMa2b = schoolClass("sc-ma2b", "MA2B", year.id);
+  const roomMa2a = { id: "rt-ma2a", name: "MA2A", schoolClassId: classMa2a.id };
+  const roomMa2b = { id: "rt-ma2b", name: "MA2B", schoolClassId: classMa2b.id };
+  const courseMa2a = course("ac-ma2a", year.id, classMa2a.id);
+  const courseMa2b = course("ac-ma2b", year.id, classMa2b.id);
+  const replacementTca = tca(
+    "asg-ma2a-rep",
+    courseMa2a.id,
+    REPLACEMENT_ID,
+    "REPLACEMENT",
+    "2026-11-01T00:00:00.000Z",
+    "2026-11-30T23:59:59.000Z",
+  );
+  const primaryMa2b = tca("asg-ma2b", courseMa2b.id, REPLACEMENT_ID);
+  const assignments = [replacementTca, primaryMa2b];
+  const courses = [courseMa2a, courseMa2b];
+  const classes = [classMa2a, classMa2b];
+  const classrooms = [roomMa2a, roomMa2b];
+  const slots = [
+    slotFor(courseMa2a.id, { id: "s-ma2a-p4", dayOfWeek: 4, periodStart: 4, periodEnd: 4 }),
+    slotFor(courseMa2a.id, { id: "s-ma2a-p6", dayOfWeek: 4, periodStart: 6, periodEnd: 6 }),
+    slotFor(courseMa2b.id, { id: "s-ma2b-tue", dayOfWeek: 2, periodStart: 1, periodEnd: 2 }),
+  ];
+  const items: PrototypeAgendaItem[] = [
+    testItem({
+      id: 801,
+      classroomId: roomMa2a.id,
+      teacherId: REPLACEMENT_ID,
+      title: "Contrôle MA2A octobre",
+      schoolYearId: year.id,
+      day: 3,
+      schoolWeekNumber: 8,
+    }),
+    testItem({
+      id: 1101,
+      classroomId: roomMa2a.id,
+      teacherId: REPLACEMENT_ID,
+      title: "Contrôle MA2A jeudi",
+      schoolYearId: year.id,
+      day: 3,
+      schoolWeekNumber: 11,
+    }),
+    testItem({
+      id: 1102,
+      classroomId: roomMa2b.id,
+      teacherId: REPLACEMENT_ID,
+      title: "Contrôle MA2B mardi",
+      schoolYearId: year.id,
+      day: 1,
+      schoolWeekNumber: 11,
+    }),
+    testItem({
+      id: 1103,
+      classroomId: roomMa2a.id,
+      teacherId: "teacher-colleague",
+      title: "Contrôle collègue MA2A",
+      schoolYearId: year.id,
+      day: 3,
+      schoolWeekNumber: 11,
+    }),
+  ];
+
+  const deps: ControlPlanningServiceDeps = {
+    agenda: {
+      listAgendaItems: async (classroomId: string) => items.filter((item) => item.classroomId === classroomId),
+      teacherCanAccessClassroom: async () => false,
+    },
+    adapters: {
+      listClassrooms: async () => classrooms,
+      listSubjects: async () => [{ id: "subject-moteur", name: "Moteur" }],
+    },
+    catalog: {
+      ensureSeeded: async () => undefined,
+      listClasses: async () => classes,
+      listContexts: async () => [motorContext()],
+      listBranches: async () => [motorBranch()],
+    },
+    courses: {
+      listCourses: async () => courses,
+      listAssignments: async () => assignments,
+    },
+    years: {
+      listSchoolYears: async () => [year],
+      getActiveSchoolYear: async () => year,
+      getSchoolYearById: async (id: string) => (id === year.id ? year : null),
+      listDayExceptions: async () => [],
+    },
+    teachers: {
+      listAccounts: async () => [
+        { id: REPLACEMENT_ID, displayName: "Remi Placement", initials: "RP" },
+        { id: "teacher-colleague", displayName: "Collegue Martin", initials: "CM" },
+      ],
+    },
+    schedules: {
+      listSlots: async () => slots,
+    },
+  } as unknown as ControlPlanningServiceDeps;
+
+  const yearSessions = computeCourseSessions({
+    schoolYearId: year.id,
+    courses: courses.map((entry) => ({ id: entry.id, classId: entry.classId, contextId: entry.contextId })),
+    slots,
+    weeks,
+    holidays: valaisHolidaysForSchoolYear(year.label),
+  });
+  const ma2aDates = yearSessions
+    .filter((session) => session.classId === classMa2a.id)
+    .map((session) => session.date)
+    .sort();
+  assert.deepEqual(ma2aDates, ["2026-10-22", "2026-11-12", "2026-12-03"]);
+  assert.equal(
+    yearSessions.filter((session) => session.classId === classMa2a.id && session.date === "2026-11-12").length,
+    1,
+  );
+
+  assert.equal(
+    teacherHasStructuredClassroomReadAccess({
+      teacherId: REPLACEMENT_ID,
+      schoolClass: classMa2a,
+      courses,
+      assignments,
+      years: [year],
+      at: `${TODAY}T12:00:00.000Z`,
+    }),
+    false,
+  );
+  assert.equal(
+    teacherHasControlPlanningClassAccess({
+      teacherId: REPLACEMENT_ID,
+      schoolClass: classMa2a,
+      courses,
+      assignments,
+      years: [year],
+      sessions: yearSessions,
+    }),
+    true,
+  );
+  assert.equal(isAssignmentActiveAt(replacementTca, `${TODAY}T12:00:00.000Z`), false);
+
+  const runtimeNow = await listAccessibleRuntimeClassroomsForTeacher({
+    teacherId: REPLACEMENT_ID,
+    classrooms,
+    classes,
+    courses,
+    assignments,
+    years: [year],
+    teacherCanAccessClassroom: async () => false,
+    schoolYearId: year.id,
+  });
+  assert.equal(
+    runtimeNow.some((entry) => entry.id === roomMa2a.id),
+    isAssignmentActiveAt(replacementTca, new Date().toISOString()),
+    "GET /api/teacher/classrooms reste calé sur la TCA à maintenant",
+  );
+  assert.ok(runtimeNow.some((entry) => entry.id === roomMa2b.id));
+
+  const planningNow = await listAccessibleControlPlanningClassrooms({
+    teacherId: REPLACEMENT_ID,
+    classrooms,
+    classes,
+    courses,
+    assignments,
+    years: [year],
+    sessions: yearSessions,
+    teacherCanAccessClassroom: async () => false,
+    schoolYearId: year.id,
+  });
+  assert.deepEqual(
+    planningNow.map((entry) => entry.id).sort(),
+    [roomMa2a.id, roomMa2b.id].sort(),
+  );
+
+  const selectable = await getControlPlanning(deps, {
+    teacherId: REPLACEMENT_ID,
+    todayIso: TODAY,
+    week: 11,
+  });
+  assert.equal(selectable.ok, true);
+  if (!selectable.ok) return;
+  assert.ok(selectable.view.classes.some((entry) => entry.id === roomMa2a.id));
+  assert.ok(selectable.view.classes.some((entry) => entry.id === roomMa2b.id));
+
+  const october = await getControlPlanning(deps, {
+    teacherId: REPLACEMENT_ID,
+    classroomId: roomMa2a.id,
+    todayIso: TODAY,
+    week: 8,
+  });
+  assert.equal(october.ok, true);
+  if (!october.ok) return;
+  const octoberOptions = october.view.week?.days.flatMap((day) => day.placementOptions) ?? [];
+  assert.equal(octoberOptions.length, 0);
+  assert.equal(october.view.week?.days.every((day) => day.canPlan === false), true);
+  assert.equal(october.view.teacherLoadThisWeek, 0);
+  assert.equal(
+    october.view.teacherWeekControls.some((card) => card.classroomId === roomMa2a.id),
+    false,
+  );
+
+  const november = await getControlPlanning(deps, {
+    teacherId: REPLACEMENT_ID,
+    classroomId: roomMa2a.id,
+    mode: "mine",
+    todayIso: TODAY,
+    week: 11,
+  });
+  assert.equal(november.ok, true);
+  if (!november.ok) return;
+  const novemberOptions = november.view.week?.days.flatMap((day) => day.placementOptions) ?? [];
+  assert.equal(novemberOptions.length, 1);
+  assert.equal(novemberOptions[0]?.date, "2026-11-12");
+  assert.equal(novemberOptions[0]?.annualCourseId, courseMa2a.id);
+  assert.equal(novemberOptions[0]?.sessionLabel, "P4 · P6");
+  const thursday = november.view.week?.days.find((day) => day.dayIndex === 3);
+  assert.equal(thursday?.canPlan, true);
+  assert.equal(thursday?.date, "2026-11-12");
+  assert.equal(november.view.teacherLoadThisWeek, 2);
+  assert.deepEqual(
+    november.view.teacherWeekControls.map((card) => card.title).sort(),
+    ["Contrôle MA2A jeudi", "Contrôle MA2B mardi"],
+  );
+
+  const classAll = await getControlPlanning(deps, {
+    teacherId: REPLACEMENT_ID,
+    classroomId: roomMa2a.id,
+    mode: "class-all",
+    todayIso: TODAY,
+    week: 11,
+  });
+  assert.equal(classAll.ok, true);
+  if (!classAll.ok) return;
+  assert.equal(classAll.view.mode, "class-all");
+  assert.ok(classAll.view.week?.days.some((day) => day.classDayControls.some((card) => !card.isOwn)));
+  assert.equal(classAll.view.teacherLoadThisWeek, 2);
+
+  const december = await getControlPlanning(deps, {
+    teacherId: REPLACEMENT_ID,
+    classroomId: roomMa2a.id,
+    todayIso: TODAY,
+    week: 14,
+  });
+  assert.equal(december.ok, true);
+  if (!december.ok) return;
+  const decemberOptions = december.view.week?.days.flatMap((day) => day.placementOptions) ?? [];
+  assert.equal(decemberOptions.length, 0);
+  assert.equal(december.view.week?.days.every((day) => day.canPlan === false), true);
+
+  const admin = await getControlPlanning(deps, {
+    teacherId: "admin-sans-tca",
+    classroomId: roomMa2a.id,
+    todayIso: TODAY,
+    week: 11,
+  });
+  assert.equal(admin.ok, false);
+  if (!admin.ok) assert.equal(admin.status, 403);
+
+  const archivedYear = { ...year, status: "archived" as const, activatedAt: null };
+  const archived = await getControlPlanning(
+    {
+      ...deps,
+      years: {
+        listSchoolYears: async () => [archivedYear],
+        getActiveSchoolYear: async () => null,
+        getSchoolYearById: async (id: string) => (id === archivedYear.id ? archivedYear : null),
+        listDayExceptions: async () => [],
+      },
+    } as unknown as ControlPlanningServiceDeps,
+    {
+      teacherId: REPLACEMENT_ID,
+      schoolYearId: archivedYear.id,
+      classroomId: roomMa2a.id,
+      todayIso: TODAY,
+      week: 11,
+    },
+  );
+  assert.equal(archived.ok, true);
+  if (archived.ok) {
+    assert.equal(archived.view.yearStatus, "archived");
+    assert.equal(archived.view.canCreate, false);
+    assert.equal(archived.view.week?.days.every((day) => day.canPlan === false), true);
+  }
 });
 
 

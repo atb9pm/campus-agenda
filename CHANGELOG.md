@@ -14,6 +14,7 @@ Planification interactive des contrôles depuis les CourseSession réelles, publ
 - Confirmation serveur sans blocage définitif.
 - Charge enseignant visible avant publication.
 - Synchronisation immédiate planning / Agenda.
+- Accès Contrôles aux classes avec responsabilité future réelle (CourseSession + TCA à la date), sans changer Mes cours ni les autres APIs.
 
 ### Non inclus
 

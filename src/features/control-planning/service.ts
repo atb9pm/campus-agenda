@@ -6,9 +6,12 @@ import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-ty
 import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
 import type { TeacherAccountStore } from "../../lib/persistence/teacher-account-types.ts";
 import { contextBranchForCourse } from "../agenda-bridge/index.ts";
-import { listComputedCourseSessions } from "../course-sessions/index.ts";
-import { listAccessibleRuntimeClassroomsForTeacher } from "./classrooms.ts";
+import {
+  controlPlanningClassroomIdsCoveredInWeek,
+  listAccessibleControlPlanningClassrooms,
+} from "./classrooms.ts";
 import { listControlPlacementOptions } from "./placements.ts";
+import { loadControlPlanningYearSessions } from "./year-sessions.ts";
 import {
   buildControlPlanningView,
   isConsultablePlanningYear,
@@ -77,13 +80,15 @@ export async function getControlPlanning(
   }
 
   const consultableYears = listConsultablePlanningYears(yearList);
-  const accessible = await listAccessibleRuntimeClassroomsForTeacher({
+  const yearSessions = await loadControlPlanningYearSessions(deps, year.id);
+  const accessible = await listAccessibleControlPlanningClassrooms({
     teacherId,
     classrooms,
     classes,
     courses,
     assignments,
     years: yearList,
+    sessions: yearSessions,
     schoolYearId: year.id,
     teacherCanAccessClassroom: (id, classroomId) => deps.agenda.teacherCanAccessClassroom(id, classroomId),
   });
@@ -107,6 +112,16 @@ export async function getControlPlanning(
     : null;
   const linkedClassId = selectedClassroom?.schoolClassId?.trim() || null;
   const linkedClass = linkedClassId ? classes.find((entry) => entry.id === linkedClassId) ?? null : null;
+  const todayIso = todayIsoDate(query.todayIso);
+  const targetWeek = resolvePlanningWeekNumber(year.weeks, query.week ?? null, todayIso);
+  const teacherWeekClassroomIds = controlPlanningClassroomIdsCoveredInWeek({
+    accessible,
+    classrooms,
+    sessions: yearSessions,
+    assignments,
+    teacherId,
+    schoolWeekNumber: targetWeek,
+  });
 
   if (year.status === "archived") {
     canCreate = false;
@@ -119,23 +134,13 @@ export async function getControlPlanning(
       deps.catalog.listContexts(),
       deps.catalog.listBranches(),
     ]);
-    const sessionsResult = await listComputedCourseSessions(
-      {
-        schedules: deps.schedules,
-        courses: deps.courses,
-        catalog: deps.catalog,
-        years: deps.years,
-      },
-      { schoolYearId: year.id, classId: linkedClass.id },
-    );
-    const sessions = sessionsResult.ok ? sessionsResult.value : [];
+    const sessions = yearSessions.filter((session) => session.classId === linkedClass.id);
     const branchByCourseId = new Map<string, string>();
     for (const course of courses) {
       if (course.classId !== linkedClass.id) continue;
       const info = contextBranchForCourse({ course, contexts, branches });
       if (info) branchByCourseId.set(course.id, info.branch.label);
     }
-    const targetWeek = resolvePlanningWeekNumber(year.weeks, query.week ?? null, todayIsoDate(query.todayIso));
     if (targetWeek !== null) {
       placementOptions = listControlPlacementOptions({
         sessions,
@@ -171,11 +176,12 @@ export async function getControlPlanning(
     classroomId: requestedClassroom,
     requestedMode: query.mode ?? "mine",
     schoolWeekNumber: query.week ?? null,
-    todayIso: todayIsoDate(query.todayIso),
+    todayIso,
     includeUnscopedYearItems: year.id === active?.id,
     placementOptions,
     canCreate,
     guidedPlanningReason,
+    teacherWeekClassroomIds,
   });
 
   return { ok: true, view };

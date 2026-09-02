@@ -300,10 +300,13 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
   const classroomName = classroomId
     ? input.accessibleClasses.find((entry) => entry.id === classroomId)?.name ?? null
     : null;
+  const teacherWeekClassroomIds = input.teacherWeekClassroomIds
+    ? [...input.teacherWeekClassroomIds]
+    : input.accessibleClasses.map((entry) => entry.id);
   const teacherLoadThisWeek = countOwnControlsForWeek({
     items: input.items,
     teacherId: input.teacherId,
-    accessibleClassroomIds: input.accessibleClasses.map((entry) => entry.id),
+    accessibleClassroomIds: teacherWeekClassroomIds,
     schoolYearId: input.schoolYearId,
     includeUnscopedYearItems: input.includeUnscopedYearItems,
     schoolWeekNumber: weekNumber,
@@ -312,7 +315,7 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
   const ownWeekItems = selectControlItems({
     items: input.items,
     teacherId: input.teacherId,
-    accessibleClassroomIds: input.accessibleClasses.map((entry) => entry.id),
+    accessibleClassroomIds: teacherWeekClassroomIds,
     classroomId: null,
     mode: "mine",
     schoolYearId: input.schoolYearId,

@@ -1,5 +1,6 @@
 import type { AgendaStore } from "../../lib/persistence/types.ts";
 import type { AnnualCourseStore } from "../../lib/persistence/annual-course-types.ts";
+import type { CourseScheduleStore } from "../../lib/persistence/course-schedule-types.ts";
 import type { RuntimeAgendaAdapterStore } from "../../lib/persistence/runtime-agenda-types.ts";
 import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-types.ts";
 import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
@@ -10,7 +11,11 @@ import {
   type ControlCoordinationCatalog,
   type ControlCoordinationSummary,
 } from "../evaluations/coordination.ts";
-import { listAccessibleRuntimeClassroomsForTeacher } from "./classrooms.ts";
+import {
+  controlPlanningClassroomIdsCoveredInWeek,
+  listAccessibleControlPlanningClassrooms,
+} from "./classrooms.ts";
+import { loadControlPlanningYearSessions } from "./year-sessions.ts";
 
 export interface LiveCoordinationDeps {
   agenda: AgendaStore;
@@ -19,6 +24,7 @@ export interface LiveCoordinationDeps {
   courses: AnnualCourseStore;
   years: SchoolYearStore;
   teachers: TeacherAccountStore;
+  schedules?: CourseScheduleStore;
 }
 
 export async function evaluateLiveControlCoordination(
@@ -44,13 +50,15 @@ export async function evaluateLiveControlCoordination(
     deps.teachers.listAccounts(),
   ]);
 
-  const accessible = await listAccessibleRuntimeClassroomsForTeacher({
+  const sessions = await loadControlPlanningYearSessions(deps, options.schoolYearId);
+  const accessible = await listAccessibleControlPlanningClassrooms({
     teacherId: options.teacherId,
     classrooms,
     classes,
     courses,
     assignments,
     years: yearList,
+    sessions,
     schoolYearId: options.schoolYearId,
     teacherCanAccessClassroom: (id, classroomId) => deps.agenda.teacherCanAccessClassroom(id, classroomId),
   });
@@ -59,6 +67,18 @@ export async function evaluateLiveControlCoordination(
   if (!accessibleIds.includes(options.classroomId)) {
     accessibleIds.push(options.classroomId);
   }
+
+  const teacherWeekClassroomIds = controlPlanningClassroomIdsCoveredInWeek({
+    accessible: accessibleIds.map((id) => ({
+      id,
+      name: accessible.find((entry) => entry.id === id)?.name ?? id,
+    })),
+    classrooms,
+    sessions,
+    assignments,
+    teacherId: options.teacherId,
+    schoolWeekNumber: options.schoolWeekNumber,
+  });
 
   const items = (
     await Promise.all(accessibleIds.map((classroomId) => deps.agenda.listAgendaItems(classroomId)))
@@ -82,7 +102,7 @@ export async function evaluateLiveControlCoordination(
     classroomId: options.classroomId,
     courseDay: { schoolWeekNumber: options.schoolWeekNumber, dayIndex: options.dayIndex },
     teacherId: options.teacherId,
-    teacherWeekClassroomIds: accessibleIds,
+    teacherWeekClassroomIds,
     schoolYearId: options.schoolYearId,
     includeUnscopedYearItems: options.includeUnscopedYearItems,
     catalog,

@@ -110,4 +110,6 @@ export interface BuildControlPlanningInput {
   placementOptions: ControlPlacementOption[];
   canCreate: boolean;
   guidedPlanningReason: string | null;
+  /** Si omis : toutes les classes accessibles de l’année. */
+  teacherWeekClassroomIds?: readonly string[];
 }
