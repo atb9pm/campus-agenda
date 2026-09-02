@@ -6,6 +6,7 @@ import {
 } from "../../../../../lib/server/api.ts";
 import {
   getAnnualCourseStore,
+  getCourseScheduleStore,
   getRuntimeAgendaAdapterStore,
   getSchoolCatalogStore,
   getSchoolYearStore,
@@ -34,6 +35,7 @@ async function handleGet(request: Request) {
       courses: await getAnnualCourseStore(),
       years: await getSchoolYearStore(),
       teachers: await getTeacherAccountStore(),
+      schedules: await getCourseScheduleStore(),
     },
     {
       teacherId: auth.session!.teacherId,

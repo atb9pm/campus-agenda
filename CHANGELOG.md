@@ -2,6 +2,24 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.32.0] — Contrôles : planifier depuis les séances et coordonner les évaluations
+
+Planification interactive des contrôles depuis les CourseSession réelles, publication manuelle structurée de TEST, et coordination commune au troisième contrôle.
+
+### Ajouté
+
+- Planification interactive des contrôles depuis les CourseSession.
+- Publication manuelle structurée de TEST.
+- Coordination commune au troisième contrôle.
+- Confirmation serveur sans blocage définitif.
+- Charge enseignant visible avant publication.
+- Synchronisation immédiate planning / Agenda.
+- Accès Contrôles aux classes avec responsabilité future réelle (CourseSession + TCA à la date), sans changer Mes cours ni les autres APIs.
+
+### Non inclus
+
+N → N+1, vue élève enrichie, notation, fichiers joints, drag & drop, table dédiée aux contrôles, table CourseSession.
+
 ## [2.31.0] — Contrôles : planning hebdomadaire et coordination par classe
 
 Module enseignant dédié aux publications Agenda de type TEST. Vue unique, par jours, sans axe horaire.

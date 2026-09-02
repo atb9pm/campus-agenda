@@ -25,11 +25,26 @@ export interface ControlPlanningCard {
   date: string | null;
 }
 
+export interface ControlPlacementOption {
+  annualCourseId: string;
+  courseSessionKey: string;
+  date: string;
+  schoolWeekNumber: number;
+  dayIndex: number;
+  branchLabel: string;
+  sessionLabel?: string;
+}
+
 export interface ControlPlanningDay {
   dayIndex: number;
   weekdayLabel: string;
   date: string | null;
   controls: ControlPlanningCard[];
+  placementOptions: ControlPlacementOption[];
+  canPlan: boolean;
+  noCourseHint: string | null;
+  classDayControls: ControlPlanningCard[];
+  confirmationRequired: boolean;
 }
 
 export interface ControlPlanningWeekView {
@@ -53,6 +68,7 @@ export interface ControlPlanningYearOption {
 export interface ControlPlanningView {
   schoolYearId: string;
   schoolYearLabel: string;
+  yearStatus: "active" | "archived";
   mode: ControlPlanningMode;
   classroomId: string | null;
   classes: ControlPlanningClass[];
@@ -65,6 +81,9 @@ export interface ControlPlanningView {
   weeks: Array<{ number: number; kind: "A" | "B" }>;
   alerts: ControlPlanningAlert[];
   teacherLoadThisWeek: number;
+  teacherWeekControls: ControlPlanningCard[];
+  canCreate: boolean;
+  guidedPlanningReason: string | null;
 }
 
 export interface ControlPlanningCatalog {
@@ -87,4 +106,10 @@ export interface BuildControlPlanningInput {
   schoolWeekNumber: number | null;
   todayIso: string;
   includeUnscopedYearItems: boolean;
+  yearStatus: "active" | "archived";
+  placementOptions: ControlPlacementOption[];
+  canCreate: boolean;
+  guidedPlanningReason: string | null;
+  /** Si omis : toutes les classes accessibles de l’année. */
+  teacherWeekClassroomIds?: readonly string[];
 }

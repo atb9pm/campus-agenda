@@ -968,6 +968,55 @@ button { color: inherit; }
 .control-planning-sidebar li.is-busy-day { border-left: 3px solid #c47b16; }
 .control-planning-sidebar li.is-free-day { border-left: 3px solid #9aa5b6; color: #6d7f9b; }
 .control-planning-error { color: #8b2e2e; }
+.control-planning-hint { margin: 0; color: #6d7f9b; font-size: 12px; line-height: 1.45; }
+.control-planning-no-course { margin: 0; color: #9aa5b6; font-size: 10px; }
+.control-plan-add {
+  justify-self: start;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: #30558f;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.control-plan-add:hover { text-decoration: underline; }
+.control-plan-modal .control-plan-fixed {
+  display: grid;
+  gap: 2px;
+  margin: 16px 0 0;
+  color: #32466b;
+  font-size: 13px;
+}
+.control-plan-modal .control-plan-fixed strong { color: var(--navy); }
+.control-plan-coordination { display: grid; gap: 8px; margin-top: 8px; }
+.control-plan-coordination h3 {
+  margin: 0;
+  color: #8793a9;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.control-plan-coordination ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.control-plan-coordination li { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #f8fbff; font-size: 12px; }
+.control-plan-coordination li span { display: block; margin-top: 2px; color: #6d7f9b; font-size: 11px; }
+.control-plan-warning { margin: 0; padding: 10px 12px; border-left: 3px solid #c47b16; background: #fff7ed; color: #7a4b08; font-size: 12px; }
+.control-plan-error { margin: 0; color: #8b2e2e; font-size: 12px; }
+.control-plan-options { display: grid; gap: 8px; margin: 16px 0 0; padding: 0; list-style: none; }
+.control-plan-options button {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.control-plan-options button:hover { background: #f1f6fd; }
 
 @media (max-width: 1100px) {
   .control-planning-body { grid-template-columns: 1fr; }

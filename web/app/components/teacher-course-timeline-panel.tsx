@@ -19,8 +19,10 @@ import { WORKSPACE_ASSIGNMENT_ROLE_LABELS } from "@campus/features/teacher-works
 import {
   fetchTeacherCourseTimelineApi,
   publishTeacherCoursePublicationApi,
+  ControlCoordinationRequiredError,
   type CourseTimelinePublicationSummary,
 } from "../../lib/api-client.ts";
+import type { ControlCoordinationSummary } from "@campus/features/evaluations";
 
 interface TeacherCourseTimelinePanelProps {
   annualCourseId: string;
@@ -171,6 +173,11 @@ export function TeacherCourseTimelinePanel({
   const [publications, setPublications] = useState<CourseTimelinePublicationSummary[]>([]);
   const [publishingItemId, setPublishingItemId] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<{ itemId: string; message: string } | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    referenceItemId: string;
+    courseSessionKey: string;
+    coordination: ControlCoordinationSummary;
+  } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -207,7 +214,11 @@ export function TeacherCourseTimelinePanel({
     return map;
   }, [publications]);
 
-  async function handlePublish(referenceItemId: string, courseSessionKey: string) {
+  async function handlePublish(
+    referenceItemId: string,
+    courseSessionKey: string,
+    confirmCoordination = false,
+  ) {
     setPublishingItemId(referenceItemId);
     setPublishError(null);
     try {
@@ -215,8 +226,10 @@ export function TeacherCourseTimelinePanel({
         annualCourseId,
         courseSessionKey,
         referenceItemId,
+        confirmCoordination,
       });
       setPublishError(null);
+      setPendingConfirm(null);
       setPublications((previous) => [
         ...previous.filter((entry) => entry.referenceItemId !== referenceItemId),
         {
@@ -229,8 +242,17 @@ export function TeacherCourseTimelinePanel({
       ]);
       onAgendaItemCreated?.(item);
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "Publication impossible.";
-      setPublishError({ itemId: referenceItemId, message });
+      if (caught instanceof ControlCoordinationRequiredError) {
+        setPendingConfirm({
+          referenceItemId,
+          courseSessionKey,
+          coordination: caught.coordination,
+        });
+        setPublishError({ itemId: referenceItemId, message: caught.message });
+      } else {
+        const message = caught instanceof Error ? caught.message : "Publication impossible.";
+        setPublishError({ itemId: referenceItemId, message });
+      }
     } finally {
       setPublishingItemId(null);
     }
@@ -295,6 +317,54 @@ export function TeacherCourseTimelinePanel({
             publishError={publishError}
             onPublish={handlePublish}
           />
+
+          {pendingConfirm ? (
+            <div className="technical-modal-backdrop" role="presentation">
+              <section className="technical-modal control-alert-modal" role="dialog" aria-modal="true">
+                <header>
+                  <div>
+                    <span className="eyebrow">COORDINATION</span>
+                    <h2>Publier malgré les contrôles déjà prévus</h2>
+                  </div>
+                  <button type="button" onClick={() => setPendingConfirm(null)} aria-label="Fermer">
+                    ×
+                  </button>
+                </header>
+                <p>
+                  {pendingConfirm.coordination.classDayCount} contrôles sont déjà prévus dans cette classe ce
+                  jour-là.
+                </p>
+                <ul className="control-alert-list">
+                  {pendingConfirm.coordination.classDayControls.map((entry) => (
+                    <li key={entry.agendaItemId}>
+                      <strong>{entry.branchLabel}</strong> — {entry.title}
+                      <small>{entry.teacherName}</small>
+                    </li>
+                  ))}
+                </ul>
+                <footer className="control-alert-actions">
+                  <button type="button" onClick={() => setPendingConfirm(null)}>
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    className="confirm-anyway"
+                    data-timeline-confirm-anyway=""
+                    disabled={Boolean(publishingItemId)}
+                    onClick={() =>
+                      void handlePublish(
+                        pendingConfirm.referenceItemId,
+                        pendingConfirm.courseSessionKey,
+                        true,
+                      )
+                    }
+                  >
+                    Publier quand même
+                  </button>
+                </footer>
+              </section>
+            </div>
+          ) : null}
 
           {unscheduled.length > 0 ? (
             <section className="course-timeline-unscheduled" aria-label="Séances du parcours sans date">

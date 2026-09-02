@@ -13,6 +13,14 @@ import type { PedagogicalContextRecord, SchoolProfessionRecord } from "../school
 import type { SchoolBranchRecord, SchoolClassRecord } from "../school-catalog/types.ts";
 import type { SchoolYearRecord } from "../school-year/types.ts";
 import { listComputedCourseSessions } from "../course-sessions/index.ts";
+import type { CourseSession } from "../course-sessions/types.ts";
+import { evaluateLiveControlCoordination } from "../control-planning/live-coordination.ts";
+import {
+  CONTROL_COORDINATION_CONFIRM_CODE,
+  CONTROL_COORDINATION_CONFIRM_REASON,
+  gateControlCoordination,
+  type ControlCoordinationSummary,
+} from "../evaluations/coordination.ts";
 import {
   assignmentInstantForSessionDate,
   contextBranchForCourse,
@@ -93,8 +101,18 @@ export interface StructuredPublishDeps {
   adapters: RuntimeAgendaAdapterStore;
 }
 
-export type StructuredPublishOk = { ok: true; item: PrototypeAgendaItem };
-export type StructuredPublishErr = { ok: false; reason: string; status: 400 | 403 | 404 | 409 };
+export type StructuredPublishOk = {
+  ok: true;
+  item: PrototypeAgendaItem;
+  coordination?: ControlCoordinationSummary;
+};
+export type StructuredPublishErr = {
+  ok: false;
+  reason: string;
+  status: 400 | 403 | 404 | 409;
+  code?: string;
+  coordination?: ControlCoordinationSummary;
+};
 export type StructuredPublishResult = StructuredPublishOk | StructuredPublishErr;
 
 export interface StructuredPublishInput {
@@ -102,6 +120,26 @@ export interface StructuredPublishInput {
   annualCourseId: string;
   courseSessionKey: string;
   referenceItemId: string;
+  confirmCoordination?: boolean;
+}
+
+export interface ManualControlPublishInput {
+  teacherId: string;
+  annualCourseId: string;
+  courseSessionKey: string;
+  title: string;
+  detail?: string;
+  confirmCoordination?: boolean;
+}
+
+export interface ResolvedStructuredPublishContext {
+  teacher: { id: string };
+  course: AnnualCourse;
+  schoolClass: SchoolClassRecord;
+  year: SchoolYearRecord;
+  courseSession: CourseSession;
+  classroomId: string;
+  subjectId: string;
 }
 
 export function structuredPublishIdsFromBody(body: unknown): {
@@ -117,14 +155,35 @@ export function structuredPublishIdsFromBody(body: unknown): {
   };
 }
 
-export async function publishReferenceItemToAgenda(
+export function parseConfirmCoordination(body: unknown): boolean {
+  const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  return record.confirmCoordination === true;
+}
+
+export function manualControlIdsFromBody(body: unknown): {
+  annualCourseId: string;
+  courseSessionKey: string;
+  title: string;
+  detail: string;
+  confirmCoordination: boolean;
+} {
+  const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  return {
+    annualCourseId: typeof record.annualCourseId === "string" ? record.annualCourseId.trim() : "",
+    courseSessionKey: typeof record.courseSessionKey === "string" ? record.courseSessionKey.trim() : "",
+    title: typeof record.title === "string" ? record.title.trim() : "",
+    detail: typeof record.detail === "string" ? record.detail.trim() : "",
+    confirmCoordination: record.confirmCoordination === true,
+  };
+}
+
+export async function resolveStructuredPublishContext(
   deps: StructuredPublishDeps,
-  input: StructuredPublishInput,
-): Promise<StructuredPublishResult> {
+  input: { teacherId: string; annualCourseId: string; courseSessionKey: string },
+): Promise<{ ok: true; value: ResolvedStructuredPublishContext } | StructuredPublishErr> {
   const annualCourseId = input.annualCourseId.trim();
   const courseSessionKey = input.courseSessionKey.trim();
-  const referenceItemId = input.referenceItemId.trim();
-  if (!annualCourseId || !courseSessionKey || !referenceItemId) {
+  if (!annualCourseId || !courseSessionKey) {
     return { ok: false, reason: "Identifiants de publication incomplets.", status: 400 };
   }
 
@@ -189,29 +248,6 @@ export async function publishReferenceItemToAgenda(
     return { ok: false, reason: STRUCTURED_PUBLISH_FORBIDDEN_REASON, status: 403 };
   }
 
-  const path = await deps.paths.getPathByContextId(course.contextId);
-  if (!path) {
-    return { ok: false, reason: "Aucun parcours pédagogique de référence n’est défini pour ce cours.", status: 409 };
-  }
-
-  const referenceSession =
-    path.sessions.find((session) => session.position === courseSession.sequenceNumber) ?? null;
-  const itemAnywhere = path.sessions.flatMap((session) => session.items).find((item) => item.id === referenceItemId);
-  if (!itemAnywhere) {
-    return { ok: false, reason: "Élément pédagogique de référence introuvable.", status: 404 };
-  }
-  const existing = await deps.agenda.findAgendaItemByReferenceItem(course.id, itemAnywhere.id);
-  if (existing) {
-    return { ok: false, reason: STRUCTURED_PUBLISH_ALREADY_REASON, status: 409 };
-  }
-  if (!referenceSession) {
-    return { ok: false, reason: STRUCTURED_PUBLISH_ITEM_MOVED_REASON, status: 409 };
-  }
-  const referenceItem = referenceSession.items.find((item) => item.id === referenceItemId) ?? null;
-  if (!referenceItem) {
-    return { ok: false, reason: STRUCTURED_PUBLISH_ITEM_MOVED_REASON, status: 409 };
-  }
-
   if (!branchInfo) {
     return { ok: false, reason: "Contexte pédagogique du cours introuvable.", status: 409 };
   }
@@ -230,29 +266,161 @@ export async function publishReferenceItemToAgenda(
     return { ok: false, reason: adapters.reason, status: 409 };
   }
 
-  try {
-    const item = await deps.agenda.createAgendaItem({
+  return {
+    ok: true,
+    value: {
+      teacher: { id: teacher.id },
+      course,
+      schoolClass,
+      year: year!,
+      courseSession,
       classroomId: adapters.value.classroom.id,
       subjectId: adapters.value.subject.id,
-      authorTeacherId: teacher.id,
-      day: courseSession.dayOfWeek - 1,
+    },
+  };
+}
+
+async function coordinationForResolved(
+  deps: StructuredPublishDeps,
+  resolved: ResolvedStructuredPublishContext,
+  type: PrototypeAgendaItem["type"],
+): Promise<ControlCoordinationSummary> {
+  const active = await deps.years.getActiveSchoolYear();
+  return evaluateLiveControlCoordination(deps, {
+    teacherId: resolved.teacher.id,
+    classroomId: resolved.classroomId,
+    type,
+    schoolYearId: resolved.courseSession.schoolYearId,
+    schoolWeekNumber: resolved.courseSession.schoolWeekNumber,
+    dayIndex: resolved.courseSession.dayOfWeek - 1,
+    includeUnscopedYearItems: resolved.year.id === active?.id,
+  });
+}
+
+function coordinationConflict(coordination: ControlCoordinationSummary): StructuredPublishErr {
+  return {
+    ok: false,
+    reason: CONTROL_COORDINATION_CONFIRM_REASON,
+    status: 409,
+    code: CONTROL_COORDINATION_CONFIRM_CODE,
+    coordination,
+  };
+}
+
+export async function publishReferenceItemToAgenda(
+  deps: StructuredPublishDeps,
+  input: StructuredPublishInput,
+): Promise<StructuredPublishResult> {
+  const annualCourseId = input.annualCourseId.trim();
+  const courseSessionKey = input.courseSessionKey.trim();
+  const referenceItemId = input.referenceItemId.trim();
+  if (!annualCourseId || !courseSessionKey || !referenceItemId) {
+    return { ok: false, reason: "Identifiants de publication incomplets.", status: 400 };
+  }
+
+  const resolved = await resolveStructuredPublishContext(deps, {
+    teacherId: input.teacherId,
+    annualCourseId,
+    courseSessionKey,
+  });
+  if (!resolved.ok) return resolved;
+  const context = resolved.value;
+
+  const path = await deps.paths.getPathByContextId(context.course.contextId);
+  if (!path) {
+    return { ok: false, reason: "Aucun parcours pédagogique de référence n’est défini pour ce cours.", status: 409 };
+  }
+
+  const referenceSession =
+    path.sessions.find((session) => session.position === context.courseSession.sequenceNumber) ?? null;
+  const itemAnywhere = path.sessions.flatMap((session) => session.items).find((item) => item.id === referenceItemId);
+  if (!itemAnywhere) {
+    return { ok: false, reason: "Élément pédagogique de référence introuvable.", status: 404 };
+  }
+  const existing = await deps.agenda.findAgendaItemByReferenceItem(context.course.id, itemAnywhere.id);
+  if (existing) {
+    return { ok: false, reason: STRUCTURED_PUBLISH_ALREADY_REASON, status: 409 };
+  }
+  if (!referenceSession) {
+    return { ok: false, reason: STRUCTURED_PUBLISH_ITEM_MOVED_REASON, status: 409 };
+  }
+  const referenceItem = referenceSession.items.find((item) => item.id === referenceItemId) ?? null;
+  if (!referenceItem) {
+    return { ok: false, reason: STRUCTURED_PUBLISH_ITEM_MOVED_REASON, status: 409 };
+  }
+
+  const coordination = await coordinationForResolved(deps, context, referenceItem.type);
+  const gate = gateControlCoordination(coordination, input.confirmCoordination === true);
+  if (!gate.ok) return coordinationConflict(coordination);
+
+  try {
+    const item = await deps.agenda.createAgendaItem({
+      classroomId: context.classroomId,
+      subjectId: context.subjectId,
+      authorTeacherId: context.teacher.id,
+      day: context.courseSession.dayOfWeek - 1,
       hour: STRUCTURED_AGENDA_COMPAT_HOUR,
       weekOffset: 0,
-      schoolWeekNumber: courseSession.schoolWeekNumber,
+      schoolWeekNumber: context.courseSession.schoolWeekNumber,
       type: referenceItem.type,
       title: referenceItem.title,
       detail: referenceItem.detail,
-      schoolYearId: courseSession.schoolYearId,
-      annualCourseId: course.id,
-      courseSessionKey: courseSession.key,
-      courseSessionDate: courseSession.date,
+      schoolYearId: context.courseSession.schoolYearId,
+      annualCourseId: context.course.id,
+      courseSessionKey: context.courseSession.key,
+      courseSessionDate: context.courseSession.date,
       referenceSessionId: referenceSession.id,
       referenceItemId: referenceItem.id,
     });
-    return { ok: true, item };
+    const nextCoordination = await coordinationForResolved(deps, context, referenceItem.type);
+    return { ok: true, item, coordination: nextCoordination };
   } catch (error) {
-    const raced = await recoverStructuredPublishUniqueConflict(deps.agenda, course.id, referenceItem.id);
+    const raced = await recoverStructuredPublishUniqueConflict(deps.agenda, context.course.id, referenceItem.id);
     if (raced) return raced;
     throw error;
   }
+}
+
+export async function publishManualControlToAgenda(
+  deps: StructuredPublishDeps,
+  input: ManualControlPublishInput,
+): Promise<StructuredPublishResult> {
+  const title = input.title.trim();
+  if (!title) {
+    return { ok: false, reason: "Le titre du contrôle est obligatoire.", status: 400 };
+  }
+
+  const resolved = await resolveStructuredPublishContext(deps, {
+    teacherId: input.teacherId,
+    annualCourseId: input.annualCourseId,
+    courseSessionKey: input.courseSessionKey,
+  });
+  if (!resolved.ok) return resolved;
+  const context = resolved.value;
+
+  const coordination = await coordinationForResolved(deps, context, "TEST");
+  const gate = gateControlCoordination(coordination, input.confirmCoordination === true);
+  if (!gate.ok) return coordinationConflict(coordination);
+
+  const item = await deps.agenda.createAgendaItem({
+    classroomId: context.classroomId,
+    subjectId: context.subjectId,
+    authorTeacherId: context.teacher.id,
+    day: context.courseSession.dayOfWeek - 1,
+    hour: STRUCTURED_AGENDA_COMPAT_HOUR,
+    weekOffset: 0,
+    schoolWeekNumber: context.courseSession.schoolWeekNumber,
+    type: "TEST",
+    title,
+    detail: (input.detail ?? "").trim(),
+    schoolYearId: context.courseSession.schoolYearId,
+    annualCourseId: context.course.id,
+    courseSessionKey: context.courseSession.key,
+    courseSessionDate: context.courseSession.date,
+    referenceSessionId: null,
+    referenceItemId: null,
+    templateId: null,
+  });
+  const nextCoordination = await coordinationForResolved(deps, context, "TEST");
+  return { ok: true, item, coordination: nextCoordination };
 }

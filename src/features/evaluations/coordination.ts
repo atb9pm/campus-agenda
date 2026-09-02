@@ -6,6 +6,9 @@ import { getCourseDaysForWeek } from "../calendar/course-days.ts";
 
 export const TEST_ALERT_THRESHOLD = 3;
 export const STUDENT_UPCOMING_TESTS_LIMIT = 8;
+export const CONTROL_COORDINATION_CONFIRM_CODE = "CONTROL_COORDINATION_CONFIRM_REQUIRED";
+export const CONTROL_COORDINATION_CONFIRM_REASON =
+  "Deux contrôles sont déjà prévus dans cette classe ce jour-là. Confirmez pour publier malgré tout.";
 
 export interface CourseDayRef {
   schoolWeekNumber: number;
@@ -30,6 +33,32 @@ export interface ThirdTestAlert {
   triggered: boolean;
   existingTests: ExistingTestSummary[];
   courseDay: CourseDayRef;
+}
+
+export interface ControlCoordinationEntry {
+  agendaItemId: number;
+  title: string;
+  branchLabel: string;
+  teacherName: string;
+  classroomId: string;
+  classroomName: string;
+  schoolWeekNumber: number;
+  dayIndex: number;
+  date: string | null;
+}
+
+export interface ControlCoordinationSummary {
+  classDayControls: ControlCoordinationEntry[];
+  classDayCount: number;
+  teacherWeekControls: ControlCoordinationEntry[];
+  teacherWeekCount: number;
+  confirmationRequired: boolean;
+}
+
+export interface ControlCoordinationCatalog {
+  classrooms: Array<{ id: string; name: string }>;
+  subjects: Array<{ id: string; name: string }>;
+  teachers: Array<{ id: string; displayName: string; initials?: string }>;
 }
 
 export function matchesCourseDay(
@@ -71,7 +100,7 @@ export function evaluateThirdTestAlert(
     input.excludeItemId,
   );
 
-  const triggered = input.type === "TEST" && existing.length >= TEST_ALERT_THRESHOLD - 1;
+  const triggered = input.type === "TEST" && confirmationRequiredForExistingTests(existing.length);
 
   return {
     triggered,
@@ -83,6 +112,120 @@ export function evaluateThirdTestAlert(
       teacherName: getTeacherById(catalog, item.authorTeacherId)?.displayName ?? "Enseignant",
     })),
   };
+}
+
+/** Alerte au 3e contrôle : 2 existants déjà publiés. */
+export function confirmationRequiredForExistingTests(existingTestCount: number): boolean {
+  return existingTestCount >= TEST_ALERT_THRESHOLD - 1;
+}
+
+function lookupCatalogName(
+  entries: Array<{ id: string; name?: string; displayName?: string }>,
+  id: string,
+  fallback: string,
+): string {
+  const match = entries.find((entry) => entry.id === id);
+  if (!match) return fallback;
+  if (match.displayName?.trim()) return match.displayName.trim();
+  return match.name?.trim() || fallback;
+}
+
+function toCoordinationEntry(
+  item: PrototypeAgendaItem,
+  catalog: ControlCoordinationCatalog,
+  date: string | null = null,
+): ControlCoordinationEntry {
+  return {
+    agendaItemId: item.id,
+    title: item.title.trim() || "Contrôle",
+    branchLabel: lookupCatalogName(catalog.subjects, item.subjectId, "Branche"),
+    teacherName: lookupCatalogName(catalog.teachers, item.authorTeacherId, "Enseignant"),
+    classroomId: item.classroomId,
+    classroomName: lookupCatalogName(catalog.classrooms, item.classroomId, "Classe"),
+    schoolWeekNumber: item.schoolWeekNumber,
+    dayIndex: item.day,
+    date,
+  };
+}
+
+function itemMatchesSchoolYear(
+  item: Pick<PrototypeAgendaItem, "schoolYearId">,
+  schoolYearId: string,
+  includeUnscopedYearItems: boolean,
+): boolean {
+  const scoped = item.schoolYearId?.trim() || null;
+  if (scoped === schoolYearId) return true;
+  return includeUnscopedYearItems && scoped === null;
+}
+
+/**
+ * Politique unique de coordination des TEST.
+ * HOMEWORK / INFORMATION : jamais de confirmation.
+ * confirmationRequired = au moins 2 contrôles déjà publiés pour la classe ce jour-là.
+ */
+export function evaluateControlCoordination(options: {
+  type: PrototypeAgendaItem["type"];
+  items: PrototypeAgendaItem[];
+  classroomId: string;
+  courseDay: CourseDayRef;
+  teacherId: string;
+  teacherWeekClassroomIds: readonly string[];
+  schoolYearId: string;
+  includeUnscopedYearItems: boolean;
+  catalog: ControlCoordinationCatalog;
+}): ControlCoordinationSummary {
+  const empty: ControlCoordinationSummary = {
+    classDayControls: [],
+    classDayCount: 0,
+    teacherWeekControls: [],
+    teacherWeekCount: 0,
+    confirmationRequired: false,
+  };
+  if (options.type !== "TEST") return empty;
+
+  const yearFiltered = options.items.filter((item) =>
+    itemMatchesSchoolYear(item, options.schoolYearId, options.includeUnscopedYearItems),
+  );
+
+  const classDayItems = listTestsOnCourseDay(yearFiltered, options.classroomId, options.courseDay);
+  const weekClassrooms = new Set(options.teacherWeekClassroomIds);
+  const teacherWeekItems = yearFiltered
+    .filter(
+      (item) =>
+        item.type === "TEST" &&
+        item.authorTeacherId === options.teacherId &&
+        weekClassrooms.has(item.classroomId) &&
+        item.schoolWeekNumber === options.courseDay.schoolWeekNumber,
+    )
+    .slice()
+    .sort(
+      (left, right) =>
+        left.day - right.day ||
+        left.classroomId.localeCompare(right.classroomId) ||
+        left.id - right.id,
+    );
+
+  return {
+    classDayControls: classDayItems.map((item) => toCoordinationEntry(item, options.catalog)),
+    classDayCount: classDayItems.length,
+    teacherWeekControls: teacherWeekItems.map((item) => toCoordinationEntry(item, options.catalog)),
+    teacherWeekCount: teacherWeekItems.length,
+    confirmationRequired: confirmationRequiredForExistingTests(classDayItems.length),
+  };
+}
+
+export function gateControlCoordination(
+  coordination: ControlCoordinationSummary,
+  confirmCoordination: boolean,
+): { ok: true } | { ok: false; code: typeof CONTROL_COORDINATION_CONFIRM_CODE; reason: string } {
+  if (coordination.confirmationRequired && confirmCoordination !== true) {
+    return {
+      ok: false,
+      code: CONTROL_COORDINATION_CONFIRM_CODE,
+      reason: CONTROL_COORDINATION_CONFIRM_REASON,
+    };
+  }
+  return { ok: true };
 }
 
 function slotTimestamp(slot: CourseDaySlot): number {

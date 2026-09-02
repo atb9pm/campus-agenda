@@ -1,17 +1,25 @@
 import type { AgendaStore } from "../../lib/persistence/types.ts";
 import type { AnnualCourseStore } from "../../lib/persistence/annual-course-types.ts";
+import type { CourseScheduleStore } from "../../lib/persistence/course-schedule-types.ts";
 import type { RuntimeAgendaAdapterStore } from "../../lib/persistence/runtime-agenda-types.ts";
 import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-types.ts";
 import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
 import type { TeacherAccountStore } from "../../lib/persistence/teacher-account-types.ts";
-import { listAccessibleRuntimeClassroomsForTeacher } from "./classrooms.ts";
+import { contextBranchForCourse } from "../agenda-bridge/index.ts";
+import {
+  controlPlanningClassroomIdsCoveredInWeek,
+  listAccessibleControlPlanningClassrooms,
+} from "./classrooms.ts";
+import { listControlPlacementOptions } from "./placements.ts";
+import { loadControlPlanningYearSessions } from "./year-sessions.ts";
 import {
   buildControlPlanningView,
   isConsultablePlanningYear,
   listConsultablePlanningYears,
   parseControlPlanningMode,
+  resolvePlanningWeekNumber,
 } from "./project.ts";
-import type { ControlPlanningView } from "./types.ts";
+import type { ControlPlacementOption, ControlPlanningView } from "./types.ts";
 
 export interface ControlPlanningServiceDeps {
   agenda: AgendaStore;
@@ -20,6 +28,7 @@ export interface ControlPlanningServiceDeps {
   courses: AnnualCourseStore;
   years: SchoolYearStore;
   teachers: TeacherAccountStore;
+  schedules?: CourseScheduleStore;
 }
 
 export interface ControlPlanningQuery {
@@ -71,13 +80,15 @@ export async function getControlPlanning(
   }
 
   const consultableYears = listConsultablePlanningYears(yearList);
-  const accessible = await listAccessibleRuntimeClassroomsForTeacher({
+  const yearSessions = await loadControlPlanningYearSessions(deps, year.id);
+  const accessible = await listAccessibleControlPlanningClassrooms({
     teacherId,
     classrooms,
     classes,
     courses,
     assignments,
     years: yearList,
+    sessions: yearSessions,
     schoolYearId: year.id,
     teacherCanAccessClassroom: (id, classroomId) => deps.agenda.teacherCanAccessClassroom(id, classroomId),
   });
@@ -92,6 +103,57 @@ export async function getControlPlanning(
   ).flat();
 
   const [subjects, teachers] = await Promise.all([deps.adapters.listSubjects(), deps.teachers.listAccounts()]);
+
+  let placementOptions: ControlPlacementOption[] = [];
+  let canCreate = false;
+  let guidedPlanningReason: string | null = null;
+  const selectedClassroom = requestedClassroom
+    ? classrooms.find((entry) => entry.id === requestedClassroom) ?? null
+    : null;
+  const linkedClassId = selectedClassroom?.schoolClassId?.trim() || null;
+  const linkedClass = linkedClassId ? classes.find((entry) => entry.id === linkedClassId) ?? null : null;
+  const todayIso = todayIsoDate(query.todayIso);
+  const targetWeek = resolvePlanningWeekNumber(year.weeks, query.week ?? null, todayIso);
+  const teacherWeekClassroomIds = controlPlanningClassroomIdsCoveredInWeek({
+    accessible,
+    classrooms,
+    sessions: yearSessions,
+    assignments,
+    teacherId,
+    schoolWeekNumber: targetWeek,
+  });
+
+  if (year.status === "archived") {
+    canCreate = false;
+  } else if (requestedClassroom && !linkedClass) {
+    guidedPlanningReason =
+      "La planification guidée est disponible pour les classes reliées à l’horaire structuré.";
+  } else if (year.status === "active" && requestedClassroom && linkedClass && deps.schedules) {
+    canCreate = true;
+    const [contexts, branches] = await Promise.all([
+      deps.catalog.listContexts(),
+      deps.catalog.listBranches(),
+    ]);
+    const sessions = yearSessions.filter((session) => session.classId === linkedClass.id);
+    const branchByCourseId = new Map<string, string>();
+    for (const course of courses) {
+      if (course.classId !== linkedClass.id) continue;
+      const info = contextBranchForCourse({ course, contexts, branches });
+      if (info) branchByCourseId.set(course.id, info.branch.label);
+    }
+    if (targetWeek !== null) {
+      placementOptions = listControlPlacementOptions({
+        sessions,
+        assignments,
+        teacherId,
+        schoolWeekNumber: targetWeek,
+        branchByCourseId,
+        yearStatus: "active",
+        classroomSelected: true,
+        structured: true,
+      });
+    }
+  }
 
   const view = buildControlPlanningView({
     teacherId,
@@ -109,12 +171,17 @@ export async function getControlPlanning(
     weeks: year.weeks,
     schoolYearId: year.id,
     schoolYearLabel: year.label,
+    yearStatus: year.status === "archived" ? "archived" : "active",
     years: consultableYears,
     classroomId: requestedClassroom,
     requestedMode: query.mode ?? "mine",
     schoolWeekNumber: query.week ?? null,
-    todayIso: todayIsoDate(query.todayIso),
+    todayIso,
     includeUnscopedYearItems: year.id === active?.id,
+    placementOptions,
+    canCreate,
+    guidedPlanningReason,
+    teacherWeekClassroomIds,
   });
 
   return { ok: true, view };
