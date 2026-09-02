@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import {
   formatControlPlanningYearLabel,
@@ -509,10 +509,12 @@ export function ControlPlanningPanel({
               </div>
             </div>
 
+            {view.week.days.length ? (
             <div
               className="control-planning-week"
               data-control-week=""
               data-day-count={view.week.days.length}
+              style={{ "--control-day-count": String(view.week.days.length) } as CSSProperties}
               aria-label="Planning hebdomadaire des contrôles"
             >
               {view.week.days.map((day) => (
@@ -552,6 +554,11 @@ export function ControlPlanningPanel({
                 </section>
               ))}
             </div>
+            ) : (
+              <p className="ma-semaine-empty" data-control-empty-week="">
+                {view.emptyWeekMessage ?? "Aucun de vos cours n’est prévu cette semaine."}
+              </p>
+            )}
           </div>
 
           <aside className="control-planning-sidebar" aria-label="Coordination des contrôles">

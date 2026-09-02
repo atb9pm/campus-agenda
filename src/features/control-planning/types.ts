@@ -1,4 +1,6 @@
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
+import type { TeacherCourseAssignment } from "../annual-courses/types.ts";
+import type { CourseSession } from "../course-sessions/types.ts";
 import type { SchoolWeekEntry } from "../school-year/types.ts";
 
 export const CONTROL_PLANNING_MODES = ["mine", "class-all"] as const;
@@ -84,6 +86,8 @@ export interface ControlPlanningView {
   teacherWeekControls: ControlPlanningCard[];
   canCreate: boolean;
   guidedPlanningReason: string | null;
+  /** Présent lorsque la semaine existe mais aucun jour n’est pertinent. */
+  emptyWeekMessage: string | null;
 }
 
 export interface ControlPlanningCatalog {
@@ -112,4 +116,8 @@ export interface BuildControlPlanningInput {
   guidedPlanningReason: string | null;
   /** Si omis : toutes les classes accessibles de l’année. */
   teacherWeekClassroomIds?: readonly string[];
+  sessions?: readonly CourseSession[];
+  assignments?: readonly TeacherCourseAssignment[];
+  /** SchoolClass liée à la classroom runtime sélectionnée. Null = legacy / toutes les classes. */
+  selectedSchoolClassId?: string | null;
 }

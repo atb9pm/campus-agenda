@@ -19,6 +19,8 @@ import {
   listAccessibleRuntimeClassroomsForTeacher,
   listConsultablePlanningYears,
   listControlPlacementOptions,
+  listVisibleControlPlanningDayIndexes,
+  emptyControlPlanningWeekMessage,
   teacherHasControlPlanningClassAccess,
   resolveControlPlanningMode,
   selectControlItems,
@@ -26,6 +28,7 @@ import {
   type ControlPlanningServiceDeps,
 } from "../src/features/control-planning/index.ts";
 import { computeCourseSessions } from "../src/features/course-sessions/index.ts";
+import type { CourseSession } from "../src/features/course-sessions/types.ts";
 import type { CourseScheduleSlot } from "../src/features/course-schedule/types.ts";
 import { TEST_ALERT_THRESHOLD } from "../src/features/evaluations/index.ts";
 import { valaisHolidaysForSchoolYear } from "../src/features/school-days/holidays-valais.ts";
@@ -140,8 +143,8 @@ function planningDeps(items: PrototypeAgendaItem[] = DEMO_PROTOTYPE_ITEMS): Cont
   } as unknown as ControlPlanningServiceDeps;
 }
 
-test("version 2.32.0 — module Contrôles, sans table dédiée", () => {
-  assert.equal(APP_VERSION, "2.32.0");
+test("version 2.32.1 — jours dynamiques, sans table dédiée", () => {
+  assert.equal(APP_VERSION, "2.32.1");
   assert.equal(TEACHER_NAV_LABELS.controles, "Contrôles");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",
@@ -217,13 +220,12 @@ test("projection — Tous les contrôles de la classe inclut les collègues", ()
   assert.equal(cards.some((card) => card.title === "Géométrie des trains"), false);
 });
 
-test("projection — la classe apparaît sur chaque carte, jours vides conservés, pas d’heure", () => {
+test("projection — la classe apparaît sur chaque carte, jours sans CourseSession absents, pas d’heure", () => {
   const view = buildControlPlanningView(planningInput());
   assert.ok(view.week);
-  assert.equal(view.week!.days.length, 5);
   assert.deepEqual(
     view.week!.days.map((day) => day.weekdayLabel),
-    ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"],
+    ["Jeudi"],
   );
 
   const thursday = view.week!.days.find((day) => day.dayIndex === 3);
@@ -235,10 +237,8 @@ test("projection — la classe apparaît sur chaque carte, jours vides conservé
     assert.equal("hour" in card ? (card as { hour?: unknown }).hour : undefined, undefined);
   }
 
-  const emptyDays = view.week!.days.filter((day) => day.controls.length === 0);
-  assert.ok(emptyDays.length >= 3);
-  assert.ok(emptyDays.some((day) => day.weekdayLabel === "Vendredi"));
-  assert.ok(view.alerts.some((alert) => alert.kind === "free-day" && /Vendredi/.test(alert.message)));
+  assert.equal(view.week!.days.some((day) => day.weekdayLabel === "Vendredi"), false);
+  assert.equal(view.alerts.some((alert) => /Vendredi/.test(alert.message)), false);
   assert.ok(view.alerts.some((alert) => alert.kind === "teacher-load"));
 });
 
@@ -252,7 +252,8 @@ test("service — planning prêt pour la vue, erreurs de filtre", async () => {
   assert.equal(mine.ok, true);
   if (!mine.ok) return;
   assert.equal(mine.view.mode, "mine");
-  assert.equal(mine.view.week?.days.length, 5);
+  assert.equal(mine.view.week?.days.length, 1);
+  assert.equal(mine.view.week?.days[0]?.weekdayLabel, "Jeudi");
   const mineCards = cardsFromView(mine.view);
   assert.ok(mineCards.every((card) => card.teacherId === TEACHER_ID));
   assert.ok(mineCards.every((card) => card.classroomName.trim()));
@@ -375,8 +376,10 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
   assert.match(page, /upsertAgendaItem/);
   assert.match(page, /onPublicationCreated/);
   assert.match(css, /control-planning-week/);
-  assert.match(css, /repeat\(5,/);
+  assert.match(css, /--control-day-count/);
+  assert.doesNotMatch(css, /\.control-planning-week\s*\{[^}]*repeat\(5,/s);
   assert.doesNotMatch(css, /\.control-planning-week[^{]*08h/);
+  assert.match(panel, /data-control-empty-week/);
 
   assert.match(route, /requireTeacherSession/);
   assert.match(route, /getControlPlanning/);
@@ -964,6 +967,12 @@ test("placements — classe non sélectionnée, archived, legacy, férié, excep
       canCreate: true,
       placementOptions: primary,
       yearStatus: "active",
+      sessions,
+      assignments: [tca("a1", moteur, TEACHER_ID), tca("a2", elec, TEACHER_ID)],
+      selectedSchoolClassId: "sc-ma2a",
+      schoolWeekNumber: 1,
+      items: [],
+      weeks,
     }),
   );
   assert.equal(view.canCreate, true);
@@ -1293,6 +1302,401 @@ test("service — getControlPlanning : remplacement futur visible maintenant, op
     assert.equal(archived.view.canCreate, false);
     assert.equal(archived.view.week?.days.every((day) => day.canPlan === false), true);
   }
+});
+
+function planningSession(
+  patch: Pick<CourseSession, "annualCourseId" | "classId" | "date" | "dayOfWeek" | "schoolWeekNumber"> &
+    Partial<CourseSession>,
+): CourseSession {
+  return {
+    key: `${patch.schoolYearId ?? YEAR_ID}|${patch.annualCourseId}|${patch.date}`,
+    schoolYearId: YEAR_ID,
+    contextId: "ctx-moteur",
+    weekKind: patch.schoolWeekNumber % 2 === 1 ? "A" : "B",
+    sequenceNumber: 1,
+    segments: [{ scheduleSlotId: "s1", periodStart: 4, periodEnd: 4 }],
+    ...patch,
+  };
+}
+
+test("jours visibles — professeur, classe, A/B, férié, remplacement, filet, alertes", () => {
+  const francois = TEACHER_ID;
+  const dupont = "teacher-demo-dupont";
+  const mma1a = "sc-mma1a";
+  const mma2c = "sc-mma2c";
+  const mecauto = "sc-mecauto3a";
+  const acMma1a = "ac-mma1a";
+  const acMma2c = "ac-mma2c";
+  const acMoteur = "ac-moteur";
+  const acElec = "ac-elec";
+  const assignments = [
+    tca("a-mma1a", acMma1a, francois),
+    tca("a-mma2c", acMma2c, francois),
+    tca("a-moteur", acMoteur, francois),
+    tca("a-elec", acElec, dupont),
+  ];
+
+  const mondayMma1a = planningSession({
+    annualCourseId: acMma1a,
+    classId: mma1a,
+    date: "2026-08-10",
+    dayOfWeek: 1,
+    schoolWeekNumber: 1,
+  });
+  const mondayMma2c = planningSession({
+    annualCourseId: acMma2c,
+    classId: mma2c,
+    date: "2026-08-10",
+    dayOfWeek: 1,
+    schoolWeekNumber: 1,
+  });
+  const thursdayMecauto = planningSession({
+    annualCourseId: acMoteur,
+    classId: mecauto,
+    date: "2026-08-13",
+    dayOfWeek: 4,
+    schoolWeekNumber: 1,
+  });
+  const tuesdayColleague = planningSession({
+    annualCourseId: acElec,
+    classId: mecauto,
+    date: "2026-08-11",
+    dayOfWeek: 2,
+    schoolWeekNumber: 1,
+  });
+
+  assert.deepEqual(
+    listVisibleControlPlanningDayIndexes({
+      mode: "mine",
+      classroomId: null,
+      schoolWeekNumber: 1,
+      teacherId: francois,
+      sessions: [mondayMma1a, mondayMma2c],
+      assignments,
+      selectedSchoolClassId: null,
+      existingControlDayIndexes: [],
+    }),
+    [0],
+    "CAS A : Toutes mes classes, lundi uniquement",
+  );
+
+  assert.deepEqual(
+    listVisibleControlPlanningDayIndexes({
+      mode: "mine",
+      classroomId: null,
+      schoolWeekNumber: 1,
+      teacherId: francois,
+      sessions: [mondayMma1a, thursdayMecauto],
+      assignments,
+      selectedSchoolClassId: null,
+      existingControlDayIndexes: [],
+    }),
+    [0, 3],
+    "CAS B : Toutes mes classes, lundi + jeudi",
+  );
+
+  assert.deepEqual(
+    listVisibleControlPlanningDayIndexes({
+      mode: "mine",
+      classroomId: "rt-mecauto",
+      schoolWeekNumber: 1,
+      teacherId: francois,
+      sessions: [tuesdayColleague, thursdayMecauto],
+      assignments,
+      selectedSchoolClassId: mecauto,
+      existingControlDayIndexes: [],
+    }),
+    [3],
+    "CAS C : Mes contrôles → uniquement les jours du professeur dans la classe",
+  );
+
+  assert.deepEqual(
+    listVisibleControlPlanningDayIndexes({
+      mode: "class-all",
+      classroomId: "rt-mecauto",
+      schoolWeekNumber: 1,
+      teacherId: francois,
+      sessions: [tuesdayColleague, thursdayMecauto],
+      assignments,
+      selectedSchoolClassId: mecauto,
+      existingControlDayIndexes: [],
+    }),
+    [1, 3],
+    "CAS C : Tous les contrôles → tous les jours de CourseSession de la classe",
+  );
+
+  const weeksAb = mondayWeeks("2026-08-10", 2);
+  const abSessions = computeCourseSessions({
+    schoolYearId: YEAR_ID,
+    courses: [{ id: acMoteur, classId: mecauto, contextId: "ctx-moteur" }],
+    slots: [
+      slotFor(acMoteur, { id: "s-thu-all", dayOfWeek: 4, weekKind: "all" }),
+      slotFor(acMoteur, { id: "s-tue-b", dayOfWeek: 2, weekKind: "B" }),
+    ],
+    weeks: weeksAb,
+  });
+  assert.deepEqual(
+    listVisibleControlPlanningDayIndexes({
+      mode: "mine",
+      classroomId: "rt-mecauto",
+      schoolWeekNumber: 1,
+      teacherId: francois,
+      sessions: abSessions,
+      assignments,
+      selectedSchoolClassId: mecauto,
+      existingControlDayIndexes: [],
+    }),
+    [3],
+    "CAS D semaine A : jeudi uniquement",
+  );
+  assert.deepEqual(
+    listVisibleControlPlanningDayIndexes({
+      mode: "mine",
+      classroomId: "rt-mecauto",
+      schoolWeekNumber: 2,
+      teacherId: francois,
+      sessions: abSessions,
+      assignments,
+      selectedSchoolClassId: mecauto,
+      existingControlDayIndexes: [],
+    }),
+    [1, 3],
+    "CAS D semaine B : mardi + jeudi",
+  );
+
+  const holidaySessions = computeCourseSessions({
+    schoolYearId: YEAR_ID,
+    courses: [{ id: acMma1a, classId: mma1a, contextId: "ctx-moteur" }],
+    slots: [slotFor(acMma1a, { id: "s-mon", dayOfWeek: 1 })],
+    weeks: weeksAb,
+    holidays: [{ date: "2026-08-10", label: "Fête" }],
+  });
+  assert.deepEqual(
+    listVisibleControlPlanningDayIndexes({
+      mode: "mine",
+      classroomId: null,
+      schoolWeekNumber: 1,
+      teacherId: francois,
+      sessions: holidaySessions,
+      assignments,
+      selectedSchoolClassId: null,
+      existingControlDayIndexes: [],
+    }),
+    [],
+    "jour férié sans contrôle → jour absent",
+  );
+
+  const restoredSessions = computeCourseSessions({
+    schoolYearId: YEAR_ID,
+    courses: [{ id: acMma1a, classId: mma1a, contextId: "ctx-moteur" }],
+    slots: [slotFor(acMma1a, { id: "s-mon-ex", dayOfWeek: 1 })],
+    weeks: weeksAb,
+    holidays: [{ date: "2026-08-10", label: "Fête" }],
+    exceptions: [{ date: "2026-08-10", state: "class", label: "Cours rattrapé" }],
+  });
+  assert.deepEqual(
+    listVisibleControlPlanningDayIndexes({
+      mode: "mine",
+      classroomId: null,
+      schoolWeekNumber: 1,
+      teacherId: francois,
+      sessions: restoredSessions,
+      assignments,
+      selectedSchoolClassId: null,
+      existingControlDayIndexes: [],
+    }),
+    [0],
+    "exception rétablissant la séance → jour présent",
+  );
+
+  const replacement = tca(
+    "a-rep",
+    acMoteur,
+    "teacher-replacement",
+    "REPLACEMENT",
+    "2026-08-13T00:00:00.000Z",
+    "2026-08-13T23:59:59.000Z",
+  );
+  assert.deepEqual(
+    listVisibleControlPlanningDayIndexes({
+      mode: "mine",
+      classroomId: "rt-mecauto",
+      schoolWeekNumber: 1,
+      teacherId: "teacher-replacement",
+      sessions: [tuesdayColleague, thursdayMecauto],
+      assignments: [replacement],
+      selectedSchoolClassId: mecauto,
+      existingControlDayIndexes: [],
+    }),
+    [3],
+    "REPLACEMENT actif à la date → jeudi présent",
+  );
+  const laterReplacement = tca(
+    "a-rep-later",
+    acMoteur,
+    "teacher-replacement",
+    "REPLACEMENT",
+    "2026-09-01T00:00:00.000Z",
+    "2026-09-30T23:59:59.000Z",
+  );
+  assert.deepEqual(
+    listVisibleControlPlanningDayIndexes({
+      mode: "mine",
+      classroomId: "rt-mecauto",
+      schoolWeekNumber: 1,
+      teacherId: "teacher-replacement",
+      sessions: [thursdayMecauto],
+      assignments: [laterReplacement],
+      selectedSchoolClassId: mecauto,
+      existingControlDayIndexes: [],
+    }),
+    [],
+    "remplacement hors période → jour absent pour Mes contrôles",
+  );
+
+  const p4p6 = computeCourseSessions({
+    schoolYearId: YEAR_ID,
+    courses: [{ id: acMoteur, classId: mecauto, contextId: "ctx-moteur" }],
+    slots: [
+      slotFor(acMoteur, { id: "s-p4", dayOfWeek: 4, periodStart: 4, periodEnd: 4 }),
+      slotFor(acMoteur, { id: "s-p6", dayOfWeek: 4, periodStart: 6, periodEnd: 6 }),
+    ],
+    weeks: weeksAb,
+  });
+  const thursdayP4p6 = p4p6.filter((entry) => entry.date === "2026-08-13");
+  assert.equal(thursdayP4p6.length, 1);
+  assert.equal(thursdayP4p6[0]?.segments.length, 2);
+  assert.deepEqual(
+    listVisibleControlPlanningDayIndexes({
+      mode: "mine",
+      classroomId: "rt-mecauto",
+      schoolWeekNumber: 1,
+      teacherId: francois,
+      sessions: p4p6,
+      assignments,
+      selectedSchoolClassId: mecauto,
+      existingControlDayIndexes: [],
+    }),
+    [3],
+  );
+  const p4p6Options = listControlPlacementOptions({
+    sessions: p4p6,
+    assignments,
+    teacherId: francois,
+    schoolWeekNumber: 1,
+    branchByCourseId: new Map([[acMoteur, "Moteur"]]),
+    yearStatus: "active",
+    classroomSelected: true,
+    structured: true,
+  });
+  assert.equal(p4p6Options.filter((entry) => entry.date === "2026-08-13").length, 1);
+
+  assert.deepEqual(
+    listVisibleControlPlanningDayIndexes({
+      mode: "mine",
+      classroomId: null,
+      schoolWeekNumber: 1,
+      teacherId: francois,
+      sessions: [mondayMma1a],
+      assignments,
+      selectedSchoolClassId: null,
+      existingControlDayIndexes: [2],
+    }),
+    [0, 2],
+    "contrôle existant mercredi sans CourseSession → jour conservé",
+  );
+
+  assert.equal(
+    emptyControlPlanningWeekMessage({ classroomId: null, mode: "mine", structured: true }),
+    "Aucun de vos cours n’est prévu cette semaine.",
+  );
+  assert.equal(
+    emptyControlPlanningWeekMessage({ classroomId: "rt-mecauto", mode: "mine", structured: true }),
+    "Vous n’avez aucun cours avec cette classe cette semaine.",
+  );
+  assert.equal(
+    emptyControlPlanningWeekMessage({ classroomId: "rt-mecauto", mode: "class-all", structured: true }),
+    "Aucun cours n’est prévu pour cette classe cette semaine.",
+  );
+  assert.equal(
+    emptyControlPlanningWeekMessage({ classroomId: "rt-legacy", mode: "mine", structured: false }),
+    "Cette classe n’est pas reliée à l’horaire structuré.",
+  );
+
+  const emptyView = buildControlPlanningView(
+    planningInput({
+      classroomId: CLASS_2A,
+      requestedMode: "mine",
+      sessions: [],
+      assignments,
+      selectedSchoolClassId: mecauto,
+      items: [],
+    }),
+  );
+  assert.equal(emptyView.week?.days.length, 0);
+  assert.equal(emptyView.emptyWeekMessage, "Vous n’avez aucun cours avec cette classe cette semaine.");
+
+  const placementView = buildControlPlanningView(
+    planningInput({
+      classroomId: CLASS_2A,
+      requestedMode: "class-all",
+      canCreate: true,
+      selectedSchoolClassId: mecauto,
+      sessions: [tuesdayColleague, thursdayMecauto],
+      assignments,
+      items: [],
+      schoolWeekNumber: 1,
+      weeks: weeksAb,
+      placementOptions: listControlPlacementOptions({
+        sessions: [tuesdayColleague, thursdayMecauto],
+        assignments,
+        teacherId: francois,
+        schoolWeekNumber: 1,
+        branchByCourseId: new Map([
+          [acMoteur, "Moteur"],
+          [acElec, "Électricité"],
+        ]),
+        yearStatus: "active",
+        classroomSelected: true,
+        structured: true,
+      }),
+    }),
+  );
+  assert.deepEqual(
+    placementView.week?.days.map((day) => day.weekdayLabel),
+    ["Mardi", "Jeudi"],
+  );
+  const tuesday = placementView.week?.days.find((day) => day.dayIndex === 1);
+  const thursday = placementView.week?.days.find((day) => day.dayIndex === 3);
+  assert.equal(tuesday?.canPlan, false);
+  assert.equal(thursday?.canPlan, true);
+
+  const alertView = buildControlPlanningView(
+    planningInput({
+      classroomId: null,
+      sessions: [mondayMma1a, thursdayMecauto],
+      assignments,
+      items: [
+        testItem({
+          id: 901,
+          classroomId: CLASS_2A,
+          title: "Contrôle jeudi",
+          day: 3,
+          schoolWeekNumber: 1,
+        }),
+      ],
+      schoolWeekNumber: 1,
+      weeks: weeksAb,
+    }),
+  );
+  assert.deepEqual(
+    alertView.week?.days.map((day) => day.weekdayLabel),
+    ["Lundi", "Jeudi"],
+  );
+  assert.ok(alertView.alerts.some((alert) => alert.kind === "free-day" && /Lundi/.test(alert.message)));
+  assert.equal(alertView.alerts.some((alert) => /Mardi/.test(alert.message)), false);
+  assert.equal(alertView.alerts.some((alert) => /Mercredi/.test(alert.message)), false);
+  assert.equal(alertView.alerts.some((alert) => /Vendredi/.test(alert.message)), false);
 });
 
 

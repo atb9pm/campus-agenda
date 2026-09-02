@@ -2,6 +2,22 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.32.1] — Contrôles : afficher uniquement les jours de cours pertinents
+
+Le planning des contrôles n’affiche plus une grille fixe lundi–vendredi. Les colonnes suivent les vraies CourseSession de la semaine consultée.
+
+### Ajouté
+
+- Affichage dynamique des jours dans le planning des contrôles.
+- Toutes mes classes limité aux vrais jours de cours du professeur.
+- Vue classe limitée aux vrais jours de cours de la classe.
+- Suppression des colonnes de jours inutiles.
+- Alertes limitées aux jours réellement affichés.
+
+### Non inclus
+
+N → N+1, vue élève enrichie, notation, fichiers joints, drag & drop, table dédiée aux contrôles, table CourseSession.
+
 ## [2.32.0] — Contrôles : planifier depuis les séances et coordonner les évaluations
 
 Planification interactive des contrôles depuis les CourseSession réelles, publication manuelle structurée de TEST, et coordination commune au troisième contrôle.

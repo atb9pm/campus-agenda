@@ -182,6 +182,9 @@ export async function getControlPlanning(
     canCreate,
     guidedPlanningReason,
     teacherWeekClassroomIds,
+    sessions: yearSessions,
+    assignments,
+    selectedSchoolClassId: linkedClass?.id ?? null,
   });
 
   return { ok: true, view };
