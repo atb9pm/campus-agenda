@@ -5,6 +5,9 @@ process.env.AUTH_SECRET ??= "test-secret-e2e-phase-08";
 // Les comptes de démonstration n'ont pas de mot de passe personnel : le parcours
 // E2E autorise explicitement l'empreinte héritée `campus-demo`.
 process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
+// Les tests E2E enchaînent plusieurs connexions enseignant ; le plafond 10/min
+// ferait échouer les scénarios ajoutés en fin de fichier.
+process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER ??= "40";
 
 const env = {
   ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
