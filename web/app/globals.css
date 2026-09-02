@@ -886,7 +886,7 @@ button { color: inherit; }
 .control-planning-week-actions button:disabled { opacity: .4; cursor: not-allowed; }
 .control-planning-week {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--control-day-count, 1), minmax(0, 1fr));
   gap: 10px;
 }
 .control-planning-day {
@@ -1020,7 +1020,10 @@ button { color: inherit; }
 
 @media (max-width: 1100px) {
   .control-planning-body { grid-template-columns: 1fr; }
-  .control-planning-week { overflow-x: auto; grid-template-columns: repeat(5, minmax(140px, 1fr)); }
+  .control-planning-week { overflow-x: auto; grid-template-columns: repeat(var(--control-day-count, 1), minmax(140px, 1fr)); }
+}
+@media (max-width: 700px) {
+  .control-planning-week { grid-template-columns: 1fr; overflow-x: visible; }
 }
 .course-timeline-banner { margin: 0 0 16px; padding: 14px 16px; border: 1px solid #d5e2f4; border-radius: 10px; background: #f8fbff; color: #30558f; font-size: 12px; line-height: 1.5; }
 .course-timeline-list { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }

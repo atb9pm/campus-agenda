@@ -37,6 +37,11 @@ export {
 } from "./classrooms.ts";
 export { listControlPlacementOptions } from "./placements.ts";
 export {
+  emptyControlPlanningWeekMessage,
+  listVisibleControlPlanningDayIndexes,
+  teacherOwnsCourseSession,
+} from "./visible-days.ts";
+export {
   evaluateLiveControlCoordination,
   type LiveCoordinationDeps,
 } from "./live-coordination.ts";

@@ -570,7 +570,7 @@ test("2.32.0 — E2E planning des contrôles : session, années, 403, TEST", asy
   const payload = await forged.json();
   assert.equal(payload.ok, true);
   assert.ok(payload.week);
-  assert.equal(payload.week.days.length, 5);
+  assert.ok(payload.week.days.length >= 1 && payload.week.days.length <= 5);
   assert.ok(Array.isArray(payload.years));
   assert.ok(payload.years.length >= 1);
   assert.ok(payload.years.every((year) => year.status === "active" || year.status === "archived"));
@@ -633,7 +633,7 @@ test("2.32.0 — E2E planning des contrôles : session, années, 403, TEST", asy
     assert.equal(classPayload.ok, true);
     assert.equal(classPayload.mode, "class-all");
     assert.equal(classPayload.schoolYearId, payload.schoolYearId);
-    assert.equal(classPayload.week.days.length, 5);
+    assert.ok(classPayload.week.days.length >= 1 && classPayload.week.days.length <= 5);
   }
 });
 

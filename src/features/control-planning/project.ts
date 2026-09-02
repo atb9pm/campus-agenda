@@ -14,6 +14,10 @@ import type {
 } from "./types.ts";
 import { CONTROL_PLANNING_MODES } from "./types.ts";
 import { confirmationRequiredForExistingTests } from "../evaluations/coordination.ts";
+import {
+  emptyControlPlanningWeekMessage,
+  listVisibleControlPlanningDayIndexes,
+} from "./visible-days.ts";
 
 export function isControlAgendaItem(item: Pick<PrototypeAgendaItem, "type">): boolean {
   return item.type === "TEST";
@@ -190,11 +194,13 @@ export function buildControlPlanningWeek(options: {
   weeks: SchoolWeekEntry[];
   schoolWeekNumber: number;
   cards: ControlPlanningCard[];
+  visibleDayIndexes: readonly number[];
 }): ControlPlanningWeekView | null {
   const week = options.weeks.find((entry) => entry.number === options.schoolWeekNumber) ?? null;
   if (!week) return null;
   const days: ControlPlanningDay[] = [];
-  for (let dayIndex = 0; dayIndex < SCHOOL_WEEKDAY_COUNT; dayIndex += 1) {
+  for (const dayIndex of options.visibleDayIndexes) {
+    if (dayIndex < 0 || dayIndex >= SCHOOL_WEEKDAY_COUNT) continue;
     const date = isoDateForSchoolWeekDay([week], week.number, dayIndex);
     days.push({
       dayIndex,
@@ -269,6 +275,22 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
   });
 
   const weekNumber = resolvePlanningWeekNumber(input.weeks, input.schoolWeekNumber, input.todayIso);
+  const existingControlDayIndexes = selectedItems
+    .filter((item) => weekNumber !== null && item.schoolWeekNumber === weekNumber)
+    .map((item) => item.day);
+  const visibleDayIndexes =
+    weekNumber === null
+      ? []
+      : listVisibleControlPlanningDayIndexes({
+          mode,
+          classroomId,
+          schoolWeekNumber: weekNumber,
+          teacherId: input.teacherId,
+          sessions: input.sessions ?? [],
+          assignments: input.assignments ?? [],
+          selectedSchoolClassId: input.selectedSchoolClassId ?? null,
+          existingControlDayIndexes,
+        });
   const cards = selectedItems.map((item) => {
     const date =
       weekNumber !== null
@@ -294,6 +316,7 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
           weeks: input.weeks,
           schoolWeekNumber: weekNumber,
           cards,
+          visibleDayIndexes,
         });
 
   const classIds = new Set(selectedItems.map((item) => item.classroomId));
@@ -411,6 +434,14 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
     teacherWeekControls,
     canCreate: input.canCreate,
     guidedPlanningReason: input.guidedPlanningReason,
+    emptyWeekMessage:
+      week && week.days.length === 0
+        ? emptyControlPlanningWeekMessage({
+            classroomId,
+            mode,
+            structured: Boolean(input.selectedSchoolClassId) || classroomId === null,
+          })
+        : null,
   };
 }
 
