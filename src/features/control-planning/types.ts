@@ -44,12 +44,19 @@ export interface ControlPlanningAlert {
   message: string;
 }
 
+export interface ControlPlanningYearOption {
+  id: string;
+  label: string;
+  status: "active" | "archived";
+}
+
 export interface ControlPlanningView {
   schoolYearId: string;
   schoolYearLabel: string;
   mode: ControlPlanningMode;
   classroomId: string | null;
   classes: ControlPlanningClass[];
+  years: ControlPlanningYearOption[];
   summary: {
     controlCount: number;
     classCount: number;
@@ -74,6 +81,7 @@ export interface BuildControlPlanningInput {
   weeks: SchoolWeekEntry[];
   schoolYearId: string;
   schoolYearLabel: string;
+  years: ControlPlanningYearOption[];
   classroomId: string | null;
   requestedMode: string | null;
   schoolWeekNumber: number | null;

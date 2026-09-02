@@ -5,7 +5,12 @@ import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-ty
 import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
 import type { TeacherAccountStore } from "../../lib/persistence/teacher-account-types.ts";
 import { listAccessibleRuntimeClassroomsForTeacher } from "./classrooms.ts";
-import { buildControlPlanningView, parseControlPlanningMode } from "./project.ts";
+import {
+  buildControlPlanningView,
+  isConsultablePlanningYear,
+  listConsultablePlanningYears,
+  parseControlPlanningMode,
+} from "./project.ts";
 import type { ControlPlanningView } from "./types.ts";
 
 export interface ControlPlanningServiceDeps {
@@ -48,15 +53,24 @@ export async function getControlPlanning(
   }
 
   await deps.catalog.ensureSeeded();
-  const [classrooms, classes, courses, assignments, yearList, yearStore] = await Promise.all([
+  const [classrooms, classes, courses, assignments, yearList] = await Promise.all([
     deps.adapters.listClassrooms(),
     deps.catalog.listClasses(),
     deps.courses.listCourses(),
     deps.courses.listAssignments(),
     deps.years.listSchoolYears(),
-    Promise.resolve(deps.years),
   ]);
 
+  const requestedYearId = query.schoolYearId?.trim() || null;
+  const active = await deps.years.getActiveSchoolYear();
+  const year = requestedYearId
+    ? await deps.years.getSchoolYearById(requestedYearId)
+    : active;
+  if (!year || !isConsultablePlanningYear(year)) {
+    return { ok: false, reason: "Année scolaire introuvable.", status: 404 };
+  }
+
+  const consultableYears = listConsultablePlanningYears(yearList);
   const accessible = await listAccessibleRuntimeClassroomsForTeacher({
     teacherId,
     classrooms,
@@ -64,21 +78,13 @@ export async function getControlPlanning(
     courses,
     assignments,
     years: yearList,
+    schoolYearId: year.id,
     teacherCanAccessClassroom: (id, classroomId) => deps.agenda.teacherCanAccessClassroom(id, classroomId),
   });
 
   const requestedClassroom = query.classroomId?.trim() || null;
   if (requestedClassroom && !accessible.some((entry) => entry.id === requestedClassroom)) {
     return { ok: false, reason: "Cette classe ne vous est pas attribuée.", status: 403 };
-  }
-
-  const requestedYearId = query.schoolYearId?.trim() || null;
-  const active = await yearStore.getActiveSchoolYear();
-  const year = requestedYearId
-    ? await yearStore.getSchoolYearById(requestedYearId)
-    : active;
-  if (!year) {
-    return { ok: false, reason: "Année scolaire introuvable.", status: 404 };
   }
 
   const items = (
@@ -103,6 +109,7 @@ export async function getControlPlanning(
     weeks: year.weeks,
     schoolYearId: year.id,
     schoolYearLabel: year.label,
+    years: consultableYears,
     classroomId: requestedClassroom,
     requestedMode: query.mode ?? "mine",
     schoolWeekNumber: query.week ?? null,

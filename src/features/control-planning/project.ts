@@ -1,6 +1,6 @@
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
 import { isoDateForSchoolWeekDay, SCHOOL_WEEKDAY_COUNT, SCHOOL_WEEKDAY_LABELS } from "../school-days/index.ts";
-import type { SchoolWeekEntry } from "../school-year/types.ts";
+import type { SchoolWeekEntry, SchoolYearRecord } from "../school-year/types.ts";
 import type {
   BuildControlPlanningInput,
   ControlPlanningAlert,
@@ -10,6 +10,7 @@ import type {
   ControlPlanningMode,
   ControlPlanningView,
   ControlPlanningWeekView,
+  ControlPlanningYearOption,
 } from "./types.ts";
 import { CONTROL_PLANNING_MODES } from "./types.ts";
 
@@ -28,6 +29,48 @@ export function resolveControlPlanningMode(
 export function parseControlPlanningMode(value: string | null | undefined): ControlPlanningMode | null {
   if (!value) return "mine";
   return (CONTROL_PLANNING_MODES as readonly string[]).includes(value) ? (value as ControlPlanningMode) : null;
+}
+
+export function isConsultablePlanningYear(year: Pick<SchoolYearRecord, "status">): boolean {
+  return year.status === "active" || year.status === "archived";
+}
+
+/** Années proposées au filtre enseignant : active + archivées, jamais draft. */
+export function listConsultablePlanningYears(years: SchoolYearRecord[]): ControlPlanningYearOption[] {
+  return years
+    .filter((year) => isConsultablePlanningYear(year))
+    .slice()
+    .sort((left, right) => {
+      if (left.status === "active" && right.status !== "active") return -1;
+      if (right.status === "active" && left.status !== "active") return 1;
+      return right.startsOn.localeCompare(left.startsOn) || left.label.localeCompare(right.label, "fr");
+    })
+    .map((year) => ({
+      id: year.id,
+      label: year.label,
+      status: year.status as "active" | "archived",
+    }));
+}
+
+/** Charge personnelle : tous les TEST du professeur, toutes classes de l’année, semaine courante. */
+export function countOwnControlsForWeek(options: {
+  items: PrototypeAgendaItem[];
+  teacherId: string;
+  accessibleClassroomIds: readonly string[];
+  schoolYearId: string;
+  includeUnscopedYearItems: boolean;
+  schoolWeekNumber: number | null;
+}): number {
+  if (options.schoolWeekNumber === null) return 0;
+  return selectControlItems({
+    items: options.items,
+    teacherId: options.teacherId,
+    accessibleClassroomIds: options.accessibleClassroomIds,
+    classroomId: null,
+    mode: "mine",
+    schoolYearId: options.schoolYearId,
+    includeUnscopedYearItems: options.includeUnscopedYearItems,
+  }).filter((item) => item.schoolWeekNumber === options.schoolWeekNumber).length;
 }
 
 /** « 2026-2027 » → « 2026–2027 ». */
@@ -251,12 +294,14 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
   const classroomName = classroomId
     ? input.accessibleClasses.find((entry) => entry.id === classroomId)?.name ?? null
     : null;
-  const teacherLoadThisWeek = week
-    ? week.days.reduce(
-        (count, day) => count + day.controls.filter((card) => card.isOwn).length,
-        0,
-      )
-    : 0;
+  const teacherLoadThisWeek = countOwnControlsForWeek({
+    items: input.items,
+    teacherId: input.teacherId,
+    accessibleClassroomIds: input.accessibleClasses.map((entry) => entry.id),
+    schoolYearId: input.schoolYearId,
+    includeUnscopedYearItems: input.includeUnscopedYearItems,
+    schoolWeekNumber: weekNumber,
+  });
 
   return {
     schoolYearId: input.schoolYearId,
@@ -264,6 +309,7 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
     mode,
     classroomId,
     classes: sortClasses(input.accessibleClasses),
+    years: input.years,
     summary: {
       controlCount: selectedItems.length,
       classCount: classIds.size,

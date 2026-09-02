@@ -820,7 +820,6 @@ button { color: inherit; }
   letter-spacing: .08em;
   text-transform: uppercase;
 }
-.control-planning-year strong { color: var(--navy); font-size: 14px; }
 .control-planning-select select {
   max-width: 280px;
   padding: 8px 10px;

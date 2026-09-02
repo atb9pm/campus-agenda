@@ -8,10 +8,13 @@ import { DEMO_CATALOG, TEACHER_DEMO_ID } from "../src/features/classes/index.ts"
 import { getMembershipsForTeacher } from "../src/features/classes/queries.ts";
 import {
   buildControlPlanningView,
+  countOwnControlsForWeek,
   formatControlPlanningYearLabel,
   formatControlTeacherName,
   getControlPlanning,
   isControlAgendaItem,
+  listAccessibleRuntimeClassroomsForTeacher,
+  listConsultablePlanningYears,
   resolveControlPlanningMode,
   selectControlItems,
   type BuildControlPlanningInput,
@@ -20,7 +23,9 @@ import {
 import { TEACHER_NAV_LABELS, TEACHER_NAV_SECTIONS } from "../src/features/teacher/index.ts";
 import { APP_VERSION } from "../src/lib/app-version.ts";
 import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
-import type { SchoolYearWithWeeks } from "../src/features/school-year/types.ts";
+import type { SchoolClassRecord } from "../src/features/school-catalog/types.ts";
+import type { AnnualCourse, TeacherCourseAssignment } from "../src/features/annual-courses/types.ts";
+import type { SchoolYearRecord, SchoolYearWithWeeks } from "../src/features/school-year/types.ts";
 
 const TEACHER_ID = TEACHER_DEMO_ID;
 const CLASS_2A = "classe-demo-tma-2a";
@@ -60,6 +65,7 @@ function planningInput(
     weeks: WEEKS,
     schoolYearId: YEAR_ID,
     schoolYearLabel: "2026-2027",
+    years: [{ id: YEAR_ID, label: "2026-2027", status: "active" }],
     classroomId: null,
     requestedMode: "mine",
     schoolWeekNumber: WEEK_12,
@@ -285,12 +291,13 @@ test("service — planning prêt pour la vue, erreurs de filtre", async () => {
 });
 
 test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de table controls", async () => {
-  const [panel, css, page, nav, route, agenda, agendaId, classrooms] = await Promise.all([
+  const [panel, css, page, nav, route, service, agenda, agendaId, classrooms] = await Promise.all([
     readFile(new URL("../web/app/components/control-planning-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../src/features/teacher/navigation.ts", import.meta.url), "utf8"),
     readFile(new URL("../web/app/api/teacher/controls/planning/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/control-planning/service.ts", import.meta.url), "utf8"),
     readFile(new URL("../web/app/api/agenda/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../web/app/api/agenda/[id]/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../web/app/api/teacher/classrooms/route.ts", import.meta.url), "utf8"),
@@ -303,6 +310,13 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
   assert.match(panel, /Toutes mes classes/);
   assert.match(panel, /Mes contrôles/);
   assert.match(panel, /Tous les contrôles de la classe/);
+  assert.match(panel, /Année scolaire/);
+  assert.match(panel, /data-control-year/);
+  assert.match(panel, /function selectYear/);
+  assert.match(panel, /setClassroomId\(null\)/);
+  assert.match(panel, /setMode\("mine"\)/);
+  assert.match(panel, /setWeek\(null\)/);
+  assert.match(panel, /schoolYearId/);
   assert.match(panel, /card\.classroomName/);
   assert.match(panel, /Aucun contrôle/);
   assert.match(panel, /Alertes de coordination/);
@@ -320,6 +334,8 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
   assert.match(route, /getControlPlanning/);
   assert.match(route, /withApiObservability\("\/api\/teacher\/controls\/planning"/);
   assert.doesNotMatch(route, /searchParams\.get\("teacherId"\)/);
+  assert.match(service, /schoolYearId: year\.id/);
+  assert.match(service, /isConsultablePlanningYear/);
   assert.doesNotMatch(route, /export const POST/);
   assert.doesNotMatch(route, /CREATE TABLE/);
 
@@ -330,3 +346,328 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
   assert.match(agendaId, /export async function DELETE/);
   assert.match(classrooms, /listAccessibleRuntimeClassroomsForTeacher/);
 });
+
+function yearRecord(
+  id: string,
+  label: string,
+  status: SchoolYearRecord["status"],
+  weeks = WEEKS,
+): SchoolYearWithWeeks {
+  const startsOn = `${label.slice(0, 4)}-08-17`;
+  return {
+    id,
+    label,
+    status,
+    startsOn,
+    endsOn: `${label.slice(5)}-07-02`,
+    sourceFilename: "seed",
+    importedAt: "2026-01-01T00:00:00.000Z",
+    activatedAt: status === "active" ? "2026-08-01T00:00:00.000Z" : null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    weeks,
+  };
+}
+
+function schoolClass(id: string, code: string, schoolYearId: string, archived = false): SchoolClassRecord {
+  return {
+    id,
+    code,
+    label: code,
+    sortOrder: 1,
+    isActive: !archived,
+    schoolYearId,
+    schoolYearLabel: schoolYearId === "year-2026" ? "2026-2027" : "2025-2026",
+    professionId: "prof-mma",
+    trainingYear: 1,
+    parallelCode: "A",
+    isArchived: archived,
+    archivedAt: archived ? "2026-08-01T00:00:00.000Z" : null,
+  };
+}
+
+function course(id: string, schoolYearId: string, classId: string): AnnualCourse {
+  return {
+    id,
+    schoolYearId,
+    classId,
+    contextId: "ctx-moteur",
+    isArchived: false,
+    archivedAt: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+}
+
+function assignment(id: string, annualCourseId: string, teacherId: string): TeacherCourseAssignment {
+  return {
+    id,
+    annualCourseId,
+    teacherId,
+    role: "PRIMARY",
+    validFrom: "2025-08-01T00:00:00.000Z",
+    validTo: null,
+    createdByAdminId: "admin-1",
+    createdAt: "2025-08-01T00:00:00.000Z",
+    endedAt: null,
+    overrideReason: null,
+    overrideByAdminId: null,
+  };
+}
+
+function testItem(input: {
+  id: number;
+  classroomId: string;
+  teacherId?: string;
+  title: string;
+  type?: PrototypeAgendaItem["type"];
+  schoolYearId?: string | null;
+  day?: number;
+}): PrototypeAgendaItem {
+  return {
+    id: input.id,
+    classroomId: input.classroomId,
+    subjectId: "subject-moteur",
+    authorTeacherId: input.teacherId ?? TEACHER_ID,
+    day: input.day ?? 0,
+    hour: 9,
+    weekOffset: 0,
+    schoolWeekNumber: WEEK_12,
+    type: input.type ?? "TEST",
+    title: input.title,
+    detail: "Contrôle",
+    schoolYearId: input.schoolYearId ?? null,
+  };
+}
+
+test("années consultables — active et archivées, jamais draft", () => {
+  const years = listConsultablePlanningYears([
+    yearRecord("year-draft", "2027-2028", "draft"),
+    yearRecord("year-2025", "2025-2026", "archived"),
+    yearRecord("year-2026", "2026-2027", "active"),
+  ]);
+  assert.deepEqual(
+    years.map((entry) => entry.id),
+    ["year-2026", "year-2025"],
+  );
+  assert.equal(years[0]?.status, "active");
+  assert.equal(
+    years.some((entry) => entry.id === "year-draft"),
+    false,
+  );
+});
+
+test("service — classes structurées filtrées par année, même code MMA1A jamais mélangé", async () => {
+  const active = yearRecord("year-2026", "2026-2027", "active");
+  const archived = yearRecord("year-2025", "2025-2026", "archived");
+  const draft = yearRecord("year-draft", "2027-2028", "draft");
+  const class2026 = schoolClass("sc-mma1a-2026", "MMA1A", "year-2026");
+  const class2025 = schoolClass("sc-mma1a-2025", "MMA1A", "year-2025", true);
+  const room2026 = { id: "rt-mma1a-2026", name: "MMA1A", schoolClassId: "sc-mma1a-2026" };
+  const room2025 = { id: "rt-mma1a-2025", name: "MMA1A", schoolClassId: "sc-mma1a-2025" };
+  const course2026 = course("ac-2026", "year-2026", class2026.id);
+  const course2025 = course("ac-2025", "year-2025", class2025.id);
+  const items: PrototypeAgendaItem[] = [
+    testItem({
+      id: 101,
+      classroomId: room2026.id,
+      title: "Contrôle 2026",
+      schoolYearId: "year-2026",
+    }),
+    testItem({
+      id: 102,
+      classroomId: room2025.id,
+      title: "Contrôle 2025",
+      schoolYearId: "year-2025",
+    }),
+    testItem({
+      id: 103,
+      classroomId: room2026.id,
+      title: "Devoir 2026",
+      type: "HOMEWORK",
+      schoolYearId: "year-2026",
+    }),
+  ];
+
+  const deps: ControlPlanningServiceDeps = {
+    agenda: {
+      listAgendaItems: async (classroomId: string) => items.filter((item) => item.classroomId === classroomId),
+      teacherCanAccessClassroom: async () => false,
+    },
+    adapters: {
+      listClassrooms: async () => [room2026, room2025],
+      listSubjects: async () => [{ id: "subject-moteur", name: "Moteur" }],
+    },
+    catalog: {
+      ensureSeeded: async () => undefined,
+      listClasses: async () => [class2026, class2025],
+    },
+    courses: {
+      listCourses: async () => [course2026, course2025],
+      listAssignments: async () => [
+        assignment("asg-2026", course2026.id, TEACHER_ID),
+        assignment("asg-2025", course2025.id, TEACHER_ID),
+      ],
+    },
+    years: {
+      listSchoolYears: async () => [active, archived, draft],
+      getActiveSchoolYear: async () => active,
+      getSchoolYearById: async (id: string) =>
+        [active, archived, draft].find((entry) => entry.id === id) ?? null,
+    },
+    teachers: {
+      listAccounts: async () => [{ id: TEACHER_ID, displayName: "François Martin", initials: "FM" }],
+    },
+  } as unknown as ControlPlanningServiceDeps;
+
+  const current = await getControlPlanning(deps, {
+    teacherId: TEACHER_ID,
+    schoolYearId: "year-2026",
+    week: WEEK_12,
+    todayIso: "2026-11-18",
+  });
+  assert.equal(current.ok, true);
+  if (!current.ok) return;
+  assert.equal(current.view.schoolYearId, "year-2026");
+  assert.deepEqual(
+    current.view.classes.map((entry) => entry.id),
+    ["rt-mma1a-2026"],
+  );
+  assert.equal(current.view.classes.some((entry) => entry.id === "rt-mma1a-2025"), false);
+  assert.deepEqual(
+    cardsFromView(current.view).map((card) => card.title),
+    ["Contrôle 2026"],
+  );
+  assert.equal(cardsFromView(current.view).some((card) => card.title === "Contrôle 2025"), false);
+  assert.equal(cardsFromView(current.view).some((card) => card.title === "Devoir 2026"), false);
+  assert.deepEqual(
+    current.view.years.map((entry) => entry.id),
+    ["year-2026", "year-2025"],
+  );
+
+  const previous = await getControlPlanning(deps, {
+    teacherId: TEACHER_ID,
+    schoolYearId: "year-2025",
+    week: WEEK_12,
+    todayIso: "2026-11-18",
+  });
+  assert.equal(previous.ok, true);
+  if (!previous.ok) return;
+  assert.equal(previous.view.schoolYearId, "year-2025");
+  assert.deepEqual(
+    previous.view.classes.map((entry) => entry.id),
+    ["rt-mma1a-2025"],
+  );
+  assert.deepEqual(
+    cardsFromView(previous.view).map((card) => card.title),
+    ["Contrôle 2025"],
+  );
+
+  const otherYearClass = await getControlPlanning(deps, {
+    teacherId: TEACHER_ID,
+    schoolYearId: "year-2026",
+    classroomId: room2025.id,
+  });
+  assert.equal(otherYearClass.ok, false);
+  if (!otherYearClass.ok) assert.equal(otherYearClass.status, 403);
+
+  const draftYear = await getControlPlanning(deps, {
+    teacherId: TEACHER_ID,
+    schoolYearId: "year-draft",
+  });
+  assert.equal(draftYear.ok, false);
+  if (!draftYear.ok) assert.equal(draftYear.status, 404);
+
+  const accessible2026 = await listAccessibleRuntimeClassroomsForTeacher({
+    teacherId: TEACHER_ID,
+    classrooms: [room2026, room2025],
+    classes: [class2026, class2025],
+    courses: [course2026, course2025],
+    assignments: [
+      assignment("asg-2026", course2026.id, TEACHER_ID),
+      assignment("asg-2025", course2025.id, TEACHER_ID),
+    ],
+    years: [active, archived],
+    schoolYearId: "year-2026",
+    teacherCanAccessClassroom: async () => false,
+  });
+  assert.deepEqual(
+    accessible2026.map((entry) => entry.id),
+    ["rt-mma1a-2026"],
+  );
+});
+
+test("projection — charge enseignant globale indépendante du filtre classe", () => {
+  const classes = [
+    { id: "c-ma2a", name: "MA2A" },
+    { id: "c-ma2b", name: "MA2B" },
+    { id: "c-mma1a", name: "MMA1A" },
+  ];
+  const items: PrototypeAgendaItem[] = [
+    testItem({ id: 1, classroomId: "c-ma2a", title: "Contrôle MA2A" }),
+    testItem({ id: 2, classroomId: "c-ma2b", title: "Contrôle MA2B" }),
+    testItem({ id: 3, classroomId: "c-mma1a", title: "Contrôle MMA1A" }),
+    testItem({
+      id: 4,
+      classroomId: "c-ma2a",
+      teacherId: "teacher-demo-dupont",
+      title: "Contrôle collègue",
+    }),
+    testItem({
+      id: 5,
+      classroomId: "c-ma2a",
+      title: "Info MA2A",
+      type: "INFORMATION",
+    }),
+  ];
+  const catalog = {
+    classrooms: classes,
+    subjects: [{ id: "subject-moteur", name: "Moteur" }],
+    teachers: [
+      { id: TEACHER_ID, displayName: "François Martin", initials: "FM" },
+      { id: "teacher-demo-dupont", displayName: "Mme Dupont", initials: "MD" },
+    ],
+  };
+  const base = planningInput({
+    items,
+    catalog,
+    accessibleClasses: classes,
+  });
+
+  const allMine = buildControlPlanningView(base);
+  assert.equal(allMine.teacherLoadThisWeek, 3);
+  assert.equal(
+    countOwnControlsForWeek({
+      items,
+      teacherId: TEACHER_ID,
+      accessibleClassroomIds: classes.map((entry) => entry.id),
+      schoolYearId: YEAR_ID,
+      includeUnscopedYearItems: true,
+      schoolWeekNumber: WEEK_12,
+    }),
+    3,
+  );
+
+  const mineClass = buildControlPlanningView({
+    ...base,
+    classroomId: "c-ma2a",
+    requestedMode: "mine",
+  });
+  assert.deepEqual(
+    cardsFromView(mineClass).map((card) => card.title),
+    ["Contrôle MA2A"],
+  );
+  assert.equal(mineClass.teacherLoadThisWeek, 3);
+
+  const classAll = buildControlPlanningView({
+    ...base,
+    classroomId: "c-ma2a",
+    requestedMode: "class-all",
+  });
+  assert.deepEqual(
+    cardsFromView(classAll).map((card) => card.title).sort(),
+    ["Contrôle MA2A", "Contrôle collègue"],
+  );
+  assert.equal(classAll.teacherLoadThisWeek, 3);
+  assert.equal(classAll.summary.controlCount, 2);
+});
+

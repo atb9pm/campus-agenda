@@ -49,6 +49,7 @@ function ControlCard({ card }: { card: ControlPlanningCard }) {
 }
 
 export function ControlPlanningPanel() {
+  const [schoolYearId, setSchoolYearId] = useState<string | null>(null);
   const [classroomId, setClassroomId] = useState<string | null>(null);
   const [mode, setMode] = useState<ControlPlanningMode>("mine");
   const [week, setWeek] = useState<number | null>(null);
@@ -66,6 +67,7 @@ export function ControlPlanningPanel() {
       try {
         const next = await fetchTeacherControlPlanningApi(
           {
+            schoolYearId,
             classroomId,
             mode: resolvedMode,
             week,
@@ -84,7 +86,7 @@ export function ControlPlanningPanel() {
 
     void load();
     return () => controller.abort();
-  }, [classroomId, mode, week]);
+  }, [schoolYearId, classroomId, mode, week]);
 
   const yearLabel = view ? formatControlPlanningYearLabel(view.schoolYearLabel) : null;
   const coordinationAlerts = useMemo(
@@ -95,6 +97,13 @@ export function ControlPlanningPanel() {
     () => view?.alerts.find((alert: ControlPlanningAlert) => alert.kind === "teacher-load") ?? null,
     [view],
   );
+
+  function selectYear(nextId: string) {
+    setSchoolYearId(nextId);
+    setClassroomId(null);
+    setMode("mine");
+    setWeek(null);
+  }
 
   function selectClassroom(nextId: string | null) {
     setClassroomId(nextId);
@@ -123,9 +132,21 @@ export function ControlPlanningPanel() {
       </div>
 
       <div className="control-planning-filters" role="region" aria-label="Filtres des contrôles">
-        <label className="control-planning-year">
+        <label className="control-planning-select control-planning-year">
           <span>Année scolaire</span>
-          <strong>{yearLabel ?? "—"}</strong>
+          <select
+            data-control-year=""
+            value={schoolYearId ?? view?.schoolYearId ?? ""}
+            onChange={(event) => selectYear(event.target.value)}
+            disabled={!view?.years.length}
+          >
+            {(view?.years ?? []).map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {formatControlPlanningYearLabel(entry.label)}
+                {entry.status === "active" ? " (active)" : ""}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label className="control-planning-select">

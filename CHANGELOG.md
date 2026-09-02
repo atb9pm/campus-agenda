@@ -11,8 +11,10 @@ Module enseignant dédié aux publications Agenda de type TEST. Vue unique, par 
 - Nouveau module enseignant de planification des contrôles.
 - Vue hebdomadaire par jours (lundi à vendredi), sans axe horaire.
 - Filtres par classes attribuées (« Toutes mes classes » ou une classe précise).
+- Filtre d’année scolaire (année active par défaut, années archivées consultables, jamais draft).
+- Classes structurées filtrées par `schoolClass.schoolYearId` de l’année affichée.
 - Mode « Mes contrôles » / « Tous les contrôles de la classe ».
-- Alertes simples de coordination et charge enseignant de la semaine.
+- Alertes simples de coordination ; charge enseignant globale de la semaine (toutes classes).
 - Affichage clair de la classe sur chaque contrôle.
 - Route `GET /api/teacher/controls/planning` (projection prête pour la vue).
 
