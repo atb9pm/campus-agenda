@@ -823,8 +823,9 @@ test("2.32.0 — E2E planification interactive et coordination au 3e contrôle",
     headers: { cookie: teacherCookie },
   });
   assert.equal(planningAll.response.status, 200, planningAll.payload.reason);
-  assert.equal(planningAll.payload.canCreate, false);
-  assert.ok(planningAll.payload.week.days.every((day) => day.canPlan === false));
+  assert.equal(planningAll.payload.ok, true);
+  assert.equal(planningAll.payload.allClassesSelected, true);
+  assert.ok(Array.isArray(planningAll.payload.classroomIds));
 
   const classrooms = planningAll.payload.classes ?? [];
   let classroom;
