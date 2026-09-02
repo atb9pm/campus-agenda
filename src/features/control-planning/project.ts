@@ -13,11 +13,12 @@ import type {
   ControlPlanningYearOption,
 } from "./types.ts";
 import { CONTROL_PLANNING_MODES } from "./types.ts";
-import { confirmationRequiredForExistingTests } from "../evaluations/coordination.ts";
 import {
   emptyControlPlanningWeekMessage,
   listVisibleControlPlanningDayIndexes,
 } from "./visible-days.ts";
+import { splitControlPlanningPeriods } from "./periods.ts";
+import { buildControlPlanningSemesterSummary, buildControlPlanningSemesterView } from "./semester.ts";
 
 export function isControlAgendaItem(item: Pick<PrototypeAgendaItem, "type">): boolean {
   return item.type === "TEST";
@@ -26,8 +27,9 @@ export function isControlAgendaItem(item: Pick<PrototypeAgendaItem, "type">): bo
 export function resolveControlPlanningMode(
   classroomId: string | null,
   requested: string | null | undefined,
+  selectedClassroomCount = classroomId ? 1 : 0,
 ): ControlPlanningMode {
-  if (!classroomId) return "mine";
+  if (selectedClassroomCount <= 0) return "mine";
   return requested === "class-all" ? "class-all" : "mine";
 }
 
@@ -109,20 +111,51 @@ export function selectControlItems(options: {
   teacherId: string;
   accessibleClassroomIds: readonly string[];
   classroomId: string | null;
+  classroomIds?: readonly string[] | null;
   mode: ControlPlanningMode;
   schoolYearId: string;
   includeUnscopedYearItems: boolean;
 }): PrototypeAgendaItem[] {
   const accessible = new Set(options.accessibleClassroomIds);
-  const classroomId = options.classroomId;
+  const selected = resolveItemClassroomFilter(options.classroomIds, options.classroomId);
   return options.items.filter((item) => {
     if (!isControlAgendaItem(item)) return false;
     if (!accessible.has(item.classroomId)) return false;
-    if (classroomId && item.classroomId !== classroomId) return false;
+    if (selected && !selected.has(item.classroomId)) return false;
     if (!itemBelongsToSchoolYear(item, options.schoolYearId, options.includeUnscopedYearItems)) return false;
     if (options.mode === "mine" && item.authorTeacherId !== options.teacherId) return false;
     return true;
   });
+}
+
+function resolveItemClassroomFilter(
+  classroomIds: readonly string[] | null | undefined,
+  classroomId: string | null,
+): Set<string> | null {
+  if (classroomIds && classroomIds.length > 0) return new Set(classroomIds);
+  if (classroomId) return new Set([classroomId]);
+  return null;
+}
+
+export function resolveSelectedClassroomIds(input: {
+  accessibleClasses: readonly ControlPlanningClass[];
+  classroomId: string | null;
+  classroomIds?: readonly string[] | null;
+}): { selectedIds: string[]; allSelected: boolean; classroomId: string | null } {
+  const accessible = input.accessibleClasses.map((entry) => entry.id);
+  const accessibleSet = new Set(accessible);
+  let selectedIds: string[];
+  if (input.classroomIds && input.classroomIds.length > 0) {
+    selectedIds = [...new Set(input.classroomIds.filter((id) => accessibleSet.has(id)))];
+  } else if (input.classroomId && accessibleSet.has(input.classroomId)) {
+    selectedIds = [input.classroomId];
+  } else {
+    selectedIds = accessible;
+  }
+  const allSelected =
+    selectedIds.length === accessible.length && accessible.every((id) => selectedIds.includes(id));
+  const classroomId = !allSelected && selectedIds.length === 1 ? selectedIds[0]! : null;
+  return { selectedIds, allSelected, classroomId };
 }
 
 export function resolvePlanningWeekNumber(
@@ -179,6 +212,9 @@ export function projectControlCard(
     schoolWeekNumber: item.schoolWeekNumber,
     dayIndex: item.day,
     date: options.date,
+    annualCourseId: item.annualCourseId?.trim() || null,
+    courseSessionKey: item.courseSessionKey?.trim() || null,
+    courseSessionDate: item.courseSessionDate?.trim() || options.date,
   };
 }
 
@@ -259,16 +295,16 @@ export function buildControlPlanningAlerts(options: {
 }
 
 export function buildControlPlanningView(input: BuildControlPlanningInput): ControlPlanningView {
-  const classroomId =
-    input.classroomId && input.accessibleClasses.some((entry) => entry.id === input.classroomId)
-      ? input.classroomId
-      : null;
-  const mode = resolveControlPlanningMode(classroomId, input.requestedMode);
+  const selection = resolveSelectedClassroomIds(input);
+  const classroomId = selection.classroomId;
+  const selectedIds = selection.selectedIds;
+  const mode = resolveControlPlanningMode(classroomId, input.requestedMode, selectedIds.length);
   const selectedItems = selectControlItems({
     items: input.items,
     teacherId: input.teacherId,
     accessibleClassroomIds: input.accessibleClasses.map((entry) => entry.id),
     classroomId,
+    classroomIds: selectedIds,
     mode,
     schoolYearId: input.schoolYearId,
     includeUnscopedYearItems: input.includeUnscopedYearItems,
@@ -278,6 +314,12 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
   const existingControlDayIndexes = selectedItems
     .filter((item) => weekNumber !== null && item.schoolWeekNumber === weekNumber)
     .map((item) => item.day);
+  const selectedSchoolClassIds =
+    input.selectedSchoolClassIds && input.selectedSchoolClassIds.length > 0
+      ? [...input.selectedSchoolClassIds]
+      : input.selectedSchoolClassId
+        ? [input.selectedSchoolClassId]
+        : [];
   const visibleDayIndexes =
     weekNumber === null
       ? []
@@ -289,17 +331,15 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
           sessions: input.sessions ?? [],
           assignments: input.assignments ?? [],
           selectedSchoolClassId: input.selectedSchoolClassId ?? null,
+          selectedSchoolClassIds,
           existingControlDayIndexes,
         });
   const cards = selectedItems.map((item) => {
-    const date =
-      weekNumber !== null
-        ? isoDateForSchoolWeekDay(
-            input.weeks.filter((week) => week.number === item.schoolWeekNumber),
-            item.schoolWeekNumber,
-            item.day,
-          )
-        : null;
+    const date = isoDateForSchoolWeekDay(
+      input.weeks.filter((week) => week.number === item.schoolWeekNumber),
+      item.schoolWeekNumber,
+      item.day,
+    );
     return projectControlCard(item, {
       teacherId: input.teacherId,
       classrooms: input.catalog.classrooms,
@@ -320,9 +360,12 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
         });
 
   const classIds = new Set(selectedItems.map((item) => item.classroomId));
-  const classroomName = classroomId
-    ? input.accessibleClasses.find((entry) => entry.id === classroomId)?.name ?? null
-    : null;
+  const classroomName =
+    classroomId
+      ? input.accessibleClasses.find((entry) => entry.id === classroomId)?.name ?? null
+      : selectedIds.length === 1
+        ? input.accessibleClasses.find((entry) => entry.id === selectedIds[0])?.name ?? null
+        : null;
   const teacherWeekClassroomIds = input.teacherWeekClassroomIds
     ? [...input.teacherWeekClassroomIds]
     : input.accessibleClasses.map((entry) => entry.id);
@@ -365,12 +408,13 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
     })
     .sort((left, right) => left.dayIndex - right.dayIndex || sortCards(left, right));
 
-  const classAllItems = classroomId
+  const classAllItems = selectedIds.length
     ? selectControlItems({
         items: input.items,
         teacherId: input.teacherId,
         accessibleClassroomIds: input.accessibleClasses.map((entry) => entry.id),
-        classroomId,
+        classroomId: null,
+        classroomIds: selectedIds,
         mode: "class-all",
         schoolYearId: input.schoolYearId,
         includeUnscopedYearItems: input.includeUnscopedYearItems,
@@ -382,20 +426,19 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
       classrooms: input.catalog.classrooms,
       subjects: input.catalog.subjects,
       teachers: input.catalog.teachers,
-      date:
-        weekNumber !== null
-          ? isoDateForSchoolWeekDay(
-              input.weeks.filter((entry) => entry.number === item.schoolWeekNumber),
-              item.schoolWeekNumber,
-              item.day,
-            )
-          : null,
+      date: isoDateForSchoolWeekDay(
+        input.weeks.filter((entry) => entry.number === item.schoolWeekNumber),
+        item.schoolWeekNumber,
+        item.day,
+      ),
     }),
   );
 
   if (week) {
     for (const day of week.days) {
-      const dayOptions = input.placementOptions.filter((option) => option.dayIndex === day.dayIndex);
+      const dayOptions = input.placementOptions.filter(
+        (option) => option.dayIndex === day.dayIndex && option.schoolWeekNumber === week.number,
+      );
       const dayClassControls = classDayCards
         .filter((card) => card.schoolWeekNumber === week.number && card.dayIndex === day.dayIndex)
         .slice()
@@ -405,9 +448,31 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
       day.noCourseHint =
         input.canCreate && dayOptions.length === 0 ? "Aucun de vos cours ce jour-là" : null;
       day.classDayControls = dayClassControls;
-      day.confirmationRequired = confirmationRequiredForExistingTests(dayClassControls.length);
+      day.confirmationRequired = false;
     }
   }
+
+  const layout = input.layout === "week" ? "week" : "semester";
+  const periods = splitControlPlanningPeriods(input.weeks);
+  const periodId = input.periodId === "semester-2" ? "semester-2" : "semester-1";
+  const period = periods.find((entry) => entry.id === periodId) ?? periods[0]!;
+  const semester = buildControlPlanningSemesterView({
+    period,
+    weeks: input.weeks,
+    cards,
+    classDayCards,
+    placementOptions: input.placementOptions,
+    sessions: input.sessions ?? [],
+    assignments: input.assignments ?? [],
+    teacherId: input.teacherId,
+    mode,
+    selectedSchoolClassIds,
+    canCreate: input.canCreate,
+  });
+  const semesterSummary = buildControlPlanningSemesterSummary({
+    semester,
+    selectedClassCount: selectedIds.length,
+  });
 
   return {
     schoolYearId: input.schoolYearId,
@@ -415,12 +480,18 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
     yearStatus: input.yearStatus,
     mode,
     classroomId,
+    classroomIds: selectedIds,
+    allClassesSelected: selection.allSelected,
+    layout,
+    periodId,
     classes: sortClasses(input.accessibleClasses),
     years: input.years,
     summary: {
       controlCount: selectedItems.length,
       classCount: classIds.size,
     },
+    semesterSummary,
+    semester,
     week,
     weeks: input.weeks.map((entry) => ({ number: entry.number, kind: entry.kind })),
     alerts: week
@@ -439,7 +510,8 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
         ? emptyControlPlanningWeekMessage({
             classroomId,
             mode,
-            structured: Boolean(input.selectedSchoolClassId) || classroomId === null,
+            structured: selectedSchoolClassIds.length > 0 || classroomId === null,
+            selectedCount: selectedIds.length,
           })
         : null,
   };

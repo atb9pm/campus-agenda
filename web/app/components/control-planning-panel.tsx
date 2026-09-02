@@ -3,12 +3,18 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import {
+  classDayControlsForPlacementOption,
+  confirmationRequiredForPlacementOption,
   formatControlPlanningYearLabel,
+  toggleControlPlanningClassroomSelection,
   type ControlPlacementOption,
   type ControlPlanningAlert,
   type ControlPlanningCard,
   type ControlPlanningDay,
+  type ControlPlanningLayout,
   type ControlPlanningMode,
+  type ControlPlanningPeriodId,
+  type ControlPlanningSemesterDay,
   type ControlPlanningView,
 } from "@campus/features/control-planning";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
@@ -34,34 +40,126 @@ function formatWeekdayDate(weekdayLabel: string, iso: string | null): string {
   return day ? `${weekdayLabel} ${day}` : weekdayLabel;
 }
 
+function formatCompactDay(iso: string | null): string {
+  if (!iso) return "";
+  const [year, month, day] = iso.split("-").map(Number);
+  if (!year || !month || !day) return iso;
+  return new Intl.DateTimeFormat("fr-CH", { day: "numeric", month: "short" }).format(
+    new Date(year, month - 1, day),
+  );
+}
+
 function summaryLabel(view: ControlPlanningView): string {
+  const source = view.layout === "semester" && view.semesterSummary ? view.semesterSummary : view.summary;
   const controls =
-    view.summary.controlCount === 1
-      ? "1 contrôle planifié"
-      : `${view.summary.controlCount} contrôles planifiés`;
+    source.controlCount === 1 ? "1 contrôle planifié" : `${source.controlCount} contrôles planifiés`;
   const classes =
-    view.summary.classCount === 1
-      ? "1 classe concernée"
-      : `${view.summary.classCount} classes concernées`;
+    view.classroomIds.length === 1
+      ? "1 classe sélectionnée"
+      : `${view.classroomIds.length} classes sélectionnées`;
+  if (view.layout === "semester" && view.semesterSummary) {
+    const weeks =
+      view.semesterSummary.weekCount === 1
+        ? "1 semaine concernée"
+        : `${view.semesterSummary.weekCount} semaines concernées`;
+    const busy =
+      view.semesterSummary.busyDayCount === 1
+        ? "1 journée avec ≥ 2 contrôles"
+        : `${view.semesterSummary.busyDayCount} journées avec ≥ 2 contrôles`;
+    return `${view.semester?.label ?? "Semestre"} · ${controls} · ${classes} · ${weeks} · ${busy}`;
+  }
   return `${controls} · ${classes}`;
 }
 
 function placementCaption(option: ControlPlacementOption): string {
-  return option.sessionLabel ? `${option.branchLabel} · ${option.sessionLabel}` : option.branchLabel;
+  const branch = option.sessionLabel ? `${option.branchLabel} · ${option.sessionLabel}` : option.branchLabel;
+  return option.classroomName ? `${option.classroomName} · ${branch}` : branch;
 }
 
-function ControlCard({ card }: { card: ControlPlanningCard }) {
+function placementHint(option: ControlPlacementOption): string {
+  return option.classroomName
+    ? `+ ${option.classroomName} · ${option.branchLabel}`
+    : `+ ${option.branchLabel}`;
+}
+
+function classToneIndex(classroomId: string, classroomIds: readonly string[]): number {
+  const index = classroomIds.indexOf(classroomId);
+  return index < 0 ? 0 : index % 6;
+}
+
+function toPlanningDay(day: ControlPlanningSemesterDay): ControlPlanningDay {
+  return {
+    dayIndex: day.dayIndex,
+    weekdayLabel: day.weekdayLabel,
+    date: day.date,
+    controls: day.controls,
+    placementOptions: day.placementOptions,
+    canPlan: day.canPlan,
+    noCourseHint: day.hasCourse ? null : "Aucun cours",
+    classDayControls: day.classDayControls,
+    confirmationRequired: day.confirmationRequired,
+  };
+}
+
+function coordinationCardsFromSummary(
+  entries: ControlCoordinationSummary["classDayControls"],
+): ControlPlanningCard[] {
+  return entries.map((entry) => ({
+    agendaItemId: entry.agendaItemId,
+    classroomId: entry.classroomId,
+    classroomName: entry.classroomName,
+    subjectId: "",
+    branchLabel: entry.branchLabel,
+    title: entry.title,
+    teacherId: "",
+    teacherName: entry.teacherName,
+    isOwn: false,
+    schoolWeekNumber: entry.schoolWeekNumber,
+    dayIndex: entry.dayIndex,
+    date: entry.date,
+    annualCourseId: null,
+    courseSessionKey: null,
+    courseSessionDate: entry.date,
+  }));
+}
+
+function ControlCard({
+  card,
+  compact = false,
+  showTeacher = true,
+  toneIndex = 0,
+}: {
+  card: ControlPlanningCard;
+  compact?: boolean;
+  showTeacher?: boolean;
+  toneIndex?: number;
+}) {
+  const title = [card.classroomName, card.branchLabel, card.title, card.teacherName].filter(Boolean).join(" · ");
   return (
     <article
-      className={card.isOwn ? "control-planning-card" : "control-planning-card is-peer"}
+      className={
+        compact
+          ? card.isOwn
+            ? "control-planning-card is-compact"
+            : "control-planning-card is-compact is-peer"
+          : card.isOwn
+            ? "control-planning-card"
+            : "control-planning-card is-peer"
+      }
       data-control-card=""
       data-classroom-name={card.classroomName}
       data-own={card.isOwn ? "true" : "false"}
+      data-class-tone={toneIndex}
+      data-agenda-item-id={card.agendaItemId}
+      data-annual-course-id={card.annualCourseId ?? ""}
+      data-course-session-key={card.courseSessionKey ?? ""}
+      data-course-session-date={card.courseSessionDate ?? card.date ?? ""}
+      title={title}
     >
       <span className="control-planning-class-badge">{card.classroomName}</span>
       <span className="control-planning-branch">{card.branchLabel}</span>
       <strong>{card.title}</strong>
-      <span className="control-planning-teacher">{card.teacherName}</span>
+      {showTeacher ? <span className="control-planning-teacher">{card.teacherName}</span> : null}
     </article>
   );
 }
@@ -233,9 +331,11 @@ export function ControlPlanningPanel({
   onPublicationCreated?: (item: PrototypeAgendaItem) => void;
 }) {
   const [schoolYearId, setSchoolYearId] = useState<string | null>(null);
-  const [classroomId, setClassroomId] = useState<string | null>(null);
+  const [classroomIds, setClassroomIds] = useState<string[] | null>(null);
   const [mode, setMode] = useState<ControlPlanningMode>("mine");
   const [week, setWeek] = useState<number | null>(null);
+  const [layout, setLayout] = useState<ControlPlanningLayout>("semester");
+  const [period, setPeriod] = useState<ControlPlanningPeriodId | null>(null);
   const [view, setView] = useState<ControlPlanningView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -251,7 +351,6 @@ export function ControlPlanningPanel({
 
   useEffect(() => {
     const controller = new AbortController();
-    const resolvedMode: ControlPlanningMode = classroomId ? mode : "mine";
 
     async function load() {
       setLoading(true);
@@ -260,14 +359,17 @@ export function ControlPlanningPanel({
         const next = await fetchTeacherControlPlanningApi(
           {
             schoolYearId,
-            classroomId,
-            mode: resolvedMode,
+            classroomIds,
+            mode,
             week,
+            view: layout,
+            period,
           },
           controller.signal,
         );
         if (controller.signal.aborted) return;
         setView(next);
+        setPeriod((current) => current ?? next.periodId);
       } catch (loadError) {
         if (controller.signal.aborted) return;
         setError(loadError instanceof Error ? loadError.message : "Chargement impossible.");
@@ -278,7 +380,7 @@ export function ControlPlanningPanel({
 
     void load();
     return () => controller.abort();
-  }, [schoolYearId, classroomId, mode, week, reloadToken]);
+  }, [schoolYearId, classroomIds, mode, week, layout, period, reloadToken]);
 
   const yearLabel = view ? formatControlPlanningYearLabel(view.schoolYearLabel) : null;
   const coordinationAlerts = useMemo(
@@ -292,21 +394,38 @@ export function ControlPlanningPanel({
 
   function selectYear(nextId: string) {
     setSchoolYearId(nextId);
-    setClassroomId(null);
+    setClassroomIds(null);
     setMode("mine");
     setWeek(null);
+    setPeriod(null);
+    setLayout("semester");
     closeModal();
   }
 
-  function selectClassroom(nextId: string | null) {
-    setClassroomId(nextId);
-    if (!nextId) setMode("mine");
+  function selectAllClasses() {
+    setClassroomIds(null);
+    closeModal();
+  }
+
+  function toggleClassroom(classroomId: string) {
+    const assignedIds = (view?.classes ?? []).map((entry) => entry.id);
+    setClassroomIds((current) => toggleControlPlanningClassroomSelection(current, assignedIds, classroomId));
     closeModal();
   }
 
   function selectMode(next: ControlPlanningMode) {
-    if (next === "class-all" && !classroomId) return;
+    if (next === "class-all" && !(view?.classes.length)) return;
     setMode(next);
+  }
+
+  function selectLayout(next: ControlPlanningLayout) {
+    setLayout(next);
+    closeModal();
+  }
+
+  function selectPeriod(next: ControlPlanningPeriodId) {
+    setPeriod(next);
+    closeModal();
   }
 
   function closeModal() {
@@ -384,11 +503,23 @@ export function ControlPlanningPanel({
   const weekIndex = currentWeekNumber == null ? -1 : weekNumbers.indexOf(currentWeekNumber);
   const previousWeek = weekIndex > 0 ? weekNumbers[weekIndex - 1]! : null;
   const nextWeek = weekIndex >= 0 && weekIndex < weekNumbers.length - 1 ? weekNumbers[weekIndex + 1]! : null;
-  const classAllEnabled = Boolean(classroomId);
-  const classroomName =
-    (view?.classroomId && view.classes.find((entry) => entry.id === view.classroomId)?.name) || "Classe";
-  const modalConfirmation =
-    Boolean(serverCoordination?.confirmationRequired) || Boolean(modalDay?.confirmationRequired);
+  const classAllEnabled = Boolean(view?.classes.length);
+  const selectedCount = classroomIds?.length ?? view?.classes.length ?? 0;
+  const allClassesSelected = classroomIds === null || Boolean(view?.allClassesSelected);
+  const classAllLabel =
+    selectedCount > 1 ? "Tous les contrôles des classes" : "Tous les contrôles de la classe";
+  const modalClassroomName =
+    modalOption?.classroomName ||
+    (view?.classes.find((entry) => entry.id === modalOption?.classroomId)?.name) ||
+    "Classe";
+  const targetClassDayControls =
+    modalDay && modalOption
+      ? classDayControlsForPlacementOption(modalDay.classDayControls, modalOption)
+      : [];
+  const modalConfirmation = serverCoordination
+    ? Boolean(serverCoordination.confirmationRequired)
+    : Boolean(modalOption && confirmationRequiredForPlacementOption(modalDay?.classDayControls ?? [], modalOption));
+  const assignedIds = view?.classes.map((entry) => entry.id) ?? [];
 
   return (
     <section className="teacher-workspace control-planning" aria-label="Contrôles" data-control-planning="">
@@ -417,46 +548,83 @@ export function ControlPlanningPanel({
           </select>
         </label>
 
-        <label className="control-planning-select">
-          <span>Classe</span>
-          <select
-            value={classroomId ?? ""}
-            onChange={(event) => selectClassroom(event.target.value || null)}
+        <div className="control-planning-modes" role="group" aria-label="Vue">
+          <button
+            type="button"
+            className={layout === "semester" ? "is-active" : ""}
+            aria-pressed={layout === "semester"}
+            data-control-layout="semester"
+            onClick={() => selectLayout("semester")}
           >
-            <option value="">Toutes mes classes</option>
-            {(view?.classes ?? []).map((entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            Semestre
+          </button>
+          <button
+            type="button"
+            className={layout === "week" ? "is-active" : ""}
+            aria-pressed={layout === "week"}
+            data-control-layout="week"
+            onClick={() => selectLayout("week")}
+          >
+            Semaine
+          </button>
+        </div>
+
+        {layout === "semester" ? (
+          <div className="control-planning-modes" role="group" aria-label="Semestre">
+            <button
+              type="button"
+              className={(period ?? view?.periodId) === "semester-1" ? "is-active" : ""}
+              aria-pressed={(period ?? view?.periodId) === "semester-1"}
+              data-control-period="semester-1"
+              onClick={() => selectPeriod("semester-1")}
+            >
+              Semestre 1
+            </button>
+            <button
+              type="button"
+              className={(period ?? view?.periodId) === "semester-2" ? "is-active" : ""}
+              aria-pressed={(period ?? view?.periodId) === "semester-2"}
+              data-control-period="semester-2"
+              onClick={() => selectPeriod("semester-2")}
+            >
+              Semestre 2
+            </button>
+          </div>
+        ) : null}
 
         <div className="control-planning-chips" role="group" aria-label="Classes attribuées">
           <button
             type="button"
-            className={!classroomId ? "is-active" : ""}
-            onClick={() => selectClassroom(null)}
+            className={allClassesSelected ? "is-active" : ""}
+            aria-pressed={allClassesSelected}
+            data-control-chip="all"
+            onClick={() => selectAllClasses()}
           >
             Toutes mes classes
           </button>
-          {(view?.classes ?? []).map((entry) => (
-            <button
-              key={entry.id}
-              type="button"
-              className={classroomId === entry.id ? "is-active" : ""}
-              onClick={() => selectClassroom(entry.id)}
-            >
-              {entry.name}
-            </button>
-          ))}
+          {(view?.classes ?? []).map((entry) => {
+            const pressed = allClassesSelected || Boolean(classroomIds?.includes(entry.id));
+            return (
+              <button
+                key={entry.id}
+                type="button"
+                className={pressed ? "is-active" : ""}
+                aria-pressed={pressed}
+                data-control-chip={entry.id}
+                data-class-tone={classToneIndex(entry.id, assignedIds)}
+                onClick={() => toggleClassroom(entry.id)}
+              >
+                {entry.name}
+              </button>
+            );
+          })}
         </div>
 
         <div className="control-planning-modes" role="group" aria-label="Mode d’affichage">
           <button
             type="button"
-            className={mode === "mine" || !classroomId ? "is-active" : ""}
-            aria-pressed={mode === "mine" || !classroomId}
+            className={mode === "mine" ? "is-active" : ""}
+            aria-pressed={mode === "mine"}
             onClick={() => selectMode("mine")}
           >
             Mes contrôles
@@ -468,12 +636,12 @@ export function ControlPlanningPanel({
             disabled={!classAllEnabled}
             title={
               classAllEnabled
-                ? "Afficher tous les contrôles de la classe, y compris ceux des collègues"
-                : "Sélectionnez une classe pour voir tous ses contrôles"
+                ? "Afficher tous les contrôles des classes sélectionnées, y compris ceux des collègues"
+                : "Aucune classe attribuée via l’horaire structuré"
             }
             onClick={() => selectMode("class-all")}
           >
-            Tous les contrôles de la classe
+            {classAllLabel}
           </button>
         </div>
         {view?.guidedPlanningReason ? (
@@ -485,7 +653,7 @@ export function ControlPlanningPanel({
         <p className="ma-semaine-empty control-planning-error">{error}</p>
       ) : loading && !view ? (
         <p className="ma-semaine-empty">Chargement du planning des contrôles…</p>
-      ) : view?.week ? (
+      ) : view?.layout === "week" && view.week ? (
         <div className="control-planning-body">
           <div className="control-planning-main">
             <div className="control-planning-week-nav">
@@ -532,7 +700,11 @@ export function ControlPlanningPanel({
                     <ul>
                       {day.controls.map((card) => (
                         <li key={card.agendaItemId}>
-                          <ControlCard card={card} />
+                          <ControlCard
+                            card={card}
+                            showTeacher={mode === "class-all" || !card.isOwn}
+                            toneIndex={classToneIndex(card.classroomId, assignedIds)}
+                          />
                         </li>
                       ))}
                     </ul>
@@ -582,6 +754,94 @@ export function ControlPlanningPanel({
             </section>
           </aside>
         </div>
+      ) : view?.semester ? (
+        <div
+          className="control-planning-semester-wrap"
+          data-control-semester=""
+          style={{ "--control-day-count": String(view.semester.visibleDayIndexes.length) } as CSSProperties}
+        >
+          <table className="control-planning-semester">
+            <thead>
+              <tr>
+                <th scope="col" className="control-planning-semester-week">
+                  Semaine
+                </th>
+                {view.semester.visibleDayIndexes.map((dayIndex) => (
+                  <th key={dayIndex} scope="col">
+                    {SCHOOL_WEEKDAY_LABELS[dayIndex] ?? `Jour ${dayIndex + 1}`}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {view.semester.weeks.map((semesterWeek) => (
+                <tr
+                  key={semesterWeek.number}
+                  className={semesterWeek.hasCourse ? undefined : "is-empty-week"}
+                  data-week-number={semesterWeek.number}
+                  data-week-kind={semesterWeek.kind}
+                >
+                  <th scope="row" className="control-planning-semester-week">
+                    <button
+                      type="button"
+                      className="control-planning-week-link"
+                      onClick={() => {
+                        setWeek(semesterWeek.number);
+                        selectLayout("week");
+                      }}
+                    >
+                      S{String(semesterWeek.number).padStart(2, "0")}-{semesterWeek.kind}
+                    </button>
+                    <span>{formatCompactDay(semesterWeek.monday)}</span>
+                  </th>
+                  {semesterWeek.days.map((day) => (
+                    <td
+                      key={`${semesterWeek.number}-${day.dayIndex}`}
+                      className={day.hasCourse ? "is-available" : "is-inactive"}
+                      data-day-index={day.dayIndex}
+                      data-has-course={day.hasCourse ? "true" : "false"}
+                      data-date={day.date ?? ""}
+                    >
+                      {day.controls.length ? (
+                        <ul>
+                          {day.controls.map((card) => (
+                            <li key={card.agendaItemId}>
+                              <ControlCard
+                                card={card}
+                                compact
+                                showTeacher={mode === "class-all" || !card.isOwn}
+                                toneIndex={classToneIndex(card.classroomId, assignedIds)}
+                              />
+                            </li>
+                          ))}
+                        </ul>
+                      ) : !day.hasCourse ? (
+                        <p className="control-planning-day-empty">Aucun cours</p>
+                      ) : null}
+                      {day.canPlan
+                        ? day.placementOptions.map((option) => (
+                            <button
+                              key={option.courseSessionKey}
+                              type="button"
+                              className="control-plan-add is-compact"
+                              data-control-plan=""
+                              data-control-placement={option.courseSessionKey}
+                              data-annual-course-id={option.annualCourseId}
+                              data-course-session-key={option.courseSessionKey}
+                              data-course-session-date={option.date}
+                              onClick={() => chooseOption(toPlanningDay(day), option)}
+                            >
+                              {placementHint(option)}
+                            </button>
+                          ))
+                        : null}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : (
         <p className="ma-semaine-empty">Aucune semaine scolaire n’est disponible pour cette année.</p>
       )}
@@ -613,43 +873,17 @@ export function ControlPlanningPanel({
 
       {modalDay && modalOption && view ? (
         <PlanModal
-          classroomName={classroomName}
+          classroomName={modalClassroomName}
           day={modalDay}
           option={modalOption}
           classDayControls={
             serverCoordination
-              ? serverCoordination.classDayControls.map((entry) => ({
-                  agendaItemId: entry.agendaItemId,
-                  classroomId: entry.classroomId,
-                  classroomName: entry.classroomName,
-                  subjectId: "",
-                  branchLabel: entry.branchLabel,
-                  title: entry.title,
-                  teacherId: "",
-                  teacherName: entry.teacherName,
-                  isOwn: false,
-                  schoolWeekNumber: entry.schoolWeekNumber,
-                  dayIndex: entry.dayIndex,
-                  date: entry.date,
-                }))
-              : modalDay.classDayControls
+              ? coordinationCardsFromSummary(serverCoordination.classDayControls)
+              : targetClassDayControls
           }
           teacherWeekControls={
             serverCoordination
-              ? serverCoordination.teacherWeekControls.map((entry) => ({
-                  agendaItemId: entry.agendaItemId,
-                  classroomId: entry.classroomId,
-                  classroomName: entry.classroomName,
-                  subjectId: "",
-                  branchLabel: entry.branchLabel,
-                  title: entry.title,
-                  teacherId: "",
-                  teacherName: entry.teacherName,
-                  isOwn: false,
-                  schoolWeekNumber: entry.schoolWeekNumber,
-                  dayIndex: entry.dayIndex,
-                  date: entry.date,
-                }))
+              ? coordinationCardsFromSummary(serverCoordination.teacherWeekControls)
               : view.teacherWeekControls
           }
           submitting={submitting}

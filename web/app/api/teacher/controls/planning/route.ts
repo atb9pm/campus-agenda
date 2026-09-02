@@ -41,8 +41,13 @@ async function handleGet(request: Request) {
       teacherId: auth.session!.teacherId,
       schoolYearId: url.searchParams.get("schoolYearId"),
       classroomId: url.searchParams.get("classroomId"),
+      classroomIds: url.searchParams.getAll("classroomIds").length
+        ? url.searchParams.getAll("classroomIds")
+        : url.searchParams.get("classroomIds"),
       mode: url.searchParams.get("mode"),
       week: parseWeek(url.searchParams.get("week")),
+      view: url.searchParams.get("view") ?? url.searchParams.get("layout"),
+      period: url.searchParams.get("period"),
     },
   );
 

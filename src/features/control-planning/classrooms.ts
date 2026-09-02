@@ -44,7 +44,7 @@ export async function listAccessibleRuntimeClassroomsForTeacher(options: {
 }
 
 /**
- * Accès spécifique au module Contrôles.
+ * Accès spécifique au module Contrôles (coordination live, APIs génériques).
  * Une classe structurée est visible si la lecture actuelle l’autorise
  * OU si l’enseignant a au moins une CourseSession de l’année avec TCA à la date de séance.
  */
@@ -67,6 +67,24 @@ export function teacherHasControlPlanningClassAccess(options: {
   ) {
     return true;
   }
+  return teacherHasAssignedStructuredPlanningClass(options);
+}
+
+/**
+ * Classe proposée dans le planning structuré : SchoolClass de l’année,
+ * AnnualCourse, et au moins une CourseSession avec TCA (PRIMARY / CO_TEACHER /
+ * REPLACEMENT) valable à la date de séance. Pas de membership, pas de legacy.
+ */
+export function teacherHasAssignedStructuredPlanningClass(options: {
+  teacherId: string;
+  schoolClass: SchoolClassRecord;
+  courses: AnnualCourse[];
+  assignments: TeacherCourseAssignment[];
+  years: SchoolYearRecord[];
+  sessions: readonly CourseSession[];
+}): boolean {
+  const hasAnnualCourse = options.courses.some((course) => course.classId === options.schoolClass.id);
+  if (!hasAnnualCourse) return false;
   return options.sessions.some(
     (session) =>
       session.classId === options.schoolClass.id &&
@@ -77,6 +95,48 @@ export function teacherHasControlPlanningClassAccess(options: {
         at: assignmentInstantForSessionDate(session.date),
       }),
   );
+}
+
+export function listAssignedStructuredPlanningClassrooms(options: {
+  teacherId: string;
+  classrooms: RuntimeClassroomListItem[];
+  classes: SchoolClassRecord[];
+  courses: AnnualCourse[];
+  assignments: TeacherCourseAssignment[];
+  years: SchoolYearRecord[];
+  sessions: readonly CourseSession[];
+  schoolYearId: string;
+}): ControlPlanningClass[] {
+  const yearClasses = options.classes
+    .filter((schoolClass) => structuredClassMatchesPlanningYear(schoolClass, options.schoolYearId))
+    .slice()
+    .sort((left, right) => (left.code || left.label).localeCompare(right.code || right.label, "fr"));
+  const classroomBySchoolClassId = new Map(
+    options.classrooms
+      .filter((classroom) => classroom.schoolClassId?.trim())
+      .map((classroom) => [classroom.schoolClassId!.trim(), classroom]),
+  );
+  const result: ControlPlanningClass[] = [];
+  const seen = new Set<string>();
+  for (const schoolClass of yearClasses) {
+    if (
+      !teacherHasAssignedStructuredPlanningClass({
+        teacherId: options.teacherId,
+        schoolClass,
+        courses: options.courses,
+        assignments: options.assignments,
+        years: options.years,
+        sessions: options.sessions,
+      })
+    ) {
+      continue;
+    }
+    const classroom = classroomBySchoolClassId.get(schoolClass.id);
+    if (!classroom || seen.has(classroom.id)) continue;
+    seen.add(classroom.id);
+    result.push({ id: classroom.id, name: classroom.name });
+  }
+  return result;
 }
 
 export async function listAccessibleControlPlanningClassrooms(options: {

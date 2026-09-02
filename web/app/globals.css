@@ -970,6 +970,89 @@ button { color: inherit; }
 .control-planning-error { color: #8b2e2e; }
 .control-planning-hint { margin: 0; color: #6d7f9b; font-size: 12px; line-height: 1.45; }
 .control-planning-no-course { margin: 0; color: #9aa5b6; font-size: 10px; }
+.control-planning-semester-wrap {
+  overflow: auto;
+  max-height: min(78vh, 920px);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.control-planning-semester {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.control-planning-semester th,
+.control-planning-semester td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid #eef2f8;
+  vertical-align: top;
+  font-size: 11px;
+}
+.control-planning-semester thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #f8fbff;
+  color: var(--navy);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  border-bottom: 2px solid var(--navy);
+}
+.control-planning-semester-week {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  width: 92px;
+  min-width: 92px;
+  background: #fbfcfe;
+  color: var(--navy);
+  text-align: left;
+}
+.control-planning-semester thead .control-planning-semester-week { z-index: 4; }
+.control-planning-week-link {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.control-planning-week-link:hover { text-decoration: underline; }
+.control-planning-semester-week span {
+  display: block;
+  margin-top: 2px;
+  color: #8793a9;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.control-planning-semester td { min-width: 120px; background: #fff; }
+.control-planning-semester td.is-inactive { background: #f4f6fa; color: #9aa5b6; }
+.control-planning-semester td.is-available { background: #f8fbff; }
+.control-planning-semester tr.is-empty-week td,
+.control-planning-semester tr.is-empty-week th { background: #f4f6fa; }
+.control-planning-semester td ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.control-planning-card.is-compact { gap: 2px; padding: 6px 8px; }
+.control-planning-card.is-compact strong { font-size: 12px; }
+.control-planning-card[data-class-tone="1"] { border-left: 3px solid #30558f; }
+.control-planning-card[data-class-tone="2"] { border-left: 3px solid #2f6f4e; }
+.control-planning-card[data-class-tone="3"] { border-left: 3px solid #8a4b12; }
+.control-planning-card[data-class-tone="4"] { border-left: 3px solid #5b3d8f; }
+.control-planning-card[data-class-tone="5"] { border-left: 3px solid #8a2e4b; }
+.control-plan-add.is-compact {
+  display: block;
+  padding: 2px 0;
+  font-size: 10px;
+  font-weight: 700;
+}
 .control-plan-add {
   justify-self: start;
   padding: 6px 0;
@@ -1024,6 +1107,8 @@ button { color: inherit; }
 }
 @media (max-width: 700px) {
   .control-planning-week { grid-template-columns: 1fr; overflow-x: visible; }
+  .control-planning-semester-wrap { overflow-x: auto; max-height: none; }
+  .control-planning-semester { min-width: 560px; }
 }
 .course-timeline-banner { margin: 0 0 16px; padding: 14px 16px; border: 1px solid #d5e2f4; border-radius: 10px; background: #f8fbff; color: #30558f; font-size: 12px; line-height: 1.5; }
 .course-timeline-list { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }

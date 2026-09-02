@@ -8,8 +8,10 @@ import type { TeacherAccountStore } from "../../lib/persistence/teacher-account-
 import { contextBranchForCourse } from "../agenda-bridge/index.ts";
 import {
   controlPlanningClassroomIdsCoveredInWeek,
-  listAccessibleControlPlanningClassrooms,
+  listAssignedStructuredPlanningClassrooms,
 } from "./classrooms.ts";
+import { parseControlPlanningLayout, parseControlPlanningPeriodId } from "./period-types.ts";
+import { resolveControlPlanningPeriodId } from "./periods.ts";
 import { listControlPlacementOptions } from "./placements.ts";
 import { loadControlPlanningYearSessions } from "./year-sessions.ts";
 import {
@@ -19,6 +21,7 @@ import {
   parseControlPlanningMode,
   resolvePlanningWeekNumber,
 } from "./project.ts";
+import { parseControlPlanningClassroomIds, resolveAssignedClassroomSelection } from "./selection.ts";
 import type { ControlPlacementOption, ControlPlanningView } from "./types.ts";
 
 export interface ControlPlanningServiceDeps {
@@ -35,8 +38,12 @@ export interface ControlPlanningQuery {
   teacherId: string;
   schoolYearId?: string | null;
   classroomId?: string | null;
+  classroomIds?: string | string[] | null;
   mode?: string | null;
   week?: number | null;
+  view?: string | null;
+  layout?: string | null;
+  period?: string | null;
   todayIso?: string;
 }
 
@@ -60,6 +67,13 @@ export async function getControlPlanning(
   if (query.mode != null && query.mode !== "" && parseControlPlanningMode(query.mode) === null) {
     return { ok: false, reason: "Mode d’affichage invalide.", status: 400 };
   }
+  const layoutValue = query.view ?? query.layout;
+  if (layoutValue != null && layoutValue !== "" && parseControlPlanningLayout(layoutValue) === null) {
+    return { ok: false, reason: "Vue d’affichage invalide.", status: 400 };
+  }
+  if (query.period != null && query.period !== "" && parseControlPlanningPeriodId(query.period) === null) {
+    return { ok: false, reason: "Période invalide.", status: 400 };
+  }
 
   await deps.catalog.ensureSeeded();
   const [classrooms, classes, courses, assignments, yearList] = await Promise.all([
@@ -81,7 +95,7 @@ export async function getControlPlanning(
 
   const consultableYears = listConsultablePlanningYears(yearList);
   const yearSessions = await loadControlPlanningYearSessions(deps, year.id);
-  const accessible = await listAccessibleControlPlanningClassrooms({
+  const assigned = listAssignedStructuredPlanningClassrooms({
     teacherId,
     classrooms,
     classes,
@@ -90,32 +104,49 @@ export async function getControlPlanning(
     years: yearList,
     sessions: yearSessions,
     schoolYearId: year.id,
-    teacherCanAccessClassroom: (id, classroomId) => deps.agenda.teacherCanAccessClassroom(id, classroomId),
   });
 
-  const requestedClassroom = query.classroomId?.trim() || null;
-  if (requestedClassroom && !accessible.some((entry) => entry.id === requestedClassroom)) {
-    return { ok: false, reason: "Cette classe ne vous est pas attribuée.", status: 403 };
+  const requestedIds = parseControlPlanningClassroomIds({
+    classroomIds: query.classroomIds,
+    classroomId: query.classroomId,
+  });
+  const selection = resolveAssignedClassroomSelection({
+    requestedIds,
+    assignedIds: assigned.map((entry) => entry.id),
+  });
+  if (!selection.ok) {
+    return { ok: false, reason: selection.reason, status: 403 };
   }
 
+  const selectedClassrooms = assigned.filter((entry) => selection.selectedIds.includes(entry.id));
   const items = (
-    await Promise.all(accessible.map((classroom) => deps.agenda.listAgendaItems(classroom.id)))
+    await Promise.all(assigned.map((classroom) => deps.agenda.listAgendaItems(classroom.id)))
   ).flat();
 
   const [subjects, teachers] = await Promise.all([deps.adapters.listSubjects(), deps.teachers.listAccounts()]);
 
-  let placementOptions: ControlPlacementOption[] = [];
-  let canCreate = false;
-  let guidedPlanningReason: string | null = null;
-  const selectedClassroom = requestedClassroom
-    ? classrooms.find((entry) => entry.id === requestedClassroom) ?? null
-    : null;
-  const linkedClassId = selectedClassroom?.schoolClassId?.trim() || null;
-  const linkedClass = linkedClassId ? classes.find((entry) => entry.id === linkedClassId) ?? null : null;
+  const classroomByClassId = new Map<string, { id: string; name: string }>();
+  const selectedSchoolClassIds: string[] = [];
+  for (const entry of selectedClassrooms) {
+    const runtime = classrooms.find((classroom) => classroom.id === entry.id);
+    const schoolClassId = runtime?.schoolClassId?.trim() || null;
+    if (!schoolClassId) continue;
+    selectedSchoolClassIds.push(schoolClassId);
+    classroomByClassId.set(schoolClassId, { id: entry.id, name: entry.name });
+  }
+
   const todayIso = todayIsoDate(query.todayIso);
+  const yearStatus = year.status === "archived" ? "archived" : "active";
+  const layout = parseControlPlanningLayout(layoutValue) ?? "semester";
+  const periodId = resolveControlPlanningPeriodId({
+    weeks: year.weeks,
+    yearStatus,
+    todayIso,
+    requested: query.period,
+  });
   const targetWeek = resolvePlanningWeekNumber(year.weeks, query.week ?? null, todayIso);
   const teacherWeekClassroomIds = controlPlanningClassroomIdsCoveredInWeek({
-    accessible,
+    accessible: assigned,
     classrooms,
     sessions: yearSessions,
     assignments,
@@ -123,43 +154,47 @@ export async function getControlPlanning(
     schoolWeekNumber: targetWeek,
   });
 
+  let placementOptions: ControlPlacementOption[] = [];
+  let canCreate = false;
+  let guidedPlanningReason: string | null = null;
+  const structuredSelected = selectedSchoolClassIds.length > 0;
   if (year.status === "archived") {
     canCreate = false;
-  } else if (requestedClassroom && !linkedClass) {
+  } else if (selectedClassrooms.length > 0 && !structuredSelected) {
     guidedPlanningReason =
       "La planification guidée est disponible pour les classes reliées à l’horaire structuré.";
-  } else if (year.status === "active" && requestedClassroom && linkedClass && deps.schedules) {
+  } else if (year.status === "active" && structuredSelected && deps.schedules) {
     canCreate = true;
     const [contexts, branches] = await Promise.all([
       deps.catalog.listContexts(),
       deps.catalog.listBranches(),
     ]);
-    const sessions = yearSessions.filter((session) => session.classId === linkedClass.id);
+    const sessions = yearSessions.filter((session) => selectedSchoolClassIds.includes(session.classId));
     const branchByCourseId = new Map<string, string>();
     for (const course of courses) {
-      if (course.classId !== linkedClass.id) continue;
+      if (!selectedSchoolClassIds.includes(course.classId)) continue;
       const info = contextBranchForCourse({ course, contexts, branches });
       if (info) branchByCourseId.set(course.id, info.branch.label);
     }
-    if (targetWeek !== null) {
-      placementOptions = listControlPlacementOptions({
-        sessions,
-        assignments,
-        teacherId,
-        schoolWeekNumber: targetWeek,
-        branchByCourseId,
-        yearStatus: "active",
-        classroomSelected: true,
-        structured: true,
-      });
-    }
+    placementOptions = listControlPlacementOptions({
+      sessions,
+      assignments,
+      teacherId,
+      schoolWeekNumber: null,
+      branchByCourseId,
+      yearStatus: "active",
+      classroomSelected: true,
+      structured: true,
+      classroomByClassId,
+      selectedSchoolClassIds,
+    });
   }
 
   const view = buildControlPlanningView({
     teacherId,
     items,
     catalog: {
-      classrooms: accessible,
+      classrooms: assigned,
       subjects: subjects.map((subject) => ({ id: subject.id, name: subject.name })),
       teachers: teachers.map((teacher) => ({
         id: teacher.id,
@@ -167,13 +202,14 @@ export async function getControlPlanning(
         initials: teacher.initials,
       })),
     },
-    accessibleClasses: accessible,
+    accessibleClasses: assigned,
     weeks: year.weeks,
     schoolYearId: year.id,
     schoolYearLabel: year.label,
-    yearStatus: year.status === "archived" ? "archived" : "active",
+    yearStatus,
     years: consultableYears,
-    classroomId: requestedClassroom,
+    classroomId: selection.allSelected ? null : selection.selectedIds.length === 1 ? selection.selectedIds[0]! : null,
+    classroomIds: selection.selectedIds,
     requestedMode: query.mode ?? "mine",
     schoolWeekNumber: query.week ?? null,
     todayIso,
@@ -184,7 +220,10 @@ export async function getControlPlanning(
     teacherWeekClassroomIds,
     sessions: yearSessions,
     assignments,
-    selectedSchoolClassId: linkedClass?.id ?? null,
+    selectedSchoolClassId: selectedSchoolClassIds.length === 1 ? selectedSchoolClassIds[0]! : null,
+    selectedSchoolClassIds,
+    layout,
+    periodId,
   });
 
   return { ok: true, view };
