@@ -10,12 +10,22 @@ import {
   revalidateLiveSession,
   unauthorizedResponse,
 } from "@campus/lib/auth/index.ts";
-import { checkClassroomExists, getAgendaStore, getAnnualCourseNotesStore, getAnnualCourseStore, getCourseScheduleStore, getMembershipStore, getPedagogicalPathStore, getSchoolCatalogStore, getSchoolYearStore, getTeacherAccountStore, getTeacherNotesStore as resolveTeacherNotesStore, getTeacherSetupStore, getTemplateStore, resolveClassroomSubjectNames } from "@campus/lib/persistence/store-factory.ts";
-import { decideAgendaPublishAccess, resolveAnnualCourseForPublication } from "@campus/features/annual-courses/index.ts";
+import { checkClassroomExists, getAgendaStore, getAnnualCourseNotesStore, getAnnualCourseStore, getCourseScheduleStore, getMembershipStore, getPedagogicalPathStore, getRuntimeAgendaAdapterStore, getSchoolCatalogStore, getSchoolYearStore, getTeacherAccountStore, getTeacherNotesStore as resolveTeacherNotesStore, getTeacherSetupStore, getTemplateStore, resolveClassroomSubjectNames } from "@campus/lib/persistence/store-factory.ts";
+import { resolveAnnualCourseForPublication } from "@campus/features/annual-courses/index.ts";
 import { validateAgendaScheduleTarget } from "@campus/features/agenda/schedule-target.ts";
 import type { AnnualCourseServiceDeps } from "@campus/features/annual-courses/index.ts";
 import type { CourseScheduleServiceDeps } from "@campus/features/course-schedule/index.ts";
 import type { CourseTimelineServiceDeps } from "@campus/features/course-timeline/index.ts";
+import type { StructuredPublishDeps } from "@campus/features/course-publications/index.ts";
+import {
+  assignmentInstantForSessionDate,
+  evaluateTeacherAgendaPublishAccess,
+  loadClassroomAgendaBinding,
+  reconcileStructuredClassrooms,
+  resolveStructuredSchoolClassForClassroom,
+  teacherHasStructuredClassroomReadAccess,
+} from "@campus/features/agenda-bridge/index.ts";
+import { isoDateForSchoolWeekDay } from "@campus/features/school-days/index.ts";
 import { evaluateAgendaBranchForClass, assertAgendaClassMutable } from "@campus/features/school-catalog/index.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import { ARCHIVED_YEAR_READONLY_REASON, getArchivedYearIds, isArchivedYearItem } from "@campus/features/school-year/archived-readonly.ts";
@@ -98,15 +108,30 @@ export async function getCourseStore() {
 }
 
 export async function getAnnualCourseServiceDeps(): Promise<AnnualCourseServiceDeps> {
-  const [courses, catalog, years, teachers, notes, schedules] = await Promise.all([
+  const [courses, catalog, years, teachers, notes, schedules, agenda] = await Promise.all([
     getAnnualCourseStore(),
     getSchoolCatalogStore(),
     getSchoolYearStore(),
     getTeacherAccountStore(),
     getAnnualCourseNotesStore(),
     getCourseScheduleStore(),
+    getAgendaStore(),
   ]);
-  return { courses, catalog, years, teachers, notes, schedules };
+  return { courses, catalog, years, teachers, notes, schedules, agenda };
+}
+
+export async function getStructuredPublishDeps(): Promise<StructuredPublishDeps> {
+  const [courses, catalog, years, teachers, schedules, paths, agenda, adapters] = await Promise.all([
+    getAnnualCourseStore(),
+    getSchoolCatalogStore(),
+    getSchoolYearStore(),
+    getTeacherAccountStore(),
+    getCourseScheduleStore(),
+    getPedagogicalPathStore(),
+    getAgendaStore(),
+    getRuntimeAgendaAdapterStore(),
+  ]);
+  return { courses, catalog, years, teachers, schedules, paths, agenda, adapters };
 }
 
 export async function getCourseScheduleServiceDeps(): Promise<CourseScheduleServiceDeps> {
@@ -138,18 +163,50 @@ export async function authorizeTeacherAgendaPublish(
   subjectId: string,
   store: { teacherCanPublish(teacherId: string, classroomId: string, subjectId: string): Promise<boolean> },
   schoolYearId?: string | null,
+  schedule?: { schoolWeekNumber: number; dayIndex: number } | null,
 ): Promise<boolean> {
-  const names = await resolveClassroomSubjectNames(classroomId, subjectId);
   const catalog = await getSchoolCatalogStore();
   await catalog.ensureSeeded();
-  const [classes, branches, contexts, courses, assignments, teacher] = await Promise.all([
+  const [classes, branches, contexts, courses, assignments, teacher, adapters, yearStore] = await Promise.all([
     catalog.listClasses(),
     catalog.listBranches(),
     catalog.listContexts(),
     getAnnualCourseStore().then((entry) => entry.listCourses()),
     getAnnualCourseStore().then((entry) => entry.listAssignments()),
     getTeacherAccountStore().then((entry) => entry.findAccount(teacherId)),
+    getRuntimeAgendaAdapterStore(),
+    getSchoolYearStore(),
   ]);
+  const binding = await loadClassroomAgendaBinding(adapters, {
+    classroomId,
+    subjectId,
+    classes,
+    courses,
+  });
+  if (binding.kind === "structured-incomplete") return false;
+  if (binding.kind === "structured") {
+    const yearId = binding.target.schoolClass.schoolYearId ?? schoolYearId ?? null;
+    const year = yearId
+      ? await yearStore.getSchoolYearById(yearId)
+      : await yearStore.getActiveSchoolYear();
+    const targetDate =
+      schedule && year
+        ? isoDateForSchoolWeekDay(year.weeks, schedule.schoolWeekNumber, schedule.dayIndex)
+        : null;
+    if (!targetDate) return false;
+    return evaluateTeacherAgendaPublishAccess({
+      binding,
+      teacherId,
+      assignments,
+      targetAt: assignmentInstantForSessionDate(targetDate),
+      teacher,
+      legacyResolved: null,
+      legacyMembershipAllows: false,
+    });
+  }
+
+  // LEGACY ADAPTER — uniquement si classroom.school_class_id IS NULL.
+  const names = await resolveClassroomSubjectNames(classroomId, subjectId);
   const resolved = resolveAnnualCourseForPublication({
     classroomName: names.classroomName,
     subjectName: names.subjectName,
@@ -162,12 +219,38 @@ export async function authorizeTeacherAgendaPublish(
   const legacyMembershipAllows = resolved
     ? false
     : await store.teacherCanPublish(teacherId, classroomId, subjectId);
-  return decideAgendaPublishAccess({
-    resolved,
-    teacher,
+  return evaluateTeacherAgendaPublishAccess({
+    binding,
+    teacherId,
     assignments,
+    targetAt: null,
+    teacher,
+    legacyResolved: resolved,
     legacyMembershipAllows,
   });
+}
+
+export async function assertStructuredAgendaSubjectLinked(
+  classroomId: string,
+  subjectId: string,
+): Promise<Response | null> {
+  const catalog = await getSchoolCatalogStore();
+  await catalog.ensureSeeded();
+  const [classes, courses, adapters] = await Promise.all([
+    catalog.listClasses(),
+    getAnnualCourseStore().then((entry) => entry.listCourses()),
+    getRuntimeAgendaAdapterStore(),
+  ]);
+  const binding = await loadClassroomAgendaBinding(adapters, {
+    classroomId,
+    subjectId,
+    classes,
+    courses,
+  });
+  if (binding.kind === "structured-incomplete") {
+    return jsonResponse({ ok: false, reason: binding.reason }, { status: 409 });
+  }
+  return null;
 }
 
 /** Message unique côté client pour déclencher l'écran de changement obligatoire. */
@@ -203,31 +286,48 @@ export async function assertValidAgendaScheduleTarget(options: {
     return jsonResponse({ ok: false, reason: "Aucune année scolaire active." }, { status: 400 });
   }
 
-  const names = await resolveClassroomSubjectNames(options.classroomId, options.subjectId);
   const catalog = await getSchoolCatalogStore();
   await catalog.ensureSeeded();
-  const [classes, branches, contexts, courses, scheduleStore] = await Promise.all([
+  const [classes, branches, contexts, courses, scheduleStore, adapters] = await Promise.all([
     catalog.listClasses(),
     catalog.listBranches(),
     catalog.listContexts(),
     getAnnualCourseStore().then((entry) => entry.listCourses()),
     getCourseScheduleStore(),
+    getRuntimeAgendaAdapterStore(),
   ]);
-  const resolved = resolveAnnualCourseForPublication({
-    classroomName: names.classroomName,
-    subjectName: names.subjectName,
+  const binding = await loadClassroomAgendaBinding(adapters, {
+    classroomId: options.classroomId,
+    subjectId: options.subjectId,
     classes,
-    branches,
-    contexts,
     courses,
-    schoolYearId: year.id,
   });
-
+  if (binding.kind === "structured-incomplete") {
+    return jsonResponse({ ok: false, reason: binding.reason }, { status: 409 });
+  }
   let attendanceDays = null;
   let slots = null;
-  if (resolved) {
-    attendanceDays = await scheduleStore.listAttendanceDaysByClass(resolved.schoolClass.id);
-    slots = await scheduleStore.listSlotsByAnnualCourse(resolved.course.id);
+  let resolvedStructuredCourse = binding.kind === "structured";
+  if (binding.kind === "structured") {
+    attendanceDays = await scheduleStore.listAttendanceDaysByClass(binding.target.schoolClass.id);
+    slots = await scheduleStore.listSlotsByAnnualCourse(binding.target.course.id);
+  } else {
+    // LEGACY ADAPTER — uniquement si classroom.school_class_id IS NULL.
+    const names = await resolveClassroomSubjectNames(options.classroomId, options.subjectId);
+    const resolved = resolveAnnualCourseForPublication({
+      classroomName: names.classroomName,
+      subjectName: names.subjectName,
+      classes,
+      branches,
+      contexts,
+      courses,
+      schoolYearId: year.id,
+    });
+    if (resolved) {
+      resolvedStructuredCourse = true;
+      attendanceDays = await scheduleStore.listAttendanceDaysByClass(resolved.schoolClass.id);
+      slots = await scheduleStore.listSlotsByAnnualCourse(resolved.course.id);
+    }
   }
 
   const result = validateAgendaScheduleTarget({
@@ -236,7 +336,7 @@ export async function assertValidAgendaScheduleTarget(options: {
     weeks: year.weeks,
     attendanceDays,
     slots,
-    resolvedStructuredCourse: Boolean(resolved),
+    resolvedStructuredCourse,
   });
   if (!result.ok) {
     return jsonResponse({ ok: false, reason: result.reason }, { status: 400 });
@@ -263,13 +363,28 @@ export async function assertAgendaClassMutableForItem(
   item: PrototypeAgendaItem | undefined,
 ): Promise<Response | null> {
   if (!item) return null;
-  const names = await resolveClassroomSubjectNames(item.classroomId, item.subjectId);
   const catalog = await getSchoolCatalogStore();
   await catalog.ensureSeeded();
+  const classes = await catalog.listClasses();
+  const adapters = await getRuntimeAgendaAdapterStore();
+  const linkedClass = await resolveStructuredSchoolClassForClassroom(adapters, item.classroomId, classes);
+  if (linkedClass) {
+    const result = assertAgendaClassMutable({
+      classroomName: linkedClass.code,
+      schoolYearId: linkedClass.schoolYearId ?? item.schoolYearId,
+      classes: [linkedClass],
+    });
+    if (!result.ok) {
+      return jsonResponse({ ok: false, reason: result.reason }, { status: 403 });
+    }
+    return null;
+  }
+  // LEGACY ADAPTER
+  const names = await resolveClassroomSubjectNames(item.classroomId, item.subjectId);
   const result = assertAgendaClassMutable({
     classroomName: names.classroomName,
     schoolYearId: item.schoolYearId,
-    classes: await catalog.listClasses(),
+    classes,
   });
   if (!result.ok) {
     return jsonResponse({ ok: false, reason: result.reason }, { status: 403 });
@@ -284,14 +399,35 @@ export async function assertAgendaPublicationBranchAllowed(
   schoolYearId?: string | null,
   purpose: "create" | "update" = "create",
 ): Promise<Response | null> {
-  const names = await resolveClassroomSubjectNames(classroomId, subjectId);
   const catalog = await getSchoolCatalogStore();
   await catalog.ensureSeeded();
-  const [classes, branches, contexts] = await Promise.all([
+  const [classes, branches, contexts, courses, adapters] = await Promise.all([
     catalog.listClasses(),
     catalog.listBranches(),
     catalog.listContexts(),
+    getAnnualCourseStore().then((entry) => entry.listCourses()),
+    getRuntimeAgendaAdapterStore(),
   ]);
+  const binding = await loadClassroomAgendaBinding(adapters, {
+    classroomId,
+    subjectId,
+    classes,
+    courses,
+  });
+  if (binding.kind === "structured-incomplete") {
+    return forbiddenResponse(binding.reason);
+  }
+  if (binding.kind === "structured") {
+    if (binding.target.schoolClass.isArchived) {
+      return forbiddenResponse("Cette classe est archivée. Impossible de publier un nouvel élément.");
+    }
+    if (purpose !== "update" && !binding.target.schoolClass.isActive) {
+      return forbiddenResponse("Cette classe est désactivée. Impossible de publier un nouvel élément.");
+    }
+    return null;
+  }
+  // LEGACY ADAPTER — uniquement si classroom.school_class_id IS NULL.
+  const names = await resolveClassroomSubjectNames(classroomId, subjectId);
   const result = evaluateAgendaBranchForClass({
     classroomName: names.classroomName,
     subjectName: names.subjectName,
@@ -308,10 +444,17 @@ export async function assertAgendaPublicationBranchAllowed(
 }
 
 export async function listAttendanceDaysForLegacyClassroom(classroomId: string) {
-  const names = await resolveClassroomSubjectNames(classroomId, "");
   const catalog = await getSchoolCatalogStore();
   await catalog.ensureSeeded();
   const classes = await catalog.listClasses();
+  const adapters = await getRuntimeAgendaAdapterStore();
+  const linkedClass = await resolveStructuredSchoolClassForClassroom(adapters, classroomId, classes);
+  if (linkedClass) {
+    const schedules = await getCourseScheduleStore();
+    return schedules.listAttendanceDaysByClass(linkedClass.id);
+  }
+  // LEGACY ADAPTER — correspondance par code/libellé uniquement sans lien explicite.
+  const names = await resolveClassroomSubjectNames(classroomId, "");
   const name = names.classroomName;
   const schoolClass = name
     ? classes.find((entry) => entry.label === name || entry.code === name) ?? null
@@ -327,10 +470,52 @@ export async function requireClassroomReadAccess(request: Request, classroomId: 
   if (!(await checkClassroomExists(classroomId))) {
     return { error: jsonResponse({ ok: false, reason: "Classe introuvable." }, { status: 404 }) };
   }
-  if (!(await canReadClassroomAgenda(session, classroomId, store))) {
-    return { error: unauthorizedResponse("Accès à cette classe non autorisé.") };
+  if (session?.kind === "student") {
+    if (!(await canReadClassroomAgenda(session, classroomId, store))) {
+      return { error: unauthorizedResponse("Accès à cette classe non autorisé.") };
+    }
+    return { session, store };
   }
-  return { session, store };
+  if (session?.kind === "teacher") {
+    const catalog = await getSchoolCatalogStore();
+    await catalog.ensureSeeded();
+    const [classes, courses, assignments, years, adapters] = await Promise.all([
+      catalog.listClasses(),
+      getAnnualCourseStore().then((entry) => entry.listCourses()),
+      getAnnualCourseStore().then((entry) => entry.listAssignments()),
+      getSchoolYearStore().then((entry) => entry.listSchoolYears()),
+      getRuntimeAgendaAdapterStore(),
+    ]);
+    const linkedClass = await resolveStructuredSchoolClassForClassroom(adapters, classroomId, classes);
+    if (linkedClass) {
+      const allowed = teacherHasStructuredClassroomReadAccess({
+        teacherId: session.teacherId,
+        schoolClass: linkedClass,
+        courses,
+        assignments,
+        years,
+      });
+      if (!allowed) {
+        return { error: unauthorizedResponse("Accès à cette classe non autorisé.") };
+      }
+      return { session, store };
+    }
+    if (!(await canReadClassroomAgenda(session, classroomId, store))) {
+      return { error: unauthorizedResponse("Accès à cette classe non autorisé.") };
+    }
+    return { session, store };
+  }
+  return { error: unauthorizedResponse("Accès à cette classe non autorisé.") };
+}
+
+export async function reconcileRuntimeStructuredClassrooms(): Promise<void> {
+  const catalog = await getSchoolCatalogStore();
+  await catalog.ensureSeeded();
+  const [classes, adapters] = await Promise.all([
+    catalog.listClasses(),
+    getRuntimeAgendaAdapterStore(),
+  ]);
+  await reconcileStructuredClassrooms(adapters, classes);
 }
 
 /** Session enseignant sans contrôle du mot de passe provisoire. */

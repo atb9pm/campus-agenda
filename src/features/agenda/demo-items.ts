@@ -17,6 +17,12 @@ export interface PrototypeAgendaItem {
   templateId?: string | null;
   /** Année scolaire de rattachement (phase 2.1+). */
   schoolYearId?: string | null;
+  /** Provenance CourseTimeline — snapshot, pas une CourseSession persistée. */
+  annualCourseId?: string | null;
+  courseSessionKey?: string | null;
+  courseSessionDate?: string | null;
+  referenceSessionId?: string | null;
+  referenceItemId?: string | null;
 }
 
 export const DEMO_PROTOTYPE_ITEMS: PrototypeAgendaItem[] = [

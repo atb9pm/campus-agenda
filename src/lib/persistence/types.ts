@@ -41,6 +41,11 @@ export interface CreateAgendaInput {
   detail: string;
   templateId?: string | null;
   schoolYearId?: string | null;
+  annualCourseId?: string | null;
+  courseSessionKey?: string | null;
+  courseSessionDate?: string | null;
+  referenceSessionId?: string | null;
+  referenceItemId?: string | null;
 }
 
 export interface AgendaStore {
@@ -62,6 +67,12 @@ export interface AgendaStore {
   /** Connexion enseignant par initiales (ChF) : renvoie l'identifiant interne. */
   findTeacherIdByInitials(initials: string): Promise<string | undefined>;
   verifyTeacherCredentials(teacherId: string, password: string): Promise<boolean>;
+  listAgendaItemsByAnnualCourse(annualCourseId: string): Promise<PrototypeAgendaItem[]>;
+  findAgendaItemByReferenceItem(
+    annualCourseId: string,
+    referenceItemId: string,
+  ): Promise<PrototypeAgendaItem | undefined>;
+  countAgendaItemsByAnnualCourse(annualCourseId: string): Promise<number>;
   exportAllItems(): Promise<PrototypeAgendaItem[]>;
   replaceAllItems(items: PrototypeAgendaItem[]): Promise<void>;
 }

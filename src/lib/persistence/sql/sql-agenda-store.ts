@@ -5,7 +5,7 @@ import type { PrototypeAgendaItem } from "../../../features/agenda/demo-items.ts
 import type { AgendaItemRow, SqlDatabase, StudentAccessRow } from "./types.ts";
 
 const AGENDA_ITEM_COLUMNS =
-  "id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id";
+  "id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id, annual_course_id, course_session_key, course_session_date, reference_session_id, reference_item_id";
 
 function rowToItem(row: AgendaItemRow): PrototypeAgendaItem {
   return {
@@ -22,7 +22,17 @@ function rowToItem(row: AgendaItemRow): PrototypeAgendaItem {
     detail: row.detail,
     templateId: row.template_id ?? null,
     schoolYearId: row.school_year_id ?? null,
+    annualCourseId: row.annual_course_id ?? null,
+    courseSessionKey: row.course_session_key ?? null,
+    courseSessionDate: row.course_session_date ?? null,
+    referenceSessionId: row.reference_session_id ?? null,
+    referenceItemId: row.reference_item_id ?? null,
   };
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /UNIQUE constraint failed/i.test(message);
 }
 
 export class SqlAgendaStore implements AgendaStore {
@@ -56,27 +66,50 @@ export class SqlAgendaStore implements AgendaStore {
     const title = input.title.trim();
     if (!title) throw new Error("Le titre est obligatoire.");
     const detail = input.detail.trim() || "Aucune précision";
-    const result = await this.db
-      .prepare(
-        `INSERT INTO agenda_items
-          (classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        input.classroomId,
-        input.subjectId,
-        input.authorTeacherId,
-        input.day,
-        input.hour,
-        input.weekOffset ?? 0,
-        input.schoolWeekNumber,
-        input.type,
-        title,
-        detail,
-        input.templateId ?? null,
-        input.schoolYearId ?? null,
-      )
-      .run();
+    let result;
+    try {
+      result = await this.db
+        .prepare(
+          `INSERT INTO agenda_items
+            (classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id, annual_course_id, course_session_key, course_session_date, reference_session_id, reference_item_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          input.classroomId,
+          input.subjectId,
+          input.authorTeacherId,
+          input.day,
+          input.hour,
+          input.weekOffset ?? 0,
+          input.schoolWeekNumber,
+          input.type,
+          title,
+          detail,
+          input.templateId ?? null,
+          input.schoolYearId ?? null,
+          input.annualCourseId ?? null,
+          input.courseSessionKey ?? null,
+          input.courseSessionDate ?? null,
+          input.referenceSessionId ?? null,
+          input.referenceItemId ?? null,
+        )
+        .run();
+    } catch (error) {
+      if (
+        isUniqueConstraintError(error) &&
+        input.annualCourseId?.trim() &&
+        input.referenceItemId?.trim()
+      ) {
+        const existing = await this.findAgendaItemByReferenceItem(
+          input.annualCourseId.trim(),
+          input.referenceItemId.trim(),
+        );
+        if (existing) {
+          throw new Error("Cet élément de référence a déjà été publié dans l’Agenda pour ce cours.");
+        }
+      }
+      throw error;
+    }
     const id = Number(result.meta?.last_row_id);
     if (!Number.isFinite(id) || id <= 0) {
       throw new Error("Identifiant de publication introuvable.");
@@ -203,6 +236,38 @@ export class SqlAgendaStore implements AgendaStore {
     return verifyPassword(password, row.password_hash);
   }
 
+  async listAgendaItemsByAnnualCourse(annualCourseId: string): Promise<PrototypeAgendaItem[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT ${AGENDA_ITEM_COLUMNS} FROM agenda_items WHERE annual_course_id = ? ORDER BY id`,
+      )
+      .bind(annualCourseId)
+      .all<AgendaItemRow>();
+    return results.map(rowToItem);
+  }
+
+  async findAgendaItemByReferenceItem(
+    annualCourseId: string,
+    referenceItemId: string,
+  ): Promise<PrototypeAgendaItem | undefined> {
+    const row = await this.db
+      .prepare(
+        `SELECT ${AGENDA_ITEM_COLUMNS} FROM agenda_items
+         WHERE annual_course_id = ? AND reference_item_id = ? LIMIT 1`,
+      )
+      .bind(annualCourseId, referenceItemId)
+      .first<AgendaItemRow>();
+    return row ? rowToItem(row) : undefined;
+  }
+
+  async countAgendaItemsByAnnualCourse(annualCourseId: string): Promise<number> {
+    const row = await this.db
+      .prepare("SELECT COUNT(*) AS count FROM agenda_items WHERE annual_course_id = ?")
+      .bind(annualCourseId)
+      .first<{ count: number }>();
+    return Number(row?.count ?? 0);
+  }
+
   async exportAllItems(): Promise<PrototypeAgendaItem[]> {
     const { results } = await this.db
       .prepare(
@@ -219,8 +284,8 @@ export class SqlAgendaStore implements AgendaStore {
       await this.db
         .prepare(
           `INSERT INTO agenda_items
-            (id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id, annual_course_id, course_session_key, course_session_date, reference_session_id, reference_item_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           item.id,
@@ -236,6 +301,11 @@ export class SqlAgendaStore implements AgendaStore {
           item.detail,
           item.templateId ?? null,
           item.schoolYearId ?? null,
+          item.annualCourseId ?? null,
+          item.courseSessionKey ?? null,
+          item.courseSessionDate ?? null,
+          item.referenceSessionId ?? null,
+          item.referenceItemId ?? null,
         )
         .run();
     }
@@ -252,9 +322,16 @@ export async function classroomExistsInDatabase(db: SqlDatabase, classroomId: st
 
 export async function listClassroomsInDatabase(
   db: SqlDatabase,
-): Promise<Array<{ id: string; name: string }>> {
-  const { results } = await db.prepare("SELECT id, name FROM classrooms").bind().all<{ id: string; name: string }>();
-  return results ?? [];
+): Promise<Array<{ id: string; name: string; schoolClassId?: string | null }>> {
+  const { results } = await db
+    .prepare("SELECT id, name, school_class_id FROM classrooms")
+    .bind()
+    .all<{ id: string; name: string; school_class_id: string | null }>();
+  return (results ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    schoolClassId: row.school_class_id,
+  }));
 }
 
 export async function listStudentAccessesInDatabase(

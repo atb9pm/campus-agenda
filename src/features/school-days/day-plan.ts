@@ -32,6 +32,22 @@ export function addDays(isoDate: string, days: number): string {
   return toIsoDate(date);
 }
 
+/**
+ * Date ISO (YYYY-MM-DD) d'une publication Agenda : lundi de la semaine scolaire + dayIndex (0 = lundi).
+ * Réutilise le calendrier existant. Ne pas inventer un second calendrier.
+ */
+export function isoDateForSchoolWeekDay(
+  weeks: ReadonlyArray<{ number: number; monday: string }>,
+  schoolWeekNumber: number,
+  dayIndex: number,
+): string | null {
+  if (!Number.isInteger(schoolWeekNumber) || !Number.isInteger(dayIndex)) return null;
+  if (dayIndex < 0 || dayIndex >= SCHOOL_WEEKDAY_COUNT) return null;
+  const week = weeks.find((entry) => entry.number === schoolWeekNumber);
+  if (!week?.monday) return null;
+  return addDays(week.monday, dayIndex);
+}
+
 export function isMonday(isoDate: string): boolean {
   return parseIsoDate(isoDate).getDay() === 1;
 }

@@ -812,6 +812,9 @@ button { color: inherit; }
 .course-timeline-item-type { display: block; margin-bottom: 4px; color: #30558f; font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
 .course-timeline-items strong { display: block; color: var(--navy); font-size: 13px; }
 .course-timeline-items p { margin: 4px 0 0; color: #516582; font-size: 12px; line-height: 1.45; }
+.course-timeline-published { margin: 8px 0 0; color: #1f6b3a; font-size: 12px; font-weight: 700; }
+.course-timeline-items .workspace-action { margin-top: 10px; }
+.course-timeline-publish-error { margin: 6px 0 0; color: #8a2b2b; font-size: 12px; }
 .course-timeline-unscheduled { margin-top: 24px; padding: 18px 20px; border: 1px dashed var(--line-strong); border-radius: 12px; background: #fff; }
 .course-timeline-unscheduled h3 { margin: 0 0 12px; color: var(--navy); font-size: 14px; }
 .course-timeline-unscheduled ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }

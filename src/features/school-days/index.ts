@@ -3,6 +3,7 @@ export {
   buildSchoolDayPlan,
   checkWeekPlanConsistency,
   countClassDays,
+  isoDateForSchoolWeekDay,
   isMonday,
   listHolidayDays,
   SCHOOL_WEEKDAY_COUNT,

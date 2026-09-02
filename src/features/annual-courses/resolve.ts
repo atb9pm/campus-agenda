@@ -28,7 +28,9 @@ function resolveBranch(
 }
 
 /**
- * Résolution Agenda classe + branche → CTX → AnnualCourse.
+ * LEGACY ADAPTER — résolution Agenda par noms classroom/subject.
+ * N'est plus la source d'autorité lorsqu'un lien structuré explicite existe
+ * (classrooms.school_class_id / subjects.annual_course_id).
  * Retourne null si la correspondance n'est pas unique (jamais le premier arbitraire).
  * Un cours archivé est renvoyé tel quel : l'appelant refuse la publication
  * au lieu de tomber sur Membership.

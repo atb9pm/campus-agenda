@@ -9,6 +9,7 @@ import {
   moveWeekNote,
   normalizeClassNotes,
   visibleSchoolWeeks,
+  weekdayToCourseDayIndex,
   weekNotesKey,
 } from "../src/features/class-notebook/index.ts";
 import { TEACHER_CHF_ID } from "../src/features/classes/index.ts";
@@ -20,6 +21,14 @@ import { createNodeSqliteDatabase } from "../src/lib/persistence/sql/adapters.ts
 import { applyMigrations } from "../src/lib/persistence/sql/migrate.ts";
 import { seedDemoDatabase } from "../src/lib/persistence/sql/seed.ts";
 import { SqlTeacherNotesStore } from "../src/lib/persistence/sql/sql-teacher-notes-store.ts";
+
+test("class notebook — weekdayToCourseDayIndex ISO 1→0 … 5→4", () => {
+  assert.equal(weekdayToCourseDayIndex(1), 0);
+  assert.equal(weekdayToCourseDayIndex(2), 1);
+  assert.equal(weekdayToCourseDayIndex(3), 2);
+  assert.equal(weekdayToCourseDayIndex(4), 3);
+  assert.equal(weekdayToCourseDayIndex(5), 4);
+});
 
 test("class notebook — affichage 3 semaines centré", () => {
   const weeks = buildSchoolWeeks();

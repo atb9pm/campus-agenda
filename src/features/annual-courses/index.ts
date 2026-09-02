@@ -39,6 +39,7 @@ export {
 } from "./admin-assign-ui.ts";
 export { parseAssignmentDate, validateAssignmentPeriod, requireOverrideReason } from "./dates.ts";
 export {
+  ANNUAL_COURSE_AGENDA_DELETE_REASON,
   ANNUAL_COURSE_SCHEDULE_DELETE_REASON,
   ANNUAL_COURSE_USED_DELETE_REASON,
   annualCourseDeleteBlockers,

@@ -127,12 +127,21 @@ export async function fetchTeacherCoursesApi(schoolYearId?: string | null): Prom
   };
 }
 
+export interface CourseTimelinePublicationSummary {
+  agendaItemId: number;
+  referenceItemId: string | null;
+  courseSessionKey: string | null;
+  courseSessionDate: string | null;
+  type: AgendaItemType;
+}
+
 export async function fetchTeacherCourseTimelineApi(
   annualCourseId: string,
   signal?: AbortSignal,
 ): Promise<{
   course: TeacherCourseTimelineCourse;
   timeline: CourseTimelineProjection;
+  publications: CourseTimelinePublicationSummary[];
 }> {
   const params = `?annualCourseId=${encodeURIComponent(annualCourseId)}`;
   const response = await fetch(`/api/teacher/course-timeline${params}`, {
@@ -144,11 +153,38 @@ export async function fetchTeacherCourseTimelineApi(
     reason?: string;
     course?: TeacherCourseTimelineCourse;
     timeline?: CourseTimelineProjection;
+    publications?: CourseTimelinePublicationSummary[];
   }>(response);
   if (!response.ok || !payload.ok || !payload.course || !payload.timeline) {
     throw new Error(payload.reason ?? "Chargement du déroulement impossible.");
   }
-  return { course: payload.course, timeline: payload.timeline };
+  return {
+    course: payload.course,
+    timeline: payload.timeline,
+    publications: payload.publications ?? [],
+  };
+}
+
+export async function publishTeacherCoursePublicationApi(input: {
+  annualCourseId: string;
+  courseSessionKey: string;
+  referenceItemId: string;
+}): Promise<PrototypeAgendaItem> {
+  const response = await fetch("/api/teacher/course-publications", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      annualCourseId: input.annualCourseId,
+      courseSessionKey: input.courseSessionKey,
+      referenceItemId: input.referenceItemId,
+    }),
+  });
+  const payload = await parseJson<{ ok: boolean; reason?: string; item?: PrototypeAgendaItem }>(response);
+  if (!response.ok || !payload.ok || !payload.item) {
+    throw new Error(payload.reason ?? "Publication dans l’Agenda impossible.");
+  }
+  return payload.item;
 }
 
 /** Null si aucune configuration n'a encore été enregistrée côté serveur. */

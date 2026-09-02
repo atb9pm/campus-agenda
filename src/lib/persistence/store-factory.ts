@@ -5,6 +5,9 @@ import { createNodeSqliteDatabase, wrapD1Database } from "./sql/adapters.ts";
 import { applyMigrations, isDatabaseSeeded } from "./sql/migrate.ts";
 import { seedDemoDatabase } from "./sql/seed.ts";
 import { SqlAgendaStore, classroomExistsInDatabase, listClassroomsInDatabase, listStudentAccessesInDatabase, resolveClassroomSubjectNamesInDatabase } from "./sql/sql-agenda-store.ts";
+import type { RuntimeAgendaAdapterStore, RuntimeClassroomListItem } from "./runtime-agenda-types.ts";
+import { getMemoryRuntimeAgendaAdapterStore } from "./memory-runtime-adapter-store.ts";
+import { SqlRuntimeAgendaAdapterStore } from "./sql/sql-runtime-adapter-store.ts";
 import { SqlTemplateStore } from "./sql/sql-template-store.ts";
 import { SqlSchoolYearStore, hydrateActiveSchoolCalendar } from "./sql/sql-school-year-store.ts";
 import { getMemoryAgendaStore } from "./memory-store.ts";
@@ -68,7 +71,8 @@ interface ResolvedStore {
   kind: StoreKind;
   sqlDb: import("./sql/types.ts").SqlDatabase | null;
   classroomExists: (classroomId: string) => Promise<boolean>;
-  listRuntimeClassrooms: () => Promise<Array<{ id: string; name: string }>>;
+  adapters: RuntimeAgendaAdapterStore;
+  listRuntimeClassrooms: () => Promise<RuntimeClassroomListItem[]>;
   listStudentAccesses: () => Promise<Array<{ classroomId: string }>>;
   resolveClassroomSubjectNames: (
     classroomId: string,
@@ -189,6 +193,7 @@ async function createStore(): Promise<ResolvedStore> {
       courseScheduleStore,
       kind: "memory",
       sqlDb: null,
+      adapters: getMemoryRuntimeAgendaAdapterStore(),
       classroomExists: memoryClassroomExists,
       listRuntimeClassrooms: memoryListRuntimeClassrooms,
       listStudentAccesses: memoryListStudentAccesses,
@@ -226,6 +231,7 @@ async function createStore(): Promise<ResolvedStore> {
       courseScheduleStore,
       kind: "sqlite",
       sqlDb: sqlite,
+      adapters: new SqlRuntimeAgendaAdapterStore(sqlite),
       classroomExists: (classroomId) => classroomExistsInDatabase(sqlite, classroomId),
       listRuntimeClassrooms: () => listClassroomsInDatabase(sqlite),
       listStudentAccesses: () => listStudentAccessesInDatabase(sqlite),
@@ -266,6 +272,7 @@ async function createStore(): Promise<ResolvedStore> {
         courseScheduleStore,
         kind: "d1",
         sqlDb: db,
+        adapters: new SqlRuntimeAgendaAdapterStore(db),
         classroomExists: (classroomId) => classroomExistsInDatabase(db, classroomId),
         listRuntimeClassrooms: () => listClassroomsInDatabase(db),
         listStudentAccesses: () => listStudentAccessesInDatabase(db),
@@ -304,6 +311,7 @@ async function createStore(): Promise<ResolvedStore> {
     courseScheduleStore,
     kind: "memory",
     sqlDb: null,
+    adapters: getMemoryRuntimeAgendaAdapterStore(),
     classroomExists: memoryClassroomExists,
     listRuntimeClassrooms: memoryListRuntimeClassrooms,
     listStudentAccesses: memoryListStudentAccesses,
@@ -388,7 +396,11 @@ export async function checkClassroomExists(classroomId: string): Promise<boolean
   return resolved.classroomExists(classroomId);
 }
 
-export async function listRuntimeClassrooms(): Promise<Array<{ id: string; name: string }>> {
+export async function getRuntimeAgendaAdapterStore(): Promise<RuntimeAgendaAdapterStore> {
+  return (await resolveAgendaStore()).adapters;
+}
+
+export async function listRuntimeClassrooms(): Promise<RuntimeClassroomListItem[]> {
   const resolved = await resolveAgendaStore();
   return resolved.listRuntimeClassrooms();
 }

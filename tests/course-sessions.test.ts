@@ -97,11 +97,11 @@ function shuffleSlots(slots: CourseScheduleSlot[]): CourseScheduleSlot[] {
   return copy;
 }
 
-test("version 2.28.0 — CourseSession calculée, aucune migration 0024", () => {
+test("version — CourseSession calculée, dernière migration 0024, aucune table CourseSession", () => {
   assert.match(APP_VERSION, /^\d+\.\d+\.\d+$/);
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0023_class_attendance_days.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
   assert.equal(
-    SQL_MIGRATION_FILES.some((file) => file.startsWith("0024")),
+    SQL_MIGRATION_FILES.some((file) => file.startsWith("0025")),
     false,
   );
 });

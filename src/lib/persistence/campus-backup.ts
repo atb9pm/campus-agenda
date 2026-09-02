@@ -147,11 +147,13 @@ async function buildMemoryTables(deps: CampusBackupDeps): Promise<CampusTableDum
     name: entry.name,
     program_label: entry.programLabel,
     access_code_hint: entry.accessCodeHint,
+    school_class_id: entry.schoolClassId ?? null,
   }));
   dump.subjects = legacy.subjects.map((entry) => ({
     id: entry.id,
     classroom_id: entry.classroomId,
     name: entry.name,
+    annual_course_id: entry.annualCourseId ?? null,
   }));
   dump.student_accesses = legacy.studentAccesses.map((entry) => ({
     id: entry.id,
@@ -183,6 +185,11 @@ async function buildMemoryTables(deps: CampusBackupDeps): Promise<CampusTableDum
     detail: item.detail,
     template_id: item.templateId,
     school_year_id: item.schoolYearId,
+    annual_course_id: item.annualCourseId ?? null,
+    course_session_key: item.courseSessionKey ?? null,
+    course_session_date: item.courseSessionDate ?? null,
+    reference_session_id: item.referenceSessionId ?? null,
+    reference_item_id: item.referenceItemId ?? null,
   }));
 
   for (const year of years) {
@@ -531,6 +538,11 @@ async function restoreMemoryTables(deps: CampusBackupDeps, dump: CampusTableDump
       detail: asString(row.detail),
       templateId: asNullableString(row.template_id ?? row.templateId),
       schoolYearId: asNullableString(row.school_year_id ?? row.schoolYearId),
+      annualCourseId: asNullableString(row.annual_course_id ?? row.annualCourseId),
+      courseSessionKey: asNullableString(row.course_session_key ?? row.courseSessionKey),
+      courseSessionDate: asNullableString(row.course_session_date ?? row.courseSessionDate),
+      referenceSessionId: asNullableString(row.reference_session_id ?? row.referenceSessionId),
+      referenceItemId: asNullableString(row.reference_item_id ?? row.referenceItemId),
     })),
   );
 
@@ -540,11 +552,13 @@ async function restoreMemoryTables(deps: CampusBackupDeps, dump: CampusTableDump
       name: asString(row.name),
       programLabel: asString(row.program_label ?? row.programLabel),
       accessCodeHint: asString(row.access_code_hint ?? row.accessCodeHint),
+      schoolClassId: asNullableString(row.school_class_id ?? row.schoolClassId),
     })),
     subjects: (dump.subjects ?? []).map((row) => ({
       id: asString(row.id),
       classroomId: asString(row.classroom_id ?? row.classroomId),
       name: asString(row.name),
+      annualCourseId: asNullableString(row.annual_course_id ?? row.annualCourseId),
     })),
     studentAccesses: (dump.student_accesses ?? []).map((row) => ({
       id: asString(row.id),

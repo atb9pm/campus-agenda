@@ -14,6 +14,11 @@ export interface PublicationInput {
   detail: string;
   templateId?: string | null;
   schoolYearId?: string | null;
+  annualCourseId?: string | null;
+  courseSessionKey?: string | null;
+  courseSessionDate?: string | null;
+  referenceSessionId?: string | null;
+  referenceItemId?: string | null;
 }
 
 export type PublicationPatch = Partial<
@@ -22,6 +27,36 @@ export type PublicationPatch = Partial<
 
 export function isAllowedPublicationType(type: string): type is AgendaItemType {
   return (AGENDA_ITEM_TYPES as readonly string[]).includes(type);
+}
+
+export function isStructuredAgendaPublication(item: PrototypeAgendaItem): boolean {
+  return Boolean(item.annualCourseId?.trim() && item.courseSessionKey?.trim());
+}
+
+export const STRUCTURED_AGENDA_PATCH_FORBIDDEN_REASON =
+  "Les champs de provenance et de ciblage d’une publication structurée ne peuvent pas être modifiés.";
+
+const STRUCTURED_PATCH_FORBIDDEN_KEYS = [
+  "day",
+  "hour",
+  "schoolWeekNumber",
+  "subjectId",
+  "annualCourseId",
+  "courseSessionKey",
+  "courseSessionDate",
+  "referenceSessionId",
+  "referenceItemId",
+] as const;
+
+export function structuredAgendaPatchGuard(
+  item: PrototypeAgendaItem,
+  body: Record<string, unknown>,
+): { ok: true } | { ok: false; reason: string } {
+  if (!isStructuredAgendaPublication(item)) return { ok: true };
+  if (STRUCTURED_PATCH_FORBIDDEN_KEYS.some((key) => body[key] !== undefined)) {
+    return { ok: false, reason: STRUCTURED_AGENDA_PATCH_FORBIDDEN_REASON };
+  }
+  return { ok: true };
 }
 
 export function canModifyPublication(
@@ -67,6 +102,11 @@ export function createPublication(
     detail: input.detail.trim() || "Aucune précision",
     templateId: input.templateId ?? null,
     schoolYearId: input.schoolYearId ?? null,
+    annualCourseId: input.annualCourseId ?? null,
+    courseSessionKey: input.courseSessionKey ?? null,
+    courseSessionDate: input.courseSessionDate ?? null,
+    referenceSessionId: input.referenceSessionId ?? null,
+    referenceItemId: input.referenceItemId ?? null,
   };
 
   return [...items, publication];

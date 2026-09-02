@@ -32,6 +32,11 @@ export interface AgendaItemRow {
   detail: string;
   template_id: string | null;
   school_year_id: string | null;
+  annual_course_id: string | null;
+  course_session_key: string | null;
+  course_session_date: string | null;
+  reference_session_id: string | null;
+  reference_item_id: string | null;
 }
 
 export interface StudentAccessRow {
