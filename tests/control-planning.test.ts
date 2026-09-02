@@ -368,8 +368,10 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
   assert.match(panel, /targetClassDayControls/);
   assert.doesNotMatch(panel, /modalDay\?\.confirmationRequired/);
   assert.doesNotMatch(panel, /<span>Classe<\/span>/);
-  assert.doesNotMatch(panel, /onDragStart/);
-  assert.doesNotMatch(panel, /onDrop/);
+  assert.match(panel, /onDragStart/);
+  assert.match(panel, /onDrop/);
+  assert.match(panel, /moveTeacherControlApi/);
+  assert.match(panel, /data-control-move/);
   assert.doesNotMatch(panel, /dnd-kit/);
   assert.doesNotMatch(panel, /react-beautiful-dnd/);
   assert.doesNotMatch(panel, /type === "HOMEWORK"/);
