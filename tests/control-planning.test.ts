@@ -143,8 +143,8 @@ function planningDeps(items: PrototypeAgendaItem[] = DEMO_PROTOTYPE_ITEMS): Cont
   } as unknown as ControlPlanningServiceDeps;
 }
 
-test("version 2.33.0 — planning semestriel, sans table dédiée", () => {
-  assert.equal(APP_VERSION, "2.33.0");
+test("version 2.34.0 — planning semestriel, sans table dédiée", () => {
+  assert.equal(APP_VERSION, "2.34.0");
   assert.equal(TEACHER_NAV_LABELS.controles, "Contrôles");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",
@@ -368,8 +368,10 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
   assert.match(panel, /targetClassDayControls/);
   assert.doesNotMatch(panel, /modalDay\?\.confirmationRequired/);
   assert.doesNotMatch(panel, /<span>Classe<\/span>/);
-  assert.doesNotMatch(panel, /onDragStart/);
-  assert.doesNotMatch(panel, /onDrop/);
+  assert.match(panel, /onDragStart/);
+  assert.match(panel, /onDrop/);
+  assert.match(panel, /moveTeacherControlApi/);
+  assert.match(panel, /data-control-move/);
   assert.doesNotMatch(panel, /dnd-kit/);
   assert.doesNotMatch(panel, /react-beautiful-dnd/);
   assert.doesNotMatch(panel, /type === "HOMEWORK"/);

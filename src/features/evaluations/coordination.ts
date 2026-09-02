@@ -173,6 +173,8 @@ export function evaluateControlCoordination(options: {
   schoolYearId: string;
   includeUnscopedYearItems: boolean;
   catalog: ControlCoordinationCatalog;
+  /** Exclure le contrôle en cours de déplacement pour ne pas le compter deux fois. */
+  excludeItemId?: number;
 }): ControlCoordinationSummary {
   const empty: ControlCoordinationSummary = {
     classDayControls: [],
@@ -187,7 +189,12 @@ export function evaluateControlCoordination(options: {
     itemMatchesSchoolYear(item, options.schoolYearId, options.includeUnscopedYearItems),
   );
 
-  const classDayItems = listTestsOnCourseDay(yearFiltered, options.classroomId, options.courseDay);
+  const classDayItems = listTestsOnCourseDay(
+    yearFiltered,
+    options.classroomId,
+    options.courseDay,
+    options.excludeItemId,
+  );
   const weekClassrooms = new Set(options.teacherWeekClassroomIds);
   const teacherWeekItems = yearFiltered
     .filter(
@@ -195,7 +202,8 @@ export function evaluateControlCoordination(options: {
         item.type === "TEST" &&
         item.authorTeacherId === options.teacherId &&
         weekClassrooms.has(item.classroomId) &&
-        item.schoolWeekNumber === options.courseDay.schoolWeekNumber,
+        item.schoolWeekNumber === options.courseDay.schoolWeekNumber &&
+        item.id !== options.excludeItemId,
     )
     .slice()
     .sort(

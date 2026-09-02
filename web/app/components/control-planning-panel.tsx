@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type DragEvent } from "react";
 
 import {
   classDayControlsForPlacementOption,
   confirmationRequiredForPlacementOption,
   formatControlPlanningYearLabel,
+  isMovableStructuredControlCard,
   toggleControlPlanningClassroomSelection,
   type ControlPlacementOption,
   type ControlPlanningAlert,
@@ -24,7 +25,10 @@ import {
   ControlCoordinationRequiredError,
   createTeacherControlApi,
   fetchTeacherControlPlanningApi,
+  moveTeacherControlApi,
 } from "../../lib/api-client.ts";
+
+const CONTROL_DRAG_MIME = "application/x-campus-control";
 
 function formatIsoDay(iso: string | null): string {
   if (!iso) return "";
@@ -128,38 +132,70 @@ function ControlCard({
   compact = false,
   showTeacher = true,
   toneIndex = 0,
+  movable = false,
+  dragging = false,
+  selected = false,
+  onDragStart,
+  onDragEnd,
+  onMoveClick,
 }: {
   card: ControlPlanningCard;
   compact?: boolean;
   showTeacher?: boolean;
   toneIndex?: number;
+  movable?: boolean;
+  dragging?: boolean;
+  selected?: boolean;
+  onDragStart?: (event: DragEvent<HTMLElement>) => void;
+  onDragEnd?: () => void;
+  onMoveClick?: () => void;
 }) {
   const title = [card.classroomName, card.branchLabel, card.title, card.teacherName].filter(Boolean).join(" · ");
+  const classes = [
+    "control-planning-card",
+    compact ? "is-compact" : "",
+    card.isOwn ? "" : "is-peer",
+    movable ? "is-draggable" : "",
+    dragging ? "is-dragging" : "",
+    selected ? "is-move-source" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   return (
     <article
-      className={
-        compact
-          ? card.isOwn
-            ? "control-planning-card is-compact"
-            : "control-planning-card is-compact is-peer"
-          : card.isOwn
-            ? "control-planning-card"
-            : "control-planning-card is-peer"
-      }
+      className={classes}
       data-control-card=""
       data-classroom-name={card.classroomName}
       data-own={card.isOwn ? "true" : "false"}
+      data-movable={movable ? "true" : "false"}
       data-class-tone={toneIndex}
       data-agenda-item-id={card.agendaItemId}
       data-annual-course-id={card.annualCourseId ?? ""}
       data-course-session-key={card.courseSessionKey ?? ""}
       data-course-session-date={card.courseSessionDate ?? card.date ?? ""}
       title={title}
+      draggable={movable}
+      onDragStart={movable ? onDragStart : undefined}
+      onDragEnd={movable ? onDragEnd : undefined}
     >
       <span className="control-planning-class-badge">{card.classroomName}</span>
       <span className="control-planning-branch">{card.branchLabel}</span>
       <strong>{card.title}</strong>
       {showTeacher ? <span className="control-planning-teacher">{card.teacherName}</span> : null}
+      {movable ? (
+        <button
+          type="button"
+          className="control-planning-move-action"
+          data-control-move=""
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onMoveClick?.();
+          }}
+        >
+          Déplacer
+        </button>
+      ) : null}
     </article>
   );
 }
@@ -325,6 +361,82 @@ function PlanModal({
   );
 }
 
+function MoveModal({
+  classroomName,
+  day,
+  option,
+  card,
+  classDayControls,
+  teacherWeekControls,
+  submitting,
+  error,
+  confirmationRequired,
+  onClose,
+  onSubmit,
+}: {
+  classroomName: string;
+  day: ControlPlanningDay;
+  option: ControlPlacementOption;
+  card: ControlPlanningCard;
+  classDayControls: ControlPlanningCard[];
+  teacherWeekControls: ControlPlanningCard[];
+  submitting: boolean;
+  error: string;
+  confirmationRequired: boolean;
+  onClose: () => void;
+  onSubmit: (confirm: boolean) => void;
+}) {
+  const dayLabel = formatWeekdayDate(day.weekdayLabel, option.date);
+  return (
+    <div className="technical-modal-backdrop" role="presentation">
+      <section
+        className="technical-modal control-plan-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="control-move-title"
+        data-control-move-modal=""
+      >
+        <header>
+          <div>
+            <span className="eyebrow">DÉPLACER UN CONTRÔLE</span>
+            <h2 id="control-move-title">Déplacer un contrôle</h2>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fermer" disabled={submitting}>
+            ×
+          </button>
+        </header>
+        <p className="control-plan-fixed" data-control-fixed="">
+          <strong>{card.title}</strong>
+          <span>{classroomName}</span>
+          <span>{dayLabel}</span>
+          <span>{placementCaption(option)}</span>
+        </p>
+        <CoordinationBlock
+          classroomName={classroomName}
+          dayLabel={`ce ${day.weekdayLabel.toLocaleLowerCase("fr-CH")}`}
+          classDayControls={classDayControls}
+          teacherWeekControls={teacherWeekControls}
+          confirmationRequired={confirmationRequired}
+        />
+        {error ? <p className="control-plan-error">{error}</p> : null}
+        <footer>
+          <button type="button" onClick={onClose} disabled={submitting}>
+            Annuler
+          </button>
+          <button
+            type="button"
+            data-control-move-confirm=""
+            disabled={submitting}
+            onClick={() => onSubmit(confirmationRequired)}
+          >
+            {submitting ? "Déplacement…" : confirmationRequired ? "Déplacer quand même" : "Déplacer"}
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 export function ControlPlanningPanel({
   onPublicationCreated,
 }: {
@@ -348,6 +460,14 @@ export function ControlPlanningPanel({
   const [submitting, setSubmitting] = useState(false);
   const [publishError, setPublishError] = useState("");
   const [serverCoordination, setServerCoordination] = useState<ControlCoordinationSummary | null>(null);
+  const [draggingCard, setDraggingCard] = useState<ControlPlanningCard | null>(null);
+  const [moveSource, setMoveSource] = useState<ControlPlanningCard | null>(null);
+  const [pendingMoveDay, setPendingMoveDay] = useState<ControlPlanningDay | null>(null);
+  const [moveDay, setMoveDay] = useState<ControlPlanningDay | null>(null);
+  const [moveOption, setMoveOption] = useState<ControlPlacementOption | null>(null);
+  const [moveCard, setMoveCard] = useState<ControlPlanningCard | null>(null);
+  const [moving, setMoving] = useState(false);
+  const [moveError, setMoveError] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -437,6 +557,187 @@ export function ControlPlanningPanel({
     setPublishError("");
     setServerCoordination(null);
     setSubmitting(false);
+    setPendingMoveDay(null);
+    setMoveDay(null);
+    setMoveOption(null);
+    setMoveCard(null);
+    setMoving(false);
+    setMoveError("");
+    setMoveSource(null);
+    setDraggingCard(null);
+  }
+
+  function cancelMoveMode() {
+    setMoveSource(null);
+    setDraggingCard(null);
+    setPendingMoveDay(null);
+    setMoveDay(null);
+    setMoveOption(null);
+    setMoveCard(null);
+    setMoveError("");
+    setServerCoordination(null);
+  }
+
+  function cardIsMovable(card: ControlPlanningCard): boolean {
+    return isMovableStructuredControlCard(card, Boolean(view?.canCreate));
+  }
+
+  function startCardDrag(card: ControlPlanningCard, event: DragEvent<HTMLElement>) {
+    if (!cardIsMovable(card)) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.setData(CONTROL_DRAG_MIME, String(card.agendaItemId));
+    event.dataTransfer.setData("text/plain", String(card.agendaItemId));
+    event.dataTransfer.effectAllowed = "move";
+    setDraggingCard(card);
+    setMoveError("");
+  }
+
+  function dropState(options: readonly ControlPlacementOption[]): "ok" | "forbidden" | null {
+    if (!draggingCard && !moveSource) return null;
+    return options.length > 0 ? "ok" : "forbidden";
+  }
+
+  function sameSession(card: ControlPlanningCard, option: ControlPlacementOption): boolean {
+    return card.annualCourseId === option.annualCourseId && card.courseSessionKey === option.courseSessionKey;
+  }
+
+  async function executeMove(
+    card: ControlPlanningCard,
+    option: ControlPlacementOption,
+    confirm: boolean,
+    day?: ControlPlanningDay,
+  ) {
+    setMoving(true);
+    setMoveError("");
+    try {
+      await moveTeacherControlApi(card.agendaItemId, {
+        annualCourseId: option.annualCourseId,
+        courseSessionKey: option.courseSessionKey,
+        confirmCoordination: confirm,
+      });
+      closeModal();
+      setReloadToken((token) => token + 1);
+    } catch (caught) {
+      setMoveCard(card);
+      setMoveOption(option);
+      if (day) setMoveDay(day);
+      if (caught instanceof ControlCoordinationRequiredError) {
+        setServerCoordination(caught.coordination);
+        setMoveError(caught.message);
+      } else {
+        setMoveError(caught instanceof Error ? caught.message : "Déplacement impossible.");
+      }
+    } finally {
+      setMoving(false);
+    }
+  }
+
+  function openMoveConfirm(card: ControlPlanningCard, day: ControlPlanningDay, option: ControlPlacementOption) {
+    setPickerDay(null);
+    setPendingMoveDay(null);
+    setModalDay(null);
+    setModalOption(null);
+    setMoveSource(null);
+    setDraggingCard(null);
+    setMoveCard(card);
+    setMoveDay(day);
+    setMoveOption(option);
+    setMoveError("");
+    setServerCoordination(null);
+  }
+
+  function chooseMoveDestination(card: ControlPlanningCard, day: ControlPlanningDay, option: ControlPlacementOption) {
+    if (!cardIsMovable(card)) return;
+    if (sameSession(card, option)) {
+      cancelMoveMode();
+      return;
+    }
+    const previewConfirm = confirmationRequiredForPlacementOption(
+      day.classDayControls,
+      option,
+      card.agendaItemId,
+    );
+    if (previewConfirm) {
+      openMoveConfirm(card, day, option);
+      return;
+    }
+    void executeMove(card, option, false, day);
+  }
+
+  function resolveDroppedCard(event: DragEvent<HTMLElement>): ControlPlanningCard | null {
+    const raw =
+      event.dataTransfer.getData(CONTROL_DRAG_MIME) || event.dataTransfer.getData("text/plain");
+    const agendaItemId = Number(raw);
+    if (draggingCard && draggingCard.agendaItemId === agendaItemId) return draggingCard;
+    if (Number.isInteger(agendaItemId) && agendaItemId > 0 && view) {
+      const days = [
+        ...(view.week?.days ?? []),
+        ...(view.semester?.weeks.flatMap((week) => week.days.map(toPlanningDay)) ?? []),
+      ];
+      for (const day of days) {
+        const found = day.controls.find((entry) => entry.agendaItemId === agendaItemId);
+        if (found) return found;
+      }
+    }
+    return draggingCard;
+  }
+
+  function handleDayDragOver(event: DragEvent<HTMLElement>, options: readonly ControlPlacementOption[]) {
+    if (!draggingCard) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = options.length > 0 ? "move" : "none";
+  }
+
+  function handleDropOnDay(event: DragEvent<HTMLElement>, day: ControlPlanningDay) {
+    event.preventDefault();
+    const card = resolveDroppedCard(event);
+    setDraggingCard(null);
+    if (!card || !day.placementOptions.length) return;
+    if (day.placementOptions.length === 1) {
+      chooseMoveDestination(card, day, day.placementOptions[0]!);
+      return;
+    }
+    setMoveCard(card);
+    setPendingMoveDay(day);
+  }
+
+  function handleDropOnOption(
+    event: DragEvent<HTMLElement>,
+    day: ControlPlanningDay,
+    option: ControlPlacementOption,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    const card = resolveDroppedCard(event);
+    setDraggingCard(null);
+    if (!card) return;
+    chooseMoveDestination(card, day, option);
+  }
+
+  function activatePlacement(day: ControlPlanningDay, option?: ControlPlacementOption) {
+    const source = moveSource;
+    if (source) {
+      if (option) {
+        chooseMoveDestination(source, day, option);
+        return;
+      }
+      if (day.placementOptions.length === 1) {
+        chooseMoveDestination(source, day, day.placementOptions[0]!);
+        return;
+      }
+      if (day.placementOptions.length > 1) {
+        setMoveCard(source);
+        setPendingMoveDay(day);
+      }
+      return;
+    }
+    if (option) {
+      chooseOption(day, option);
+      return;
+    }
+    openPlan(day);
   }
 
   function openPlan(day: ControlPlanningDay) {
@@ -647,6 +948,18 @@ export function ControlPlanningPanel({
         {view?.guidedPlanningReason ? (
           <p className="control-planning-hint">{view.guidedPlanningReason}</p>
         ) : null}
+        {moveSource ? (
+          <div className="control-planning-move-bar" data-control-move-mode="">
+            <p>
+              Choisissez la séance destination pour « {moveSource.title} ». Seules les cases avec une
+              CourseSession réelle sont valides.
+            </p>
+            <button type="button" onClick={cancelMoveMode}>
+              Annuler le déplacement
+            </button>
+          </div>
+        ) : null}
+        {moveError && !moveCard ? <p className="control-plan-error">{moveError}</p> : null}
       </div>
 
       {error ? (
@@ -688,9 +1001,18 @@ export function ControlPlanningPanel({
               {view.week.days.map((day) => (
                 <section
                   key={day.dayIndex}
-                  className="control-planning-day"
+                  className={[
+                    "control-planning-day",
+                    dropState(day.placementOptions) === "ok" ? "is-drop-ok" : "",
+                    dropState(day.placementOptions) === "forbidden" ? "is-drop-forbidden" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   data-day-index={day.dayIndex}
+                  data-control-drop={dropState(day.placementOptions) ?? ""}
                   aria-label={day.weekdayLabel}
+                  onDragOver={(event) => handleDayDragOver(event, day.placementOptions)}
+                  onDrop={(event) => handleDropOnDay(event, day)}
                 >
                   <header>
                     <strong>{day.weekdayLabel}</strong>
@@ -704,6 +1026,12 @@ export function ControlPlanningPanel({
                             card={card}
                             showTeacher={mode === "class-all" || !card.isOwn}
                             toneIndex={classToneIndex(card.classroomId, assignedIds)}
+                            movable={cardIsMovable(card)}
+                            dragging={draggingCard?.agendaItemId === card.agendaItemId}
+                            selected={moveSource?.agendaItemId === card.agendaItemId}
+                            onDragStart={(event) => startCardDrag(card, event)}
+                            onDragEnd={() => setDraggingCard(null)}
+                            onMoveClick={() => setMoveSource(card)}
                           />
                         </li>
                       ))}
@@ -711,14 +1039,33 @@ export function ControlPlanningPanel({
                   ) : (
                     <p className="control-planning-day-empty">Aucun contrôle</p>
                   )}
-                  {day.canPlan ? (
+                  {day.canPlan && day.placementOptions.length > 1
+                    ? day.placementOptions.map((option) => (
+                        <button
+                          key={option.courseSessionKey}
+                          type="button"
+                          className="control-plan-add"
+                          data-control-plan=""
+                          data-control-placement={option.courseSessionKey}
+                          data-annual-course-id={option.annualCourseId}
+                          data-course-session-key={option.courseSessionKey}
+                          onClick={() => activatePlacement(day, option)}
+                          onDragOver={(event) => handleDayDragOver(event, [option])}
+                          onDrop={(event) => handleDropOnOption(event, day, option)}
+                        >
+                          {moveSource ? `→ ${placementCaption(option)}` : placementHint(option)}
+                        </button>
+                      ))
+                    : day.canPlan ? (
                     <button
                       type="button"
                       className="control-plan-add"
                       data-control-plan=""
-                      onClick={() => openPlan(day)}
+                      onClick={() => activatePlacement(day)}
+                      onDragOver={(event) => handleDayDragOver(event, day.placementOptions)}
+                      onDrop={(event) => handleDropOnDay(event, day)}
                     >
-                      + Planifier un contrôle
+                      {moveSource ? "Déposer ici" : "+ Planifier un contrôle"}
                     </button>
                   ) : day.noCourseHint ? (
                     <p className="control-planning-no-course">{day.noCourseHint}</p>
@@ -797,10 +1144,19 @@ export function ControlPlanningPanel({
                   {semesterWeek.days.map((day) => (
                     <td
                       key={`${semesterWeek.number}-${day.dayIndex}`}
-                      className={day.hasCourse ? "is-available" : "is-inactive"}
+                      className={[
+                        day.hasCourse ? "is-available" : "is-inactive",
+                        dropState(day.placementOptions) === "ok" ? "is-drop-ok" : "",
+                        dropState(day.placementOptions) === "forbidden" ? "is-drop-forbidden" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
                       data-day-index={day.dayIndex}
                       data-has-course={day.hasCourse ? "true" : "false"}
                       data-date={day.date ?? ""}
+                      data-control-drop={dropState(day.placementOptions) ?? ""}
+                      onDragOver={(event) => handleDayDragOver(event, day.placementOptions)}
+                      onDrop={(event) => handleDropOnDay(event, toPlanningDay(day))}
                     >
                       {day.controls.length ? (
                         <ul>
@@ -811,6 +1167,12 @@ export function ControlPlanningPanel({
                                 compact
                                 showTeacher={mode === "class-all" || !card.isOwn}
                                 toneIndex={classToneIndex(card.classroomId, assignedIds)}
+                                movable={cardIsMovable(card)}
+                                dragging={draggingCard?.agendaItemId === card.agendaItemId}
+                                selected={moveSource?.agendaItemId === card.agendaItemId}
+                                onDragStart={(event) => startCardDrag(card, event)}
+                                onDragEnd={() => setDraggingCard(null)}
+                                onMoveClick={() => setMoveSource(card)}
                               />
                             </li>
                           ))}
@@ -829,9 +1191,11 @@ export function ControlPlanningPanel({
                               data-annual-course-id={option.annualCourseId}
                               data-course-session-key={option.courseSessionKey}
                               data-course-session-date={option.date}
-                              onClick={() => chooseOption(toPlanningDay(day), option)}
+                              onClick={() => activatePlacement(toPlanningDay(day), option)}
+                              onDragOver={(event) => handleDayDragOver(event, [option])}
+                              onDrop={(event) => handleDropOnOption(event, toPlanningDay(day), option)}
                             >
-                              {placementHint(option)}
+                              {moveSource ? `→ ${placementHint(option)}` : placementHint(option)}
                             </button>
                           ))
                         : null}
@@ -846,22 +1210,32 @@ export function ControlPlanningPanel({
         <p className="ma-semaine-empty">Aucune semaine scolaire n’est disponible pour cette année.</p>
       )}
 
-      {pickerDay ? (
+      {pickerDay || pendingMoveDay ? (
         <div className="technical-modal-backdrop" role="presentation">
           <section className="technical-modal control-plan-modal" role="dialog" aria-modal="true">
             <header>
               <div>
                 <span className="eyebrow">SÉANCE</span>
-                <h2>Choisir le cours</h2>
+                <h2>{pendingMoveDay ? "Choisir la séance destination" : "Choisir le cours"}</h2>
               </div>
-              <button type="button" onClick={closeModal} aria-label="Fermer">
+              <button type="button" onClick={pendingMoveDay ? cancelMoveMode : closeModal} aria-label="Fermer">
                 ×
               </button>
             </header>
             <ul className="control-plan-options" data-control-session-picker="">
-              {pickerDay.placementOptions.map((option) => (
+              {(pendingMoveDay ?? pickerDay)!.placementOptions.map((option) => (
                 <li key={option.courseSessionKey}>
-                  <button type="button" onClick={() => chooseOption(pickerDay, option)}>
+                  <button
+                    type="button"
+                    data-course-session-key={option.courseSessionKey}
+                    onClick={() => {
+                      if (pendingMoveDay && moveCard) {
+                        chooseMoveDestination(moveCard, pendingMoveDay, option);
+                        return;
+                      }
+                      chooseOption((pendingMoveDay ?? pickerDay)!, option);
+                    }}
+                  >
                     {placementCaption(option)}
                   </button>
                 </li>
@@ -895,6 +1269,44 @@ export function ControlPlanningPanel({
           onDetail={setDetail}
           onClose={closeModal}
           onSubmit={(confirm) => void submitPlan(confirm)}
+        />
+      ) : null}
+
+      {moveDay && moveOption && moveCard && view ? (
+        <MoveModal
+          classroomName={
+            moveOption.classroomName ||
+            view.classes.find((entry) => entry.id === moveOption.classroomId)?.name ||
+            "Classe"
+          }
+          day={moveDay}
+          option={moveOption}
+          card={moveCard}
+          classDayControls={
+            serverCoordination
+              ? coordinationCardsFromSummary(serverCoordination.classDayControls)
+              : classDayControlsForPlacementOption(moveDay.classDayControls, moveOption).filter(
+                  (entry) => entry.agendaItemId !== moveCard.agendaItemId,
+                )
+          }
+          teacherWeekControls={
+            serverCoordination
+              ? coordinationCardsFromSummary(serverCoordination.teacherWeekControls)
+              : view.teacherWeekControls.filter((entry) => entry.agendaItemId !== moveCard.agendaItemId)
+          }
+          submitting={moving}
+          error={moveError}
+          confirmationRequired={
+            serverCoordination
+              ? Boolean(serverCoordination.confirmationRequired)
+              : confirmationRequiredForPlacementOption(
+                  moveDay.classDayControls,
+                  moveOption,
+                  moveCard.agendaItemId,
+                )
+          }
+          onClose={cancelMoveMode}
+          onSubmit={(confirm) => void executeMove(moveCard, moveOption, confirm, moveDay)}
         />
       ) : null}
     </section>

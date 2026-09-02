@@ -2,6 +2,26 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.34.0] — Contrôles : déplacement structuré vers une autre CourseSession
+
+Un enseignant peut déplacer un contrôle existant vers une autre séance de cours réelle, sans perdre l’identité Agenda et sans ouvrir le PATCH générique.
+
+### Ajouté
+
+- Mutation métier de déplacement structuré (`annualCourseId` + `courseSessionKey`).
+- API `POST /api/teacher/controls/[agendaItemId]/move`.
+- Recalcul de coordination sur la classe et la date destination, hors double comptage du contrôle déplacé.
+- Confirmation `CONTROL_COORDINATION_CONFIRM_REQUIRED` réutilisée.
+- Glisser-déposer des contrôles structurés de l’enseignant vers une `placementOption` réelle.
+- Choix explicite de la CourseSession lorsqu’une case en contient plusieurs.
+- Action tactile « Déplacer » si le drag & drop n’est pas fiable.
+- Conservation de l’`agendaItemId`, de l’auteur, du titre, du détail et du type.
+- Refus explicite des déplacements N → N+1 : le `schoolYearId` source doit être identique à celui de la CourseSession destination.
+
+### Non inclus
+
+Aucune nouvelle migration SQL (colonnes structurées déjà présentes). N → N+1, notation, fichiers joints, notifications, solver.
+
 ## [2.33.0] — Contrôles : planning semestriel et filtres multi-classes
 
 Le planning des contrôles permet de voir un semestre entier, de filtrer plusieurs classes attribuées, et de planifier depuis une case réelle de CourseSession.

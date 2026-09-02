@@ -1,6 +1,6 @@
 import { deletePublication, updatePublication } from "../../../features/agenda/publications.ts";
 import { verifyPassword } from "../../auth/password.ts";
-import type { AgendaMutationResult, AgendaStore, CreateAgendaInput } from "../types.ts";
+import type { AgendaMutationResult, AgendaStore, CreateAgendaInput, StructuredControlPlacement } from "../types.ts";
 import type { PrototypeAgendaItem } from "../../../features/agenda/demo-items.ts";
 import type { AgendaItemRow, SqlDatabase, StudentAccessRow } from "./types.ts";
 
@@ -142,6 +142,68 @@ export class SqlAgendaStore implements AgendaStore {
       .run();
 
     return { ok: true, item: updated };
+  }
+
+  async moveStructuredControlPlacement(
+    itemId: number,
+    actorTeacherId: string,
+    placement: StructuredControlPlacement,
+  ): Promise<AgendaMutationResult> {
+    const existing = await this.findAgendaItem(itemId);
+    if (!existing) return { ok: false, reason: "Publication introuvable.", status: 404 };
+    if (existing.type !== "TEST") {
+      return { ok: false, reason: "Seul un contrôle peut être déplacé vers une autre séance.", status: 400 };
+    }
+    if (existing.authorTeacherId !== actorTeacherId) {
+      return { ok: false, reason: "Seul l'auteur peut déplacer ce contrôle.", status: 403 };
+    }
+    if (!existing.annualCourseId?.trim() || !existing.courseSessionKey?.trim()) {
+      return { ok: false, reason: "Ce contrôle n'est pas rattaché à une séance de cours réelle.", status: 400 };
+    }
+
+    const item = {
+      ...existing,
+      classroomId: placement.classroomId,
+      subjectId: placement.subjectId,
+      schoolYearId: placement.schoolYearId,
+      annualCourseId: placement.annualCourseId,
+      courseSessionKey: placement.courseSessionKey,
+      courseSessionDate: placement.courseSessionDate,
+      schoolWeekNumber: placement.schoolWeekNumber,
+      day: placement.day,
+      hour: placement.hour,
+    };
+
+    await this.db
+      .prepare(
+        `UPDATE agenda_items SET
+          classroom_id = ?,
+          subject_id = ?,
+          school_year_id = ?,
+          annual_course_id = ?,
+          course_session_key = ?,
+          course_session_date = ?,
+          school_week_number = ?,
+          day = ?,
+          hour = ?,
+          updated_at = datetime('now')
+         WHERE id = ?`,
+      )
+      .bind(
+        item.classroomId,
+        item.subjectId,
+        item.schoolYearId,
+        item.annualCourseId,
+        item.courseSessionKey,
+        item.courseSessionDate,
+        item.schoolWeekNumber,
+        item.day,
+        item.hour,
+        itemId,
+      )
+      .run();
+
+    return { ok: true, item };
   }
 
   async deleteAgendaItem(itemId: number, actorTeacherId: string): Promise<AgendaMutationResult> {

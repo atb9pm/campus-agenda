@@ -37,6 +37,7 @@ export async function evaluateLiveControlCoordination(
     schoolWeekNumber: number;
     dayIndex: number;
     includeUnscopedYearItems: boolean;
+    excludeItemId?: number;
   },
 ): Promise<ControlCoordinationSummary> {
   await deps.catalog.ensureSeeded();
@@ -106,5 +107,6 @@ export async function evaluateLiveControlCoordination(
     schoolYearId: options.schoolYearId,
     includeUnscopedYearItems: options.includeUnscopedYearItems,
     catalog,
+    excludeItemId: options.excludeItemId,
   });
 }

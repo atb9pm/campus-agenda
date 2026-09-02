@@ -924,6 +924,43 @@ button { color: inherit; }
   background: #f8fbff;
 }
 .control-planning-card.is-peer { background: #fbfcfe; }
+.control-planning-card.is-draggable { cursor: grab; }
+.control-planning-card.is-dragging { opacity: .55; cursor: grabbing; }
+.control-planning-card.is-move-source { outline: 2px solid #30558f; }
+.control-planning-move-action {
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #30558f;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+}
+.control-planning-move-action:hover { text-decoration: underline; }
+.control-planning-move-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid #c5d6ef;
+  border-radius: 10px;
+  background: #eef5ff;
+}
+.control-planning-move-bar p { margin: 0; color: var(--navy); font-size: 13px; }
+.control-planning-day.is-drop-ok,
+.control-planning-semester td.is-drop-ok {
+  outline: 2px dashed #30558f;
+  background: #eef5ff;
+}
+.control-planning-day.is-drop-forbidden,
+.control-planning-semester td.is-drop-forbidden {
+  outline: 2px dashed #c9b4b4;
+  background: #f8f2f2;
+}
 .control-planning-class-badge {
   justify-self: start;
   padding: 2px 8px;
@@ -1100,6 +1137,27 @@ button { color: inherit; }
   cursor: pointer;
 }
 .control-plan-options button:hover { background: #f1f6fd; }
+.control-plan-modal > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 16px;
+}
+.control-plan-modal > footer button {
+  padding: 9px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: #4b5f7e;
+  background: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.control-plan-modal > footer button[data-control-move-confirm] {
+  border-color: var(--navy);
+  color: #fff;
+  background: var(--navy);
+}
 
 @media (max-width: 1100px) {
   .control-planning-body { grid-template-columns: 1fr; }

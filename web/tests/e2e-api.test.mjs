@@ -653,7 +653,7 @@ async function jsonRequest(path, init = {}) {
   return { response, payload };
 }
 
-async function seedInteractiveControlCourse(adminCookie, teacherId) {
+async function seedInteractiveControlCourse(adminCookie, teacherId, classCodePrefix = "CTL") {
   const headers = { "Content-Type": "application/json", cookie: adminCookie };
   const years = await jsonRequest("/api/admin/school-year", { headers: { cookie: adminCookie } });
   assert.equal(years.response.status, 200, years.payload.reason);
@@ -679,7 +679,7 @@ async function seedInteractiveControlCourse(adminCookie, teacherId) {
       kind: "profession",
       label: `Contrôles interactifs ${Date.now()}`,
       durationYears: 4,
-      classCodePrefix: "CTL",
+      classCodePrefix,
     }),
   });
   assert.equal(profession.response.status, 200, profession.payload.reason);
@@ -1005,6 +1005,121 @@ test("2.32.0 — E2E planification interactive et coordination au 3e contrôle",
     }),
   });
   assert.equal(legacyConfirmed.response.status, 201, legacyConfirmed.payload.reason);
+});
+
+test("2.34.0 — E2E déplacement structuré vers une autre CourseSession", async () => {
+  const adminCookie = await loginAdmin();
+  const teacherCookie = await loginTeacher("teacher-demo-current");
+  const otherCookie = await loginTeacher("teacher-demo-martin");
+  const seeded = await seedInteractiveControlCourse(adminCookie, "teacher-demo-current", "MOV");
+
+  const semester = await jsonRequest(
+    `/api/teacher/controls/planning?view=semester&schoolYearId=${encodeURIComponent(seeded.schoolYearId)}`,
+    { headers: { cookie: teacherCookie } },
+  );
+  assert.equal(semester.response.status, 200, semester.payload.reason);
+  assert.equal(semester.payload.ok, true);
+  assert.equal(semester.payload.layout, "semester");
+  assert.ok(semester.payload.semester);
+  assert.ok(Array.isArray(semester.payload.classroomIds));
+
+  const options = [];
+  for (let week = 1; week <= 8; week += 1) {
+    const next = await jsonRequest(
+      `/api/teacher/controls/planning?week=${week}&schoolYearId=${encodeURIComponent(seeded.schoolYearId)}&view=week`,
+      { headers: { cookie: teacherCookie } },
+    );
+    if (next.response.status !== 200) continue;
+    for (const day of next.payload.week?.days ?? []) {
+      for (const option of day.placementOptions ?? []) {
+        if (option.annualCourseId === seeded.annualCourseId) {
+          options.push(option);
+        }
+      }
+    }
+  }
+  const unique = [...new Map(options.map((entry) => [entry.courseSessionKey, entry])).values()];
+  assert.ok(unique.length >= 2, "deux CourseSession réelles requises");
+  const source = unique[0];
+  const dest = unique[1];
+  assert.notEqual(source.courseSessionKey, dest.courseSessionKey);
+
+  const created = await jsonRequest("/api/teacher/controls", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      annualCourseId: source.annualCourseId,
+      courseSessionKey: source.courseSessionKey,
+      title: "Contrôle à déplacer",
+    }),
+  });
+  assert.equal(created.response.status, 201, created.payload.reason);
+  const agendaItemId = created.payload.item.id;
+
+  const dateOnly = await jsonRequest(`/api/teacher/controls/${agendaItemId}/move`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({ date: "2099-01-01", day: 3, schoolWeekNumber: 12 }),
+  });
+  assert.equal(dateOnly.response.status, 400);
+  assert.match(dateOnly.payload.reason, /séance réelle/);
+
+  const fakeKey = await jsonRequest(`/api/teacher/controls/${agendaItemId}/move`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      annualCourseId: source.annualCourseId,
+      courseSessionKey: "year-fake|missing|2099-01-01",
+    }),
+  });
+  assert.equal(fakeKey.response.status, 409);
+
+  const stolen = await jsonRequest(`/api/teacher/controls/${agendaItemId}/move`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: otherCookie },
+    body: JSON.stringify({
+      annualCourseId: dest.annualCourseId,
+      courseSessionKey: dest.courseSessionKey,
+    }),
+  });
+  assert.equal(stolen.response.status, 403);
+
+  const noop = await jsonRequest(`/api/teacher/controls/${agendaItemId}/move`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      annualCourseId: source.annualCourseId,
+      courseSessionKey: source.courseSessionKey,
+    }),
+  });
+  assert.equal(noop.response.status, 200, noop.payload.reason);
+  assert.equal(noop.payload.moved, false);
+  assert.equal(noop.payload.item.id, agendaItemId);
+
+  const moved = await jsonRequest(`/api/teacher/controls/${agendaItemId}/move`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      annualCourseId: dest.annualCourseId,
+      courseSessionKey: dest.courseSessionKey,
+    }),
+  });
+  assert.equal(moved.response.status, 200, moved.payload.reason);
+  assert.equal(moved.payload.ok, true);
+  assert.equal(moved.payload.moved, true);
+  assert.equal(moved.payload.item.id, agendaItemId);
+  assert.equal(moved.payload.item.courseSessionKey, dest.courseSessionKey);
+  assert.equal(moved.payload.item.annualCourseId, dest.annualCourseId);
+  assert.equal(moved.payload.item.courseSessionDate, dest.date);
+  assert.equal(moved.payload.item.title, "Contrôle à déplacer");
+
+  const weekView = await jsonRequest(
+    `/api/teacher/controls/planning?week=${dest.schoolWeekNumber}&view=week&schoolYearId=${encodeURIComponent(seeded.schoolYearId)}`,
+    { headers: { cookie: teacherCookie } },
+  );
+  assert.equal(weekView.response.status, 200);
+  const cards = (weekView.payload.week?.days ?? []).flatMap((day) => day.controls ?? []);
+  assert.ok(cards.some((card) => card.agendaItemId === agendaItemId && card.title === "Contrôle à déplacer"));
 });
 
 

@@ -48,6 +48,19 @@ export interface CreateAgendaInput {
   referenceItemId?: string | null;
 }
 
+/** Placement dérivé d’une CourseSession réelle. Pas un PATCH générique. */
+export interface StructuredControlPlacement {
+  classroomId: string;
+  subjectId: string;
+  schoolYearId: string;
+  annualCourseId: string;
+  courseSessionKey: string;
+  courseSessionDate: string;
+  schoolWeekNumber: number;
+  day: number;
+  hour: number;
+}
+
 export interface AgendaStore {
   listAgendaItems(classroomId: string): Promise<PrototypeAgendaItem[]>;
   findAgendaItem(itemId: number): Promise<PrototypeAgendaItem | undefined>;
@@ -56,6 +69,12 @@ export interface AgendaStore {
     itemId: number,
     actorTeacherId: string,
     patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber">>,
+  ): Promise<AgendaMutationResult>;
+  /** Mutation métier de déplacement structuré. Ne pas utiliser pour un PATCH libre. */
+  moveStructuredControlPlacement(
+    itemId: number,
+    actorTeacherId: string,
+    placement: StructuredControlPlacement,
   ): Promise<AgendaMutationResult>;
   deleteAgendaItem(itemId: number, actorTeacherId: string): Promise<AgendaMutationResult>;
   teacherCanAccessClassroom(teacherId: string, classroomId: string): Promise<boolean>;

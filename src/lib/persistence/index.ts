@@ -6,6 +6,7 @@ export type {
   CreateAgendaInput,
   SessionKind,
   StoreKind,
+  StructuredControlPlacement,
   StudentSession,
   TeacherSession,
 } from "./types.ts";

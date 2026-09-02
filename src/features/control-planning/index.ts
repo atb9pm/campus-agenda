@@ -66,6 +66,7 @@ export {
   classDayControlsForPlacementOption,
   confirmationRequiredForPlacementOption,
 } from "./target-coordination.ts";
+export { isMovableStructuredControlCard } from "./move.ts";
 export {
   evaluateLiveControlCoordination,
   type LiveCoordinationDeps,
