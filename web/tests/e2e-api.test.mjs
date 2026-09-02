@@ -655,6 +655,12 @@ async function seedInteractiveControlCourse(adminCookie, teacherId) {
     (catalog.payload.branches ?? []).find((entry) => entry.label === "Moteur" && entry.isActive) ??
     (catalog.payload.branches ?? []).find((entry) => entry.isActive && !entry.isArchived);
   assert.ok(branch, "branche active requise");
+  const typedBranch = await jsonRequest(`/api/admin/catalog/${encodeURIComponent(branch.id)}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ kind: "branch", teachingType: "TECHNICAL" }),
+  });
+  assert.equal(typedBranch.response.status, 200, typedBranch.payload.reason);
 
   const profession = await jsonRequest("/api/admin/catalog", {
     method: "POST",
@@ -727,6 +733,13 @@ async function seedInteractiveControlCourse(adminCookie, teacherId) {
   });
   assert.equal(course.response.status, 201, course.payload.reason);
   const annualCourseId = course.payload.course.id;
+
+  const typedTeacher = await jsonRequest(`/api/admin/teachers/${encodeURIComponent(teacherId)}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ teachingType: "TECHNICAL" }),
+  });
+  assert.equal(typedTeacher.response.status, 200, typedTeacher.payload.reason);
 
   const assigned = await jsonRequest("/api/admin/annual-courses", {
     method: "POST",
