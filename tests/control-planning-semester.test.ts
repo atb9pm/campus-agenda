@@ -157,8 +157,8 @@ function testItem(input: {
   };
 }
 
-test("version 2.35.0 — semestre visuel, pas de migration", () => {
-  assert.equal(APP_VERSION, "2.35.0");
+test("version 2.36.0 — semestre visuel, pas de migration", () => {
+  assert.equal(APP_VERSION, "2.36.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
   assert.equal(SQL_MIGRATION_FILES.some((file) => file.startsWith("0025")), false);
 });
@@ -213,7 +213,7 @@ test("multi-sélection — Toutes, cumul, pas de vide, parse classroomIds", () =
   assert.equal(forged.ok, false);
 });
 
-test("classes attribuées — TCA + CourseSession, pas membership ni legacy", () => {
+test("classes attribuées — AnnualCourse Mes cours, pas membership ni CourseSession", () => {
   const year = yearRecord(YEAR_ID, "2026-2027", "active");
   const ma3a = schoolClass("sc-ma3a", "MA3A", YEAR_ID);
   const mecauto = schoolClass("sc-mecauto", "MECAUTO3A", YEAR_ID);
@@ -225,23 +225,6 @@ test("classes attribuées — TCA + CourseSession, pas membership ni legacy", ()
   const courseMma2a = course("ac-mma2a", mma2a.id);
   const courseMma1a = course("ac-mma1a", mma1a.id);
   const coursePrev = course("ac-mma1a-prev", prev.id, "year-2025");
-  const slots = [
-    slotFor(courseMa3a.id, { id: "s-ma3a", dayOfWeek: 1 }),
-    slotFor(courseMecauto.id, { id: "s-mecauto", dayOfWeek: 4 }),
-    slotFor(courseMma2a.id, { id: "s-mma2a", dayOfWeek: 2 }),
-    slotFor(courseMma1a.id, { id: "s-mma1a", dayOfWeek: 3 }),
-    slotFor(coursePrev.id, { id: "s-prev", dayOfWeek: 1 }),
-  ];
-  const sessions = computeCourseSessions({
-    schoolYearId: YEAR_ID,
-    courses: [courseMa3a, courseMecauto, courseMma2a, courseMma1a].map((entry) => ({
-      id: entry.id,
-      classId: entry.classId,
-      contextId: entry.contextId,
-    })),
-    slots: slots.filter((slot) => slot.annualCourseId !== coursePrev.id),
-    weeks: WEEKS,
-  });
   const rooms = [
     { id: "rt-ma3a", name: "MA3A", schoolClassId: ma3a.id },
     { id: "rt-mecauto", name: "MECAUTO3A", schoolClassId: mecauto.id },
@@ -250,6 +233,32 @@ test("classes attribuées — TCA + CourseSession, pas membership ni legacy", ()
     { id: "rt-legacy", name: "Legacy" },
     { id: "rt-mma1a-prev", name: "MMA1A", schoolClassId: prev.id },
   ];
+  const contexts = [
+    {
+      id: "ctx-moteur",
+      adminCode: "CTX-0001",
+      professionId: "prof-mma",
+      trainingYear: 3,
+      branchId: "br-moteur",
+      isActive: true,
+      isArchived: false,
+      archivedAt: null,
+    },
+  ];
+  const branches = [
+    {
+      id: "br-moteur",
+      code: "MOT",
+      label: "Moteur",
+      sortOrder: 1,
+      isActive: true,
+      adminCode: "BR-0001",
+      isArchived: false,
+      archivedAt: null,
+      teachingType: "TECHNICAL" as const,
+    },
+  ];
+  const at = "2026-09-15T12:00:00.000Z";
 
   const assigned = listAssignedStructuredPlanningClassrooms({
     teacherId: TEACHER_ID,
@@ -263,8 +272,10 @@ test("classes attribuées — TCA + CourseSession, pas membership ni legacy", ()
       tca("a-mma1a-none", courseMma1a.id, OTHER_ID),
     ],
     years: [year],
-    sessions,
+    contexts,
+    branches,
     schoolYearId: YEAR_ID,
+    at,
   });
   assert.deepEqual(
     assigned.map((entry) => entry.id).sort(),
@@ -275,12 +286,6 @@ test("classes attribuées — TCA + CourseSession, pas membership ni legacy", ()
   assert.equal(assigned.some((entry) => entry.id === "rt-mma2a"), false);
   assert.equal(assigned.some((entry) => entry.id === "rt-mma1a-prev"), false);
 
-  const futureSessions = computeCourseSessions({
-    schoolYearId: YEAR_ID,
-    courses: [{ id: courseMma2a.id, classId: mma2a.id, contextId: courseMma2a.contextId }],
-    slots: [slotFor(courseMma2a.id, { id: "s-mma2a-thu", dayOfWeek: 4 })],
-    weeks: WEEKS,
-  });
   const replacementOk = listAssignedStructuredPlanningClassrooms({
     teacherId: TEACHER_ID,
     classrooms: rooms,
@@ -290,8 +295,10 @@ test("classes attribuées — TCA + CourseSession, pas membership ni legacy", ()
       tca("a-rep", courseMma2a.id, TEACHER_ID, "REPLACEMENT", "2026-09-01T00:00:00.000Z", "2026-09-30T23:59:59.000Z"),
     ],
     years: [year],
-    sessions: futureSessions,
+    contexts,
+    branches,
     schoolYearId: YEAR_ID,
+    at,
   });
   assert.ok(replacementOk.some((entry) => entry.id === "rt-mma2a"));
 
@@ -304,8 +311,10 @@ test("classes attribuées — TCA + CourseSession, pas membership ni legacy", ()
       tca("a-rep-miss", courseMma2a.id, TEACHER_ID, "REPLACEMENT", "2027-01-01T00:00:00.000Z", "2027-01-31T23:59:59.000Z"),
     ],
     years: [year],
-    sessions: futureSessions,
+    contexts,
+    branches,
     schoolYearId: YEAR_ID,
+    at,
   });
   assert.equal(replacementMiss.some((entry) => entry.id === "rt-mma2a"), false);
 });

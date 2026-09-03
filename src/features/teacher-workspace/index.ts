@@ -7,6 +7,7 @@ export {
 } from "./types.ts";
 export {
   assignedBranchNames,
+  assignedSchoolClassIdsFromTeacherCourses,
   buildTeacherCourseWorkspace,
   displaySetupsFromAssignedCourses,
   formatTeacherCourseClassMeta,

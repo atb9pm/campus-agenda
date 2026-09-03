@@ -122,6 +122,8 @@ function planningDeps(items: PrototypeAgendaItem[] = DEMO_PROTOTYPE_ITEMS): Cont
     catalog: {
       ensureSeeded: async () => undefined,
       listClasses: async () => [],
+      listContexts: async () => [],
+      listBranches: async () => [],
     },
     courses: {
       listCourses: async () => [],
@@ -143,8 +145,8 @@ function planningDeps(items: PrototypeAgendaItem[] = DEMO_PROTOTYPE_ITEMS): Cont
   } as unknown as ControlPlanningServiceDeps;
 }
 
-test("version 2.35.0 — planning semestriel, sans table dédiée", () => {
-  assert.equal(APP_VERSION, "2.35.0");
+test("version 2.36.0 — planning semestriel, sans table dédiée", () => {
+  assert.equal(APP_VERSION, "2.36.0");
   assert.equal(TEACHER_NAV_LABELS.controles, "Contrôles");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",
@@ -422,6 +424,8 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
     "GET /api/teacher/classrooms must keep runtime access, not control-planning access",
   );
   assert.match(service, /listAssignedStructuredPlanningClassrooms/);
+  assert.match(service, /at: assignmentAt/);
+  assert.doesNotMatch(service, /sessions: yearSessions,\s*schoolYearId: year\.id/);
   assert.doesNotMatch(service, /listAccessibleRuntimeClassroomsForTeacher/);
   assert.doesNotMatch(service, /listAccessibleControlPlanningClassrooms/);
   assert.match(accessSrc, /options\.at \?\? new Date\(\)\.toISOString\(\)/);
@@ -437,6 +441,7 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
     "CourseTimeline must keep listTeacherCourses access",
   );
   assert.match(workspaceSrc, /isAssignmentActiveAt/);
+  assert.match(workspaceSrc, /assignedSchoolClassIdsFromTeacherCourses/);
   assert.match(mesCoursRoute, /listTeacherCourses/);
   assert.doesNotMatch(mesCoursRoute, /teacherHasControlPlanningClassAccess/);
 });
@@ -1035,7 +1040,7 @@ function motorContext(): PedagogicalContextRecord {
   };
 }
 
-test("service — getControlPlanning : remplacement futur visible maintenant, options strictes à la séance", async () => {
+test("service — getControlPlanning : liste = Mes cours, placements toujours calés sur la séance", async () => {
   const REPLACEMENT_ID = "teacher-replacement";
   const TODAY = "2026-09-02";
   const weeks = [
@@ -1178,9 +1183,12 @@ test("service — getControlPlanning : remplacement futur visible maintenant, op
       courses,
       assignments,
       years: [year],
-      sessions: yearSessions,
+      contexts: [motorContext()],
+      branches: [motorBranch()],
+      schoolYearId: year.id,
+      at: `${TODAY}T12:00:00.000Z`,
     }),
-    true,
+    false,
   );
   assert.equal(isAssignmentActiveAt(replacementTca, `${TODAY}T12:00:00.000Z`), false);
 
@@ -1208,14 +1216,12 @@ test("service — getControlPlanning : remplacement futur visible maintenant, op
     courses,
     assignments,
     years: [year],
-    sessions: yearSessions,
-    teacherCanAccessClassroom: async () => false,
+    contexts: [motorContext()],
+    branches: [motorBranch()],
     schoolYearId: year.id,
+    at: `${TODAY}T12:00:00.000Z`,
   });
-  assert.deepEqual(
-    planningNow.map((entry) => entry.id).sort(),
-    [roomMa2a.id, roomMa2b.id].sort(),
-  );
+  assert.deepEqual(planningNow.map((entry) => entry.id), [roomMa2b.id]);
 
   const selectable = await getControlPlanning(deps, {
     teacherId: REPLACEMENT_ID,
@@ -1224,13 +1230,33 @@ test("service — getControlPlanning : remplacement futur visible maintenant, op
   });
   assert.equal(selectable.ok, true);
   if (!selectable.ok) return;
-  assert.ok(selectable.view.classes.some((entry) => entry.id === roomMa2a.id));
+  assert.equal(selectable.view.classes.some((entry) => entry.id === roomMa2a.id), false);
   assert.ok(selectable.view.classes.some((entry) => entry.id === roomMa2b.id));
+
+  const forgedFuture = await getControlPlanning(deps, {
+    teacherId: REPLACEMENT_ID,
+    classroomId: roomMa2a.id,
+    todayIso: TODAY,
+    week: 11,
+  });
+  assert.equal(forgedFuture.ok, false);
+  if (!forgedFuture.ok) assert.equal(forgedFuture.status, 403);
+
+  const novemberAt = "2026-11-12";
+  const novemberList = await getControlPlanning(deps, {
+    teacherId: REPLACEMENT_ID,
+    todayIso: novemberAt,
+    week: 11,
+  });
+  assert.equal(novemberList.ok, true);
+  if (!novemberList.ok) return;
+  assert.ok(novemberList.view.classes.some((entry) => entry.id === roomMa2a.id));
+  assert.ok(novemberList.view.classes.some((entry) => entry.id === roomMa2b.id));
 
   const october = await getControlPlanning(deps, {
     teacherId: REPLACEMENT_ID,
     classroomId: roomMa2a.id,
-    todayIso: TODAY,
+    todayIso: novemberAt,
     week: 8,
   });
   assert.equal(october.ok, true);
@@ -1248,7 +1274,7 @@ test("service — getControlPlanning : remplacement futur visible maintenant, op
     teacherId: REPLACEMENT_ID,
     classroomId: roomMa2a.id,
     mode: "mine",
-    todayIso: TODAY,
+    todayIso: novemberAt,
     week: 11,
   });
   assert.equal(november.ok, true);
@@ -1271,7 +1297,7 @@ test("service — getControlPlanning : remplacement futur visible maintenant, op
     teacherId: REPLACEMENT_ID,
     classroomId: roomMa2a.id,
     mode: "class-all",
-    todayIso: TODAY,
+    todayIso: novemberAt,
     week: 11,
   });
   assert.equal(classAll.ok, true);
@@ -1283,7 +1309,7 @@ test("service — getControlPlanning : remplacement futur visible maintenant, op
   const december = await getControlPlanning(deps, {
     teacherId: REPLACEMENT_ID,
     classroomId: roomMa2a.id,
-    todayIso: TODAY,
+    todayIso: novemberAt,
     week: 14,
   });
   assert.equal(december.ok, true);
@@ -1294,7 +1320,7 @@ test("service — getControlPlanning : remplacement futur visible maintenant, op
 
   const admin = await getControlPlanning(deps, {
     teacherId: "admin-sans-tca",
-    classroomId: roomMa2a.id,
+    classroomId: roomMa2b.id,
     todayIso: TODAY,
     week: 11,
   });
@@ -1315,7 +1341,7 @@ test("service — getControlPlanning : remplacement futur visible maintenant, op
     {
       teacherId: REPLACEMENT_ID,
       schoolYearId: archivedYear.id,
-      classroomId: roomMa2a.id,
+      classroomId: roomMa2b.id,
       todayIso: TODAY,
       week: 11,
     },

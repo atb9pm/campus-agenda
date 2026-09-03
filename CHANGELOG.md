@@ -2,6 +2,22 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.36.0] — Contrôles : classes alignées sur « Mes cours »
+
+Le filtre « Mes classes » du module Contrôles n’affiche plus que les classes correspondant aux AnnualCourse réellement attribués à l’enseignant, selon la même règle que « Mes cours ».
+
+### Corrigé
+
+- Liste des classes Contrôles dérivée de `buildTeacherCourseWorkspace` (TCA active à la date de consultation).
+- Une CourseSession, un membership Agenda ou une classe d’une autre année n’élargissent plus cette liste.
+- PRIMARY, CO_TEACHER et REPLACEMENT restent visibles s’ils le sont dans « Mes cours ».
+- `classroomId` / `classroomIds` hors de cette liste : 403 serveur.
+- Les CourseSessions restent la source des jours planifiables et des `placementOptions`.
+
+### Non inclus
+
+Aucune migration SQL. N → N+1, notes, notation, fichiers joints, notifications.
+
 ## [2.35.0] — Contrôles : modification et suppression sécurisées
 
 Un enseignant peut modifier le titre et le détail de ses contrôles, ou les supprimer, sans toucher au placement structuré ni aux contrôles d’un collègue.

@@ -76,12 +76,14 @@ export async function getControlPlanning(
   }
 
   await deps.catalog.ensureSeeded();
-  const [classrooms, classes, courses, assignments, yearList] = await Promise.all([
+  const [classrooms, classes, courses, assignments, yearList, contexts, branches] = await Promise.all([
     deps.adapters.listClassrooms(),
     deps.catalog.listClasses(),
     deps.courses.listCourses(),
     deps.courses.listAssignments(),
     deps.years.listSchoolYears(),
+    deps.catalog.listContexts(),
+    deps.catalog.listBranches(),
   ]);
 
   const requestedYearId = query.schoolYearId?.trim() || null;
@@ -94,6 +96,8 @@ export async function getControlPlanning(
   }
 
   const consultableYears = listConsultablePlanningYears(yearList);
+  const todayIso = todayIsoDate(query.todayIso);
+  const assignmentAt = `${todayIso}T12:00:00.000Z`;
   const yearSessions = await loadControlPlanningYearSessions(deps, year.id);
   const assigned = listAssignedStructuredPlanningClassrooms({
     teacherId,
@@ -102,8 +106,10 @@ export async function getControlPlanning(
     courses,
     assignments,
     years: yearList,
-    sessions: yearSessions,
+    contexts,
+    branches,
     schoolYearId: year.id,
+    at: assignmentAt,
   });
 
   const requestedIds = parseControlPlanningClassroomIds({
@@ -135,7 +141,6 @@ export async function getControlPlanning(
     classroomByClassId.set(schoolClassId, { id: entry.id, name: entry.name });
   }
 
-  const todayIso = todayIsoDate(query.todayIso);
   const yearStatus = year.status === "archived" ? "archived" : "active";
   const layout = parseControlPlanningLayout(layoutValue) ?? "semester";
   const periodId = resolveControlPlanningPeriodId({
@@ -165,10 +170,6 @@ export async function getControlPlanning(
       "La planification guidée est disponible pour les classes reliées à l’horaire structuré.";
   } else if (year.status === "active" && structuredSelected && deps.schedules) {
     canCreate = true;
-    const [contexts, branches] = await Promise.all([
-      deps.catalog.listContexts(),
-      deps.catalog.listBranches(),
-    ]);
     const sessions = yearSessions.filter((session) => selectedSchoolClassIds.includes(session.classId));
     const branchByCourseId = new Map<string, string>();
     for (const course of courses) {

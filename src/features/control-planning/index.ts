@@ -45,6 +45,7 @@ export {
   listAccessibleRuntimeClassroomsForTeacher,
   listAssignedStructuredPlanningClassrooms,
   structuredClassMatchesPlanningYear,
+  teacherCoursesForPlanningYear,
   teacherHasAssignedStructuredPlanningClass,
   teacherHasControlPlanningClassAccess,
 } from "./classrooms.ts";

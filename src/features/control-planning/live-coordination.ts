@@ -41,15 +41,18 @@ export async function evaluateLiveControlCoordination(
   },
 ): Promise<ControlCoordinationSummary> {
   await deps.catalog.ensureSeeded();
-  const [classrooms, classes, courses, assignments, yearList, subjects, teachers] = await Promise.all([
-    deps.adapters.listClassrooms(),
-    deps.catalog.listClasses(),
-    deps.courses.listCourses(),
-    deps.courses.listAssignments(),
-    deps.years.listSchoolYears(),
-    deps.adapters.listSubjects(),
-    deps.teachers.listAccounts(),
-  ]);
+  const [classrooms, classes, courses, assignments, yearList, subjects, teachers, contexts, branches] =
+    await Promise.all([
+      deps.adapters.listClassrooms(),
+      deps.catalog.listClasses(),
+      deps.courses.listCourses(),
+      deps.courses.listAssignments(),
+      deps.years.listSchoolYears(),
+      deps.adapters.listSubjects(),
+      deps.teachers.listAccounts(),
+      deps.catalog.listContexts(),
+      deps.catalog.listBranches(),
+    ]);
 
   const sessions = await loadControlPlanningYearSessions(deps, options.schoolYearId);
   const accessible = await listAccessibleControlPlanningClassrooms({
@@ -59,9 +62,9 @@ export async function evaluateLiveControlCoordination(
     courses,
     assignments,
     years: yearList,
-    sessions,
+    contexts,
+    branches,
     schoolYearId: options.schoolYearId,
-    teacherCanAccessClassroom: (id, classroomId) => deps.agenda.teacherCanAccessClassroom(id, classroomId),
   });
 
   const accessibleIds = accessible.map((entry) => entry.id);
