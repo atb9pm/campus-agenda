@@ -472,6 +472,7 @@ testBoth("O — classe inactive → modification refusée", async (world) => {
   assert.equal(created.ok, false);
   if (created.ok) return;
   assert.equal(created.status, 409);
+  assert.equal(created.reason, "Cette classe est désactivée. Aucun nouveau créneau opérationnel.");
 });
 
 testBoth("P — classe archivée → modification refusée", async (world) => {
@@ -481,6 +482,7 @@ testBoth("P — classe archivée → modification refusée", async (world) => {
   assert.equal(created.ok, false);
   if (created.ok) return;
   assert.equal(created.status, 409);
+  assert.equal(created.reason, "Cette classe est archivée (lecture seule).");
 });
 
 testBoth("Q — année archivée → modification refusée", async (world) => {

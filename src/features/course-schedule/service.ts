@@ -3,6 +3,7 @@ import type { CourseScheduleStore } from "../../lib/persistence/course-schedule-
 import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-types.ts";
 import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
 import type { TeacherAccountStore } from "../../lib/persistence/teacher-account-types.ts";
+import { isOperationalSchoolClass } from "../school-catalog/class-lifecycle.ts";
 import { findConflictingSlot } from "./conflicts.ts";
 import {
   ATTENDANCE_DAY_MISMATCH_CODE,
@@ -15,6 +16,10 @@ import {
   uncoveredScheduleSlots,
   validateAttendancePlan,
 } from "./class-attendance.ts";
+import {
+  CLASS_SCHEDULE_ARCHIVED_MUTATION_REASON,
+  CLASS_SCHEDULE_INACTIVE_MUTATION_REASON,
+} from "./class-filter.ts";
 import { isOperationalAnnualCourse } from "./operational.ts";
 import { validateCourseScheduleSlotInput } from "./validation.ts";
 import type {
@@ -62,10 +67,10 @@ async function assertCourseMutable(
   const schoolClass = (await deps.catalog.listClasses()).find((entry) => entry.id === course.classId);
   if (!schoolClass) return { ok: false, reason: "Classe introuvable.", status: 400 };
   if (schoolClass.isArchived) {
-    return { ok: false, reason: "Cette classe est archivée (lecture seule).", status: 409 };
+    return { ok: false, reason: CLASS_SCHEDULE_ARCHIVED_MUTATION_REASON, status: 409 };
   }
   if (!schoolClass.isActive) {
-    return { ok: false, reason: "Cette classe est désactivée. Aucun nouveau créneau opérationnel.", status: 409 };
+    return { ok: false, reason: CLASS_SCHEDULE_INACTIVE_MUTATION_REASON, status: 409 };
   }
   return { ok: true, value: { courseId: course.id, classId: course.classId, schoolYearId: course.schoolYearId } };
 }
@@ -77,10 +82,10 @@ async function assertClassMutable(
   const schoolClass = (await deps.catalog.listClasses()).find((entry) => entry.id === classId);
   if (!schoolClass) return { ok: false, reason: "Classe introuvable.", status: 404 };
   if (schoolClass.isArchived) {
-    return { ok: false, reason: "Cette classe est archivée (lecture seule).", status: 409 };
+    return { ok: false, reason: CLASS_SCHEDULE_ARCHIVED_MUTATION_REASON, status: 409 };
   }
   if (!schoolClass.isActive) {
-    return { ok: false, reason: "Cette classe est désactivée. Aucun nouveau créneau opérationnel.", status: 409 };
+    return { ok: false, reason: CLASS_SCHEDULE_INACTIVE_MUTATION_REASON, status: 409 };
   }
   const year = schoolClass.schoolYearId
     ? (await deps.years.listSchoolYears()).find((entry) => entry.id === schoolClass.schoolYearId)
@@ -293,8 +298,15 @@ export function isClassScheduleWritable(options: {
   courseIsArchived?: boolean;
 }): boolean {
   if (options.yearStatus === "archived") return false;
-  if (options.classIsArchived) return false;
-  if (!options.classIsActive) return false;
+  if (
+    !isOperationalSchoolClass({
+      isActive: options.classIsActive,
+      isArchived: options.classIsArchived,
+      schoolYearId: null,
+    })
+  ) {
+    return false;
+  }
   if (options.courseIsArchived) return false;
   return true;
 }
