@@ -2,6 +2,20 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.40.0] — Attributions : uniquement les enseignants compatibles
+
+Administration → Attributions des cours n’affiche plus la case « Afficher les enseignants non correspondants ». Le menu Attribuer propose uniquement les enseignants actifs dont le type correspond à la branche.
+
+### Corrigé
+
+- Liste « Choisir… » limitée aux enseignants `teacher.teachingType === branch.teachingType`.
+- Message « Aucun enseignant compatible » si la liste est vide.
+- Enseignants archivés, désactivés ou sans type exclus de la sélection standard.
+
+### Non inclus
+
+Aucune migration SQL. Le forçage administratif `forceIncompatible` reste disponible côté serveur / API, sans case à cocher dans l’écran principal. PRIMARY / CO_TEACHER / remplacement, historique PR68, horaire PR69 inchangés.
+
 ## [2.39.0] — Horaire des classes : uniquement les classes actives par défaut
 
 Administration → Horaire des classes n’affiche plus par défaut les classes désactivées ou archivées. Le menu Classe se limite aux classes opérationnelles de l’année scolaire sélectionnée. L’historique reste consultable, en lecture seule.

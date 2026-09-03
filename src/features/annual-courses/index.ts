@@ -24,6 +24,8 @@ export {
   findOverlappingPrimary,
   isAssignmentActiveAt,
   isAssignmentRole,
+  listAssignmentCandidateTeachers,
+  NO_COMPATIBLE_TEACHER_MESSAGE,
   preferredTeachersForBranch,
   teacherIsAssignable,
 } from "./assignments.ts";

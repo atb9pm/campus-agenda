@@ -149,13 +149,31 @@ export function endAssignment(
   };
 }
 
+export const NO_COMPATIBLE_TEACHER_MESSAGE = "Aucun enseignant compatible";
+
+/**
+ * Enseignants dont le type correspond à la branche.
+ * Le forçage d’incompatibilité reste une affaire serveur (`evaluateTeachingTypeGuard`),
+ * pas un élargissement de cette liste.
+ */
 export function preferredTeachersForBranch<T extends { teachingType: TeachingType | null }>(
-  teachers: T[],
+  teachers: readonly T[],
   branchType: TeachingType | null,
-  includeMismatched: boolean,
 ): T[] {
   if (!branchType) return [];
-  const assignable = teachers.filter((entry) => entry.teachingType !== null);
-  if (includeMismatched) return assignable;
-  return assignable.filter((entry) => entry.teachingType === branchType);
+  return teachers.filter((entry) => entry.teachingType === branchType);
+}
+
+/**
+ * Candidats du menu « Attribuer » : actifs, non archivés, type configuré, type = branche.
+ */
+export function listAssignmentCandidateTeachers<T extends {
+  isActive: boolean;
+  isArchived: boolean;
+  teachingType: TeachingType | null;
+}>(teachers: readonly T[], branchType: TeachingType | null): T[] {
+  return preferredTeachersForBranch(
+    teachers.filter((entry) => entry.isActive && !entry.isArchived && entry.teachingType),
+    branchType,
+  );
 }

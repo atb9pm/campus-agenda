@@ -3,7 +3,10 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { ASSIGNMENT_ROLE_LABELS, type AnnualCourse, type AssignmentRole, type TeacherCourseAssignment } from "@campus/features/annual-courses/types.ts";
-import { preferredTeachersForBranch } from "@campus/features/annual-courses/assignments.ts";
+import {
+  listAssignmentCandidateTeachers,
+  NO_COMPATIBLE_TEACHER_MESSAGE,
+} from "@campus/features/annual-courses/assignments.ts";
 import {
   assignmentLifecycle,
   assignmentDisplayLabel,
@@ -83,7 +86,6 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<ViewMode>("class");
-  const [includeMismatched, setIncludeMismatched] = useState(false);
   const [showAssignmentHistory, setShowAssignmentHistory] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState("");
   const [pending, setPending] = useState<PendingAssign | null>(null);
@@ -359,14 +361,6 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
         <button type="button" className={view === "teacher" ? "is-selected" : undefined} onClick={() => setView("teacher")}>
           Vue par enseignant
         </button>
-        <label className="admin-checkbox">
-          <input
-            type="checkbox"
-            checked={includeMismatched}
-            onChange={(event) => setIncludeMismatched(event.target.checked)}
-          />
-          <span>Afficher les enseignants non correspondants</span>
-        </label>
         {view === "teacher" ? (
           <label className="admin-checkbox">
             <input
@@ -430,11 +424,7 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
                     ? data.assignments.filter((entry) => entry.annualCourseId === course.id && assignmentLifecycle(entry) !== "ended")
                     : [];
                   const branchReady = Boolean(branch.teachingType);
-                  const candidates = preferredTeachersForBranch(
-                    data.teachers.filter((entry) => entry.isActive && !entry.isArchived && entry.teachingType),
-                    branch.teachingType,
-                    includeMismatched,
-                  );
+                  const candidates = listAssignmentCandidateTeachers(data.teachers, branch.teachingType);
                   const hasReplacement = assigned.some((entry) => entry.role === "REPLACEMENT");
                   const hasOverride = assigned.some((entry) => entry.overrideReason);
                   const status =
@@ -488,21 +478,25 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
                       </td>
                       <td>
                         {branchReady ? (
-                          <select
-                            defaultValue=""
-                            onChange={(event) => {
-                              const teacherId = event.target.value;
-                              event.target.value = "";
-                              if (teacherId) startAssign(currentClass, context, branch, teacherId);
-                            }}
-                          >
-                            <option value="">Choisir…</option>
-                            {candidates.map((teacher) => (
-                              <option key={teacher.id} value={teacher.id}>
-                                {teacher.displayName} ({typeBadge(teacher.teachingType, "teacher")})
-                              </option>
-                            ))}
-                          </select>
+                          candidates.length === 0 ? (
+                            <p className="admin-loading">{NO_COMPATIBLE_TEACHER_MESSAGE}</p>
+                          ) : (
+                            <select
+                              defaultValue=""
+                              onChange={(event) => {
+                                const teacherId = event.target.value;
+                                event.target.value = "";
+                                if (teacherId) startAssign(currentClass, context, branch, teacherId);
+                              }}
+                            >
+                              <option value="">Choisir…</option>
+                              {candidates.map((teacher) => (
+                                <option key={teacher.id} value={teacher.id}>
+                                  {teacher.displayName} ({typeBadge(teacher.teachingType, "teacher")})
+                                </option>
+                              ))}
+                            </select>
+                          )
                         ) : (
                           <p className="admin-error">
                             Configurez d’abord le type de cette branche dans le Catalogue des branches.
