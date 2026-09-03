@@ -2,6 +2,21 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.37.0] — Classe archivée : historique conservé, plus jamais « Active »
+
+Une AnnualCourse / attribution n’est plus considérée comme opérationnellement active si sa SchoolClass est archivée, désactivée, absente ou hors de l’année scolaire concernée.
+
+### Corrigé
+
+- Administration → Attributions : `Titulaire · Classe archivée` (ou `Classe désactivée` / `Terminée`), jamais simplement `Active`.
+- Mes cours, Contrôles → Mes classes, `placementOptions` et destinations de déplacement n’incluent plus une classe archivée ou désactivée.
+- Création et déplacement de contrôle : refus serveur (409) si la classe cible n’est plus opérationnelle, y compris via une API forgée.
+- L’archivage d’une classe ne supprime ni ne clôture automatiquement les AnnualCourse / TeacherCourseAssignment historiques.
+
+### Non inclus
+
+Aucune migration SQL. N → N+1, notes, notation, fichiers joints, notifications.
+
 ## [2.36.0] — Contrôles : classes alignées sur « Mes cours »
 
 Le filtre « Mes classes » du module Contrôles n’affiche plus que les classes correspondant aux AnnualCourse réellement attribués à l’enseignant, selon la même règle que « Mes cours ».

@@ -11,6 +11,21 @@ export function classLifecycleStatus(
   return "inactive";
 }
 
+/**
+ * Disponibilité opérationnelle actuelle — distincte de l’historique conservé.
+ * Une classe archivée, désactivée, absente ou hors année n’est jamais une cible active.
+ */
+export function isOperationalSchoolClass(
+  schoolClass: Pick<SchoolClassRecord, "isActive" | "isArchived" | "schoolYearId"> | null | undefined,
+  expectedSchoolYearId?: string | null,
+): boolean {
+  if (!schoolClass) return false;
+  if (classLifecycleStatus(schoolClass) !== "active") return false;
+  const expectedYear = expectedSchoolYearId?.trim() || null;
+  if (!expectedYear) return true;
+  return (schoolClass.schoolYearId?.trim() || null) === expectedYear;
+}
+
 export function classLifecycleLabel(status: ClassLifecycleStatus): string {
   if (status === "archived") return "Archivée";
   if (status === "active") return "Active";

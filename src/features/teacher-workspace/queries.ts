@@ -3,6 +3,7 @@ import { isAssignmentActiveAt } from "../annual-courses/assignments.ts";
 import { formatTrainingYearLabel } from "../school-catalog/class-codes.ts";
 import { classDisplayProfessionLabel } from "../school-catalog/class-display.ts";
 import type { PedagogicalContextRecord, SchoolProfessionRecord } from "../school-catalog/profession-types.ts";
+import { isOperationalSchoolClass } from "../school-catalog/class-lifecycle.ts";
 import type { SchoolBranchRecord, SchoolClassRecord } from "../school-catalog/types.ts";
 import type { SchoolYearRecord } from "../school-year/types.ts";
 import type { TeacherClassSetup, TeacherSetupConfig, WeekdayIndex } from "../teacher-setup/types.ts";
@@ -93,7 +94,7 @@ export function buildTeacherCourseWorkspace(
     if (operational && year.status === "archived") continue;
 
     const schoolClass = classById.get(course.classId);
-    if (!schoolClass || !schoolClass.isActive || schoolClass.isArchived) continue;
+    if (!schoolClass || !isOperationalSchoolClass(schoolClass, schoolYearId)) continue;
 
     const context = contextById.get(course.contextId);
     if (!context) continue;

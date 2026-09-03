@@ -6,10 +6,11 @@ import { ASSIGNMENT_ROLE_LABELS, type AnnualCourse, type AssignmentRole, type Te
 import { preferredTeachersForBranch } from "@campus/features/annual-courses/assignments.ts";
 import {
   assignmentLifecycle,
+  assignmentDisplayLabel,
+  assignmentDisplayStatus,
   decideAssignmentDialogSubmit,
   effectiveAtForEndAssignment,
   isClassEligibleForAssignment,
-  lifecycleLabel,
 } from "@campus/features/annual-courses/admin-assign-ui.ts";
 import type { PedagogicalContextRecord, SchoolProfessionRecord } from "@campus/features/school-catalog";
 import type { SchoolBranchRecord, SchoolClassRecord } from "@campus/features/school-catalog";
@@ -445,7 +446,13 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
                               return (
                                 <li key={entry.id}>
                                   {teacherLabel(data.teachers, entry.teacherId)} — {roleLabel(entry.role)}
-                                  {" · "}{lifecycleLabel(assignmentLifecycle(entry))}
+                                  {" · "}
+                                  {assignmentDisplayLabel(
+                                    assignmentDisplayStatus(entry, {
+                                      schoolClass: currentClass,
+                                      courseSchoolYearId: course?.schoolYearId,
+                                    }),
+                                  )}
                                   {teacher && !teacher.teachingType ? " · Non configuré" : ""}
                                   {entry.overrideReason ? " · Type forcé" : ""}
                                   {" "}
@@ -524,7 +531,13 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
                               mode: "full",
                             })}{" "}
                             → {roleLabel(entry.role)}
-                            {" · "}{lifecycleLabel(assignmentLifecycle(entry))}
+                            {" · "}
+                            {assignmentDisplayLabel(
+                              assignmentDisplayStatus(entry, {
+                                schoolClass,
+                                courseSchoolYearId: course?.schoolYearId,
+                              }),
+                            )}
                           </li>
                         );
                       })}

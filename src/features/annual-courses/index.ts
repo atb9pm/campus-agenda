@@ -32,6 +32,8 @@ export { decideAgendaPublishAccess } from "./agenda-access.ts";
 export {
   decideAssignmentDialogSubmit,
   assignmentLifecycle,
+  assignmentDisplayStatus,
+  assignmentDisplayLabel,
   lifecycleLabel,
   isClassEligibleForAssignment,
   assignmentRoleForFirstTeacher,

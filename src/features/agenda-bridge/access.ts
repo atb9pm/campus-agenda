@@ -3,6 +3,7 @@ import { isAssignmentActiveAt } from "../annual-courses/assignments.ts";
 import type { ResolvedPublicationCourse } from "../annual-courses/resolve.ts";
 import type { AnnualCourse, TeacherCourseAssignment } from "../annual-courses/types.ts";
 import type { TeacherAccountRecord } from "../teacher-accounts/types.ts";
+import { isOperationalSchoolClass } from "../school-catalog/class-lifecycle.ts";
 import type { SchoolClassRecord } from "../school-catalog/types.ts";
 import type { SchoolYearRecord } from "../school-year/types.ts";
 import type { ClassroomAgendaBinding } from "./reconcile.ts";
@@ -24,6 +25,8 @@ export function teacherHasStructuredClassroomReadAccess(options: {
   years: SchoolYearRecord[];
   at?: string;
 }): boolean {
+  if (!isOperationalSchoolClass(options.schoolClass, options.schoolClass.schoolYearId)) return false;
+
   const classCourses = options.courses.filter((course) => course.classId === options.schoolClass.id);
   if (classCourses.length === 0) return false;
   const courseIds = new Set(classCourses.map((course) => course.id));
@@ -71,7 +74,10 @@ export function evaluateTeacherAgendaPublishAccess(options: {
 }): boolean {
   if (options.binding.kind === "structured-incomplete") return false;
   if (options.binding.kind === "structured") {
-    if (options.binding.target.schoolClass.isArchived || options.binding.target.course.isArchived) {
+    if (
+      !isOperationalSchoolClass(options.binding.target.schoolClass) ||
+      options.binding.target.course.isArchived
+    ) {
       return false;
     }
     if (!options.targetAt) return false;

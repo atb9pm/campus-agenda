@@ -145,8 +145,8 @@ function planningDeps(items: PrototypeAgendaItem[] = DEMO_PROTOTYPE_ITEMS): Cont
   } as unknown as ControlPlanningServiceDeps;
 }
 
-test("version 2.36.0 — planning semestriel, sans table dédiée", () => {
-  assert.equal(APP_VERSION, "2.36.0");
+test("version 2.37.0 — planning semestriel, sans table dédiée", () => {
+  assert.equal(APP_VERSION, "2.37.0");
   assert.equal(TEACHER_NAV_LABELS.controles, "Contrôles");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",
@@ -561,7 +561,7 @@ test("service — classes structurées filtrées par année, même code MMA1A ja
   const archived = yearRecord("year-2025", "2025-2026", "archived");
   const draft = yearRecord("year-draft", "2027-2028", "draft");
   const class2026 = schoolClass("sc-mma1a-2026", "MMA1A", "year-2026");
-  const class2025 = schoolClass("sc-mma1a-2025", "MMA1A", "year-2025", true);
+  const class2025 = schoolClass("sc-mma1a-2025", "MMA1A", "year-2025");
   const room2026 = { id: "rt-mma1a-2026", name: "MMA1A", schoolClassId: "sc-mma1a-2026" };
   const room2025 = { id: "rt-mma1a-2025", name: "MMA1A", schoolClassId: "sc-mma1a-2025" };
   const course2026 = course("ac-2026", "year-2026", class2026.id);
