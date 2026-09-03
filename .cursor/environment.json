@@ -1,0 +1,11 @@
+{
+  "name": "Campus Agenda",
+  "install": "corepack enable && npm ci && cd web && npm ci && pnpm run build",
+  "terminals": [
+    {
+      "name": "web-preview",
+      "command": "cd web && CAMPUS_STORE=memory AUTH_SECRET=dev-secret CAMPUS_ALLOW_DEMO_PASSWORD=1 CAMPUS_DISABLE_RATE_LIMIT=1 pnpm run preview:node"
+    }
+  ],
+  "ports": [5173]
+}
