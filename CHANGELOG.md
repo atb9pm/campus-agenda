@@ -2,6 +2,21 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.43.0] — Contrôles : chrome allégé, Mes contrôles à gauche
+
+Espace enseignant → Contrôles : le bandeau interne, les KPI, l’aide et la colonne d’analyse sont retirés. « Mes contrôles » / « Tous les contrôles des classes » restent et sont alignés à gauche, sur la même ligne que Matières.
+
+### Modifié
+
+- Filtres : le sélecteur Mes contrôles / Tous les contrôles est décalé à gauche, à côté de Matières et de « Afficher les évaluations passées ».
+- La grille annuelle occupe toute la largeur (plus de colonne Coordination / Charge / Légende).
+- Plus de titre, d’avatar ni de cartes KPI dupliqués sous l’en-tête de page.
+- Plus de bloc Aide / Légende sous les filtres.
+
+### Non inclus
+
+Aucune migration SQL. La logique de planification, de publication et de glisser-déposer est inchangée.
+
 ## [2.42.0] — Contrôles : refonte UI (vue annuelle)
 
 Administration → Espace enseignant : l’écran « Contrôles » est refondu pour proposer une vue annuelle structurée par semaines scolaires réelles (une ligne = une semaine), accompagnée d’une colonne d’analyse et d’indicateurs KPI.
