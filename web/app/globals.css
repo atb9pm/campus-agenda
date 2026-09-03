@@ -1029,6 +1029,21 @@ button { color: inherit; }
   text-transform: uppercase;
 }
 .control-planning-branch { color: #516582; font-size: 11px; }
+.control-planning-branch-pill {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+.control-planning-card.is-compact .control-planning-branch-pill {
+  padding: 1px 6px;
+  font-size: 9px;
+}
 .control-planning-card strong { color: var(--navy); font-size: 13px; line-height: 1.3; }
 .control-planning-teacher { color: #30558f; font-size: 11px; font-weight: 700; }
 .control-planning-sidebar {
@@ -1063,6 +1078,236 @@ button { color: inherit; }
 .control-planning-error { color: #8b2e2e; }
 .control-planning-hint { margin: 0; color: #6d7f9b; font-size: 12px; line-height: 1.45; }
 .control-planning-no-course { margin: 0; color: #9aa5b6; font-size: 10px; }
+
+.control-planning-intro-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.control-planning-intro-avatar {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--navy);
+  font-weight: 900;
+}
+
+.control-planning-kpi-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.control-planning-kpi-card {
+  flex: 1 1 0;
+  min-width: 140px;
+  padding: 12px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.control-planning-kpi-card small {
+  display: block;
+  color: #8793a9;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.control-planning-kpi-card strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--navy);
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.control-planning-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: -2px;
+  color: #32466b;
+  font-size: 11px;
+  font-weight: 700;
+}
+.control-planning-checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--navy);
+}
+
+.control-planning-help {
+  margin-top: 6px;
+  padding: 12px 12px;
+  border: 1px dashed #c5d6ef;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+.control-planning-help h3 {
+  margin: 0 0 8px;
+  color: #8793a9;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.control-planning-help ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.control-planning-help li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #516582;
+  font-size: 11px;
+  font-weight: 700;
+}
+.control-planning-help-swatch {
+  width: 22px;
+  height: 14px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.control-planning-help-swatch.is-valid {
+  background: #f1f6fd;
+  border-color: #b8cce8;
+}
+.control-planning-help-swatch.is-invalid {
+  background: repeating-linear-gradient(135deg, #f4f6fa 0 6px, #edf1f6 6px 12px);
+  border-color: #d6dbe4;
+}
+.control-planning-help-swatch.is-planned {
+  background: #eef5ff;
+  border-color: #c5d6ef;
+}
+.control-planning-help-swatch.is-dnd-target {
+  background: #eef5ff;
+  border-color: #30558f;
+  outline: 2px dashed #30558f;
+  outline-offset: 2px;
+}
+
+.control-planning-annual-wrap {
+  margin-top: 8px;
+}
+.control-planning-annual-semester {
+  margin-bottom: 22px;
+}
+.control-planning-annual-semester-title {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f8fbff;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.control-planning-annual-analysis {
+  display: grid;
+  gap: 14px;
+}
+.control-planning-annual-card {
+  padding: 16px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfcfe;
+}
+.control-planning-annual-card h3 {
+  margin: 0 0 10px;
+  color: #8793a9;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.control-planning-annual-metric {
+  margin: 0;
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 800;
+}
+.control-planning-annual-hint {
+  margin: 10px 0 0;
+  color: #6d7f9b;
+  font-size: 12px;
+}
+.control-planning-annual-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+.control-planning-annual-item {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: #32466b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.control-planning-annual-action {
+  margin-top: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: not-allowed;
+  opacity: .6;
+}
+.control-planning-annual-empty {
+  margin: 10px 0 0;
+  color: #9aa5b6;
+  font-size: 12px;
+}
+.control-planning-annual-legend {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+.control-planning-annual-legend-item {
+  display: flex;
+  align-items: center;
+}
+.control-planning-annual-legend-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.control-planning-subject,
+.control-planning-select select {
+  /* keep existing styling */
+}
 .control-planning-semester-wrap {
   overflow: auto;
   max-height: min(78vh, 920px);

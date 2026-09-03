@@ -146,7 +146,7 @@ function planningDeps(items: PrototypeAgendaItem[] = DEMO_PROTOTYPE_ITEMS): Cont
 }
 
 test("version 2.38.0 — planning semestriel, sans table dédiée", () => {
-  assert.equal(APP_VERSION, "2.41.0");
+  assert.equal(APP_VERSION, "2.42.0");
   assert.equal(TEACHER_NAV_LABELS.controles, "Contrôles");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",
@@ -345,8 +345,8 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
   assert.match(panel, /Année scolaire/);
   assert.match(panel, /data-control-year/);
   assert.match(panel, /data-control-semester/);
-  assert.match(panel, /data-control-layout="semester"/);
-  assert.match(panel, /Semestre 1/);
+  assert.match(panel, /Semaine/);
+  assert.match(panel, /SEMESTRE 1/);
   assert.match(panel, /function selectYear/);
   assert.match(panel, /setClassroomIds\(null\)/);
   assert.match(panel, /setMode\("mine"\)/);
