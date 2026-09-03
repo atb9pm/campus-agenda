@@ -10,7 +10,6 @@ import {
   isMovableStructuredControlCard,
   toggleControlPlanningClassroomSelection,
   type ControlPlacementOption,
-  type ControlPlanningAlert,
   type ControlPlanningCard,
   type ControlPlanningDay,
   type ControlPlanningLayout,
@@ -92,28 +91,6 @@ function formatCompactDay(iso: string | null): string {
   return new Intl.DateTimeFormat("fr-CH", { day: "numeric", month: "short" }).format(
     new Date(year, month - 1, day),
   );
-}
-
-function summaryLabel(view: ControlPlanningView): string {
-  const source = view.layout === "semester" && view.semesterSummary ? view.semesterSummary : view.summary;
-  const controls =
-    source.controlCount === 1 ? "1 contrôle planifié" : `${source.controlCount} contrôles planifiés`;
-  const classes =
-    view.classroomIds.length === 1
-      ? "1 classe sélectionnée"
-      : `${view.classroomIds.length} classes sélectionnées`;
-  if (view.layout === "semester" && view.semesterSummary) {
-    const weeks =
-      view.semesterSummary.weekCount === 1
-        ? "1 semaine concernée"
-        : `${view.semesterSummary.weekCount} semaines concernées`;
-    const busy =
-      view.semesterSummary.busyDayCount === 1
-        ? "1 journée avec ≥ 2 contrôles"
-        : `${view.semesterSummary.busyDayCount} journées avec ≥ 2 contrôles`;
-    return `${view.semester?.label ?? "Semestre"} · ${controls} · ${classes} · ${weeks} · ${busy}`;
-  }
-  return `${controls} · ${classes}`;
 }
 
 function placementCaption(option: ControlPlacementOption): string {
@@ -725,143 +702,9 @@ function DeleteModal({
   );
 }
 
-function AnnualAnalysis({
-  view,
-  semester2View,
-  visiblePeriodMode,
-  monthNumber,
-  subjectFilter,
-  showPassedEvaluations,
-  todayIso,
-}: {
-  view: ControlPlanningView;
-  semester2View: ControlPlanningView;
-  visiblePeriodMode: "year" | "month";
-  monthNumber: number;
-  subjectFilter: string | null;
-  showPassedEvaluations: boolean;
-  todayIso: string;
-}) {
-  const semester1 = view.semester;
-  const semester2 = semester2View.semester;
-  if (!semester1 || !semester2) return null;
-
-  const activeWeeks = [
-    ...(visiblePeriodMode === "month"
-      ? semester1.weeks.filter((w) => new Date(w.monday).getMonth() + 1 === monthNumber)
-      : semester1.weeks),
-    ...(visiblePeriodMode === "month"
-      ? semester2.weeks.filter((w) => new Date(w.monday).getMonth() + 1 === monthNumber)
-      : semester2.weeks),
-  ];
-
-  const days = activeWeeks.flatMap((w) => w.days);
-  function visibleControlsForDay(day: (typeof days)[number]) {
-    const subjectFiltered = subjectFilter ? day.controls.filter((c) => c.branchLabel === subjectFilter) : day.controls;
-    if (showPassedEvaluations) return subjectFiltered;
-    return subjectFiltered.filter((c) => {
-      const iso = c.courseSessionDate ?? c.date ?? "";
-      return !iso || iso >= todayIso;
-    });
-  }
-
-  const controlsCount = days.reduce((sum, d) => sum + visibleControlsForDay(d).length, 0);
-  const busyDayCount = days.filter((d) => visibleControlsForDay(d).length >= 2).length;
-
-  const totalWeeksForLoad = activeWeeks.length || 1;
-  const ownControlsPerWeek = activeWeeks.map((w) =>
-    w.days.reduce((sum, d) => sum + visibleControlsForDay(d).filter((c) => c.isOwn).length, 0),
-  );
-  const ownControlsTotal = ownControlsPerWeek.reduce((sum, n) => sum + n, 0);
-  const averageOwnControlsPerWeek = ownControlsTotal / totalWeeksForLoad;
-  const busiestWeekIndex = ownControlsPerWeek.reduce((bestIdx, v, idx) => (v > ownControlsPerWeek[bestIdx] ? idx : bestIdx), 0);
-  const lightestWeekIndex = ownControlsPerWeek.reduce((bestIdx, v, idx) => (v < ownControlsPerWeek[bestIdx] ? idx : bestIdx), 0);
-  const busiestWeekControls = ownControlsPerWeek.length ? ownControlsPerWeek[busiestWeekIndex]! : 0;
-  const lightestWeekControls = ownControlsPerWeek.length ? ownControlsPerWeek[lightestWeekIndex]! : 0;
-
-  const topBusyDays = days
-    .filter((d) => visibleControlsForDay(d).length > 0)
-    .slice()
-    .sort((a, b) => visibleControlsForDay(b).length - visibleControlsForDay(a).length)
-    .slice(0, 3);
-
-  const branchLabels = Array.from(
-    new Set(days.flatMap((d) => visibleControlsForDay(d).map((c) => c.branchLabel)).filter(Boolean)),
-  ).sort((a, b) => a.localeCompare(b, "fr"));
-
-  return (
-    <div className="control-planning-annual-analysis" aria-label="Analyse annuelle">
-      <section className="control-planning-annual-card">
-        <h3>Coordination</h3>
-        <p className="control-planning-annual-metric">
-          <strong>{controlsCount}</strong> contrôles planifiés
-        </p>
-        <p className="control-planning-annual-hint">
-          {busyDayCount === 0 ? "Répartition équilibrée" : `${busyDayCount} journées avec conflit`}
-        </p>
-        {topBusyDays.length ? (
-          <ul className="control-planning-annual-list">
-            {topBusyDays.map((d, idx) => (
-              <li key={`${d.weekdayLabel}-${d.date ?? idx}`} className="control-planning-annual-item">
-                <strong>{d.weekdayLabel}</strong> · {formatCompactDay(d.date ?? null)} — {visibleControlsForDay(d).length} contrôles
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="control-planning-annual-empty">Aucun pic à signaler.</p>
-        )}
-        <button type="button" disabled className="control-planning-annual-action">
-          Voir l’analyse détaillée
-        </button>
-      </section>
-
-      <section className="control-planning-annual-card">
-        <h3>Charge enseignant</h3>
-        <p className="control-planning-annual-metric">
-          Moyenne : <strong>{averageOwnControlsPerWeek.toFixed(1)}</strong> / semaine
-        </p>
-          <p className="control-planning-annual-hint">
-            Semaine la plus chargée : <strong>{busiestWeekControls}</strong> contrôles
-          </p>
-        <p className="control-planning-annual-hint">
-            Semaine la plus légère : <strong>{lightestWeekControls}</strong> contrôles
-          </p>
-        <button type="button" disabled className="control-planning-annual-action">
-          Voir la courbe de charge
-        </button>
-      </section>
-
-      <section className="control-planning-annual-card">
-        <h3>Légende matières</h3>
-        {branchLabels.length ? (
-          <ul className="control-planning-annual-legend">
-            {branchLabels.map((label) => {
-              const palette = branchPalette(label, label);
-              return (
-                <li key={label} className="control-planning-annual-legend-item">
-                  <span
-                    className="control-planning-annual-legend-swatch"
-                    style={{ background: palette.fond, borderColor: palette.bordure, color: palette.texte }}
-                  >
-                    {label}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="control-planning-annual-empty">Aucune matière.</p>
-        )}
-      </section>
-    </div>
-  );
-}
-
 export function ControlPlanningPanel({
-  teacherInitials,
   onPublicationCreated,
 }: {
-  teacherInitials?: string | null;
   onPublicationCreated?: (item: PrototypeAgendaItem) => void;
 }) {
   const [schoolYearId, setSchoolYearId] = useState<string | null>(null);
@@ -967,16 +810,6 @@ export function ControlPlanningPanel({
     void load();
     return () => controller.abort();
   }, [schoolYearId, classroomIds, mode, week, layout, period, reloadToken, displayMode]);
-
-  const yearLabel = view ? formatControlPlanningYearLabel(view.schoolYearLabel) : null;
-  const coordinationAlerts = useMemo(
-    () => (view?.alerts ?? []).filter((alert) => alert.kind !== "teacher-load"),
-    [view],
-  );
-  const loadAlert = useMemo(
-    () => view?.alerts.find((alert: ControlPlanningAlert) => alert.kind === "teacher-load") ?? null,
-    [view],
-  );
 
   const availableSubjectLabels = useMemo(() => {
     const labels = new Set<string>();
@@ -1391,84 +1224,14 @@ export function ControlPlanningPanel({
   const assignedIds = view?.classes.map((entry) => entry.id) ?? [];
   const isAnnualView = displayMode === "year" || displayMode === "month";
   const todayIso = new Date().toISOString().slice(0, 10);
-  const annualKpis = useMemo(() => {
-    if (!isAnnualView || !view?.semester || !yearSemester2View?.semester) return null;
-    const semester1 = view.semester;
-    const semester2 = yearSemester2View.semester;
-    const pickWeeks = (weeks: typeof semester1.weeks) =>
-      displayMode === "month"
-        ? weeks.filter((w) => new Date(w.monday).getMonth() + 1 === monthNumber)
-        : weeks;
-    const activeWeeks = [...pickWeeks(semester1.weeks), ...pickWeeks(semester2.weeks)];
-    const days = activeWeeks.flatMap((w) => w.days);
-
-    function visibleControlsForDay(day: typeof days[number]) {
-      const subjectFiltered = subjectFilter ? day.controls.filter((c) => c.branchLabel === subjectFilter) : day.controls;
-      if (showPassedEvaluations) return subjectFiltered;
-      return subjectFiltered.filter((c) => {
-        const iso = c.courseSessionDate ?? c.date ?? "";
-        return !iso || iso >= todayIso;
-      });
-    }
-
-    const controlsCount = days.reduce((sum, d) => sum + visibleControlsForDay(d).length, 0);
-    const busyDayCount = days.filter((d) => visibleControlsForDay(d).length >= 2).length;
-    const conflictWeekCount = activeWeeks.filter((w) =>
-      w.days.some((d) => visibleControlsForDay(d).length >= 2),
-    ).length;
-
-    return { controlsCount, busyDayCount, conflictWeekCount };
-  }, [
-    isAnnualView,
-    view?.semester,
-    yearSemester2View?.semester,
-    displayMode,
-    monthNumber,
-    showPassedEvaluations,
-    subjectFilter,
-    todayIso,
-  ]);
 
   const semester1 = view?.semester ?? null;
   const semester2 = yearSemester2View?.semester ?? null;
 
   return (
     <section className="teacher-workspace control-planning" aria-label="Contrôles" data-control-planning="">
-      <div className="workspace-intro">
-        <p className="eyebrow">ESPACE ENSEIGNANT</p>
-        <div className="control-planning-intro-header">
-          <div>
-            <h2>Contrôles{yearLabel ? ` — ${yearLabel}` : ""}</h2>
-            <p>Planification des contrôles publiés dans l’agenda.</p>
-          </div>
-          {teacherInitials ? (
-            <div className="control-planning-intro-avatar" aria-label="Professeur connecté">
-              {teacherInitials}
-            </div>
-          ) : null}
-        </div>
-
-        {isAnnualView && annualKpis ? (
-          <div className="control-planning-kpi-row" role="group" aria-label="Indicateurs">
-            <div className="control-planning-kpi-card">
-              <small>Contrôles planifiés</small>
-              <strong>{annualKpis.controlsCount}</strong>
-            </div>
-            <div className="control-planning-kpi-card">
-              <small>Conflits</small>
-              <strong>{annualKpis.busyDayCount}</strong>
-            </div>
-            <div className="control-planning-kpi-card">
-              <small>À rééquilibrer</small>
-              <strong>{annualKpis.conflictWeekCount}</strong>
-            </div>
-          </div>
-        ) : view ? (
-          <p className="control-planning-summary">{summaryLabel(view)}</p>
-        ) : null}
-      </div>
-
       <div className="control-planning-filters" role="region" aria-label="Filtres des contrôles">
+        <div className="control-planning-filter-row">
         <label className="control-planning-select control-planning-year">
           <span>Année scolaire</span>
           <select
@@ -1533,6 +1296,7 @@ export function ControlPlanningPanel({
             Année
           </button>
         </div>
+        </div>
 
         <div className="control-planning-chips" role="group" aria-label="Classes attribuées">
           <button
@@ -1562,6 +1326,7 @@ export function ControlPlanningPanel({
           })}
         </div>
 
+        <div className="control-planning-filter-row">
         <label className="control-planning-select control-planning-subject">
           <span>Matières</span>
           <select
@@ -1591,7 +1356,7 @@ export function ControlPlanningPanel({
           Afficher les évaluations passées
         </label>
 
-        <div className="control-planning-modes" role="group" aria-label="Mode d’affichage">
+        <div className="control-planning-modes" role="group" aria-label="Mode d’affichage" data-control-ownership="">
           <button
             type="button"
             className={mode === "mine" ? "is-active" : ""}
@@ -1615,26 +1380,7 @@ export function ControlPlanningPanel({
             {classAllLabel}
           </button>
         </div>
-
-        <section className="control-planning-help" aria-label="Aide / Légende">
-          <h3>Aide / Légende</h3>
-          <ul>
-            <li>
-              <span className="control-planning-help-swatch is-valid" aria-hidden="true" /> Case valide
-            </li>
-            <li>
-              <span className="control-planning-help-swatch is-invalid" aria-hidden="true" /> Case non
-              valide
-            </li>
-            <li>
-              <span className="control-planning-help-swatch is-planned" aria-hidden="true" /> Contrôle
-              planifié
-            </li>
-            <li>
-              <span className="control-planning-help-swatch is-dnd-target" aria-hidden="true" /> Glisser-déposer
-            </li>
-          </ul>
-        </section>
+        </div>
 
         {view?.guidedPlanningReason ? (
           <p className="control-planning-hint">{view.guidedPlanningReason}</p>
@@ -1878,18 +1624,6 @@ export function ControlPlanningPanel({
               })}
             </div>
           </div>
-
-          <aside className="control-planning-sidebar" aria-label="Analyse annuelle">
-            <AnnualAnalysis
-              view={currentView}
-              semester2View={secondSemesterView}
-              visiblePeriodMode={displayMode}
-              monthNumber={monthNumber}
-              subjectFilter={subjectFilter}
-              showPassedEvaluations={showPassedEvaluations}
-              todayIso={todayIso}
-            />
-          </aside>
         </div>
       ))(view, yearSemester2View, semester1, semester2) : view?.layout === "week" && view.week ? (
         <div className="control-planning-body">
@@ -2007,27 +1741,6 @@ export function ControlPlanningPanel({
               </p>
             )}
           </div>
-
-          <aside className="control-planning-sidebar" aria-label="Coordination des contrôles">
-            <section>
-              <h3>Alertes de coordination</h3>
-              {coordinationAlerts.length ? (
-                <ul>
-                  {coordinationAlerts.map((alert) => (
-                    <li key={`${alert.kind}-${alert.message}`} className={`is-${alert.kind}`}>
-                      {alert.message}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p>Aucune alerte pour cette semaine.</p>
-              )}
-            </section>
-            <section>
-              <h3>Charge enseignant</h3>
-              <p>{loadAlert?.message ?? `${view.teacherLoadThisWeek} contrôles cette semaine`}</p>
-            </section>
-          </aside>
         </div>
       ) : view?.semester ? (
         <div

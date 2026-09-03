@@ -1239,7 +1239,6 @@ export default function Home() {
 
         {activeSection === "controles" && (
           <ControlPlanningPanel
-            teacherInitials={profileDiscInitials(authenticatedTeacher)}
             onPublicationCreated={(item) => {
               setItems((previous) => upsertAgendaItem(previous, item));
             }}

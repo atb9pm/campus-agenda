@@ -146,7 +146,7 @@ function planningDeps(items: PrototypeAgendaItem[] = DEMO_PROTOTYPE_ITEMS): Cont
 }
 
 test("version 2.38.0 — planning semestriel, sans table dédiée", () => {
-  assert.equal(APP_VERSION, "2.42.0");
+  assert.equal(APP_VERSION, "2.43.0");
   assert.equal(TEACHER_NAV_LABELS.controles, "Contrôles");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",
@@ -355,8 +355,12 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
   assert.match(panel, /schoolYearId/);
   assert.match(panel, /card\.classroomName/);
   assert.match(panel, /Aucun contrôle/);
-  assert.match(panel, /Alertes de coordination/);
-  assert.match(panel, /Charge enseignant/);
+  assert.match(panel, /control-planning-filter-row/);
+  assert.match(panel, /data-control-ownership/);
+  assert.doesNotMatch(panel, /Alertes de coordination/);
+  assert.doesNotMatch(panel, /Aide \/ Légende/);
+  assert.doesNotMatch(panel, /function AnnualAnalysis/);
+  assert.doesNotMatch(panel, /À rééquilibrer/);
   assert.match(panel, /\+ Planifier un contrôle/);
   assert.match(panel, /data-control-plan/);
   assert.match(panel, /data-control-modal/);
@@ -393,6 +397,9 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
   assert.match(css, /control-planning-week/);
   assert.match(css, /control-planning-semester/);
   assert.match(css, /--control-day-count/);
+  assert.match(css, /control-planning-filter-row/);
+  assert.match(css, /justify-content:\s*flex-start/);
+  assert.match(css, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*;/);
   assert.doesNotMatch(css, /\.control-planning-week\s*\{[^}]*repeat\(5,/s);
   assert.doesNotMatch(css, /\.control-planning-week[^{]*08h/);
   assert.match(panel, /data-control-empty-week/);

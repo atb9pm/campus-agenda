@@ -276,7 +276,7 @@ function adminBadge(schoolClass: SchoolClassRecord | null) {
 }
 
 test("version 2.38.0 — classe archivée hors opérationnel, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.42.0");
+  assert.equal(APP_VERSION, "2.43.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
   const [classroomsSrc, panel, lifecycle] = await Promise.all([
     readFile(new URL("../src/features/control-planning/classrooms.ts", import.meta.url), "utf8"),
