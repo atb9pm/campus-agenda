@@ -157,8 +157,8 @@ function testItem(input: {
   };
 }
 
-test("version 2.37.0 — semestre visuel, pas de migration", () => {
-  assert.equal(APP_VERSION, "2.37.0");
+test("version 2.38.0 — semestre visuel, pas de migration", () => {
+  assert.equal(APP_VERSION, "2.38.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
   assert.equal(SQL_MIGRATION_FILES.some((file) => file.startsWith("0025")), false);
 });

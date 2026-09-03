@@ -2,6 +2,21 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.38.0] — Attributions : vue enseignant centrée sur l’année active
+
+La vue par enseignant d’Administration → Attributions des cours affiche par défaut uniquement les attributions opérationnelles de l’année scolaire active. L’historique (classe archivée, TCA terminée, ancienne année) reste consultable via « Afficher l’historique », atténué visuellement.
+
+### Ajouté
+
+- Case à cocher « Afficher l’historique », décochée par défaut.
+- Helper `isOperationalTeacherCourseAssignment` (enseignant → TCA → AnnualCourse → SchoolClass → année active).
+- Enseignant actif sans cours : « Aucune attribution active ».
+- Lignes historiques (`is-historical`) distinctes des lignes opérationnelles.
+
+### Non inclus
+
+Aucune migration SQL. Vue par classe inchangée. N → N+1, notes, notation, fichiers joints, notifications.
+
 ## [2.37.0] — Classe archivée : historique conservé, plus jamais « Active »
 
 Une AnnualCourse / attribution n’est plus considérée comme opérationnellement active si sa SchoolClass est archivée, désactivée, absente ou hors de l’année scolaire concernée.

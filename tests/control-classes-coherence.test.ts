@@ -172,8 +172,8 @@ function slotFor(courseId: string, patch: Partial<CourseScheduleSlot> & { id: st
   };
 }
 
-test("version 2.37.0 — classes Contrôles = Mes cours, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.37.0");
+test("version 2.38.0 — classes Contrôles = Mes cours, pas de migration", async () => {
+  assert.equal(APP_VERSION, "2.38.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
   const [classroomsSrc, serviceSrc, panel] = await Promise.all([
     readFile(new URL("../src/features/control-planning/classrooms.ts", import.meta.url), "utf8"),

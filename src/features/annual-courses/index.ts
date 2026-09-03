@@ -39,6 +39,17 @@ export {
   assignmentRoleForFirstTeacher,
   effectiveAtForEndAssignment,
 } from "./admin-assign-ui.ts";
+export {
+  TEACHER_ASSIGNMENT_EMPTY_ACTIVE_MESSAGE,
+  TEACHER_ASSIGNMENT_HISTORY_CHECKBOX_LABEL,
+  activeSchoolYearIdForAssignments,
+  formatTeacherAssignmentOverviewLine,
+  isOperationalTeacherCourseAssignment,
+  listTeacherAssignmentOverviewRows,
+  teacherVisibleInAssignmentOverview,
+  type TeacherAssignmentOverviewRow,
+  type TeacherAssignmentOverviewTeacher,
+} from "./operational-assignment.ts";
 export { parseAssignmentDate, validateAssignmentPeriod, requireOverrideReason } from "./dates.ts";
 export {
   ANNUAL_COURSE_AGENDA_DELETE_REASON,

@@ -145,8 +145,8 @@ function planningDeps(items: PrototypeAgendaItem[] = DEMO_PROTOTYPE_ITEMS): Cont
   } as unknown as ControlPlanningServiceDeps;
 }
 
-test("version 2.37.0 — planning semestriel, sans table dédiée", () => {
-  assert.equal(APP_VERSION, "2.37.0");
+test("version 2.38.0 — planning semestriel, sans table dédiée", () => {
+  assert.equal(APP_VERSION, "2.38.0");
   assert.equal(TEACHER_NAV_LABELS.controles, "Contrôles");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",

@@ -8,7 +8,8 @@ export type AssignmentDisplayStatus =
   | AssignmentLifecycle
   | "class-archived"
   | "class-inactive"
-  | "class-unavailable";
+  | "class-unavailable"
+  | "course-archived";
 export type AssignConflictChoice = "CO_TEACHER" | "REPLACE" | "TEMPORARY" | "CANCEL";
 export type AssignForceStep = "none" | "warn" | "confirm";
 
@@ -37,18 +38,24 @@ export function assignmentDisplayStatus(
   options: {
     schoolClass?: Pick<SchoolClassRecord, "isActive" | "isArchived" | "schoolYearId"> | null;
     courseSchoolYearId?: string | null;
+    courseIsArchived?: boolean;
+    activeSchoolYearId?: string | null;
     at?: string;
   } = {},
 ): AssignmentDisplayStatus {
   const dateStatus = assignmentLifecycle(assignment, options.at);
   if (dateStatus !== "active") return dateStatus;
   const schoolClass = options.schoolClass ?? null;
+  if (schoolClass?.isArchived) return "class-archived";
+  if (schoolClass && !schoolClass.isActive) return "class-inactive";
+  if (options.courseIsArchived) return "course-archived";
   if (!schoolClass) return "class-unavailable";
-  if (schoolClass.isArchived) return "class-archived";
-  if (!schoolClass.isActive) return "class-inactive";
   if (!isOperationalSchoolClass(schoolClass, options.courseSchoolYearId ?? schoolClass.schoolYearId)) {
     return "class-unavailable";
   }
+  const activeYear = options.activeSchoolYearId?.trim() || null;
+  const courseYear = options.courseSchoolYearId?.trim() || null;
+  if (activeYear && courseYear && courseYear !== activeYear) return "class-unavailable";
   return "active";
 }
 
@@ -56,6 +63,7 @@ export function assignmentDisplayLabel(status: AssignmentDisplayStatus): string 
   if (status === "class-archived") return "Classe archivée";
   if (status === "class-inactive") return "Classe désactivée";
   if (status === "class-unavailable") return "Terminée";
+  if (status === "course-archived") return "Cours archivé";
   return lifecycleLabel(status);
 }
 
