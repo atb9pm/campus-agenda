@@ -345,8 +345,8 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
   assert.match(panel, /Année scolaire/);
   assert.match(panel, /data-control-year/);
   assert.match(panel, /data-control-semester/);
-  assert.match(panel, /data-control-layout="semester"/);
-  assert.match(panel, /Semestre 1/);
+  assert.match(panel, /Semaine/);
+  assert.match(panel, /SEMESTRE 1/);
   assert.match(panel, /function selectYear/);
   assert.match(panel, /setClassroomIds\(null\)/);
   assert.match(panel, /setMode\("mine"\)/);
