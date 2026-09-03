@@ -8,7 +8,6 @@ import {
   getClassroomById,
   getClassroomsForTeacher,
   getSubjectsForClassroom,
-  getTeacherById,
 } from "@campus/features/classes";
 import {
   TEACHER_NAV_ICONS,
@@ -73,7 +72,10 @@ import { APP_VERSION } from "@campus/lib/app-version";
 import {
   LAST_STUDENT_CODE_KEY,
   LAST_TEACHER_INITIALS_KEY,
+  authenticatedTeacherFromSession,
+  profileDiscInitials,
   writeStoredValue,
+  type AuthenticatedTeacherIdentity,
 } from "@campus/features/auth-entry";
 import {
   buildDefaultTeacherSetup,
@@ -181,6 +183,7 @@ function sectionDescription(activeSection: TeacherNavSection, isStudentView: boo
 
 export default function Home() {
   const [currentTeacherId, setCurrentTeacherId] = useState(DEMO_CURRENT_TEACHER_ID);
+  const [authenticatedTeacher, setAuthenticatedTeacher] = useState<AuthenticatedTeacherIdentity | null>(null);
   const [runtimeClassrooms, setRuntimeClassrooms] = useState<Array<{ id: string; name: string }>>([]);
   const teacherClassrooms = useMemo(() => {
     if (runtimeClassrooms.length) {
@@ -195,7 +198,6 @@ export default function Home() {
     return getClassroomsForTeacher(DEMO_CATALOG, currentTeacherId);
   }, [currentTeacherId, runtimeClassrooms]);
   const defaultClassroomId = teacherClassrooms[0]?.id ?? DEMO_CATALOG.classrooms[0].id;
-  const currentTeacher = getTeacherById(DEMO_CATALOG, currentTeacherId);
 
   const [activeSection, setActiveSection] = useState<TeacherNavSection>(DEFAULT_TEACHER_NAV_SECTION);
   const [selectedClassroomId, setSelectedClassroomId] = useState(defaultClassroomId);
@@ -261,6 +263,7 @@ export default function Home() {
       return;
     }
     setPasswordChange(null);
+    setAuthenticatedTeacher(authenticatedTeacherFromSession(session));
     setCurrentTeacherId(session.teacherId);
     setTeacherIsAdmin(Boolean(session.isAdmin));
     setAppMode("teacher");
@@ -694,6 +697,13 @@ export default function Home() {
     })();
   }
 
+  function clearTeacherAuthIdentity() {
+    setAuthenticatedTeacher(null);
+    setTeacherAuthenticated(false);
+    setTeacherIsAdmin(false);
+    setOpenTimelineCourseId(null);
+  }
+
   function exitStudentMode() {
     void (async () => {
       const wasPreview = studentEntry === "teacher-preview";
@@ -709,8 +719,7 @@ export default function Home() {
       setStudentSession(null);
       setStudentEntry(null);
       setAppMode("teacher");
-      setTeacherAuthenticated(false);
-      setOpenTimelineCourseId(null);
+      clearTeacherAuthIdentity();
     })();
   }
 
@@ -755,8 +764,7 @@ export default function Home() {
       await logoutApiSession();
       setPasswordChange(null);
       setPasswordChangeError("");
-      setTeacherAuthenticated(false);
-      setOpenTimelineCourseId(null);
+      clearTeacherAuthIdentity();
     })();
   }
 
@@ -803,8 +811,7 @@ export default function Home() {
       setStudentSession(null);
       setStudentEntry(null);
       setAppMode("teacher");
-      setTeacherAuthenticated(false);
-      setOpenTimelineCourseId(null);
+      clearTeacherAuthIdentity();
       showNotice("Session réinitialisée.");
     })();
   }
@@ -1202,7 +1209,9 @@ export default function Home() {
             <p>{sectionDescription(activeSection, false, Boolean(openNotebookClass))}</p>
           </div>
           <div className="header-actions">
-            <button className="profile-disc" aria-label="Profil enseignant">{currentTeacher?.initials ?? "FC"}</button>
+            <button className="profile-disc" aria-label="Profil enseignant">
+              {profileDiscInitials(authenticatedTeacher)}
+            </button>
           </div>
         </header>
 
