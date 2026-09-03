@@ -16,6 +16,7 @@ import {
   type ControlPlanningLayout,
   type ControlPlanningMode,
   type ControlPlanningPeriodId,
+  type ControlPlanningPeriodView,
   type ControlPlanningSemesterDay,
   type ControlPlanningView,
 } from "@campus/features/control-planning";
@@ -1038,11 +1039,6 @@ export function ControlPlanningPanel({
     closeModal();
   }
 
-  function selectPeriod(next: ControlPlanningPeriodId) {
-    setPeriod(next);
-    closeModal();
-  }
-
   function closeModal() {
     setPickerDay(null);
     setModalDay(null);
@@ -1433,6 +1429,9 @@ export function ControlPlanningPanel({
     todayIso,
   ]);
 
+  const semester1 = view?.semester ?? null;
+  const semester2 = yearSemester2View?.semester ?? null;
+
   return (
     <section className="teacher-workspace control-planning" aria-label="Contrôles" data-control-planning="">
       <div className="workspace-intro">
@@ -1658,7 +1657,12 @@ export function ControlPlanningPanel({
         <p className="ma-semaine-empty control-planning-error">{error}</p>
       ) : loading && !view ? (
         <p className="ma-semaine-empty">Chargement du planning des contrôles…</p>
-      ) : isAnnualView && view?.semester && yearSemester2View?.semester ? (
+      ) : isAnnualView && view && yearSemester2View && semester1 && semester2 ? ((
+        currentView: ControlPlanningView,
+        secondSemesterView: ControlPlanningView,
+        semester1: ControlPlanningPeriodView,
+        semester2: ControlPlanningPeriodView,
+      ) => (
         <div className="control-planning-body">
           <div className="control-planning-main">
             <div className="control-planning-week-nav">
@@ -1669,11 +1673,11 @@ export function ControlPlanningPanel({
               <div className="control-planning-week-actions">
                 <button
                   type="button"
-                  disabled={!view.canCreate}
+                  disabled={!currentView.canCreate}
                   onClick={() => {
                     const allDays: ControlPlanningDay[] = [
-                      ...view.semester.weeks.flatMap((w) => w.days.map(toPlanningDay)),
-                      ...yearSemester2View!.semester.weeks.flatMap((w) => w.days.map(toPlanningDay)),
+                      ...semester1.weeks.flatMap((w) => w.days.map(toPlanningDay)),
+                      ...semester2.weeks.flatMap((w) => w.days.map(toPlanningDay)),
                     ];
                     const first = allDays.find((d) => {
                       const placement = subjectFilter ? d.placementOptions.filter((o) => o.branchLabel === subjectFilter) : d.placementOptions;
@@ -1689,15 +1693,15 @@ export function ControlPlanningPanel({
 
             <div className="control-planning-annual-wrap" data-control-annual="">
               {(["semester-1", "semester-2"] as const).map((periodId) => {
-                const semesterView = periodId === "semester-1" ? view.semester : yearSemester2View!.semester;
+                const semesterView = periodId === "semester-1" ? semester1 : semester2;
                 const weeks =
                   displayMode === "month"
                     ? semesterView.weeks.filter((w) => new Date(w.monday).getMonth() + 1 === monthNumber)
                     : semesterView.weeks;
                 const visibleDayIndexes = [
                   ...new Set([
-                    ...(view.semester.visibleDayIndexes ?? []),
-                    ...(yearSemester2View!.semester.visibleDayIndexes ?? []),
+                    ...(semester1.visibleDayIndexes ?? []),
+                    ...(semester2.visibleDayIndexes ?? []),
                   ]),
                 ].sort((a, b) => a - b);
 
@@ -1877,8 +1881,8 @@ export function ControlPlanningPanel({
 
           <aside className="control-planning-sidebar" aria-label="Analyse annuelle">
             <AnnualAnalysis
-              view={view}
-              semester2View={yearSemester2View}
+              view={currentView}
+              semester2View={secondSemesterView}
               visiblePeriodMode={displayMode}
               monthNumber={monthNumber}
               subjectFilter={subjectFilter}
@@ -1887,7 +1891,7 @@ export function ControlPlanningPanel({
             />
           </aside>
         </div>
-      ) : view?.layout === "week" && view.week ? (
+      ))(view, yearSemester2View, semester1, semester2) : view?.layout === "week" && view.week ? (
         <div className="control-planning-body">
           <div className="control-planning-main">
             <div className="control-planning-week-nav">
