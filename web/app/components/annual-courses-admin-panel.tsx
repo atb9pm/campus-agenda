@@ -12,6 +12,12 @@ import {
   effectiveAtForEndAssignment,
   isClassEligibleForAssignment,
 } from "@campus/features/annual-courses/admin-assign-ui.ts";
+import {
+  TEACHER_ASSIGNMENT_EMPTY_ACTIVE_MESSAGE,
+  TEACHER_ASSIGNMENT_HISTORY_CHECKBOX_LABEL,
+  listTeacherAssignmentOverviewRows,
+  teacherVisibleInAssignmentOverview,
+} from "@campus/features/annual-courses/operational-assignment.ts";
 import type { PedagogicalContextRecord, SchoolProfessionRecord } from "@campus/features/school-catalog";
 import type { SchoolBranchRecord, SchoolClassRecord } from "@campus/features/school-catalog";
 import { formatPedagogicalContextLabel } from "@campus/features/school-catalog";
@@ -78,6 +84,7 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<ViewMode>("class");
   const [includeMismatched, setIncludeMismatched] = useState(false);
+  const [showAssignmentHistory, setShowAssignmentHistory] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState("");
   const [pending, setPending] = useState<PendingAssign | null>(null);
   const [conflictChoice, setConflictChoice] = useState<ConflictChoice>("CANCEL");
@@ -360,6 +367,16 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
           />
           <span>Afficher les enseignants non correspondants</span>
         </label>
+        {view === "teacher" ? (
+          <label className="admin-checkbox">
+            <input
+              type="checkbox"
+              checked={showAssignmentHistory}
+              onChange={(event) => setShowAssignmentHistory(event.target.checked)}
+            />
+            <span>{TEACHER_ASSIGNMENT_HISTORY_CHECKBOX_LABEL}</span>
+          </label>
+        ) : null}
       </div>
 
       {view === "class" ? (
@@ -501,8 +518,19 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
         </>
       ) : (
         <ul className="admin-teacher-access-list">
-          {data.teachers.map((teacher) => {
-            const rows = data.assignments.filter((entry) => entry.teacherId === teacher.id);
+          {data.teachers
+            .filter((teacher) => teacherVisibleInAssignmentOverview(teacher, showAssignmentHistory))
+            .map((teacher) => {
+            const rows = listTeacherAssignmentOverviewRows({
+              teacher,
+              assignments: data.assignments,
+              courses: data.courses,
+              classes: data.classes,
+              years: data.schoolYears ?? [],
+              contexts: data.contexts,
+              branches: data.branches,
+              includeHistory: showAssignmentHistory,
+            });
             return (
               <li key={teacher.id} className={teacher.isArchived ? "admin-teacher-card is-archived" : "admin-teacher-card"}>
                 <div>
@@ -512,32 +540,32 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
                     {teacher.isArchived ? " · Archivé" : teacher.isActive ? "" : " · Désactivé"}
                   </p>
                   {rows.length === 0 ? (
-                    <p className="admin-loading">Aucune attribution.</p>
+                    <p className="admin-loading">{TEACHER_ASSIGNMENT_EMPTY_ACTIVE_MESSAGE}</p>
                   ) : (
                     <ul className="annual-course-teachers">
-                      {rows.map((entry) => {
-                        const course = data.courses.find((item) => item.id === entry.annualCourseId);
-                        const schoolClass = data.classes.find((item) => item.id === course?.classId);
-                        const context = data.contexts.find((item) => item.id === course?.contextId);
-                        const branch = data.branches.find((item) => item.id === context?.branchId);
+                      {rows.map((row) => {
+                        const context = row.course
+                          ? data.contexts.find((item) => item.id === row.course?.contextId)
+                          : undefined;
+                        const branch = context
+                          ? data.branches.find((item) => item.id === context.branchId)
+                          : undefined;
                         return (
-                          <li key={entry.id}>
-                            {schoolClass?.label ?? "Classe"} →{" "}
+                          <li
+                            key={row.assignment.id}
+                            className={row.operational ? "is-operational" : "is-historical"}
+                          >
+                            {row.schoolClass?.label ?? "Classe"} →{" "}
                             {formatPedagogicalContextLabel({
                               branchLabel: branch?.label ?? "Branche",
-                              trainingYear: context?.trainingYear ?? schoolClass?.trainingYear ?? 1,
-                              professionLabel: data.professions.find((entry) => entry.id === schoolClass?.professionId)
+                              trainingYear: context?.trainingYear ?? row.schoolClass?.trainingYear ?? 1,
+                              professionLabel: data.professions.find((entry) => entry.id === row.schoolClass?.professionId)
                                 ?.label,
                               mode: "full",
                             })}{" "}
-                            → {roleLabel(entry.role)}
+                            → {roleLabel(row.assignment.role)}
                             {" · "}
-                            {assignmentDisplayLabel(
-                              assignmentDisplayStatus(entry, {
-                                schoolClass,
-                                courseSchoolYearId: course?.schoolYearId,
-                              }),
-                            )}
+                            {assignmentDisplayLabel(row.displayStatus)}
                           </li>
                         );
                       })}

@@ -633,6 +633,8 @@ button { color: inherit; }
 .annual-course-row.is-replacement { background: #fff7e8; }
 .annual-course-row.is-override { background: #fff0f0; }
 .annual-course-teachers { margin: 0; padding-left: 18px; }
+.annual-course-teachers li.is-operational { color: var(--navy); }
+.annual-course-teachers li.is-historical { color: #667085; opacity: .78; }
 .annual-course-class-select { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; max-width: 420px; }
 .annual-course-dialog { margin-top: 18px; padding: 16px; border: 1px solid var(--line-strong); border-radius: 10px; background: #f8fafc; }
 .annual-course-dialog fieldset { display: flex; flex-direction: column; gap: 8px; border: 0; padding: 0; }
