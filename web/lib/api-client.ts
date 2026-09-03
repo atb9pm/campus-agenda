@@ -242,6 +242,41 @@ export async function moveTeacherControlApi(
   return { item: payload.item, coordination: payload.coordination, moved: payload.moved !== false };
 }
 
+export async function updateTeacherControlApi(
+  agendaItemId: number,
+  input: { title?: string; detail?: string },
+): Promise<{ item: PrototypeAgendaItem }> {
+  const response = await fetch(`/api/teacher/controls/${encodeURIComponent(String(agendaItemId))}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...(input.title !== undefined ? { title: input.title } : {}),
+      ...(input.detail !== undefined ? { detail: input.detail } : {}),
+    }),
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    item?: PrototypeAgendaItem;
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.item) {
+    throw new Error(payload.reason ?? "Modification du contrôle impossible.");
+  }
+  return { item: payload.item };
+}
+
+export async function deleteTeacherControlApi(agendaItemId: number): Promise<void> {
+  const response = await fetch(`/api/teacher/controls/${encodeURIComponent(String(agendaItemId))}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  const payload = await parseJson<{ ok: boolean; reason?: string }>(response);
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.reason ?? "Suppression du contrôle impossible.");
+  }
+}
+
 export async function fetchTeacherCoursesApi(schoolYearId?: string | null): Promise<{
   schoolYearId: string | null;
   courses: TeacherCourseWorkspaceEntry[];

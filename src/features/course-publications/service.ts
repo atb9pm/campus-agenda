@@ -28,6 +28,7 @@ import {
   ensureRuntimeSubjectForAnnualCourse,
   teacherHasStructuredPublishAccess,
 } from "../agenda-bridge/index.ts";
+import { ARCHIVED_YEAR_READONLY_REASON } from "../school-year/archived-readonly.ts";
 
 /** Compatibilité Agenda historique. Ce n'est PAS l'identité de la CourseSession. */
 export const STRUCTURED_AGENDA_COMPAT_HOUR = 8;
@@ -57,6 +58,35 @@ export const STRUCTURED_CONTROL_MOVE_FREE_PLACEMENT_REASON =
   "La destination doit être une séance réelle (annualCourseId + courseSessionKey).";
 export const STRUCTURED_CONTROL_MOVE_YEAR_MISMATCH_REASON =
   "Un contrôle ne peut pas être déplacé vers une autre année scolaire.";
+export const STRUCTURED_CONTROL_EDIT_NOT_FOUND_REASON = "Contrôle introuvable.";
+export const STRUCTURED_CONTROL_EDIT_NOT_TEST_REASON =
+  "Seul un contrôle peut être modifié ou supprimé ici.";
+export const STRUCTURED_CONTROL_EDIT_NOT_STRUCTURED_REASON =
+  "Ce contrôle n’est pas rattaché à une séance de cours réelle.";
+export const STRUCTURED_CONTROL_EDIT_FORBIDDEN_REASON =
+  "Vous ne pouvez modifier que vos propres contrôles.";
+export const STRUCTURED_CONTROL_DELETE_FORBIDDEN_REASON =
+  "Vous ne pouvez supprimer que vos propres contrôles.";
+export const STRUCTURED_CONTROL_EDIT_CONTENT_ONLY_REASON =
+  "Seuls le titre et le détail d’un contrôle peuvent être modifiés.";
+export const STRUCTURED_CONTROL_EDIT_TITLE_REQUIRED_REASON = "Le titre du contrôle est obligatoire.";
+
+const STRUCTURED_CONTROL_CONTENT_FORBIDDEN_KEYS = [
+  "classroomId",
+  "subjectId",
+  "schoolYearId",
+  "annualCourseId",
+  "courseSessionKey",
+  "courseSessionDate",
+  "schoolWeekNumber",
+  "day",
+  "hour",
+  "date",
+  "authorTeacherId",
+  "teacherId",
+  "type",
+  "agendaItemId",
+] as const;
 
 export function structuredPublishReferentialGuard(options: {
   year: SchoolYearRecord | null | undefined;
@@ -152,6 +182,18 @@ export interface StructuredControlMoveInput {
   confirmCoordination?: boolean;
 }
 
+export interface StructuredControlContentInput {
+  teacherId: string;
+  agendaItemId: number;
+  title?: string;
+  detail?: string;
+}
+
+export interface StructuredControlDeleteInput {
+  teacherId: string;
+  agendaItemId: number;
+}
+
 export type StructuredControlMoveOk = StructuredPublishOk & { moved: boolean };
 export type StructuredControlMoveResult = StructuredControlMoveOk | StructuredPublishErr;
 
@@ -202,6 +244,37 @@ export function structuredControlMoveIdsFromBody(body: unknown): {
 export function parseConfirmCoordination(body: unknown): boolean {
   const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   return record.confirmCoordination === true;
+}
+
+export function structuredControlContentFromBody(body: unknown):
+  | { ok: true; title?: string; detail?: string }
+  | { ok: false; reason: string } {
+  const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+  if (STRUCTURED_CONTROL_CONTENT_FORBIDDEN_KEYS.some((key) => record[key] !== undefined)) {
+    return { ok: false, reason: STRUCTURED_CONTROL_EDIT_CONTENT_ONLY_REASON };
+  }
+  const hasTitle = Object.prototype.hasOwnProperty.call(record, "title");
+  const hasDetail = Object.prototype.hasOwnProperty.call(record, "detail");
+  if (!hasTitle && !hasDetail) {
+    return { ok: false, reason: STRUCTURED_CONTROL_EDIT_CONTENT_ONLY_REASON };
+  }
+  const rawTitle = hasTitle ? record.title : undefined;
+  const rawDetail = hasDetail ? record.detail : undefined;
+  if (hasTitle && typeof rawTitle !== "string") {
+    return { ok: false, reason: STRUCTURED_CONTROL_EDIT_TITLE_REQUIRED_REASON };
+  }
+  if (hasDetail && typeof rawDetail !== "string") {
+    return { ok: false, reason: STRUCTURED_CONTROL_EDIT_CONTENT_ONLY_REASON };
+  }
+  const title = typeof rawTitle === "string" ? rawTitle.trim() : undefined;
+  if (hasTitle && !title) {
+    return { ok: false, reason: STRUCTURED_CONTROL_EDIT_TITLE_REQUIRED_REASON };
+  }
+  return {
+    ok: true,
+    ...(hasTitle ? { title } : {}),
+    ...(hasDetail && typeof rawDetail === "string" ? { detail: rawDetail.trim() } : {}),
+  };
 }
 
 export function manualControlIdsFromBody(body: unknown): {
@@ -542,4 +615,81 @@ export async function moveStructuredControlToCourseSession(
 
   const nextCoordination = await coordinationForResolved(deps, context, "TEST");
   return { ok: true, item: mutated.item, coordination: nextCoordination, moved: true };
+}
+
+async function loadOwnStructuredControl(
+  deps: StructuredPublishDeps,
+  input: { teacherId: string; agendaItemId: number },
+  forbiddenReason: string,
+): Promise<{ ok: true; item: PrototypeAgendaItem } | StructuredPublishErr> {
+  if (!Number.isInteger(input.agendaItemId) || input.agendaItemId <= 0) {
+    return { ok: false, reason: "Identifiant de contrôle invalide.", status: 400 };
+  }
+
+  const item = await deps.agenda.findAgendaItem(input.agendaItemId);
+  if (!item) {
+    return { ok: false, reason: STRUCTURED_CONTROL_EDIT_NOT_FOUND_REASON, status: 404 };
+  }
+  if (item.type !== "TEST") {
+    return { ok: false, reason: STRUCTURED_CONTROL_EDIT_NOT_TEST_REASON, status: 400 };
+  }
+  if (!isStructuredAgendaPublication(item) || !item.schoolYearId?.trim()) {
+    return { ok: false, reason: STRUCTURED_CONTROL_EDIT_NOT_STRUCTURED_REASON, status: 400 };
+  }
+  if (item.authorTeacherId !== input.teacherId) {
+    return { ok: false, reason: forbiddenReason, status: 403 };
+  }
+
+  const year = await deps.years.getSchoolYearById(item.schoolYearId);
+  if (!year) {
+    return { ok: false, reason: "Année scolaire introuvable.", status: 404 };
+  }
+  if (year.status === "archived") {
+    return { ok: false, reason: ARCHIVED_YEAR_READONLY_REASON, status: 403 };
+  }
+
+  return { ok: true, item };
+}
+
+export async function updateStructuredControlContent(
+  deps: StructuredPublishDeps,
+  input: StructuredControlContentInput,
+): Promise<StructuredPublishResult> {
+  const loaded = await loadOwnStructuredControl(deps, input, STRUCTURED_CONTROL_EDIT_FORBIDDEN_REASON);
+  if (!loaded.ok) return loaded;
+
+  const patch: { title?: string; detail?: string } = {};
+  if (input.title !== undefined) {
+    const title = input.title.trim();
+    if (!title) {
+      return { ok: false, reason: STRUCTURED_CONTROL_EDIT_TITLE_REQUIRED_REASON, status: 400 };
+    }
+    patch.title = title;
+  }
+  if (input.detail !== undefined) {
+    patch.detail = input.detail.trim();
+  }
+  if (Object.keys(patch).length === 0) {
+    return { ok: false, reason: STRUCTURED_CONTROL_EDIT_CONTENT_ONLY_REASON, status: 400 };
+  }
+
+  const mutated = await deps.agenda.updateAgendaItem(loaded.item.id, input.teacherId, patch);
+  if (!mutated.ok) {
+    return { ok: false, reason: mutated.reason, status: mutated.status === 401 ? 403 : mutated.status };
+  }
+  return { ok: true, item: mutated.item };
+}
+
+export async function deleteStructuredControl(
+  deps: StructuredPublishDeps,
+  input: StructuredControlDeleteInput,
+): Promise<StructuredPublishResult> {
+  const loaded = await loadOwnStructuredControl(deps, input, STRUCTURED_CONTROL_DELETE_FORBIDDEN_REASON);
+  if (!loaded.ok) return loaded;
+
+  const mutated = await deps.agenda.deleteAgendaItem(loaded.item.id, input.teacherId);
+  if (!mutated.ok) {
+    return { ok: false, reason: mutated.reason, status: mutated.status === 401 ? 403 : mutated.status };
+  }
+  return { ok: true, item: mutated.item };
 }

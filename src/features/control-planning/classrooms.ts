@@ -5,8 +5,13 @@ import {
   teacherHasStructuredPublishAccess,
 } from "../agenda-bridge/access.ts";
 import type { CourseSession } from "../course-sessions/types.ts";
-import type { SchoolClassRecord } from "../school-catalog/types.ts";
+import type { PedagogicalContextRecord } from "../school-catalog/profession-types.ts";
+import type { SchoolBranchRecord, SchoolClassRecord } from "../school-catalog/types.ts";
 import type { SchoolYearRecord } from "../school-year/types.ts";
+import {
+  assignedSchoolClassIdsFromTeacherCourses,
+  buildTeacherCourseWorkspace,
+} from "../teacher-workspace/index.ts";
 import type { RuntimeClassroomListItem } from "../../lib/persistence/runtime-agenda-types.ts";
 import type { ControlPlanningClass } from "./types.ts";
 
@@ -15,6 +20,39 @@ export function structuredClassMatchesPlanningYear(
   schoolYearId: string,
 ): boolean {
   return (schoolClass.schoolYearId?.trim() || null) === schoolYearId;
+}
+
+export function teacherCoursesForPlanningYear(options: {
+  teacherId: string;
+  schoolYearId: string;
+  at?: string;
+  assignments: TeacherCourseAssignment[];
+  courses: AnnualCourse[];
+  classes: SchoolClassRecord[];
+  contexts: PedagogicalContextRecord[];
+  branches: SchoolBranchRecord[];
+  years: SchoolYearRecord[];
+}) {
+  const year = options.years.find((entry) => entry.id === options.schoolYearId);
+  const classes =
+    year?.status === "archived"
+      ? options.classes.map((schoolClass) =>
+          schoolClass.schoolYearId === options.schoolYearId
+            ? { ...schoolClass, isActive: true, isArchived: false }
+            : schoolClass,
+        )
+      : options.classes;
+  return buildTeacherCourseWorkspace({
+    teacherId: options.teacherId,
+    schoolYearId: options.schoolYearId,
+    at: options.at,
+    assignments: options.assignments,
+    courses: options.courses,
+    classes,
+    contexts: options.contexts,
+    branches: options.branches,
+    years: options.years,
+  }).courses;
 }
 
 /**
@@ -44,36 +82,8 @@ export async function listAccessibleRuntimeClassroomsForTeacher(options: {
 }
 
 /**
- * Accès spécifique au module Contrôles (coordination live, APIs génériques).
- * Une classe structurée est visible si la lecture actuelle l’autorise
- * OU si l’enseignant a au moins une CourseSession de l’année avec TCA à la date de séance.
- */
-export function teacherHasControlPlanningClassAccess(options: {
-  teacherId: string;
-  schoolClass: SchoolClassRecord;
-  courses: AnnualCourse[];
-  assignments: TeacherCourseAssignment[];
-  years: SchoolYearRecord[];
-  sessions: readonly CourseSession[];
-}): boolean {
-  if (
-    teacherHasStructuredClassroomReadAccess({
-      teacherId: options.teacherId,
-      schoolClass: options.schoolClass,
-      courses: options.courses,
-      assignments: options.assignments,
-      years: options.years,
-    })
-  ) {
-    return true;
-  }
-  return teacherHasAssignedStructuredPlanningClass(options);
-}
-
-/**
- * Classe proposée dans le planning structuré : SchoolClass de l’année,
- * AnnualCourse, et au moins une CourseSession avec TCA (PRIMARY / CO_TEACHER /
- * REPLACEMENT) valable à la date de séance. Pas de membership, pas de legacy.
+ * Classe du module Contrôles : au moins un AnnualCourse attribué selon « Mes cours ».
+ * Les CourseSessions ne sont pas une source d’autorité pour cette liste.
  */
 export function teacherHasAssignedStructuredPlanningClass(options: {
   teacherId: string;
@@ -81,22 +91,33 @@ export function teacherHasAssignedStructuredPlanningClass(options: {
   courses: AnnualCourse[];
   assignments: TeacherCourseAssignment[];
   years: SchoolYearRecord[];
-  sessions: readonly CourseSession[];
+  contexts: PedagogicalContextRecord[];
+  branches: SchoolBranchRecord[];
+  schoolYearId?: string;
+  at?: string;
 }): boolean {
-  const hasAnnualCourse = options.courses.some((course) => course.classId === options.schoolClass.id);
-  if (!hasAnnualCourse) return false;
-  return options.sessions.some(
-    (session) =>
-      session.classId === options.schoolClass.id &&
-      teacherHasStructuredPublishAccess({
-        teacherId: options.teacherId,
-        annualCourseId: session.annualCourseId,
-        assignments: options.assignments,
-        at: assignmentInstantForSessionDate(session.date),
-      }),
-  );
+  const schoolYearId = options.schoolYearId?.trim() || options.schoolClass.schoolYearId?.trim() || "";
+  if (!schoolYearId) return false;
+  return teacherCoursesForPlanningYear({
+    teacherId: options.teacherId,
+    schoolYearId,
+    at: options.at,
+    assignments: options.assignments,
+    courses: options.courses,
+    classes: [options.schoolClass],
+    contexts: options.contexts,
+    branches: options.branches,
+    years: options.years,
+  }).some((course) => course.classId === options.schoolClass.id);
 }
 
+/** Alias : Contrôles et Mes cours partagent la même règle d’attribution. */
+export const teacherHasControlPlanningClassAccess = teacherHasAssignedStructuredPlanningClass;
+
+/**
+ * Classes proposées dans Contrôles : dérivées des AnnualCourse de « Mes cours »
+ * pour l’année. Pas de membership, pas de CourseSession, pas de catalogue démo.
+ */
 export function listAssignedStructuredPlanningClassrooms(options: {
   teacherId: string;
   classrooms: RuntimeClassroomListItem[];
@@ -104,33 +125,39 @@ export function listAssignedStructuredPlanningClassrooms(options: {
   courses: AnnualCourse[];
   assignments: TeacherCourseAssignment[];
   years: SchoolYearRecord[];
-  sessions: readonly CourseSession[];
+  contexts: PedagogicalContextRecord[];
+  branches: SchoolBranchRecord[];
   schoolYearId: string;
+  at?: string;
 }): ControlPlanningClass[] {
-  const yearClasses = options.classes
-    .filter((schoolClass) => structuredClassMatchesPlanningYear(schoolClass, options.schoolYearId))
-    .slice()
-    .sort((left, right) => (left.code || left.label).localeCompare(right.code || right.label, "fr"));
+  const assignedClassIds = new Set(
+    assignedSchoolClassIdsFromTeacherCourses(
+      teacherCoursesForPlanningYear({
+        teacherId: options.teacherId,
+        schoolYearId: options.schoolYearId,
+        at: options.at,
+        assignments: options.assignments,
+        courses: options.courses,
+        classes: options.classes,
+        contexts: options.contexts,
+        branches: options.branches,
+        years: options.years,
+      }),
+    ),
+  );
   const classroomBySchoolClassId = new Map(
     options.classrooms
       .filter((classroom) => classroom.schoolClassId?.trim())
       .map((classroom) => [classroom.schoolClassId!.trim(), classroom]),
   );
+  const yearClasses = options.classes
+    .filter((schoolClass) => structuredClassMatchesPlanningYear(schoolClass, options.schoolYearId))
+    .filter((schoolClass) => assignedClassIds.has(schoolClass.id))
+    .slice()
+    .sort((left, right) => (left.code || left.label).localeCompare(right.code || right.label, "fr"));
   const result: ControlPlanningClass[] = [];
   const seen = new Set<string>();
   for (const schoolClass of yearClasses) {
-    if (
-      !teacherHasAssignedStructuredPlanningClass({
-        teacherId: options.teacherId,
-        schoolClass,
-        courses: options.courses,
-        assignments: options.assignments,
-        years: options.years,
-        sessions: options.sessions,
-      })
-    ) {
-      continue;
-    }
     const classroom = classroomBySchoolClassId.get(schoolClass.id);
     if (!classroom || seen.has(classroom.id)) continue;
     seen.add(classroom.id);
@@ -146,25 +173,33 @@ export async function listAccessibleControlPlanningClassrooms(options: {
   courses: AnnualCourse[];
   assignments: TeacherCourseAssignment[];
   years: SchoolYearRecord[];
-  sessions: readonly CourseSession[];
-  teacherCanAccessClassroom: (teacherId: string, classroomId: string) => Promise<boolean>;
+  contexts: PedagogicalContextRecord[];
+  branches: SchoolBranchRecord[];
+  sessions?: readonly CourseSession[];
+  teacherCanAccessClassroom?: (teacherId: string, classroomId: string) => Promise<boolean>;
   schoolYearId?: string | null;
+  at?: string;
 }): Promise<ControlPlanningClass[]> {
-  return listRuntimeClassroomsWhere(options, (linked) =>
-    teacherHasControlPlanningClassAccess({
-      teacherId: options.teacherId,
-      schoolClass: linked,
-      courses: options.courses,
-      assignments: options.assignments,
-      years: options.years,
-      sessions: options.sessions,
-    }),
-  );
+  const schoolYearId =
+    options.schoolYearId?.trim() || options.years.find((year) => year.status === "active")?.id || "";
+  if (!schoolYearId) return [];
+  return listAssignedStructuredPlanningClassrooms({
+    teacherId: options.teacherId,
+    classrooms: options.classrooms,
+    classes: options.classes,
+    courses: options.courses,
+    assignments: options.assignments,
+    years: options.years,
+    contexts: options.contexts,
+    branches: options.branches,
+    schoolYearId,
+    at: options.at,
+  });
 }
 
 /**
  * Classes dont au moins une CourseSession de la semaine a une TCA active à la date.
- * Legacy : conserve l’accès déjà établi. Sans séances calculées : toutes les classes accessibles.
+ * Ne sert qu’au filtrage des jours / charge, jamais à élargir la liste des classes.
  */
 export function controlPlanningClassroomIdsCoveredInWeek(options: {
   accessible: readonly ControlPlanningClass[];

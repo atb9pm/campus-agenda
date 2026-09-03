@@ -1122,4 +1122,145 @@ test("2.34.0 — E2E déplacement structuré vers une autre CourseSession", asyn
   assert.ok(cards.some((card) => card.agendaItemId === agendaItemId && card.title === "Contrôle à déplacer"));
 });
 
+test("2.35.0 — E2E PATCH et DELETE d’un contrôle structuré", async () => {
+  const adminCookie = await loginAdmin();
+  const teacherCookie = await loginTeacher("teacher-demo-current");
+  const otherCookie = await loginTeacher("teacher-demo-martin");
+  const seeded = await seedInteractiveControlCourse(adminCookie, "teacher-demo-current", "EDT");
+
+  const options = [];
+  for (let week = 1; week <= 8; week += 1) {
+    const next = await jsonRequest(
+      `/api/teacher/controls/planning?week=${week}&schoolYearId=${encodeURIComponent(seeded.schoolYearId)}&view=week`,
+      { headers: { cookie: teacherCookie } },
+    );
+    if (next.response.status !== 200) continue;
+    for (const day of next.payload.week?.days ?? []) {
+      for (const option of day.placementOptions ?? []) {
+        if (option.annualCourseId === seeded.annualCourseId) options.push(option);
+      }
+    }
+  }
+  const unique = [...new Map(options.map((entry) => [entry.courseSessionKey, entry])).values()];
+  assert.ok(unique.length >= 1, "une CourseSession réelle requise");
+  const source = unique[0];
+
+  const created = await jsonRequest("/api/teacher/controls", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      annualCourseId: source.annualCourseId,
+      courseSessionKey: source.courseSessionKey,
+      title: "Contrôle à éditer",
+      detail: "Détail initial",
+    }),
+  });
+  assert.equal(created.response.status, 201, created.payload.reason);
+  const agendaItemId = created.payload.item.id;
+  const before = {
+    id: created.payload.item.id,
+    schoolYearId: created.payload.item.schoolYearId,
+    classroomId: created.payload.item.classroomId,
+    subjectId: created.payload.item.subjectId,
+    annualCourseId: created.payload.item.annualCourseId,
+    courseSessionKey: created.payload.item.courseSessionKey,
+    courseSessionDate: created.payload.item.courseSessionDate,
+    schoolWeekNumber: created.payload.item.schoolWeekNumber,
+    day: created.payload.item.day,
+    hour: created.payload.item.hour,
+  };
+
+  const forged = await jsonRequest(`/api/teacher/controls/${agendaItemId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      title: "Forgé",
+      annualCourseId: "other-course",
+      courseSessionKey: "other-key",
+      date: "2099-01-01",
+      classroomId: "other-class",
+    }),
+  });
+  assert.equal(forged.response.status, 400);
+  assert.match(forged.payload.reason, /titre et le détail/);
+
+  const stolen = await jsonRequest(`/api/teacher/controls/${agendaItemId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", cookie: otherCookie },
+    body: JSON.stringify({ title: "Titre usurpé" }),
+  });
+  assert.equal(stolen.response.status, 403);
+
+  const patched = await jsonRequest(`/api/teacher/controls/${agendaItemId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      title: "Contrôle édité",
+      detail: "Détail modifié",
+    }),
+  });
+  assert.equal(patched.response.status, 200, patched.payload.reason);
+  assert.equal(patched.payload.ok, true);
+  assert.equal(patched.payload.item.id, agendaItemId);
+  assert.equal(patched.payload.item.title, "Contrôle édité");
+  assert.equal(patched.payload.item.detail, "Détail modifié");
+  assert.equal(patched.payload.item.annualCourseId, before.annualCourseId);
+  assert.equal(patched.payload.item.courseSessionKey, before.courseSessionKey);
+  assert.equal(patched.payload.item.courseSessionDate, before.courseSessionDate);
+  assert.equal(patched.payload.item.classroomId, before.classroomId);
+  assert.equal(patched.payload.item.schoolYearId, before.schoolYearId);
+  assert.equal(patched.payload.item.day, before.day);
+  assert.equal(patched.payload.item.hour, before.hour);
+
+  const weekView = await jsonRequest(
+    `/api/teacher/controls/planning?week=${source.schoolWeekNumber}&view=week&schoolYearId=${encodeURIComponent(seeded.schoolYearId)}`,
+    { headers: { cookie: teacherCookie } },
+  );
+  assert.equal(weekView.response.status, 200);
+  const cards = (weekView.payload.week?.days ?? []).flatMap((day) => day.controls ?? []);
+  assert.ok(cards.some((card) => card.agendaItemId === agendaItemId && card.title === "Contrôle édité"));
+
+  const stolenDelete = await jsonRequest(`/api/teacher/controls/${agendaItemId}`, {
+    method: "DELETE",
+    headers: { cookie: otherCookie },
+  });
+  assert.equal(stolenDelete.response.status, 403);
+
+  const stillThere = await jsonRequest(
+    `/api/teacher/controls/planning?week=${source.schoolWeekNumber}&view=week&schoolYearId=${encodeURIComponent(seeded.schoolYearId)}`,
+    { headers: { cookie: teacherCookie } },
+  );
+  assert.ok(
+    (stillThere.payload.week?.days ?? [])
+      .flatMap((day) => day.controls ?? [])
+      .some((card) => card.agendaItemId === agendaItemId),
+  );
+
+  const removed = await jsonRequest(`/api/teacher/controls/${agendaItemId}`, {
+    method: "DELETE",
+    headers: { cookie: teacherCookie },
+  });
+  assert.equal(removed.response.status, 200, removed.payload.reason);
+  assert.equal(removed.payload.ok, true);
+  assert.equal(removed.payload.item.id, agendaItemId);
+
+  const afterDelete = await jsonRequest(
+    `/api/teacher/controls/planning?week=${source.schoolWeekNumber}&view=week&schoolYearId=${encodeURIComponent(seeded.schoolYearId)}`,
+    { headers: { cookie: teacherCookie } },
+  );
+  assert.equal(afterDelete.response.status, 200);
+  assert.ok(
+    !(afterDelete.payload.week?.days ?? [])
+      .flatMap((day) => day.controls ?? [])
+      .some((card) => card.agendaItemId === agendaItemId),
+  );
+
+  const missing = await jsonRequest(`/api/teacher/controls/${agendaItemId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({ title: "Après suppression" }),
+  });
+  assert.equal(missing.response.status, 404);
+});
+
 

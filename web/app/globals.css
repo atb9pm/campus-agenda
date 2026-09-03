@@ -923,6 +923,59 @@ button { color: inherit; }
   border-radius: 10px;
   background: #f8fbff;
 }
+.control-planning-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.control-planning-card-actions {
+  position: relative;
+  flex: 0 0 auto;
+}
+.control-planning-card-menu-trigger {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--navy);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.control-planning-card-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 6;
+  display: grid;
+  min-width: 168px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(16, 36, 68, .12);
+}
+.control-planning-card-menu button {
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--navy);
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+}
+.control-planning-card-menu button:hover,
+.control-planning-card-menu button:focus-visible {
+  background: #eef5ff;
+}
+.control-planning-card-menu button.is-danger,
+.control-plan-modal footer button.is-danger {
+  color: #8a2e4b;
+}
 .control-planning-card.is-peer { background: #fbfcfe; }
 .control-planning-card.is-draggable { cursor: grab; }
 .control-planning-card.is-dragging { opacity: .55; cursor: grabbing; }
