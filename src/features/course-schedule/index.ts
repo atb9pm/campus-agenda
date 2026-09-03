@@ -37,6 +37,23 @@ export {
   isOperationalAnnualCourse,
 } from "./operational.ts";
 export {
+  CLASS_SCHEDULE_ARCHIVED_MUTATION_REASON,
+  CLASS_SCHEDULE_ARCHIVED_READ_ONLY_BANNER,
+  CLASS_SCHEDULE_EMPTY_ACTIVE_MESSAGE,
+  CLASS_SCHEDULE_EMPTY_YEAR_MESSAGE,
+  CLASS_SCHEDULE_HISTORY_CHECKBOX_LABEL,
+  CLASS_SCHEDULE_INACTIVE_MUTATION_REASON,
+  CLASS_SCHEDULE_INACTIVE_READ_ONLY_BANNER,
+  CLASS_SCHEDULE_YEAR_ARCHIVED_READ_ONLY_BANNER,
+  DEFAULT_SHOW_INACTIVE_OR_ARCHIVED_CLASSES,
+  classScheduleEmptyClassesMessage,
+  classScheduleOptionLabel,
+  classScheduleReadOnlyBanner,
+  listScheduleEditorClasses,
+  resolveScheduleEditorClassId,
+  scheduleEditorClassIdAfterYearChange,
+} from "./class-filter.ts";
+export {
   isCourseWeekKind,
   isCourseWeekday,
   isIsoCalendarDate,

@@ -5,9 +5,11 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { AnnualCourse, TeacherCourseAssignment } from "@campus/features/annual-courses/types.ts";
 import {
   ADDITIONAL_RHYTHM_CHOICES,
+  CLASS_SCHEDULE_HISTORY_CHECKBOX_LABEL,
   COURSE_WEEKDAY_LABELS,
   COURSE_WEEK_KIND_LONG_LABELS,
   COURSE_WEEK_KINDS,
+  DEFAULT_SHOW_INACTIVE_OR_ARCHIVED_CLASSES,
   TEACHABLE_PERIODS,
   allowedPeriodEnds,
   attendanceDraftIsComplete,
@@ -17,6 +19,9 @@ import {
   buildAttendanceWeekPreview,
   buildClassScheduleTemplate,
   buildGlobalDayGrid,
+  classScheduleEmptyClassesMessage,
+  classScheduleOptionLabel,
+  classScheduleReadOnlyBanner,
   daysPresentInAAndB,
   filterSlotsForScheduleView,
   formatAttendancePresenceDetail,
@@ -25,7 +30,9 @@ import {
   formatTemplatePeriod,
   groupSlotsByAnnualCourse,
   isClassScheduleWritable,
+  listScheduleEditorClasses,
   nextAdditionalDraftDay,
+  resolveScheduleEditorClassId,
   scheduleEditorStateAfterYearChange,
   slotRoleBadge,
   suggestAttendanceDraftFromSlots,
@@ -118,6 +125,9 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
   const [datesCourseId, setDatesCourseId] = useState("");
   const [dateSessions, setDateSessions] = useState<CourseSession[]>([]);
   const [datesLoading, setDatesLoading] = useState(false);
+  const [showInactiveOrArchivedClasses, setShowInactiveOrArchivedClasses] = useState(
+    DEFAULT_SHOW_INACTIVE_OR_ARCHIVED_CLASSES,
+  );
 
   const refresh = useCallback(async () => {
     const response = await fetch("/api/admin/course-schedule", { credentials: "include" });
@@ -145,12 +155,19 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
 
   const yearClasses = useMemo(() => {
     if (!data) return [];
-    return data.classes
-      .filter((entry) => entry.schoolYearId === selectedYearId)
-      .sort((left, right) => left.sortOrder - right.sortOrder || left.code.localeCompare(right.code, "fr-CH"));
-  }, [data, selectedYearId]);
+    return listScheduleEditorClasses({
+      classes: data.classes,
+      schoolYearId: selectedYearId,
+      includeInactiveOrArchived: showInactiveOrArchivedClasses,
+    });
+  }, [data, selectedYearId, showInactiveOrArchivedClasses]);
 
-  const currentClass = yearClasses.find((entry) => entry.id === selectedClassId) ?? yearClasses[0] ?? null;
+  const resolvedClassId = resolveScheduleEditorClassId({
+    visibleClasses: yearClasses,
+    selectedClassId,
+    schoolYearId: selectedYearId,
+  });
+  const currentClass = yearClasses.find((entry) => entry.id === resolvedClassId) ?? null;
   const currentYear = data?.schoolYears.find((entry) => entry.id === selectedYearId) ?? null;
 
   const classCourses = useMemo(() => {
@@ -166,10 +183,12 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
 
   const datesCourses = useMemo(() => {
     if (!data) return [];
+    const visibleClassIds = new Set(yearClasses.map((entry) => entry.id));
     return data.courses
       .filter((course) => {
         if (course.schoolYearId !== selectedYearId) return false;
         if (datesClassId && course.classId !== datesClassId) return false;
+        if (!datesClassId && !visibleClassIds.has(course.classId)) return false;
         if (currentYear?.status !== "archived" && course.isArchived) return false;
         return true;
       })
@@ -178,7 +197,7 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
         const rightLabel = branchForCourse(right, data.contexts, data.branches)?.label ?? "";
         return leftLabel.localeCompare(rightLabel, "fr-CH");
       });
-  }, [data, selectedYearId, datesClassId, currentYear?.status]);
+  }, [data, selectedYearId, datesClassId, currentYear?.status, yearClasses]);
 
   const classSlots = useMemo(() => {
     if (!data) return [];
@@ -231,6 +250,33 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
     setError(next.error);
     setDatesClassId("");
     setDatesCourseId("");
+  }
+
+  function handleShowInactiveOrArchived(checked: boolean) {
+    setShowInactiveOrArchivedClasses(checked);
+    if (checked || !data) return;
+    const operational = listScheduleEditorClasses({
+      classes: data.classes,
+      schoolYearId: selectedYearId,
+      includeInactiveOrArchived: false,
+    });
+    const operationalIds = new Set(operational.map((entry) => entry.id));
+    if (selectedClassId && !operationalIds.has(selectedClassId)) {
+      setSelectedClassId(
+        resolveScheduleEditorClassId({
+          visibleClasses: operational,
+          selectedClassId: "",
+          schoolYearId: selectedYearId,
+        }),
+      );
+      setEditingDays(false);
+      setDraft(null);
+      setAttendanceDraft({ primaryDay: "", additional: [] });
+    }
+    if (datesClassId && !operationalIds.has(datesClassId)) {
+      setDatesClassId("");
+      setDatesCourseId("");
+    }
   }
 
   async function postAction(body: Record<string, unknown>) {
@@ -403,21 +449,17 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
     weekKind: globalWeek,
     slots: yearSlots,
     courses: data.courses,
-    classes: yearClasses.filter((entry) => !entry.isArchived),
+    classes: yearClasses,
     contexts: data.contexts,
     branches: data.branches,
     yearStatus: currentYear?.status,
   });
   const draftWeekKinds =
     draft ? (slotDayOptions.find((entry) => entry.dayOfWeek === draft.dayOfWeek)?.weekKinds ?? []) : [];
-  const readOnlyReason =
-    currentYear?.status === "archived"
-      ? "Année scolaire archivée — lecture seule."
-      : currentClass?.isArchived
-        ? "Classe archivée — lecture seule."
-        : currentClass && !currentClass.isActive
-          ? "Classe inactive — consultation uniquement, aucun nouveau créneau opérationnel."
-          : null;
+  const readOnlyReason = classScheduleReadOnlyBanner({
+    yearStatus: currentYear?.status,
+    schoolClass: currentClass,
+  });
 
   function renderDayBlocks(
     blocks: ReturnType<typeof buildAttendanceWeekPreview>["days"][number]["blocks"],
@@ -508,9 +550,7 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
                 <option value="">Toutes les classes</option>
                 {yearClasses.map((entry) => (
                   <option key={entry.id} value={entry.id}>
-                    {entry.code}
-                    {!entry.isActive ? " (inactive)" : ""}
-                    {entry.isArchived ? " (archivée)" : ""}
+                    {classScheduleOptionLabel(entry)}
                   </option>
                 ))}
               </select>
@@ -546,9 +586,7 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
             >
               {yearClasses.map((entry) => (
                 <option key={entry.id} value={entry.id}>
-                  {entry.code}
-                  {!entry.isActive ? " (inactive)" : ""}
-                  {entry.isArchived ? " (archivée)" : ""}
+                  {classScheduleOptionLabel(entry)}
                 </option>
               ))}
             </select>
@@ -583,6 +621,15 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
             </label>
           </>
         )}
+        <label className="admin-checkbox class-schedule-history-toggle">
+          <input
+            type="checkbox"
+            checked={showInactiveOrArchivedClasses}
+            onChange={(event) => handleShowInactiveOrArchived(event.target.checked)}
+            data-testid="class-schedule-show-inactive-classes"
+          />
+          <span>{CLASS_SCHEDULE_HISTORY_CHECKBOX_LABEL}</span>
+        </label>
       </div>
 
       <div className="class-schedule-toolbar">
@@ -663,7 +710,7 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
             {globalWeek === "all" ? "TOUTES LES SEMAINES" : `SEMAINE ${globalWeek}`}
           </h4>
           {globalGrid.classColumns.length === 0 ? (
-            <p className="admin-loading">Aucune classe pour cette année scolaire.</p>
+            <p className="admin-loading">{classScheduleEmptyClassesMessage(showInactiveOrArchivedClasses)}</p>
           ) : (
             <div className="class-schedule-global-wrap">
               <table className="class-schedule-global-table">
@@ -707,7 +754,7 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
           )}
         </div>
       ) : !currentClass ? (
-        <p className="admin-loading">Aucune classe pour cette année scolaire.</p>
+        <p className="admin-loading">{classScheduleEmptyClassesMessage(showInactiveOrArchivedClasses)}</p>
       ) : (
         <div className="class-schedule-layout">
           <div className="class-schedule-col-left">

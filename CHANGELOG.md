@@ -2,6 +2,21 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.39.0] — Horaire des classes : uniquement les classes actives par défaut
+
+Administration → Horaire des classes n’affiche plus par défaut les classes désactivées ou archivées. Le menu Classe se limite aux classes opérationnelles de l’année scolaire sélectionnée. L’historique reste consultable, en lecture seule.
+
+### Ajouté
+
+- Case à cocher « Afficher les classes inactives / archivées », décochée par défaut.
+- Libellés français du menu : `MA3B · désactivée`, `MA2 · archivée` (plus de « inactive »).
+- Classe désactivée : consultation uniquement, bannière « Classe désactivée — lecture seule ».
+- Helper `listScheduleEditorClasses` basé sur `isOperationalSchoolClass`.
+
+### Non inclus
+
+Aucune migration SQL. Aucune suppression d’historique. La classe n’est jamais réactivée depuis cet écran.
+
 ## [2.38.0] — Attributions : vue enseignant centrée sur l’année active
 
 La vue par enseignant d’Administration → Attributions des cours affiche par défaut uniquement les attributions opérationnelles de l’année scolaire active. L’historique (classe archivée, TCA terminée, ancienne année) reste consultable via « Afficher l’historique », atténué visuellement.

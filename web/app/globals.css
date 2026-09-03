@@ -444,6 +444,7 @@ button { color: inherit; }
 .annual-course-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .annual-course-table th, .annual-course-table td { text-align: left; vertical-align: top; padding: 10px 8px; border-bottom: 1px solid var(--line); }
 .class-schedule-filters { margin-bottom: 8px; }
+.class-schedule-history-toggle { align-self: center; min-height: 38px; }
 .class-schedule-class-heading { margin: 0 0 14px; }
 .class-schedule-class-heading strong { display: block; color: var(--navy); font-size: 18px; }
 .class-schedule-class-heading p { margin: 4px 0 0; color: #516582; font-size: 12px; }
