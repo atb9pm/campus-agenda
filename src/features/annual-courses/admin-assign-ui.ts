@@ -1,7 +1,14 @@
+import type { SchoolClassRecord } from "../school-catalog/types.ts";
+import { isOperationalSchoolClass } from "../school-catalog/class-lifecycle.ts";
 import { isAssignmentActiveAt } from "./assignments.ts";
 import type { AssignmentRole, TeacherCourseAssignment } from "./types.ts";
 
 export type AssignmentLifecycle = "upcoming" | "active" | "ended";
+export type AssignmentDisplayStatus =
+  | AssignmentLifecycle
+  | "class-archived"
+  | "class-inactive"
+  | "class-unavailable";
 export type AssignConflictChoice = "CO_TEACHER" | "REPLACE" | "TEMPORARY" | "CANCEL";
 export type AssignForceStep = "none" | "warn" | "confirm";
 
@@ -18,6 +25,38 @@ export function lifecycleLabel(status: AssignmentLifecycle): string {
   if (status === "upcoming") return "À venir";
   if (status === "active") return "Active";
   return "Terminée";
+}
+
+/**
+ * Libellé d’administration : l’historique date des TCA reste distinct de la
+ * disponibilité opérationnelle de la classe. Jamais « Active » si la classe
+ * est archivée, désactivée, absente ou hors année.
+ */
+export function assignmentDisplayStatus(
+  assignment: Pick<TeacherCourseAssignment, "validFrom" | "validTo" | "endedAt">,
+  options: {
+    schoolClass?: Pick<SchoolClassRecord, "isActive" | "isArchived" | "schoolYearId"> | null;
+    courseSchoolYearId?: string | null;
+    at?: string;
+  } = {},
+): AssignmentDisplayStatus {
+  const dateStatus = assignmentLifecycle(assignment, options.at);
+  if (dateStatus !== "active") return dateStatus;
+  const schoolClass = options.schoolClass ?? null;
+  if (!schoolClass) return "class-unavailable";
+  if (schoolClass.isArchived) return "class-archived";
+  if (!schoolClass.isActive) return "class-inactive";
+  if (!isOperationalSchoolClass(schoolClass, options.courseSchoolYearId ?? schoolClass.schoolYearId)) {
+    return "class-unavailable";
+  }
+  return "active";
+}
+
+export function assignmentDisplayLabel(status: AssignmentDisplayStatus): string {
+  if (status === "class-archived") return "Classe archivée";
+  if (status === "class-inactive") return "Classe désactivée";
+  if (status === "class-unavailable") return "Terminée";
+  return lifecycleLabel(status);
 }
 
 export type AssignmentDialogDecision =

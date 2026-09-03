@@ -33,22 +33,13 @@ export function teacherCoursesForPlanningYear(options: {
   branches: SchoolBranchRecord[];
   years: SchoolYearRecord[];
 }) {
-  const year = options.years.find((entry) => entry.id === options.schoolYearId);
-  const classes =
-    year?.status === "archived"
-      ? options.classes.map((schoolClass) =>
-          schoolClass.schoolYearId === options.schoolYearId
-            ? { ...schoolClass, isActive: true, isArchived: false }
-            : schoolClass,
-        )
-      : options.classes;
   return buildTeacherCourseWorkspace({
     teacherId: options.teacherId,
     schoolYearId: options.schoolYearId,
     at: options.at,
     assignments: options.assignments,
     courses: options.courses,
-    classes,
+    classes: options.classes,
     contexts: options.contexts,
     branches: options.branches,
     years: options.years,

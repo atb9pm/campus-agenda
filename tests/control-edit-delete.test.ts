@@ -390,8 +390,8 @@ function structuredSnapshot(item: PrototypeAgendaItem) {
   };
 }
 
-test("version 2.36.0 — modification et suppression, pas de migration 0025", async () => {
-  assert.equal(APP_VERSION, "2.36.0");
+test("version 2.37.0 — modification et suppression, pas de migration 0025", async () => {
+  assert.equal(APP_VERSION, "2.37.0");
   assert.equal(TEST_ALERT_THRESHOLD, 3);
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
   assert.equal(SQL_MIGRATION_FILES.some((file) => file.startsWith("0025")), false);

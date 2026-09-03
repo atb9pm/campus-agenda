@@ -11,6 +11,7 @@ import type { TeacherAccountStore } from "../../lib/persistence/teacher-account-
 import { validateAttributionReferential } from "../annual-courses/validation.ts";
 import type { AnnualCourse } from "../annual-courses/types.ts";
 import type { PedagogicalContextRecord, SchoolProfessionRecord } from "../school-catalog/profession-types.ts";
+import { isOperationalSchoolClass } from "../school-catalog/class-lifecycle.ts";
 import type { SchoolBranchRecord, SchoolClassRecord } from "../school-catalog/types.ts";
 import type { SchoolYearRecord } from "../school-year/types.ts";
 import { listComputedCourseSessions } from "../course-sessions/index.ts";
@@ -47,6 +48,10 @@ export const STRUCTURED_PUBLISH_YEAR_ARCHIVED_REASON =
   "Cette année scolaire est archivée. Impossible de publier un nouvel élément.";
 export const STRUCTURED_PUBLISH_COURSE_ARCHIVED_REASON =
   "Ce cours annuel est archivé. Impossible de publier.";
+export const STRUCTURED_PUBLISH_CLASS_ARCHIVED_REASON = "Cette classe est archivée.";
+export const STRUCTURED_PUBLISH_CLASS_INACTIVE_REASON = "Cette classe est inactive.";
+export const STRUCTURED_PUBLISH_CLASS_YEAR_MISMATCH_REASON =
+  "La classe n'appartient pas à cette année scolaire.";
 export const STRUCTURED_CONTROL_MOVE_NOT_FOUND_REASON = "Contrôle introuvable.";
 export const STRUCTURED_CONTROL_MOVE_NOT_TEST_REASON =
   "Seul un contrôle peut être déplacé vers une autre séance.";
@@ -107,6 +112,18 @@ export function structuredPublishReferentialGuard(options: {
   }
   if (options.course.isArchived) {
     return { ok: false, reason: STRUCTURED_PUBLISH_COURSE_ARCHIVED_REASON, status: 409 };
+  }
+  if (!isOperationalSchoolClass(options.schoolClass, options.course.schoolYearId)) {
+    if (!options.schoolClass) {
+      return { ok: false, reason: "Classe introuvable.", status: 404 };
+    }
+    if (options.schoolClass.isArchived) {
+      return { ok: false, reason: STRUCTURED_PUBLISH_CLASS_ARCHIVED_REASON, status: 409 };
+    }
+    if (!options.schoolClass.isActive) {
+      return { ok: false, reason: STRUCTURED_PUBLISH_CLASS_INACTIVE_REASON, status: 409 };
+    }
+    return { ok: false, reason: STRUCTURED_PUBLISH_CLASS_YEAR_MISMATCH_REASON, status: 409 };
   }
 
   const referential = validateAttributionReferential({

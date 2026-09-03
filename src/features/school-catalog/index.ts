@@ -63,6 +63,7 @@ export {
   classLifecycleLabel,
   classLifecycleStatus,
   applyClassLifecyclePatch,
+  isOperationalSchoolClass,
   type ClassLifecycleStatus,
 } from "./class-lifecycle.ts";
 export { assertAgendaClassMutable } from "./agenda-class-guards.ts";

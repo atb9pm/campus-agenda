@@ -188,6 +188,8 @@ export async function getControlPlanning(
       structured: true,
       classroomByClassId,
       selectedSchoolClassIds,
+      schoolClasses: classes,
+      planningSchoolYearId: year.id,
     });
   }
 

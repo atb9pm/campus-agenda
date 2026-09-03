@@ -5,6 +5,8 @@ import {
 import type { TeacherCourseAssignment } from "../annual-courses/types.ts";
 import { formatCourseSessionPeriods } from "../course-sessions/format.ts";
 import type { CourseSession } from "../course-sessions/types.ts";
+import { isOperationalSchoolClass } from "../school-catalog/class-lifecycle.ts";
+import type { SchoolClassRecord } from "../school-catalog/types.ts";
 import type { ControlPlacementOption } from "./types.ts";
 
 export function listControlPlacementOptions(options: {
@@ -18,6 +20,8 @@ export function listControlPlacementOptions(options: {
   structured: boolean;
   classroomByClassId?: ReadonlyMap<string, { id: string; name: string }>;
   selectedSchoolClassIds?: readonly string[] | null;
+  schoolClasses?: readonly Pick<SchoolClassRecord, "id" | "isActive" | "isArchived" | "schoolYearId">[];
+  planningSchoolYearId?: string | null;
 }): ControlPlacementOption[] {
   if (!options.classroomSelected || !options.structured || options.yearStatus !== "active") {
     return [];
@@ -27,6 +31,9 @@ export function listControlPlacementOptions(options: {
     options.selectedSchoolClassIds && options.selectedSchoolClassIds.length > 0
       ? new Set(options.selectedSchoolClassIds)
       : null;
+  const classById = options.schoolClasses
+    ? new Map(options.schoolClasses.map((entry) => [entry.id, entry]))
+    : null;
   const seen = new Set<string>();
   const placements: ControlPlacementOption[] = [];
   for (const session of options.sessions) {
@@ -34,6 +41,10 @@ export function listControlPlacementOptions(options: {
       continue;
     }
     if (classFilter && !classFilter.has(session.classId)) continue;
+    if (classById) {
+      const schoolClass = classById.get(session.classId);
+      if (!isOperationalSchoolClass(schoolClass, options.planningSchoolYearId)) continue;
+    }
     if (seen.has(session.key)) continue;
     const at = assignmentInstantForSessionDate(session.date);
     if (
