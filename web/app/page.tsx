@@ -1230,6 +1230,7 @@ export default function Home() {
 
         {activeSection === "controles" && (
           <ControlPlanningPanel
+            teacherInitials={currentTeacher?.initials ?? null}
             onPublicationCreated={(item) => {
               setItems((previous) => upsertAgendaItem(previous, item));
             }}

@@ -20,7 +20,7 @@ import {
   type ControlPlanningView,
 } from "@campus/features/control-planning";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
-import { SCHOOL_WEEKDAY_LABELS } from "@campus/features/school-days";
+import { SCHOOL_WEEKDAY_LABELS, addDays } from "@campus/features/school-days";
 import type { ControlCoordinationSummary } from "@campus/features/evaluations";
 import {
   ControlCoordinationRequiredError,
@@ -32,6 +32,43 @@ import {
 } from "../../lib/api-client.ts";
 
 const CONTROL_DRAG_MIME = "application/x-campus-control";
+
+type BranchPalette = { fond: string; bordure: string; texte: string };
+
+const BRANCH_PALETTES_BY_LABEL: Record<string, BranchPalette> = {
+  Français: { fond: "#F3EEFF", bordure: "#CDBAFB", texte: "#6C43D6" },
+  Mathématiques: { fond: "#E8F7EC", bordure: "#B8E6C4", texte: "#1F8A4C" },
+  "Histoire-Géo": { fond: "#EAF2FF", bordure: "#BFD3FF", texte: "#2F6BFF" },
+  "Physique-Chimie": { fond: "#FFF1E8", bordure: "#FFD2B5", texte: "#E56A1A" },
+  Anglais: { fond: "#FDECF4", bordure: "#F8C5DA", texte: "#D34D8B" },
+  SVT: { fond: "#E8F8F6", bordure: "#BFEAE3", texte: "#199A8E" },
+  SES: { fond: "#FFF7E5", bordure: "#F6DE9A", texte: "#C48A00" },
+};
+
+const BRANCH_PALETTE_FALLBACK: BranchPalette[] = [
+  { fond: "#F3EEFF", bordure: "#CDBAFB", texte: "#6C43D6" },
+  { fond: "#E8F7EC", bordure: "#B8E6C4", texte: "#1F8A4C" },
+  { fond: "#EAF2FF", bordure: "#BFD3FF", texte: "#2F6BFF" },
+  { fond: "#FFF1E8", bordure: "#FFD2B5", texte: "#E56A1A" },
+  { fond: "#FDECF4", bordure: "#F8C5DA", texte: "#D34D8B" },
+  { fond: "#E8F8F6", bordure: "#BFEAE3", texte: "#199A8E" },
+  { fond: "#FFF7E5", bordure: "#F6DE9A", texte: "#C48A00" },
+];
+
+function hashString(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash * 31 + value.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+function branchPalette(branchLabel: string, subjectId: string): BranchPalette {
+  const known = BRANCH_PALETTES_BY_LABEL[branchLabel];
+  if (known) return known;
+  const key = subjectId?.trim() || branchLabel.trim();
+  return BRANCH_PALETTE_FALLBACK[hashString(key) % BRANCH_PALETTE_FALLBACK.length]!;
+}
 
 function formatIsoDay(iso: string | null): string {
   if (!iso) return "";
@@ -163,6 +200,7 @@ function ControlCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const title = [card.classroomName, card.branchLabel, card.title, card.teacherName].filter(Boolean).join(" · ");
+  const palette = branchPalette(card.branchLabel, card.subjectId);
   const classes = [
     "control-planning-card",
     compact ? "is-compact" : "",
@@ -200,6 +238,10 @@ function ControlCard({
   return (
     <article
       className={classes}
+      style={{
+        background: palette.fond,
+        borderLeft: `3px solid ${palette.bordure}`,
+      }}
       data-control-card=""
       data-classroom-name={card.classroomName}
       data-own={card.isOwn ? "true" : "false"}
@@ -287,7 +329,12 @@ function ControlCard({
           </div>
         ) : null}
       </div>
-      <span className="control-planning-branch">{card.branchLabel}</span>
+      <span
+        className="control-planning-branch-pill"
+        style={{ background: palette.fond, borderColor: palette.bordure, color: palette.texte }}
+      >
+        {card.branchLabel}
+      </span>
       <strong>{card.title}</strong>
       {showTeacher ? <span className="control-planning-teacher">{card.teacherName}</span> : null}
     </article>
@@ -677,9 +724,143 @@ function DeleteModal({
   );
 }
 
+function AnnualAnalysis({
+  view,
+  semester2View,
+  visiblePeriodMode,
+  monthNumber,
+  subjectFilter,
+  showPassedEvaluations,
+  todayIso,
+}: {
+  view: ControlPlanningView;
+  semester2View: ControlPlanningView;
+  visiblePeriodMode: "year" | "month";
+  monthNumber: number;
+  subjectFilter: string | null;
+  showPassedEvaluations: boolean;
+  todayIso: string;
+}) {
+  const semester1 = view.semester;
+  const semester2 = semester2View.semester;
+  if (!semester1 || !semester2) return null;
+
+  const activeWeeks = [
+    ...(visiblePeriodMode === "month"
+      ? semester1.weeks.filter((w) => new Date(w.monday).getMonth() + 1 === monthNumber)
+      : semester1.weeks),
+    ...(visiblePeriodMode === "month"
+      ? semester2.weeks.filter((w) => new Date(w.monday).getMonth() + 1 === monthNumber)
+      : semester2.weeks),
+  ];
+
+  const days = activeWeeks.flatMap((w) => w.days);
+  function visibleControlsForDay(day: (typeof days)[number]) {
+    const subjectFiltered = subjectFilter ? day.controls.filter((c) => c.branchLabel === subjectFilter) : day.controls;
+    if (showPassedEvaluations) return subjectFiltered;
+    return subjectFiltered.filter((c) => {
+      const iso = c.courseSessionDate ?? c.date ?? "";
+      return !iso || iso >= todayIso;
+    });
+  }
+
+  const controlsCount = days.reduce((sum, d) => sum + visibleControlsForDay(d).length, 0);
+  const busyDayCount = days.filter((d) => visibleControlsForDay(d).length >= 2).length;
+
+  const totalWeeksForLoad = activeWeeks.length || 1;
+  const ownControlsPerWeek = activeWeeks.map((w) =>
+    w.days.reduce((sum, d) => sum + visibleControlsForDay(d).filter((c) => c.isOwn).length, 0),
+  );
+  const ownControlsTotal = ownControlsPerWeek.reduce((sum, n) => sum + n, 0);
+  const averageOwnControlsPerWeek = ownControlsTotal / totalWeeksForLoad;
+  const busiestWeekIndex = ownControlsPerWeek.reduce((bestIdx, v, idx) => (v > ownControlsPerWeek[bestIdx] ? idx : bestIdx), 0);
+  const lightestWeekIndex = ownControlsPerWeek.reduce((bestIdx, v, idx) => (v < ownControlsPerWeek[bestIdx] ? idx : bestIdx), 0);
+  const busiestWeekControls = ownControlsPerWeek.length ? ownControlsPerWeek[busiestWeekIndex]! : 0;
+  const lightestWeekControls = ownControlsPerWeek.length ? ownControlsPerWeek[lightestWeekIndex]! : 0;
+
+  const topBusyDays = days
+    .filter((d) => visibleControlsForDay(d).length > 0)
+    .slice()
+    .sort((a, b) => visibleControlsForDay(b).length - visibleControlsForDay(a).length)
+    .slice(0, 3);
+
+  const branchLabels = Array.from(
+    new Set(days.flatMap((d) => visibleControlsForDay(d).map((c) => c.branchLabel)).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b, "fr"));
+
+  return (
+    <div className="control-planning-annual-analysis" aria-label="Analyse annuelle">
+      <section className="control-planning-annual-card">
+        <h3>Coordination</h3>
+        <p className="control-planning-annual-metric">
+          <strong>{controlsCount}</strong> contrôles planifiés
+        </p>
+        <p className="control-planning-annual-hint">
+          {busyDayCount === 0 ? "Répartition équilibrée" : `${busyDayCount} journées avec conflit`}
+        </p>
+        {topBusyDays.length ? (
+          <ul className="control-planning-annual-list">
+            {topBusyDays.map((d, idx) => (
+              <li key={`${d.weekdayLabel}-${d.date ?? idx}`} className="control-planning-annual-item">
+                <strong>{d.weekdayLabel}</strong> · {formatCompactDay(d.date ?? null)} — {visibleControlsForDay(d).length} contrôles
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="control-planning-annual-empty">Aucun pic à signaler.</p>
+        )}
+        <button type="button" disabled className="control-planning-annual-action">
+          Voir l’analyse détaillée
+        </button>
+      </section>
+
+      <section className="control-planning-annual-card">
+        <h3>Charge enseignant</h3>
+        <p className="control-planning-annual-metric">
+          Moyenne : <strong>{averageOwnControlsPerWeek.toFixed(1)}</strong> / semaine
+        </p>
+          <p className="control-planning-annual-hint">
+            Semaine la plus chargée : <strong>{busiestWeekControls}</strong> contrôles
+          </p>
+        <p className="control-planning-annual-hint">
+            Semaine la plus légère : <strong>{lightestWeekControls}</strong> contrôles
+          </p>
+        <button type="button" disabled className="control-planning-annual-action">
+          Voir la courbe de charge
+        </button>
+      </section>
+
+      <section className="control-planning-annual-card">
+        <h3>Légende matières</h3>
+        {branchLabels.length ? (
+          <ul className="control-planning-annual-legend">
+            {branchLabels.map((label) => {
+              const palette = branchPalette(label, label);
+              return (
+                <li key={label} className="control-planning-annual-legend-item">
+                  <span
+                    className="control-planning-annual-legend-swatch"
+                    style={{ background: palette.fond, borderColor: palette.bordure, color: palette.texte }}
+                  >
+                    {label}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="control-planning-annual-empty">Aucune matière.</p>
+        )}
+      </section>
+    </div>
+  );
+}
+
 export function ControlPlanningPanel({
+  teacherInitials,
   onPublicationCreated,
 }: {
+  teacherInitials?: string | null;
   onPublicationCreated?: (item: PrototypeAgendaItem) => void;
 }) {
   const [schoolYearId, setSchoolYearId] = useState<string | null>(null);
@@ -688,6 +869,11 @@ export function ControlPlanningPanel({
   const [week, setWeek] = useState<number | null>(null);
   const [layout, setLayout] = useState<ControlPlanningLayout>("semester");
   const [period, setPeriod] = useState<ControlPlanningPeriodId | null>(null);
+  const [displayMode, setDisplayMode] = useState<"week" | "month" | "year">("year");
+  const [yearSemester2View, setYearSemester2View] = useState<ControlPlanningView | null>(null);
+  const [monthNumber] = useState<number>(() => new Date().getMonth() + 1);
+  const [showPassedEvaluations, setShowPassedEvaluations] = useState(false);
+  const [subjectFilter, setSubjectFilter] = useState<string | null>(null);
   const [view, setView] = useState<ControlPlanningView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -724,20 +910,51 @@ export function ControlPlanningPanel({
       setLoading(true);
       setError("");
       try {
-        const next = await fetchTeacherControlPlanningApi(
-          {
-            schoolYearId,
-            classroomIds,
-            mode,
-            week,
-            view: layout,
-            period,
-          },
-          controller.signal,
-        );
-        if (controller.signal.aborted) return;
-        setView(next);
-        setPeriod((current) => current ?? next.periodId);
+        if (displayMode === "year" || displayMode === "month") {
+          const [semester1, semester2] = await Promise.all([
+            fetchTeacherControlPlanningApi(
+              {
+                schoolYearId,
+                classroomIds,
+                mode,
+                week: null,
+                view: "semester",
+                period: "semester-1",
+              },
+              controller.signal,
+            ),
+            fetchTeacherControlPlanningApi(
+              {
+                schoolYearId,
+                classroomIds,
+                mode,
+                week: null,
+                view: "semester",
+                period: "semester-2",
+              },
+              controller.signal,
+            ),
+          ]);
+          if (controller.signal.aborted) return;
+          setView(semester1);
+          setYearSemester2View(semester2);
+        } else {
+          const next = await fetchTeacherControlPlanningApi(
+            {
+              schoolYearId,
+              classroomIds,
+              mode,
+              week,
+              view: layout,
+              period,
+            },
+            controller.signal,
+          );
+          if (controller.signal.aborted) return;
+          setView(next);
+          setYearSemester2View(null);
+          setPeriod((current) => current ?? next.periodId);
+        }
       } catch (loadError) {
         if (controller.signal.aborted) return;
         setError(loadError instanceof Error ? loadError.message : "Chargement impossible.");
@@ -748,7 +965,7 @@ export function ControlPlanningPanel({
 
     void load();
     return () => controller.abort();
-  }, [schoolYearId, classroomIds, mode, week, layout, period, reloadToken]);
+  }, [schoolYearId, classroomIds, mode, week, layout, period, reloadToken, displayMode]);
 
   const yearLabel = view ? formatControlPlanningYearLabel(view.schoolYearLabel) : null;
   const coordinationAlerts = useMemo(
@@ -760,13 +977,43 @@ export function ControlPlanningPanel({
     [view],
   );
 
+  const availableSubjectLabels = useMemo(() => {
+    const labels = new Set<string>();
+    function collectFromControlDay(days: readonly { controls: ControlPlanningCard[]; placementOptions: ControlPlacementOption[]; classDayControls?: ControlPlanningCard[] }[]) {
+      for (const day of days) {
+        for (const card of day.controls) if (card.branchLabel) labels.add(card.branchLabel);
+        for (const opt of day.placementOptions) if (opt.branchLabel) labels.add(opt.branchLabel);
+        for (const card of day.classDayControls ?? []) if (card.branchLabel) labels.add(card.branchLabel);
+      }
+    }
+    function collectFromView(next: ControlPlanningView | null) {
+      if (!next) return;
+      if (next.week) {
+        collectFromControlDay(next.week.days.map((d) => ({ controls: d.controls, placementOptions: d.placementOptions })));
+      }
+      if (next.semester) {
+        const days = next.semester.weeks.flatMap((w) => w.days);
+        collectFromControlDay(days.map((d) => ({ controls: d.controls, placementOptions: d.placementOptions, classDayControls: d.classDayControls })));
+      }
+    }
+
+    collectFromView(view);
+    if (displayMode === "year" || displayMode === "month") {
+      collectFromView(yearSemester2View);
+    }
+
+    return [...labels].sort((a, b) => a.localeCompare(b, "fr"));
+  }, [view, yearSemester2View, displayMode]);
+
   function selectYear(nextId: string) {
     setSchoolYearId(nextId);
     setClassroomIds(null);
     setMode("mine");
     setWeek(null);
     setPeriod(null);
+    setDisplayMode("year");
     setLayout("semester");
+    setYearSemester2View(null);
     closeModal();
   }
 
@@ -999,6 +1246,7 @@ export function ControlPlanningPanel({
       const days = [
         ...(view.week?.days ?? []),
         ...(view.semester?.weeks.flatMap((week) => week.days.map(toPlanningDay)) ?? []),
+        ...(yearSemester2View?.semester?.weeks.flatMap((week) => week.days.map(toPlanningDay)) ?? []),
       ];
       for (const day of days) {
         const found = day.controls.find((entry) => entry.agendaItemId === agendaItemId);
@@ -1145,14 +1393,80 @@ export function ControlPlanningPanel({
     ? Boolean(serverCoordination.confirmationRequired)
     : Boolean(modalOption && confirmationRequiredForPlacementOption(modalDay?.classDayControls ?? [], modalOption));
   const assignedIds = view?.classes.map((entry) => entry.id) ?? [];
+  const isAnnualView = displayMode === "year" || displayMode === "month";
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const annualKpis = useMemo(() => {
+    if (!isAnnualView || !view?.semester || !yearSemester2View?.semester) return null;
+    const semester1 = view.semester;
+    const semester2 = yearSemester2View.semester;
+    const pickWeeks = (weeks: typeof semester1.weeks) =>
+      displayMode === "month"
+        ? weeks.filter((w) => new Date(w.monday).getMonth() + 1 === monthNumber)
+        : weeks;
+    const activeWeeks = [...pickWeeks(semester1.weeks), ...pickWeeks(semester2.weeks)];
+    const days = activeWeeks.flatMap((w) => w.days);
+
+    function visibleControlsForDay(day: typeof days[number]) {
+      const subjectFiltered = subjectFilter ? day.controls.filter((c) => c.branchLabel === subjectFilter) : day.controls;
+      if (showPassedEvaluations) return subjectFiltered;
+      return subjectFiltered.filter((c) => {
+        const iso = c.courseSessionDate ?? c.date ?? "";
+        return !iso || iso >= todayIso;
+      });
+    }
+
+    const controlsCount = days.reduce((sum, d) => sum + visibleControlsForDay(d).length, 0);
+    const busyDayCount = days.filter((d) => visibleControlsForDay(d).length >= 2).length;
+    const conflictWeekCount = activeWeeks.filter((w) =>
+      w.days.some((d) => visibleControlsForDay(d).length >= 2),
+    ).length;
+
+    return { controlsCount, busyDayCount, conflictWeekCount };
+  }, [
+    isAnnualView,
+    view?.semester,
+    yearSemester2View?.semester,
+    displayMode,
+    monthNumber,
+    showPassedEvaluations,
+    subjectFilter,
+    todayIso,
+  ]);
 
   return (
     <section className="teacher-workspace control-planning" aria-label="Contrôles" data-control-planning="">
       <div className="workspace-intro">
         <p className="eyebrow">ESPACE ENSEIGNANT</p>
-        <h2>Contrôles{yearLabel ? ` — ${yearLabel}` : ""}</h2>
-        <p>Planification des contrôles publiés dans l’agenda.</p>
-        {view ? <p className="control-planning-summary">{summaryLabel(view)}</p> : null}
+        <div className="control-planning-intro-header">
+          <div>
+            <h2>Contrôles{yearLabel ? ` — ${yearLabel}` : ""}</h2>
+            <p>Planification des contrôles publiés dans l’agenda.</p>
+          </div>
+          {teacherInitials ? (
+            <div className="control-planning-intro-avatar" aria-label="Professeur connecté">
+              {teacherInitials}
+            </div>
+          ) : null}
+        </div>
+
+        {isAnnualView && annualKpis ? (
+          <div className="control-planning-kpi-row" role="group" aria-label="Indicateurs">
+            <div className="control-planning-kpi-card">
+              <small>Contrôles planifiés</small>
+              <strong>{annualKpis.controlsCount}</strong>
+            </div>
+            <div className="control-planning-kpi-card">
+              <small>Conflits</small>
+              <strong>{annualKpis.busyDayCount}</strong>
+            </div>
+            <div className="control-planning-kpi-card">
+              <small>À rééquilibrer</small>
+              <strong>{annualKpis.conflictWeekCount}</strong>
+            </div>
+          </div>
+        ) : view ? (
+          <p className="control-planning-summary">{summaryLabel(view)}</p>
+        ) : null}
       </div>
 
       <div className="control-planning-filters" role="region" aria-label="Filtres des contrôles">
@@ -1173,49 +1487,53 @@ export function ControlPlanningPanel({
           </select>
         </label>
 
-        <div className="control-planning-modes" role="group" aria-label="Vue">
+        <div className="control-planning-modes" role="group" aria-label="Vue (semaine/mois/année)">
           <button
             type="button"
-            className={layout === "semester" ? "is-active" : ""}
-            aria-pressed={layout === "semester"}
-            data-control-layout="semester"
-            onClick={() => selectLayout("semester")}
-          >
-            Semestre
-          </button>
-          <button
-            type="button"
-            className={layout === "week" ? "is-active" : ""}
-            aria-pressed={layout === "week"}
-            data-control-layout="week"
-            onClick={() => selectLayout("week")}
+            className={displayMode === "week" ? "is-active" : ""}
+            aria-pressed={displayMode === "week"}
+            onClick={() => {
+              setDisplayMode("week");
+              setLayout("week");
+              setWeek(null);
+              setPeriod(null);
+              setYearSemester2View(null);
+              closeModal();
+            }}
           >
             Semaine
           </button>
+          <button
+            type="button"
+            className={displayMode === "month" ? "is-active" : ""}
+            aria-pressed={displayMode === "month"}
+            onClick={() => {
+              setDisplayMode("month");
+              setLayout("semester");
+              setWeek(null);
+              setPeriod(null);
+              setYearSemester2View(null);
+              closeModal();
+            }}
+          >
+            Mois
+          </button>
+          <button
+            type="button"
+            className={displayMode === "year" ? "is-active" : ""}
+            aria-pressed={displayMode === "year"}
+            onClick={() => {
+              setDisplayMode("year");
+              setLayout("semester");
+              setWeek(null);
+              setPeriod(null);
+              setYearSemester2View(null);
+              closeModal();
+            }}
+          >
+            Année
+          </button>
         </div>
-
-        {layout === "semester" ? (
-          <div className="control-planning-modes" role="group" aria-label="Semestre">
-            <button
-              type="button"
-              className={(period ?? view?.periodId) === "semester-1" ? "is-active" : ""}
-              aria-pressed={(period ?? view?.periodId) === "semester-1"}
-              data-control-period="semester-1"
-              onClick={() => selectPeriod("semester-1")}
-            >
-              Semestre 1
-            </button>
-            <button
-              type="button"
-              className={(period ?? view?.periodId) === "semester-2" ? "is-active" : ""}
-              aria-pressed={(period ?? view?.periodId) === "semester-2"}
-              data-control-period="semester-2"
-              onClick={() => selectPeriod("semester-2")}
-            >
-              Semestre 2
-            </button>
-          </div>
-        ) : null}
 
         <div className="control-planning-chips" role="group" aria-label="Classes attribuées">
           <button
@@ -1245,6 +1563,35 @@ export function ControlPlanningPanel({
           })}
         </div>
 
+        <label className="control-planning-select control-planning-subject">
+          <span>Matières</span>
+          <select
+            data-control-subject=""
+            value={subjectFilter ?? ""}
+            onChange={(event) => {
+              const value = event.target.value;
+              setSubjectFilter(value ? value : null);
+            }}
+            disabled={!availableSubjectLabels.length}
+          >
+            <option value="">Toutes les matières</option>
+            {availableSubjectLabels.map((label) => (
+              <option key={label} value={label}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="control-planning-checkbox">
+          <input
+            type="checkbox"
+            checked={showPassedEvaluations}
+            onChange={(event) => setShowPassedEvaluations(event.target.checked)}
+          />
+          Afficher les évaluations passées
+        </label>
+
         <div className="control-planning-modes" role="group" aria-label="Mode d’affichage">
           <button
             type="button"
@@ -1269,6 +1616,27 @@ export function ControlPlanningPanel({
             {classAllLabel}
           </button>
         </div>
+
+        <section className="control-planning-help" aria-label="Aide / Légende">
+          <h3>Aide / Légende</h3>
+          <ul>
+            <li>
+              <span className="control-planning-help-swatch is-valid" aria-hidden="true" /> Case valide
+            </li>
+            <li>
+              <span className="control-planning-help-swatch is-invalid" aria-hidden="true" /> Case non
+              valide
+            </li>
+            <li>
+              <span className="control-planning-help-swatch is-planned" aria-hidden="true" /> Contrôle
+              planifié
+            </li>
+            <li>
+              <span className="control-planning-help-swatch is-dnd-target" aria-hidden="true" /> Glisser-déposer
+            </li>
+          </ul>
+        </section>
+
         {view?.guidedPlanningReason ? (
           <p className="control-planning-hint">{view.guidedPlanningReason}</p>
         ) : null}
@@ -1290,6 +1658,235 @@ export function ControlPlanningPanel({
         <p className="ma-semaine-empty control-planning-error">{error}</p>
       ) : loading && !view ? (
         <p className="ma-semaine-empty">Chargement du planning des contrôles…</p>
+      ) : isAnnualView && view?.semester && yearSemester2View?.semester ? (
+        <div className="control-planning-body">
+          <div className="control-planning-main">
+            <div className="control-planning-week-nav">
+              <div>
+                <span className="eyebrow">ANNÉE SCOLAIRE</span>
+                <strong>Planification annuelle</strong>
+              </div>
+              <div className="control-planning-week-actions">
+                <button
+                  type="button"
+                  disabled={!view.canCreate}
+                  onClick={() => {
+                    const allDays: ControlPlanningDay[] = [
+                      ...view.semester.weeks.flatMap((w) => w.days.map(toPlanningDay)),
+                      ...yearSemester2View!.semester.weeks.flatMap((w) => w.days.map(toPlanningDay)),
+                    ];
+                    const first = allDays.find((d) => {
+                      const placement = subjectFilter ? d.placementOptions.filter((o) => o.branchLabel === subjectFilter) : d.placementOptions;
+                      return d.canPlan && placement.length > 0;
+                    });
+                    if (first) openPlan(first);
+                  }}
+                >
+                  + Planifier un contrôle
+                </button>
+              </div>
+            </div>
+
+            <div className="control-planning-annual-wrap" data-control-annual="">
+              {(["semester-1", "semester-2"] as const).map((periodId) => {
+                const semesterView = periodId === "semester-1" ? view.semester : yearSemester2View!.semester;
+                const weeks =
+                  displayMode === "month"
+                    ? semesterView.weeks.filter((w) => new Date(w.monday).getMonth() + 1 === monthNumber)
+                    : semesterView.weeks;
+                const visibleDayIndexes = [
+                  ...new Set([
+                    ...(view.semester.visibleDayIndexes ?? []),
+                    ...(yearSemester2View!.semester.visibleDayIndexes ?? []),
+                  ]),
+                ].sort((a, b) => a - b);
+
+                return (
+                  <div key={periodId} className="control-planning-annual-semester">
+                    <h3 className="control-planning-annual-semester-title">
+                      {periodId === "semester-1" ? "SEMESTRE 1" : "SEMESTRE 2"}
+                    </h3>
+                    <div className="control-planning-semester-wrap">
+                      <table className="control-planning-semester">
+                        <thead>
+                          <tr>
+                            <th scope="col" className="control-planning-semester-week">
+                              Semaine
+                            </th>
+                            {visibleDayIndexes.map((dayIndex) => (
+                              <th key={dayIndex} scope="col">
+                                {SCHOOL_WEEKDAY_LABELS[dayIndex] ?? `Jour ${dayIndex + 1}`}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {weeks.map((semesterWeek) => (
+                            <tr
+                              key={`${periodId}-${semesterWeek.number}`}
+                              className={semesterWeek.hasCourse ? undefined : "is-empty-week"}
+                              data-week-number={semesterWeek.number}
+                              data-week-kind={semesterWeek.kind}
+                            >
+                              <th scope="row" className="control-planning-semester-week">
+                                <button
+                                  type="button"
+                                  className="control-planning-week-link"
+                                  onClick={() => {
+                                    setWeek(semesterWeek.number);
+                                    setDisplayMode("week");
+                                    setLayout("week");
+                                  }}
+                                >
+                                  S{String(semesterWeek.number).padStart(2, "0")}-{semesterWeek.kind}
+                                </button>
+                                <span>
+                                  {formatCompactDay(semesterWeek.monday)} ·{" "}
+                                  {formatCompactDay(addDays(semesterWeek.monday, 4))}
+                                </span>
+                              </th>
+
+                              {visibleDayIndexes.map((dayIndex) => {
+                                const baseDay = semesterWeek.days.find((d) => d.dayIndex === dayIndex) ?? null;
+                                const semesterDay: ControlPlanningSemesterDay = baseDay ?? {
+                                  dayIndex,
+                                  weekdayLabel: SCHOOL_WEEKDAY_LABELS[dayIndex] ?? `Jour ${dayIndex + 1}`,
+                                  date: null,
+                                  controls: [],
+                                  placementOptions: [],
+                                  classDayControls: [],
+                                  hasCourse: false,
+                                  canPlan: false,
+                                  confirmationRequired: false,
+                                };
+                                const planningDay = toPlanningDay(semesterDay);
+
+                                const filteredControls = subjectFilter
+                                  ? planningDay.controls.filter((c) => c.branchLabel === subjectFilter)
+                                  : planningDay.controls;
+                                const visibleControls = showPassedEvaluations
+                                  ? filteredControls
+                                  : filteredControls.filter((c) => {
+                                      const iso = c.courseSessionDate ?? c.date ?? "";
+                                      return !iso || iso >= todayIso;
+                                    });
+
+                                const filteredPlacementOptions = subjectFilter
+                                  ? planningDay.placementOptions.filter((o) => o.branchLabel === subjectFilter)
+                                  : planningDay.placementOptions;
+
+                                const filteredClassDayControls = subjectFilter
+                                  ? planningDay.classDayControls.filter((c) => c.branchLabel === subjectFilter)
+                                  : planningDay.classDayControls;
+
+                                const cellCanPlan = planningDay.canPlan && filteredPlacementOptions.length > 0;
+                                const cellHasCourse = visibleControls.length > 0 || filteredPlacementOptions.length > 0;
+
+                                const planningDayFiltered: ControlPlanningDay = {
+                                  ...planningDay,
+                                  controls: visibleControls,
+                                  placementOptions: filteredPlacementOptions,
+                                  canPlan: cellCanPlan,
+                                  classDayControls: filteredClassDayControls,
+                                };
+
+                                const cellDropState = dropState(planningDayFiltered.placementOptions);
+
+                                return (
+                                  <td
+                                    key={`${periodId}-${semesterWeek.number}-${dayIndex}`}
+                                    className={[
+                                      cellHasCourse ? "is-available" : "is-inactive",
+                                      cellDropState === "ok" ? "is-drop-ok" : "",
+                                      cellDropState === "forbidden" ? "is-drop-forbidden" : "",
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" ")}
+                                    data-day-index={dayIndex}
+                                    data-has-course={cellHasCourse ? "true" : "false"}
+                                    data-date={planningDay.date ?? ""}
+                                    data-control-drop={cellDropState ?? ""}
+                                    onDragOver={(event) => handleDayDragOver(event, planningDayFiltered.placementOptions)}
+                                    onDrop={(event) => handleDropOnDay(event, planningDayFiltered)}
+                                  >
+                                    {planningDayFiltered.controls.length ? (
+                                      <ul>
+                                        {planningDayFiltered.controls.map((card) => (
+                                          <li key={card.agendaItemId}>
+                                            <ControlCard
+                                              card={card}
+                                              compact
+                                              showTeacher={mode === "class-all" || !card.isOwn}
+                                              toneIndex={classToneIndex(card.classroomId, assignedIds)}
+                                              movable={cardIsMovable(card)}
+                                              manageable={cardIsManageable(card)}
+                                              dragging={draggingCard?.agendaItemId === card.agendaItemId}
+                                              selected={moveSource?.agendaItemId === card.agendaItemId}
+                                              onDragStart={(event) => startCardDrag(card, event)}
+                                              onDragEnd={() => setDraggingCard(null)}
+                                              onEditClick={() => openEdit(card)}
+                                              onMoveClick={() => setMoveSource(card)}
+                                              onDeleteClick={() => openDelete(card)}
+                                            />
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    ) : !cellHasCourse ? (
+                                      <p className="control-planning-day-empty">Aucun cours</p>
+                                    ) : null}
+
+                                    {planningDayFiltered.canPlan
+                                      ? planningDayFiltered.placementOptions.map((option) => (
+                                          <button
+                                            key={option.courseSessionKey}
+                                            type="button"
+                                            className="control-plan-add is-compact"
+                                            data-control-plan=""
+                                            data-control-placement={option.courseSessionKey}
+                                            data-annual-course-id={option.annualCourseId}
+                                            data-course-session-key={option.courseSessionKey}
+                                            data-control-session-date={option.date}
+                                            onClick={() => activatePlacement(planningDayFiltered, option)}
+                                            onDragOver={(event) => handleDayDragOver(event, [option])}
+                                            onDrop={(event) => handleDropOnOption(event, planningDayFiltered, option)}
+                                          >
+                                            {moveSource ? `→ ${placementHint(option)}` : placementHint(option)}
+                                          </button>
+                                        ))
+                                      : null}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                          {!weeks.length ? (
+                            <tr className="is-empty-week">
+                              <td colSpan={visibleDayIndexes.length + 1} className="control-planning-error">
+                                Aucune semaine scolaire pour ce filtre.
+                              </td>
+                            </tr>
+                          ) : null}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <aside className="control-planning-sidebar" aria-label="Analyse annuelle">
+            <AnnualAnalysis
+              view={view}
+              semester2View={yearSemester2View}
+              visiblePeriodMode={displayMode}
+              monthNumber={monthNumber}
+              subjectFilter={subjectFilter}
+              showPassedEvaluations={showPassedEvaluations}
+              todayIso={todayIso}
+            />
+          </aside>
+        </div>
       ) : view?.layout === "week" && view.week ? (
         <div className="control-planning-body">
           <div className="control-planning-main">

@@ -2,6 +2,22 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.42.0] — Contrôles : refonte UI (vue annuelle)
+
+Administration → Espace enseignant : l’écran « Contrôles » est refondu pour proposer une vue annuelle structurée par semaines scolaires réelles (une ligne = une semaine), accompagnée d’une colonne d’analyse et d’indicateurs KPI.
+
+### Ajouté
+
+- Switch de vue : Semaine / Mois / Année (la vue Année est la priorité UI).
+- Vue annuelle avec sous-titres « SEMESTRE 1 » / « SEMESTRE 2 », une ligne par semaine.
+- Filtres UI : Matières et case « Afficher les évaluations passées ».
+- Couleurs de matières / branches via mapping stable et légende dédiée.
+- Colonne d’analyse : coordination (conflits), charge enseignant, légende matières.
+
+### Non inclus
+
+Aucune migration SQL.
+
 ## [2.40.0] — Attributions : uniquement les enseignants compatibles
 
 Administration → Attributions des cours n’affiche plus la case « Afficher les enseignants non correspondants ». Le menu Attribuer propose uniquement les enseignants actifs dont le type correspond à la branche.
