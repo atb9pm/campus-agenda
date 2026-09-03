@@ -43,3 +43,11 @@ export function writeStoredValue(key: string, value: string): void {
     // Stockage indisponible (navigation privée) : sans conséquence.
   }
 }
+
+export {
+  UNKNOWN_TEACHER_INITIALS,
+  authenticatedTeacherFromSession,
+  initialsFromDisplayName,
+  profileDiscInitials,
+  type AuthenticatedTeacherIdentity,
+} from "./teacher-identity.ts";
