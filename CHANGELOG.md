@@ -18,6 +18,20 @@ Administration → Espace enseignant : l’écran « Contrôles » est refondu p
 
 Aucune migration SQL.
 
+## [2.41.0] — Identité enseignant : initiales du compte connecté
+
+Le rond de profil de l’espace enseignant affiche les initiales de la session authentifiée, plus celles du catalogue démo. Déconnexion et reconnexion changent immédiatement l’identité visible.
+
+### Corrigé
+
+- Source : `session.initials` via `authenticatedTeacher` (plus `getTeacherById(DEMO_CATALOG, …)` ni fallback `"FC"`).
+- Rechargement : l’identité est reconstruite depuis `fetchApiSession()`.
+- Fallback : initiales calculées depuis `displayName`, ou `?`, jamais l’identité d’un autre enseignant.
+
+### Non inclus
+
+Aucune migration SQL. Droits serveur, attributions, TCA et permissions inchangés. L’identité visuelle n’est pas une source d’autorité.
+
 ## [2.40.0] — Attributions : uniquement les enseignants compatibles
 
 Administration → Attributions des cours n’affiche plus la case « Afficher les enseignants non correspondants ». Le menu Attribuer propose uniquement les enseignants actifs dont le type correspond à la branche.
