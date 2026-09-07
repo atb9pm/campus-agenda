@@ -43,7 +43,7 @@ Le script :
 3. installe (`npm ci`, repli `npm install`) et construit dans `web/`
 4. écrit `web/build-info.json` (commit, date) exposé par `/api/health`
 
-Cycle courant, sans SSH ni PowerShell :
+Cycle courant, sans SSH depuis GitHub :
 
 ```
 Pull Request → CI verte → Merge sur main → bouton « Build » → bouton « Redémarrer »
@@ -117,90 +117,28 @@ enseignants** (mot de passe provisoire affiché à l'écran, à transmettre de v
 6. **Run**
 7. SSL Let's Encrypt pour `campusagenda.ch`
 
-## Déploiement automatique (CI/CD GitHub)
+## Après un merge : Build Infomaniak, pas GitHub SSH
 
-Après configuration, **chaque merge d'une PR sur `main`** déclenche le workflow
-[`.github/workflows/deploy-infomaniak.yml`](../.github/workflows/deploy-infomaniak.yml) :
-
-1. Connexion SSH à Infomaniak
-2. `git pull` + `npm install` + `npm run build`
-3. Redémarrage de l'app (API Manager)
-4. Vérification de `https://campusagenda.ch/api/health`
-
-Les PR sont testées par [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) (lint + tests + build).
-
-### Étape 1 — Compte SSH Infomaniak
-
-1. Manager Infomaniak → **Hébergement Web** → votre hébergement
-2. **FTP / SSH** → **Ajouter** un compte **FTP + SSH**
-3. Choisir l'environnement **Node.js** (`campusagenda.ch`)
-4. Noter : hôte SSH, utilisateur, mot de passe
-
-### Étape 2 — Authentification SSH pour GitHub Actions
-
-> **Infomaniak Node.js** affiche actuellement : *« L'authentification par clé privée
-> n'est pas encore disponible »*. Utilisez donc le **mot de passe** du compte SSH
-> (pas de champ clé publique dans le Manager).
-
-1. Créez un compte **FTP + SSH** → environnement **Node.js**
-2. Définissez un mot de passe fort (8 car., majuscule, minuscule, chiffre, caractère spécial)
-3. Notez les infos de connexion (menu ⋮ → **Voir les informations de connexion SSH**) :
-   - Hôte : ex. `57-115909.ssh.hosting-ik.com`
-   - Utilisateur : ex. `KtVVAsNzFhW_atb_9pm`
-
-Trouver le chemin du clone Git sur le serveur (via **Console SSH** Infomaniak ou terminal) :
-
-```bash
-ssh VOTRE_USER@VOTRE_HOST.infomaniak.com
-pwd
-ls
-# Exemple : /home/clients/abc123/web/campusagenda.ch
-```
-
-### Étape 3 — Secrets GitHub
-
-Dépôt → **Settings** → **Secrets and variables** → **Actions** → **New repository secret** :
-
-| Secret | Description |
-|---|---|
-| `INFOMANIAK_SSH_HOST` | Hôte SSH Node.js (ex. `57-115909.ssh.hosting-ik.com`) |
-| `INFOMANIAK_SSH_USER` | Utilisateur SSH (ex. `KtVVAsNzFhW_atb_9pm`) |
-| `INFOMANIAK_SSH_PASSWORD` | Mot de passe du compte SSH (**requis** sur Node.js Infomaniak) |
-| `INFOMANIAK_SITE_DIR` | Chemin absolu du clone Git sur Infomaniak |
-| `INFOMANIAK_SSH_KEY` | *(Optionnel)* Clé privée — quand Infomaniak l'activera |
-| `INFOMANIAK_HOSTING_ID` | ID hébergement (Manager, URL ou API) |
-| `INFOMANIAK_VHOST_ROUTE_ID` | ID route Node.js du site |
-| `INFOMANIAK_SASESSION` | Cookie session Manager (voir ci-dessous) |
-| `INFOMANIAK_MANAGER_XSRF` | Token CSRF Manager (voir ci-dessous) |
-
-Les secrets SSH + `INFOMANIAK_SITE_DIR` suffisent pour le build ; les cookies Manager permettent le **redémarrage automatique**.
-
-#### Obtenir les cookies Manager (redémarrage auto)
-
-1. Connectez-vous à [manager.infomaniak.com](https://manager.infomaniak.com)
-2. Ouvrez les **Outils de développement** (F12) → **Application** → **Cookies**
-3. Copiez `SASESSION` → secret `INFOMANIAK_SASESSION`
-4. Copiez `MANAGER-XSRF-TOKEN` (ou `XSRF-TOKEN`) → secret `INFOMANIAK_MANAGER_XSRF`
-
-> Ces cookies **expirent** (session navigateur). Renouvelez-les si le déploiement échoue
-> à l'étape « Redémarrer l'application ». En attendant, un **Build + Run** manuel dans le Manager suffit.
-
-#### IDs hosting / vhost
-
-Dans le Manager, ouvrez votre site Node.js : l'URL contient souvent des identifiants numériques.
-Sinon, contactez le support ou inspectez les requêtes réseau (onglet Network) lors d'un clic sur **Build**.
-
-### Étape 4 — Activer
-
-1. Mergez cette branche dans `main`
-2. Ajoutez les secrets GitHub
-3. Poussez un commit sur `main` ou lancez **Actions → Deploy Infomaniak → Run workflow**
-
-### Workflow utilisateur
+Infomaniak Node.js **n’expose pas encore** de secret SSH utilisable depuis GitHub Actions
+(« L'authentification par clé privée n'est pas encore disponible »). Un `sshpass`
+depuis Actions restait bloqué plusieurs heures. **Le déploiement ne passe plus par SSH.**
 
 ```
-Branche feature → Pull Request → CI (tests) → Merge sur main → Deploy automatique
+Branche → Pull Request → CI (tests) → Merge sur main
+  → Manager Infomaniak : Build puis Redémarrer
+  → GitHub : vérifie https://campusagenda.ch/api/health
 ```
+
+Les PR sont testées par [`.github/workflows/ci.yml`](../.github/workflows/ci.yml).
+Après un push sur `main`, [`.github/workflows/deploy-infomaniak.yml`](../.github/workflows/deploy-infomaniak.yml)
+contrôle seulement que le site répond (`ok: true`). Si le `commit` de `/api/health`
+n’est pas encore celui de `main`, c’est un rappel de lancer **Build** dans le Manager,
+pas un échec.
+
+Pour attendre le nouveau commit (après un Build) : **Actions → Infomaniak — vérifier production →
+Run workflow**, case « Attendre que /api/health serve le commit ».
+
+Aucun secret GitHub n’est requis pour ce contrôle.
 
 ## Vérification
 
@@ -213,7 +151,7 @@ Attendu :
 ```json
 {
   "ok": true,
-  "version": "2.6.1",
+  "version": "2.43.1",
   "store": "sqlite",
   "commit": "dc6b445",
   "builtAt": "2026-08-28T14:10:00.000Z"
@@ -246,8 +184,8 @@ administrateur.
 | « Initiales ou mot de passe incorrect » avec `campus-demo` | Comportement voulu : le mot de passe démo est refusé en production | Utiliser le mot de passe d'amorçage (voir « Premier mot de passe administrateur ») |
 | Site en maintenance | Mode maintenance ON | **Gérer** → désactiver maintenance |
 | Build OK mais Run échoue | Ancienne commande avec corepack | Remplacer la commande de lancement |
-| Deploy GitHub : SSH refused | Clé ou hôte incorrect | Vérifier secrets SSH |
-| Deploy GitHub : build OK, site ancien | Redémarrage manquant | Mettre à jour cookies Manager ou **Run** manuel |
+| GitHub « Santé injoignable » | Site down ou maintenance | Désactiver la maintenance, vérifier Run Infomaniak |
+| GitHub notice « Main est … » | Build Infomaniak pas encore lancé | **Build** puis **Redémarrer** dans le Manager |
 | Build OK mais `/api/health` garde l'ancien `commit` | Build sans récupération Git | Commande de build = `bash scripts/infomaniak-build.sh` |
 | `n'est pas un dépôt Git` | Dossier d'exécution ≠ racine du clone | Mettre `.` comme dossier d'exécution |
 
