@@ -2,6 +2,20 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.43.1] — Infomaniak : plus de SSH GitHub bloquant
+
+Le workflow « Deploy Infomaniak » ne tente plus de se connecter au serveur Node.js. Infomaniak n’expose pas encore de secret SSH utilisable depuis Actions ; le `sshpass` restait bloqué jusqu’à la limite de 6 h. Le déploiement reste manuel (Build puis Redémarrer dans le Manager). GitHub vérifie seulement `https://campusagenda.ch/api/health`.
+
+### Modifié
+
+- Plus de `sshpass`, plus de secrets SSH, plus de cookies Manager dans le workflow.
+- Job limité à 8 minutes, avec option manuelle « attendre le commit » après un Build.
+- Guide `docs/infomaniak-deploy.md` aligné sur ce cycle.
+
+### Non inclus
+
+Aucune migration SQL. Aucun changement applicatif.
+
 ## [2.43.0] — Contrôles : chrome allégé, Mes contrôles à gauche
 
 Espace enseignant → Contrôles : le bandeau interne, les KPI, l’aide et la colonne d’analyse sont retirés. « Mes contrôles » / « Tous les contrôles des classes » restent et sont alignés à gauche, sur la même ligne que Matières.

@@ -1,8 +1,6 @@
-# Déploie campusagenda.ch sur Infomaniak après merge d'une PR sur main.
-#
-# Infomaniak Node.js : pas de clé SSH pour l'instant → mot de passe.
-# Le Builder Infomaniak est recommandé pour npm build (SSH a des ressources limitées).
-# Ici : git pull via SSH, puis Build/Restart via API Manager si cookies présents.
+# Infomaniak Node.js n’expose pas encore de secret SSH utilisable depuis Actions.
+# Le déploiement réel se fait dans le Manager (Build puis Redémarrer).
+# Ce workflow ne touche plus au serveur : il vérifie que campusagenda.ch répond.
 name: Deploy Infomaniak
 
 on:
@@ -11,116 +9,72 @@ on:
       - main
   workflow_dispatch:
     inputs:
-      branch:
-        description: Branche Git à déployer
-        required: false
-        default: main
+      wait_for_commit:
+        description: Attendre que /api/health serve le commit de cette exécution
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-infomaniak
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
-  deploy:
-    name: Déployer sur Infomaniak
+  health:
+    name: Vérifier campusagenda.ch
     runs-on: ubuntu-latest
+    timeout-minutes: 8
 
     env:
-      DEPLOY_BRANCH: ${{ github.event.inputs.branch || 'main' }}
       HEALTH_URL: https://campusagenda.ch/api/health
-      SSH_HOST: ${{ secrets.INFOMANIAK_SSH_HOST }}
-      SSH_USER: ${{ secrets.INFOMANIAK_SSH_USER }}
-      SSH_PASSWORD: ${{ secrets.INFOMANIAK_SSH_PASSWORD }}
-      SITE_DIR: ${{ secrets.INFOMANIAK_SITE_DIR }}
-      MANAGER_SESSION: ${{ secrets.INFOMANIAK_SASESSION }}
+      WAIT_FOR_COMMIT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.wait_for_commit == 'true' }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Vérifier les secrets de déploiement
-        id: secrets
-        run: |
-          missing=0
-          [ -n "$SSH_HOST" ] || { echo "::error::INFOMANIAK_SSH_HOST manquant"; missing=1; }
-          [ -n "$SSH_USER" ] || { echo "::error::INFOMANIAK_SSH_USER manquant"; missing=1; }
-          [ -n "$SITE_DIR" ] || { echo "::error::INFOMANIAK_SITE_DIR manquant"; missing=1; }
-          [ -n "$SSH_PASSWORD" ] || { echo "::error::INFOMANIAK_SSH_PASSWORD manquant"; missing=1; }
-          if [ "$missing" -ne 0 ]; then
-            echo "Voir docs/infomaniak-deploy.md"
-            exit 1
-          fi
-          echo "ready=true" >> "$GITHUB_OUTPUT"
-          if [ -n "$MANAGER_SESSION" ]; then
-            echo "manager=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "manager=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Pas de cookies Manager — après git pull, lancez Build + Run dans Infomaniak."
-          fi
-
-      - name: Installer sshpass
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
-
-      - name: Tester la connexion SSH
-        run: |
-          set -euo pipefail
-          chmod +x scripts/ssh-infomaniak.sh
-          echo "Connexion à ${SSH_USER}@${SSH_HOST} …"
-          scripts/ssh-infomaniak.sh 'echo SSH_OK; whoami; pwd; ls -la'
-
-      - name: Mettre à jour le code (git pull via SSH)
-        run: |
-          set -euo pipefail
-          chmod +x scripts/ssh-infomaniak.sh
-          SITE_Q=$(printf %q "$SITE_DIR")
-          BRANCH_Q=$(printf %q "$DEPLOY_BRANCH")
-          scripts/ssh-infomaniak.sh "set -euo pipefail
-            SITE_DIR=${SITE_Q}
-            DEPLOY_BRANCH=${BRANCH_Q}
-            echo '==> Déploiement Campus Agenda'
-            echo \"    Dossier : \$SITE_DIR\"
-            echo \"    Branche : \$DEPLOY_BRANCH\"
-            cd \"\$SITE_DIR\"
-            if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-              echo \"❌ \$SITE_DIR n'est pas un dépôt Git\"
-              ls -la
-              exit 1
-            fi
-            echo \"Commit actuel : \$(git rev-parse --short HEAD)\"
-            git remote -v
-            git fetch origin \"\$DEPLOY_BRANCH\"
-            git reset --hard \"origin/\$DEPLOY_BRANCH\"
-            echo \"✓ Code à jour : \$(git rev-parse --short HEAD)\"
-            ls -la web/package.json"
-
-      - name: Build + redémarrage (API Manager Infomaniak)
-        if: ${{ steps.secrets.outputs.manager == 'true' }}
-        env:
-          INFOMANIAK_HOSTING_ID: ${{ secrets.INFOMANIAK_HOSTING_ID }}
-          INFOMANIAK_VHOST_ROUTE_ID: ${{ secrets.INFOMANIAK_VHOST_ROUTE_ID }}
-          INFOMANIAK_SASESSION: ${{ secrets.INFOMANIAK_SASESSION }}
-          INFOMANIAK_MANAGER_XSRF: ${{ secrets.INFOMANIAK_MANAGER_XSRF }}
-        run: |
-          node scripts/trigger-infomaniak-action.mjs build
-          node scripts/trigger-infomaniak-action.mjs restart
-
-      - name: Rappel Build manuel Infomaniak
-        if: ${{ steps.secrets.outputs.manager != 'true' }}
-        run: |
-          echo "::warning::Code mis à jour sur le serveur. Dans le Manager Infomaniak → campusagenda.ch → Build puis Run."
-
       - name: Vérifier /api/health
-        if: ${{ steps.secrets.outputs.manager == 'true' }}
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
         run: |
-          echo "Attente du redémarrage…"
-          for attempt in 1 2 3 4 5 6; do
-            if curl -fsS "${HEALTH_URL}" | grep -q '"ok"[[:space:]]*:[[:space:]]*true'; then
-              echo "✓ Santé OK : ${HEALTH_URL}"
-              curl -fsS "${HEALTH_URL}"
-              exit 0
+          set -euo pipefail
+          expected="${EXPECTED_SHA:0:7}"
+          attempts=4
+          if [ "$WAIT_FOR_COMMIT" = "true" ]; then
+            attempts=16
+            echo "Attente du commit ${expected} sur ${HEALTH_URL}…"
+          fi
+
+          i=1
+          while [ "$i" -le "$attempts" ]; do
+            if body=$(curl -fsS --max-time 20 "$HEALTH_URL"); then
+              echo "$body"
+              parsed=$(printf '%s' "$body" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(("1" if d.get("ok") is True else "0")+"\t"+(d.get("commit") or "")+"\t"+(d.get("version") or "")+"\t"+(d.get("store") or ""))')
+              ok=$(printf '%s' "$parsed" | cut -f1)
+              commit=$(printf '%s' "$parsed" | cut -f2)
+              version=$(printf '%s' "$parsed" | cut -f3)
+              store=$(printf '%s' "$parsed" | cut -f4)
+              if [ "$ok" != "1" ]; then
+                echo "::error::Le site répond mais ok n’est pas true."
+                exit 1
+              fi
+              echo "version=${version} store=${store} commit=${commit} attendu=${expected}"
+              if [ -n "$commit" ] && [ "$commit" = "$expected" ]; then
+                echo "✓ Production à jour (${commit})."
+                exit 0
+              fi
+              if [ "$WAIT_FOR_COMMIT" = "true" ]; then
+                echo "Commit encore ${commit:-inconnu}, tentative ${i}/${attempts}…"
+              else
+                echo "::notice::Le site répond (${version}, ${commit:-sans commit}). Main est ${expected}. Lancez Build puis Redémarrer dans Infomaniak si ce n’est pas déjà fait."
+                exit 0
+              fi
+            else
+              echo "Santé injoignable, tentative ${i}/${attempts}…"
+              if [ "$i" -eq "$attempts" ]; then
+                echo "::error::https://campusagenda.ch/api/health ne répond pas."
+                exit 1
+              fi
             fi
-            echo "Tentative ${attempt}/6…"
+            i=$((i + 1))
             sleep 15
           done
-          echo "❌ Le site ne répond pas correctement après déploiement."
+
+          echo "::error::Production pas encore sur ${expected} après attente."
           exit 1

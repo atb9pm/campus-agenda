@@ -119,7 +119,7 @@ Pour un hébergement **Infomaniak** (sans Cloudflare), suivre le guide dédié :
 
 → **`docs/infomaniak-deploy.md`**
 
-Résumé : dossier d'exécution `.` (racine du dépôt), build `git pull origin main && cd web && npm install && npm run build`, lancement `cd web && AUTH_SECRET=… CAMPUS_STORE=sqlite npm run start:infomaniak`. Déploiement auto : merge PR sur `main` → GitHub Actions (voir `docs/infomaniak-deploy.md`).
+Résumé : dossier d'exécution `.` (racine du dépôt), build Infomaniak via `scripts/infomaniak-build.sh`, lancement `cd web && AUTH_SECRET=… CAMPUS_STORE=sqlite npm run start:infomaniak`. Après merge sur `main` : bouton **Build** puis **Redémarrer** dans le Manager. GitHub Actions ne fait plus de SSH ; il vérifie `https://campusagenda.ch/api/health` (voir `docs/infomaniak-deploy.md`).
 
 ## Vérifications
 
