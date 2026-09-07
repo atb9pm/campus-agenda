@@ -1,7 +1,7 @@
 # Infomaniak Node.js n’expose pas encore de secret SSH utilisable depuis Actions.
 # Le déploiement réel se fait dans le Manager (Build puis Redémarrer).
 # Ce workflow ne touche plus au serveur : il vérifie que campusagenda.ch répond.
-name: Deploy Infomaniak
+name: Infomaniak — vérifier production
 
 on:
   push:
@@ -34,12 +34,32 @@ jobs:
           EXPECTED_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          expected="${EXPECTED_SHA:0:7}"
+          expected_full="$EXPECTED_SHA"
+          expected_short="${expected_full:0:7}"
           attempts=4
           if [ "$WAIT_FOR_COMMIT" = "true" ]; then
             attempts=16
-            echo "Attente du commit ${expected} sur ${HEALTH_URL}…"
+            echo "Attente d’un commit production préfixe de ${expected_full}…"
           fi
+
+          commit_matches() {
+            COMMIT="$1" EXPECTED_SHA="$2" python3 -c 'import os; got=os.environ["COMMIT"]; full=os.environ["EXPECTED_SHA"]; raise SystemExit(0 if got and (full.startswith(got) or got[:7] == full[:7]) else 1)'
+          }
+
+          write_summary_ok() {
+            [ -n "${GITHUB_STEP_SUMMARY:-}" ] || return 0
+            echo "✅ Production à jour" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          write_summary_stale() {
+            [ -n "${GITHUB_STEP_SUMMARY:-}" ] || return 0
+            {
+              echo "⚠️ Production pas encore à jour"
+              echo "Commit production : ${1:-inconnu}"
+              echo "Commit main attendu : ${expected_full}"
+              echo "Action requise : Manager Infomaniak → Build → Redémarrer"
+            } >> "$GITHUB_STEP_SUMMARY"
+          }
 
           i=1
           while [ "$i" -le "$attempts" ]; do
@@ -54,15 +74,17 @@ jobs:
                 echo "::error::Le site répond mais ok n’est pas true."
                 exit 1
               fi
-              echo "version=${version} store=${store} commit=${commit} attendu=${expected}"
-              if [ -n "$commit" ] && [ "$commit" = "$expected" ]; then
+              echo "version=${version} store=${store} commit=${commit} attendu=${expected_short} (${expected_full})"
+              if commit_matches "$commit" "$expected_full"; then
                 echo "✓ Production à jour (${commit})."
+                write_summary_ok
                 exit 0
               fi
               if [ "$WAIT_FOR_COMMIT" = "true" ]; then
                 echo "Commit encore ${commit:-inconnu}, tentative ${i}/${attempts}…"
               else
-                echo "::notice::Le site répond (${version}, ${commit:-sans commit}). Main est ${expected}. Lancez Build puis Redémarrer dans Infomaniak si ce n’est pas déjà fait."
+                echo "::warning::⚠️ Production pas encore à jour. Commit production : ${commit:-inconnu}. Commit main attendu : ${expected_full}. Action requise : Manager Infomaniak → Build → Redémarrer"
+                write_summary_stale "${commit:-inconnu}"
                 exit 0
               fi
             else
@@ -76,5 +98,6 @@ jobs:
             sleep 15
           done
 
-          echo "::error::Production pas encore sur ${expected} après attente."
+          echo "::error::Production pas encore sur ${expected_full} après attente."
+          write_summary_stale "${commit:-inconnu}"
           exit 1

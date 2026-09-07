@@ -4,7 +4,7 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
 ## [2.43.1] — Infomaniak : plus de SSH GitHub bloquant
 
-Le workflow « Deploy Infomaniak » ne tente plus de se connecter au serveur Node.js. Infomaniak n’expose pas encore de secret SSH utilisable depuis Actions ; le `sshpass` restait bloqué jusqu’à la limite de 6 h. Le déploiement reste manuel (Build puis Redémarrer dans le Manager). GitHub vérifie seulement `https://campusagenda.ch/api/health`.
+Le workflow « Infomaniak — vérifier production » ne tente plus de se connecter au serveur Node.js. Infomaniak n’expose pas encore de secret SSH utilisable depuis Actions ; le `sshpass` restait bloqué jusqu’à la limite de 6 h. Le déploiement reste manuel (Build puis Redémarrer dans le Manager). GitHub vérifie seulement `https://campusagenda.ch/api/health`. Un commit de production différent de `main` reste un succès, signalé en warning avec résumé d’action Infomaniak.
 
 ### Modifié
 

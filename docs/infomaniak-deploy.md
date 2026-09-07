@@ -135,7 +135,7 @@ contrôle seulement que le site répond (`ok: true`). Si le `commit` de `/api/he
 n’est pas encore celui de `main`, c’est un rappel de lancer **Build** dans le Manager,
 pas un échec.
 
-Pour attendre le nouveau commit (après un Build) : **Actions → Deploy Infomaniak →
+Pour attendre le nouveau commit (après un Build) : **Actions → Infomaniak — vérifier production →
 Run workflow**, case « Attendre que /api/health serve le commit ».
 
 Aucun secret GitHub n’est requis pour ce contrôle.
