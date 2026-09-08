@@ -65,7 +65,7 @@ async function ensureClassroomForSchoolClass(
     id: runtimeClassroomIdForSchoolClass(schoolClass.id),
     name: schoolClass.code,
     programLabel: schoolClass.label,
-    accessCodeHint: "",
+    accessCodeHint: schoolClass.code,
     schoolClassId: schoolClass.id,
   });
   return { id: created.id, name: created.name };

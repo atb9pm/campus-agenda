@@ -47,7 +47,12 @@ import {
 } from "../src/lib/persistence/memory-teacher-account-store.ts";
 import { exportCampusSnapshot, restoreCampusSnapshot } from "../src/lib/persistence/campus-backup.ts";
 import { CAMPUS_BACKUP_COLUMNS } from "../src/lib/persistence/campus-backup-tables.ts";
-import { canonicalizeCampusDump, validateCampusTables } from "../src/lib/persistence/sql/sql-campus-backup.ts";
+import {
+  canonicalizeCampusDump,
+  dumpCampusTables,
+  restoreCampusTables,
+  validateCampusTables,
+} from "../src/lib/persistence/sql/sql-campus-backup.ts";
 import { createNodeSqliteDatabase } from "../src/lib/persistence/sql/adapters.ts";
 import { applyMigrations, SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 import { seedDemoDatabase } from "../src/lib/persistence/sql/seed.ts";
@@ -155,7 +160,7 @@ async function loginDepsFrom(admin: Awaited<ReturnType<typeof adminDeps>>) {
   };
 }
 
-test("PR79 — version 2.44.0 et migration 0025", () => {
+test("PR79 — version 2.44.0 et migration 0025", async () => {
   assert.equal(APP_VERSION, "2.44.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0025_structured_student_access.sql");
   assert.ok(SQL_MIGRATION_FILES.includes("0024_structured_agenda_bridge.sql"));
@@ -163,6 +168,11 @@ test("PR79 — version 2.44.0 et migration 0025", () => {
   assert.ok(columns.includes("school_class_id"));
   assert.ok(columns.includes("access_version"));
   assert.ok(columns.includes("revoked_at"));
+  const migration = await readFile(new URL("../migrations/0025_structured_student_access.sql", import.meta.url), "utf8");
+  assert.match(migration, /label TEXT NOT NULL/);
+  assert.doesNotMatch(migration, /label TEXT NOT NULL UNIQUE/);
+  assert.match(migration, /student_accesses_structured_0025/);
+  assert.match(migration, /idx_student_accesses_school_class_id/);
 });
 
 test("A — génération : format, alphabet, hash, pas de plaintext", async () => {
@@ -519,7 +529,140 @@ test("SQLite — génération, login ACTIVE, hash stocké", async () => {
   assert.equal(isUsablePasswordHash(stored.accessCodeHash), true);
   const agenda = new SqlAgendaStore(db);
   assert.ok(await agenda.findStudentAccessById(stored.id));
+  const ddl = await db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'student_accesses'")
+    .bind()
+    .first<{ sql: string }>();
+  assert.ok(ddl?.sql);
+  assert.match(ddl.sql, /label TEXT NOT NULL/);
+  assert.doesNotMatch(ddl.sql, /label TEXT NOT NULL UNIQUE/);
   db.close();
+});
+
+test("SQLite — deux SchoolClass MA2 (ACTIVE + DRAFT) ont chacune un accès", async () => {
+  const db = createNodeSqliteDatabase(":memory:");
+  await applyMigrations(db);
+  await seedDemoDatabase(db);
+  const catalog = new SqlSchoolCatalogStore(db);
+  await catalog.ensureSeeded();
+  const years = new SqlSchoolYearStore(db);
+  await years.seedDefaultActiveYearIfEmpty();
+  await catalog.applySchoolYearBackfill(await years.listSchoolYears());
+  const accesses = new SqlStudentAccessStore(db);
+  const adapters = new SqlRuntimeAgendaAdapterStore(db);
+  const admin = {
+    accesses,
+    adapters,
+    getSchoolClassById: async (id: string) => (await catalog.listClasses()).find((entry) => entry.id === id) ?? null,
+    getSchoolYearById: (id: string) => years.getSchoolYearById(id),
+    listClasses: () => catalog.listClasses(),
+    listYears: () => years.listSchoolYears(),
+  };
+
+  const activeYear = await years.getActiveSchoolYear();
+  assert.ok(activeYear);
+  assert.equal(activeYear.status, "active");
+  assert.match(activeYear.label, /2026/);
+  const activeClass = (await catalog.listClasses()).find(
+    (entry) => entry.code === "MA2" && entry.schoolYearId === activeYear.id,
+  );
+  assert.ok(activeClass);
+
+  const activeGenerated = await generateStudentAccess(admin, activeClass.id);
+  assert.equal(activeGenerated.ok, true);
+  if (!activeGenerated.ok) return;
+
+  await db
+    .prepare(
+      `INSERT INTO school_years (id, label, status, starts_on, ends_on, created_at)
+       VALUES (?, ?, 'draft', '2027-08-16', '2028-07-02', ?)`,
+    )
+    .bind("year-draft-2027", "2027-2028", new Date().toISOString())
+    .run();
+  const draftClass = await catalog.createClass({
+    code: "MA2",
+    label: "MA2 2027-2028",
+    schoolYearId: "year-draft-2027",
+    schoolYearLabel: "2027-2028",
+  });
+  assert.equal(draftClass.code, "MA2");
+  assert.notEqual(draftClass.id, activeClass.id);
+
+  const draftGenerated = await generateStudentAccess(admin, draftClass.id);
+  assert.equal(draftGenerated.ok, true, draftGenerated.ok ? "" : draftGenerated.reason);
+  if (!draftGenerated.ok) return;
+
+  const listed = await accesses.listAll();
+  const ma2Rows = listed.filter((row) => row.label === "MA2");
+  assert.equal(ma2Rows.length, 2);
+  const activeAccess = await accesses.getBySchoolClassId(activeClass.id);
+  const draftAccess = await accesses.getBySchoolClassId(draftClass.id);
+  assert.ok(activeAccess);
+  assert.ok(draftAccess);
+  assert.notEqual(activeAccess.schoolClassId, draftAccess.schoolClassId);
+  assert.notEqual(activeAccess.accessCodeHash, draftAccess.accessCodeHash);
+  assert.notEqual(activeGenerated.code, draftGenerated.code);
+  assert.equal(isUsablePasswordHash(activeAccess.accessCodeHash), true);
+  assert.equal(isUsablePasswordHash(draftAccess.accessCodeHash), true);
+
+  const loginDeps = {
+    getActiveSchoolYear: () => years.getActiveSchoolYear(),
+    listClasses: () => catalog.listClasses(),
+    getAccessBySchoolClassId: (id: string) => accesses.getBySchoolClassId(id),
+    findClassroomBySchoolClassId: (id: string) => adapters.findClassroomBySchoolClassId(id),
+  };
+  const draftLogin = await authenticateStudentAccessCode(draftGenerated.code, loginDeps);
+  assert.equal(draftLogin.ok, false);
+  const activeLogin = await authenticateStudentAccessCode(activeGenerated.code, loginDeps);
+  assert.equal(activeLogin.ok, true);
+
+  const dump = await dumpCampusTables(db);
+  const dumpedMa2 = (dump.student_accesses ?? []).filter((row) => row.label === "MA2");
+  assert.equal(dumpedMa2.length, 2);
+  assert.equal(
+    new Set(dumpedMa2.map((row) => String(row.school_class_id))).size,
+    2,
+  );
+  assert.notEqual(dumpedMa2[0]?.access_code_hash, dumpedMa2[1]?.access_code_hash);
+  assert.equal(JSON.stringify(dumpedMa2).includes(activeGenerated.code), false);
+  assert.equal(JSON.stringify(dumpedMa2).includes(draftGenerated.code), false);
+
+  const db2 = createNodeSqliteDatabase(":memory:");
+  await applyMigrations(db2);
+  await restoreCampusTables(db2, dump);
+  const restoredDump = await dumpCampusTables(db2);
+  assert.deepEqual(
+    canonicalizeCampusDump({ student_accesses: restoredDump.student_accesses ?? [] }),
+    canonicalizeCampusDump({ student_accesses: dump.student_accesses ?? [] }),
+  );
+
+  const restoredAccesses = new SqlStudentAccessStore(db2);
+  const restoredCatalog = new SqlSchoolCatalogStore(db2);
+  const restoredYears = new SqlSchoolYearStore(db2);
+  const restoredAdapters = new SqlRuntimeAgendaAdapterStore(db2);
+  const restoredMa2 = await restoredAccesses.listAll();
+  assert.equal(restoredMa2.filter((row) => row.label === "MA2").length, 2);
+  const restoredLogin = await authenticateStudentAccessCode(activeGenerated.code, {
+    getActiveSchoolYear: () => restoredYears.getActiveSchoolYear(),
+    listClasses: () => restoredCatalog.listClasses(),
+    getAccessBySchoolClassId: (id) => restoredAccesses.getBySchoolClassId(id),
+    findClassroomBySchoolClassId: (id) => restoredAdapters.findClassroomBySchoolClassId(id),
+  });
+  assert.equal(restoredLogin.ok, true);
+  const restoredDraftLogin = await authenticateStudentAccessCode(draftGenerated.code, {
+    getActiveSchoolYear: () => restoredYears.getActiveSchoolYear(),
+    listClasses: () => restoredCatalog.listClasses(),
+    getAccessBySchoolClassId: (id) => restoredAccesses.getBySchoolClassId(id),
+    findClassroomBySchoolClassId: (id) => restoredAdapters.findClassroomBySchoolClassId(id),
+  });
+  assert.equal(restoredDraftLogin.ok, false);
+
+  await applyMigrations(db);
+  const afterReplay = await accesses.listAll();
+  assert.equal(afterReplay.filter((row) => row.label === "MA2").length, 2);
+
+  db.close();
+  db2.close();
 });
 
 test("login HTTP — mauvais code 401 identique, bon code 200", async () => {
