@@ -99,11 +99,7 @@ function shuffleSlots(slots: CourseScheduleSlot[]): CourseScheduleSlot[] {
 
 test("version — CourseSession calculée, dernière migration 0024, aucune table CourseSession", () => {
   assert.match(APP_VERSION, /^\d+\.\d+\.\d+$/);
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
-  assert.equal(
-    SQL_MIGRATION_FILES.some((file) => file.startsWith("0025")),
-    false,
-  );
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0025_structured_student_access.sql");
 });
 
 test("CourseSession n’a pas de trainingYear — l’identité reste contextId", () => {

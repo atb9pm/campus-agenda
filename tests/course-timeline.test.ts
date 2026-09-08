@@ -361,12 +361,8 @@ async function seedAssignedCourse(
 }
 
 test("version 2.32.0 — déroulement conservé, nav Contrôles, migration 0024", () => {
-  assert.equal(APP_VERSION, "2.43.4");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
-  assert.equal(
-    SQL_MIGRATION_FILES.some((file) => file.startsWith("0025")),
-    false,
-  );
+  assert.equal(APP_VERSION, "2.44.0");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0025_structured_student_access.sql");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",
     "controles",

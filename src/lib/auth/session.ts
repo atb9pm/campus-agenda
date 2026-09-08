@@ -85,8 +85,14 @@ export async function parseSessionToken(token: string | null | undefined): Promi
     if (
       typeof decoded.accessId !== "string" ||
       !decoded.accessId ||
+      typeof decoded.accessVersion !== "number" ||
+      !Number.isInteger(decoded.accessVersion) ||
       typeof decoded.classroomId !== "string" ||
       !decoded.classroomId ||
+      typeof decoded.schoolClassId !== "string" ||
+      !decoded.schoolClassId ||
+      typeof decoded.schoolYearId !== "string" ||
+      !decoded.schoolYearId ||
       typeof decoded.label !== "string" ||
       !isFiniteIssuedAt(decoded.issuedAt)
     ) {
@@ -95,7 +101,10 @@ export async function parseSessionToken(token: string | null | undefined): Promi
     return {
       kind: "student",
       accessId: decoded.accessId,
+      accessVersion: decoded.accessVersion,
       classroomId: decoded.classroomId,
+      schoolClassId: decoded.schoolClassId,
+      schoolYearId: decoded.schoolYearId,
       label: decoded.label,
       issuedAt: decoded.issuedAt,
     };

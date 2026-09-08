@@ -14,9 +14,9 @@ import { APP_VERSION } from "../src/lib/app-version.ts";
 import { backupDownloadFilename } from "../src/lib/persistence/backup.ts";
 import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 
-test("version 2.43.4 — sauvegarde admin manuelle, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.43.4");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
+test("version 2.44.0 — sauvegarde admin manuelle", async () => {
+  assert.equal(APP_VERSION, "2.44.0");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0025_structured_student_access.sql");
 
   const panel = await readFile(new URL("../web/app/components/admin-backup-panel.tsx", import.meta.url), "utf8");
   const admin = await readFile(new URL("../web/app/components/administration-panel.tsx", import.meta.url), "utf8");

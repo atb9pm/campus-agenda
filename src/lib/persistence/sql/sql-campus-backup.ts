@@ -96,7 +96,19 @@ export async function dumpCampusTables(db: SqlDatabase): Promise<CampusTableDump
   const tables: CampusTableDump = {};
   for (const table of CAMPUS_BACKUP_INSERT_ORDER) {
     const { results } = await db.prepare(`SELECT * FROM ${table}`).bind().all<Record<string, unknown>>();
-    tables[table] = (results ?? []).map((row) => ({ ...row }));
+    const specs = CAMPUS_BACKUP_COLUMNS[table];
+    tables[table] = (results ?? []).map((row) => {
+      const next: Record<string, unknown> = {};
+      for (const spec of specs) {
+        if (!(spec.name in row)) continue;
+        let value = row[spec.name];
+        if (spec.type === "integer" && typeof value === "bigint") {
+          value = Number(value);
+        }
+        next[spec.name] = value;
+      }
+      return next;
+    });
   }
   return tables;
 }

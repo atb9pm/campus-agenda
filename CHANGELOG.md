@@ -2,6 +2,31 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.44.0] — Accès apprentis sécurisés et structurés
+
+Campus Agenda n’utilise plus le libellé comme secret. Chaque vraie SchoolClass possède un accès partagé, hashé, rattaché à son année scolaire.
+
+### Ajouté
+
+- Codes apprentis au format `MECAUTO3A-K7M4-R2P8`, normalisés avant hachage et vérification.
+- Stockage PBKDF2 uniquement (`access_code_hash`) ; le secret n’est affiché qu’à la génération ou régénération.
+- Rattachement `student_accesses.school_class_id` + `access_version` + `revoked_at`.
+- Préparation possible en année DRAFT ; connexion uniquement si l’année de la classe est l’unique ACTIVE.
+- Rotation et révocation : `access_version` incrémenté, sessions élèves invalidées à la requête suivante.
+- API admin `GET/POST/DELETE /api/admin/student-access` et zone **Accès apprentis** dans Administration → Classes.
+- Migration `0025_structured_student_access.sql`.
+
+### Modifié
+
+- `POST /api/auth/student` identifie la classe par le préfixe, puis vérifie uniquement le hash de son accès.
+- Session élève structurée (`schoolClassId`, `schoolYearId`, `accessVersion`).
+- Plus de stockage du secret dans `localStorage`, plus d’auto-login `?classe=<secret>`.
+- Backup/restore v4 étendu rétrocompatiblement (nouvelles colonnes optionnelles, jamais de plaintext).
+
+### Non inclus
+
+Pas de comptes élèves individuels, pas de copie d’année, pas de changement du mécanisme d’activation des SchoolYears, pas de parcours pédagogique ni de contrôles.
+
 ## [2.43.4] — Administration : sauvegarde et restauration en onglets
 
 Sauvegarde et restauration deviennent deux onglets Administration. Le choix de fichier de restauration est un vrai bouton.

@@ -13,7 +13,10 @@ export interface TeacherSession {
 export interface StudentSession {
   kind: "student";
   accessId: string;
+  accessVersion: number;
   classroomId: string;
+  schoolClassId: string;
+  schoolYearId: string;
   label: string;
   issuedAt: number;
 }
@@ -80,8 +83,8 @@ export interface AgendaStore {
   teacherCanAccessClassroom(teacherId: string, classroomId: string): Promise<boolean>;
   teacherCanPublish(teacherId: string, classroomId: string, subjectId: string): Promise<boolean>;
   teacherIsAdmin(teacherId: string): Promise<boolean>;
+  /** @deprecated L'authentification élève ne se fait plus par label. Conservé pour les tests de lecture. */
   resolveStudentAccess(label: string): Promise<{ id: string; classroomId: string; label: string } | undefined>;
-  /** Revalidation de session élève : l'accès doit encore exister et coller au classroomId du jeton. */
   findStudentAccessById(accessId: string): Promise<{ id: string; classroomId: string; label: string } | undefined>;
   /** Connexion enseignant par initiales (ChF) : renvoie l'identifiant interne. */
   findTeacherIdByInitials(initials: string): Promise<string | undefined>;

@@ -160,6 +160,11 @@ async function buildMemoryTables(deps: CampusBackupDeps): Promise<CampusTableDum
     classroom_id: entry.classroomId,
     label: entry.label,
     access_code_hash: entry.accessCodeHash ?? "",
+    school_class_id: entry.schoolClassId ?? null,
+    access_version: entry.accessVersion ?? 1,
+    created_at: entry.createdAt ?? null,
+    updated_at: entry.updatedAt ?? null,
+    revoked_at: entry.revokedAt ?? null,
   }));
   dump.memberships = memberships.map((entry) => ({
     id: entry.id,
@@ -565,6 +570,11 @@ async function restoreMemoryTables(deps: CampusBackupDeps, dump: CampusTableDump
       classroomId: asString(row.classroom_id ?? row.classroomId),
       label: asString(row.label),
       accessCodeHash: asNullableString(row.access_code_hash ?? row.accessCodeHash),
+      schoolClassId: asNullableString(row.school_class_id ?? row.schoolClassId),
+      accessVersion: asNumber(row.access_version ?? row.accessVersion, 1),
+      createdAt: asNullableString(row.created_at ?? row.createdAt),
+      updatedAt: asNullableString(row.updated_at ?? row.updatedAt),
+      revokedAt: asNullableString(row.revoked_at ?? row.revokedAt),
     })),
   });
 

@@ -37,6 +37,8 @@ export interface ApiStudentSession {
   classroomId: string;
   classroomName?: string;
   accessId?: string;
+  schoolClassId?: string;
+  schoolYearId?: string;
 }
 
 export type ApiSession = ApiTeacherSession | ApiStudentSession | null;

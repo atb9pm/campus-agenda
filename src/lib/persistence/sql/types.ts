@@ -46,5 +46,11 @@ export interface AgendaItemRow {
 export interface StudentAccessRow {
   id: string;
   classroom_id: string;
+  school_class_id?: string | null;
   label: string;
+  access_code_hash?: string | null;
+  access_version?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  revoked_at?: string | null;
 }

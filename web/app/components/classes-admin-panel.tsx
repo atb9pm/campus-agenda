@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import type {
   PedagogicalContextRecord,
@@ -26,6 +26,8 @@ import {
 } from "@campus/features/school-catalog";
 import { ClassCreationWizard } from "./class-creation-wizard.tsx";
 import type { SchoolYearSummary } from "../../lib/api-client.ts";
+import type { StudentAccessMetadata } from "@campus/types/student-access";
+import { StudentAccessAdminBlock } from "./student-access-admin.tsx";
 
 interface ClassEditDraft {
   classId: string;
@@ -73,6 +75,8 @@ export function ClassesAdminPanel({
   const [groupBy, setGroupBy] = useState<ClassGroupBy>("profession");
   const [classDraft, setClassDraft] = useState<ClassEditDraft | null>(null);
   const [pending, setPending] = useState(false);
+  const [accesses, setAccesses] = useState<Record<string, StudentAccessMetadata>>({});
+  const [revealedCodeByClass, setRevealedCodeByClass] = useState<Record<string, string>>({});
 
   const counts = useMemo(() => countClassesByStatus(classes), [classes]);
   const visibleClasses = useMemo(
@@ -90,10 +94,98 @@ export function ClassesAdminPanel({
     return map;
   }, [professions]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const response = await fetch("/api/admin/student-access", { credentials: "include" });
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        accesses?: StudentAccessMetadata[];
+      };
+      if (cancelled || !response.ok || !payload.ok) return;
+      const next: Record<string, StudentAccessMetadata> = {};
+      for (const access of payload.accesses ?? []) {
+        next[access.schoolClassId] = access;
+      }
+      setAccesses(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [classes]);
+
   const activeProfessions = useMemo(
     () => professions.filter((entry) => entry.isActive && !entry.isArchived),
     [professions],
   );
+
+  async function generateStudentAccess(entry: SchoolClassRecord, isRegenerate: boolean) {
+    const confirmMessage = isRegenerate
+      ? `Régénérer le code de ${entry.code} ?\nL’ancien code et les sessions élèves actuellement ouvertes seront immédiatement invalidés.`
+      : null;
+    if (confirmMessage && !window.confirm(confirmMessage)) return;
+    onClearError();
+    setPending(true);
+    try {
+      const response = await fetch("/api/admin/student-access", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schoolClassId: entry.id }),
+      });
+      const payload = (await response.json()) as {
+        ok: boolean;
+        reason?: string;
+        access?: StudentAccessMetadata;
+        code?: string;
+      };
+      if (!response.ok || !payload.ok || !payload.access || !payload.code) {
+        onError(payload.reason ?? "Génération impossible.");
+        return;
+      }
+      setAccesses((current) => ({ ...current, [entry.id]: payload.access! }));
+      setRevealedCodeByClass((current) => ({ ...current, [entry.id]: payload.code! }));
+      onNotice(isRegenerate ? `Nouveau code apprentis pour ${entry.code}.` : `Code apprentis généré pour ${entry.code}.`);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function revokeStudentAccess(entry: SchoolClassRecord) {
+    if (
+      !window.confirm(
+        `Désactiver l’accès apprentis de ${entry.code} ?\nLes élèves actuellement connectés seront déconnectés.`,
+      )
+    ) {
+      return;
+    }
+    onClearError();
+    setPending(true);
+    try {
+      const response = await fetch(`/api/admin/student-access?schoolClassId=${encodeURIComponent(entry.id)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const payload = (await response.json()) as {
+        ok: boolean;
+        reason?: string;
+        access?: StudentAccessMetadata;
+      };
+      if (!response.ok || !payload.ok || !payload.access) {
+        onError(payload.reason ?? "Désactivation impossible.");
+        return;
+      }
+      setAccesses((current) => ({ ...current, [entry.id]: payload.access! }));
+      setRevealedCodeByClass((current) => {
+        const next = { ...current };
+        delete next[entry.id];
+        return next;
+      });
+      onNotice(`Accès apprentis de ${entry.code} désactivé.`);
+    } finally {
+      setPending(false);
+    }
+  }
 
   async function patchClass(
     entry: SchoolClassRecord,
@@ -445,6 +537,24 @@ export function ClassesAdminPanel({
                               configurer
                             </p>
                           )}
+                          <StudentAccessAdminBlock
+                            schoolClass={entry}
+                            schoolYears={schoolYears}
+                            access={accesses[entry.id] ?? null}
+                            revealedCode={revealedCodeByClass[entry.id] ?? null}
+                            pending={pending}
+                            onGenerate={(schoolClass, isRegenerate) =>
+                              void generateStudentAccess(schoolClass, isRegenerate)
+                            }
+                            onRevoke={(schoolClass) => void revokeStudentAccess(schoolClass)}
+                            onDismissCode={() =>
+                              setRevealedCodeByClass((current) => {
+                                const next = { ...current };
+                                delete next[entry.id];
+                                return next;
+                              })
+                            }
+                          />
                         </div>
                       )}
                     </div>

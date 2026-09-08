@@ -64,11 +64,7 @@ const referenceDays = [mondayAll, thursdayB];
 
 test("version — dernière migration 0024", () => {
   assert.match(APP_VERSION, /^\d+\.\d+\.\d+$/);
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
-  assert.equal(
-    SQL_MIGRATION_FILES.some((file) => file.startsWith("0025")),
-    false,
-  );
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0025_structured_student_access.sql");
 });
 
 test("A — résumé PRIMARY Lundi all + ADDITIONAL Jeudi B → A = Lundi, B = Lundi + Jeudi", () => {

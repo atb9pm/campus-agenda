@@ -26,7 +26,10 @@ test("phase 0.7 — cookie de session extrait de la requête", async () => {
   const token = await createSessionToken({
     kind: "student",
     accessId: "student-access-demo-2a",
+    accessVersion: 1,
     classroomId: "classe-demo-tma-2a",
+    schoolClassId: "school-class-ma2",
+    schoolYearId: "year-active-test",
     label: "eleve-test-001",
     issuedAt: Date.now(),
   });
@@ -82,7 +85,10 @@ test("phase 1.0 — permissions de lecture classe asynchrones", async () => {
   const session = await createSessionToken({
     kind: "student",
     accessId: "student-access-demo-2a",
+    accessVersion: 1,
     classroomId: "classe-demo-tma-2a",
+    schoolClassId: "school-class-ma2",
+    schoolYearId: "year-active-test",
     label: "eleve-test-001",
     issuedAt: Date.now(),
   });

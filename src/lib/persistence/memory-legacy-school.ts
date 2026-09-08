@@ -9,7 +9,12 @@ import type { Membership } from "../../types/membership.ts";
 import type { StudentAccess } from "../../types/student-access.ts";
 
 export interface LegacyStudentAccess extends StudentAccess {
+  schoolClassId?: string | null;
   accessCodeHash?: string | null;
+  accessVersion?: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  revokedAt?: string | null;
 }
 
 interface LegacySchoolState {

@@ -2,14 +2,11 @@ export type LoginTab = "student" | "teacher";
 
 export const DEFAULT_LOGIN_TAB: LoginTab = "student";
 
-/** Dernier code de classe utilisé sur cet appareil, pour éviter de le retaper. */
-export const LAST_STUDENT_CODE_KEY = "campus-last-student-code";
-
 /** Dernières initiales utilisées sur cet appareil. */
 export const LAST_TEACHER_INITIALS_KEY = "campus-last-teacher-initials";
 
 export function normalizeStudentCode(raw: string): string {
-  return raw.trim().toLowerCase();
+  return raw.trim().toUpperCase().replace(/\s+/g, "");
 }
 
 export function normalizeTeacherInitials(raw: string): string {
@@ -17,8 +14,8 @@ export function normalizeTeacherInitials(raw: string): string {
 }
 
 /**
- * Lien direct par classe : `?classe=ma2` ouvre l'agenda sans rien taper.
- * `class` est accepté pour les liens rédigés en anglais.
+ * `?classe=` n'est plus un secret d'authentification.
+ * Conservé uniquement comme préfixe public éventuel ; il ne suffit jamais à ouvrir l'agenda.
  */
 export function readClassCodeFromQuery(search: string): string | null {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);

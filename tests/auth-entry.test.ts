@@ -21,18 +21,18 @@ test("page d'entrée — l'onglet élève est proposé par défaut", () => {
   assert.equal(DEFAULT_LOGIN_TAB, "student");
 });
 
-test("lien de classe — ?classe=MA2 est reconnu et normalisé", () => {
-  assert.equal(readClassCodeFromQuery("?classe=eleve-ma2"), "eleve-ma2");
-  assert.equal(readClassCodeFromQuery("?classe=%20ELEVE-MA2%20"), "eleve-ma2");
-  assert.equal(readClassCodeFromQuery("classe=eleve-ma2"), "eleve-ma2");
-  assert.equal(readClassCodeFromQuery("?class=eleve-mma3a"), "eleve-mma3a");
+test("lien de classe — ?classe= n'est plus un secret, seulement un préfixe public", () => {
+  assert.equal(readClassCodeFromQuery("?classe=eleve-ma2"), "ELEVE-MA2");
+  assert.equal(readClassCodeFromQuery("?classe=%20ELEVE-MA2%20"), "ELEVE-MA2");
+  assert.equal(readClassCodeFromQuery("classe=eleve-ma2"), "ELEVE-MA2");
+  assert.equal(readClassCodeFromQuery("?class=eleve-mma3a"), "ELEVE-MMA3A");
   assert.equal(readClassCodeFromQuery("?autre=1"), null);
   assert.equal(readClassCodeFromQuery("?classe="), null);
   assert.equal(readClassCodeFromQuery(""), null);
 });
 
-test("saisies — code en minuscules, initiales inchangées", () => {
-  assert.equal(normalizeStudentCode("  ELEVE-MA2 "), "eleve-ma2");
+test("saisies — code normalisé en majuscules, initiales inchangées", () => {
+  assert.equal(normalizeStudentCode("  ELEVE-MA2 "), "ELEVE-MA2");
   assert.equal(normalizeTeacherInitials("  ChF "), "ChF");
 });
 

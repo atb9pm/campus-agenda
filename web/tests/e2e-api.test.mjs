@@ -8,6 +8,7 @@ process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
 // Les tests E2E enchaînent plusieurs connexions enseignant ; le plafond 10/min
 // ferait échouer les scénarios ajoutés en fin de fichier.
 process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER ??= "50";
+process.env.CAMPUS_AUTH_RATE_LIMIT_STUDENT ??= "50";
 
 const env = {
   ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
@@ -49,6 +50,37 @@ async function loginTeacher(teacherId) {
 /** Administrateur réel du seed (ChF), pas l'enseignant démo historique. */
 function loginAdmin() {
   return loginTeacher("teacher-chf");
+}
+
+async function loginGeneratedStudent() {
+  const adminCookie = await loginAdmin();
+  const catalogResponse = await request("/api/admin/catalog", { headers: { cookie: adminCookie } });
+  const catalog = await catalogResponse.json();
+  const yearsResponse = await request("/api/admin/school-year", { headers: { cookie: adminCookie } });
+  const yearsPayload = await yearsResponse.json();
+  const active = (yearsPayload.years ?? []).find((year) => year.status === "active");
+  const schoolClass = (catalog.classes ?? []).find(
+    (entry) => entry.schoolYearId === active?.id && entry.isActive && !entry.isArchived,
+  );
+  assert.ok(schoolClass, "une classe rattachée à l'année active est requise");
+  const generated = await request("/api/admin/student-access", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: adminCookie },
+    body: JSON.stringify({ schoolClassId: schoolClass.id }),
+  });
+  const genPayload = await generated.json();
+  assert.equal(generated.status, 200, genPayload.reason ?? "génération accès apprentis");
+  const studentLogin = await request("/api/auth/student", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code: genPayload.code }),
+  });
+  assert.equal(studentLogin.status, 200, await studentLogin.text());
+  return {
+    cookie: extractCookie(studentLogin),
+    classroomId: genPayload.access.classroomId,
+    code: genPayload.code,
+  };
 }
 
 test("phase 0.8 — E2E health check", async () => {
@@ -98,20 +130,33 @@ test("phase 0.8 — E2E enseignant publie puis élève consulte", async () => {
   assert.ok(Array.isArray(backupPayload.snapshot.teacherNotes));
   assert.ok(Array.isArray(backupPayload.snapshot.teacherAccounts));
 
-  const studentLogin = await request("/api/auth/student", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code: "eleve-test-001" }),
+  const student = await loginGeneratedStudent();
+  const otherClassroom = await request("/api/agenda?classroomId=classe-demo-tma-2a", {
+    headers: { cookie: student.cookie },
   });
-  assert.equal(studentLogin.status, 200);
-  const studentCookie = extractCookie(studentLogin);
+  assert.equal(otherClassroom.status, 401);
 
-  const agendaResponse = await request("/api/agenda?classroomId=classe-demo-tma-2a", {
-    headers: { cookie: studentCookie },
+  const ownAgenda = await request(`/api/agenda?classroomId=${encodeURIComponent(student.classroomId)}`, {
+    headers: { cookie: student.cookie },
   });
-  assert.equal(agendaResponse.status, 200);
-  const agendaPayload = await agendaResponse.json();
-  assert.ok(agendaPayload.items.some((item) => item.title === "E2E devoir"));
+  assert.equal(ownAgenda.status, 200);
+
+  const studentMutation = await request("/api/agenda", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: student.cookie },
+    body: JSON.stringify({
+      classroomId: student.classroomId,
+      subjectId: "subject-demo-moteur-2a",
+      day: 3,
+      hour: 10,
+      weekOffset: 0,
+      schoolWeekNumber: 12,
+      type: "HOMEWORK",
+      title: "Interdit",
+      detail: "Élève",
+    }),
+  });
+  assert.equal(studentMutation.status, 401);
 
   const deleteResponse = await request(`/api/agenda/${created.item.id}`, {
     method: "DELETE",
@@ -366,14 +411,9 @@ test("2.24.0 — E2E Mes cours : session uniquement, teacherId client ignoré", 
   assert.ok(Array.isArray(payload.courses));
   assert.ok("schoolYearId" in payload);
 
-  const studentLogin = await request("/api/auth/student", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code: "eleve-test-001" }),
-  });
-  assert.equal(studentLogin.status, 200);
+  const student = await loginGeneratedStudent();
   const studentForbidden = await request("/api/teacher/courses", {
-    headers: { cookie: extractCookie(studentLogin) },
+    headers: { cookie: student.cookie },
   });
   assert.equal(studentForbidden.status, 401);
 });
@@ -554,14 +594,9 @@ test("2.32.0 — E2E planning des contrôles : session, années, 403, TEST", asy
   const anon = await request("/api/teacher/controls/planning");
   assert.equal(anon.status, 401);
 
-  const studentLogin = await request("/api/auth/student", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code: "eleve-test-001" }),
-  });
-  assert.equal(studentLogin.status, 200);
+  const student = await loginGeneratedStudent();
   const studentForbidden = await request("/api/teacher/controls/planning", {
-    headers: { cookie: extractCookie(studentLogin) },
+    headers: { cookie: student.cookie },
   });
   assert.equal(studentForbidden.status, 401);
 

@@ -726,6 +726,10 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .admin-class-pedagogy select { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); background: #fff; font-size: 11px; }
 .admin-class-config-warn { color: #b54708; font-size: 10px; font-weight: 700; }
 .admin-class-config-ok { color: #027a48; font-size: 10px; font-weight: 700; }
+.admin-student-access { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); display: grid; gap: 8px; }
+.admin-student-access-title { margin: 0; color: #516582; font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.admin-student-access-status { display: grid; gap: 4px; }
+.admin-student-access-status p { margin: 0; color: #667085; font-size: 11px; line-height: 1.4; }
 .admin-admin-code { margin: 4px 0 0; color: #98a2b3; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; letter-spacing: .04em; }
 .admin-code-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
 .admin-code-row .admin-admin-code { margin: 0; }

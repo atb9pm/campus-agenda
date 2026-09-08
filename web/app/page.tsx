@@ -70,7 +70,6 @@ import {
 } from "../lib/api-client.ts";
 import { APP_VERSION } from "@campus/lib/app-version";
 import {
-  LAST_STUDENT_CODE_KEY,
   LAST_TEACHER_INITIALS_KEY,
   authenticatedTeacherFromSession,
   profileDiscInitials,
@@ -670,7 +669,6 @@ export default function Home() {
       try {
         const session = await loginStudentApi(code);
         const access = studentAccessFromApiSession(session);
-        writeStoredValue(LAST_STUDENT_CODE_KEY, code.trim().toLowerCase());
         setStudentSession(access);
         setStudentClassroomName(session.classroomName ?? "");
         setSelectedClassroomId(session.classroomId);
@@ -1328,8 +1326,12 @@ export default function Home() {
           <section className="technical-modal" role="dialog" aria-modal="true" aria-labelledby="student-code-title">
             <header><div><span className="eyebrow">ESPACE ÉLÈVE</span><h2 id="student-code-title">Connexion anonyme</h2></div><button onClick={() => setStudentCodeModalOpen(false)}>×</button></header>
             <form onSubmit={(event) => { event.preventDefault(); enterStudentWithCode(String(new FormData(event.currentTarget).get("code") || "")); }}>
-              <label>Identifiant élève<input name="code" placeholder="eleve-ma2" required /></label>
-              <p className="modal-hint">Exemples&nbsp;: <strong>eleve-ma2</strong>, <strong>eleve-mma3a</strong>, <strong>eleve-pai</strong> (une classe de test par code).</p>
+              <label>Code de classe<input name="code" placeholder="MECAUTO3A-K7M4-R2P8" required autoComplete="off" /></label>
+              {process.env.NODE_ENV === "development" ? (
+                <p className="modal-hint">Les codes apprentis se génèrent dans Administration → Classes.</p>
+              ) : (
+                <p className="modal-hint">Saisissez le code communiqué par l’administrateur. Il n’est jamais enregistré sur cet appareil.</p>
+              )}
               <footer><button type="button" onClick={() => setStudentCodeModalOpen(false)}>Annuler</button><button type="submit">Consulter mon agenda</button></footer>
             </form>
           </section>
