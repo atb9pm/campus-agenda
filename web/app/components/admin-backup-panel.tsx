@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   BACKUP_ERROR_MESSAGE,
@@ -26,7 +26,7 @@ import {
 type BackupPhase = "idle" | "pending" | "success" | "error";
 type RestorePhase = "idle" | "pending" | "success" | "error";
 
-export function AdminBackupPanel() {
+export function AdminBackupPanel({ mode }: { mode: "download" | "restore" }) {
   const [phase, setPhase] = useState<BackupPhase>("idle");
   const [restorePhase, setRestorePhase] = useState<RestorePhase>("idle");
   const [fileError, setFileError] = useState<string | null>(null);
@@ -36,6 +36,7 @@ export function AdminBackupPanel() {
   const [successDateLabel, setSuccessDateLabel] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function clearSelectedSnapshot() {
     setSnapshot(null);
@@ -143,103 +144,120 @@ export function AdminBackupPanel() {
   const canConfirm = isRestoreConfirmToken(confirmText) && restorePhase !== "pending";
   const dateLabel = meta?.exportedAtLabel ?? successDateLabel ?? "date inconnue";
 
+  if (mode === "download") {
+    return (
+      <section className="admin-panel-block admin-backup-block" aria-label="Sauvegarde des données">
+        <header className="config-section-header">
+          <div>
+            <h3>Sauvegarde des données</h3>
+            <p>Télécharge une copie complète des données actuelles de Campus Agenda.</p>
+          </div>
+        </header>
+        <button
+          type="button"
+          className="workspace-action"
+          data-admin-backup=""
+          disabled={phase === "pending"}
+          aria-busy={phase === "pending"}
+          onClick={() => {
+            void downloadBackup();
+          }}
+        >
+          {phase === "pending" ? BACKUP_PENDING_MESSAGE : "Télécharger une sauvegarde"}
+        </button>
+        {phase === "success" ? (
+          <p className="admin-backup-status is-success" role="status">
+            {BACKUP_SUCCESS_MESSAGE}
+          </p>
+        ) : null}
+        {phase === "error" ? (
+          <p className="admin-backup-status is-error" role="alert">
+            {BACKUP_ERROR_MESSAGE}
+          </p>
+        ) : null}
+      </section>
+    );
+  }
+
   return (
-    <section className="admin-panel-block admin-backup-block" aria-label="Sauvegarde des données">
+    <section className="admin-panel-block admin-backup-block" aria-label="Restaurer une sauvegarde" data-admin-restore="">
       <header className="config-section-header">
         <div>
-          <h3>Sauvegarde des données</h3>
-          <p>Télécharge une copie complète des données actuelles de Campus Agenda.</p>
+          <h3>Restaurer une sauvegarde</h3>
+          <p>Restaure les données de Campus Agenda à l’état contenu dans une sauvegarde précédente.</p>
         </div>
       </header>
+      <input
+        ref={fileInputRef}
+        id="admin-restore-file"
+        className="admin-restore-file-input"
+        type="file"
+        accept=".json,application/json"
+        data-admin-restore-file=""
+        disabled={restorePhase === "pending"}
+        onChange={(event) => {
+          const file = event.target.files?.[0] ?? null;
+          event.target.value = "";
+          void onBackupFileChosen(file);
+        }}
+      />
       <button
         type="button"
         className="workspace-action"
-        data-admin-backup=""
-        disabled={phase === "pending"}
-        aria-busy={phase === "pending"}
-        onClick={() => {
-          void downloadBackup();
-        }}
+        data-admin-restore-pick=""
+        disabled={restorePhase === "pending"}
+        onClick={() => fileInputRef.current?.click()}
       >
-        {phase === "pending" ? BACKUP_PENDING_MESSAGE : "Télécharger une sauvegarde"}
+        Choisir un fichier de sauvegarde
       </button>
-      {phase === "success" ? (
-        <p className="admin-backup-status is-success" role="status">
-          {BACKUP_SUCCESS_MESSAGE}
-        </p>
-      ) : null}
-      {phase === "error" ? (
+      {fileError ? (
         <p className="admin-backup-status is-error" role="alert">
-          {BACKUP_ERROR_MESSAGE}
+          {fileError}
         </p>
       ) : null}
-
-      <div className="admin-restore-zone" data-admin-restore="">
-        <h4>Restaurer une sauvegarde</h4>
-        <p>Restaure les données de Campus Agenda à l’état contenu dans une sauvegarde précédente.</p>
-        <label className="admin-restore-file">
-          Choisir un fichier de sauvegarde
-          <input
-            type="file"
-            accept=".json,application/json"
-            data-admin-restore-file=""
-            disabled={restorePhase === "pending"}
-            onChange={(event) => {
-              const file = event.target.files?.[0] ?? null;
-              event.target.value = "";
-              void onBackupFileChosen(file);
-            }}
-          />
-        </label>
-        {fileError ? (
-          <p className="admin-backup-status is-error" role="alert">
-            {fileError}
-          </p>
-        ) : null}
-        {meta ? (
-          <div className="admin-restore-meta" data-admin-restore-meta="">
-            <dl>
-              <dt>Fichier</dt>
-              <dd>{meta.fileName}</dd>
-              <dt>Date de la sauvegarde</dt>
-              <dd>{meta.exportedAtLabel}</dd>
-              <dt>Version du format</dt>
-              <dd>{meta.versionLabel}</dd>
-              {meta.itemCount != null ? (
-                <>
-                  <dt>Éléments</dt>
-                  <dd>{meta.itemCount}</dd>
-                </>
-              ) : null}
-            </dl>
-            {meta.isLegacy ? (
-              <p className="admin-restore-legacy" role="note" data-admin-restore-legacy="">
-                {LEGACY_BACKUP_FILE_NOTICE}
-              </p>
+      {meta ? (
+        <div className="admin-restore-meta" data-admin-restore-meta="">
+          <dl>
+            <dt>Fichier</dt>
+            <dd>{meta.fileName}</dd>
+            <dt>Date de la sauvegarde</dt>
+            <dd>{meta.exportedAtLabel}</dd>
+            <dt>Version du format</dt>
+            <dd>{meta.versionLabel}</dd>
+            {meta.itemCount != null ? (
+              <>
+                <dt>Éléments</dt>
+                <dd>{meta.itemCount}</dd>
+              </>
             ) : null}
-          </div>
-        ) : null}
-        <button
-          type="button"
-          className="workspace-action is-danger"
-          data-admin-restore-open=""
-          disabled={!canRestore}
-          onClick={openRestoreModal}
-        >
-          Restaurer cette sauvegarde
-        </button>
-        {restorePhase === "success" ? (
-          <div className="admin-restore-success" role="status">
-            <p className="admin-backup-status is-success">{RESTORE_SUCCESS_TITLE}</p>
-            <p>{restoreSuccessDetail(dateLabel)}</p>
-          </div>
-        ) : null}
-        {restoreError ? (
-          <p className="admin-backup-status is-error" role="alert">
-            {restoreError}
-          </p>
-        ) : null}
-      </div>
+          </dl>
+          {meta.isLegacy ? (
+            <p className="admin-restore-legacy" role="note" data-admin-restore-legacy="">
+              {LEGACY_BACKUP_FILE_NOTICE}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      <button
+        type="button"
+        className="workspace-action is-danger"
+        data-admin-restore-open=""
+        disabled={!canRestore}
+        onClick={openRestoreModal}
+      >
+        Restaurer cette sauvegarde
+      </button>
+      {restorePhase === "success" ? (
+        <div className="admin-restore-success" role="status">
+          <p className="admin-backup-status is-success">{RESTORE_SUCCESS_TITLE}</p>
+          <p>{restoreSuccessDetail(dateLabel)}</p>
+        </div>
+      ) : null}
+      {restoreError ? (
+        <p className="admin-backup-status is-error" role="alert">
+          {restoreError}
+        </p>
+      ) : null}
 
       {modalOpen ? (
         <div className="technical-modal-backdrop" role="presentation">

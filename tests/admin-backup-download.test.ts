@@ -14,8 +14,8 @@ import { APP_VERSION } from "../src/lib/app-version.ts";
 import { backupDownloadFilename } from "../src/lib/persistence/backup.ts";
 import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 
-test("version 2.43.3 — sauvegarde admin manuelle, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.43.3");
+test("version 2.43.4 — sauvegarde admin manuelle, pas de migration", async () => {
+  assert.equal(APP_VERSION, "2.43.4");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
 
   const panel = await readFile(new URL("../web/app/components/admin-backup-panel.tsx", import.meta.url), "utf8");
@@ -29,7 +29,13 @@ test("version 2.43.3 — sauvegarde admin manuelle, pas de migration", async () 
   assert.match(route, /exportStoreSnapshot/);
   assert.match(route, /method: "GET"|export const GET/);
   assert.match(restore, /requireAdminSession/);
-  assert.match(admin, /<AdminBackupPanel/);
+  assert.match(admin, /<AdminBackupPanel mode="download"/);
+  assert.match(admin, /<AdminBackupPanel mode="restore"/);
+  assert.match(admin, /backup: "Sauvegarde des données"/);
+  assert.match(admin, /restore: "Restaurer une sauvegarde"/);
+  assert.doesNotMatch(admin, /Référentiel pédagogique/);
+  const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /\.admin-workspace \.admin-tabs \{[^}]*flex-wrap: nowrap/);
   assert.match(panel, /Sauvegarde des données/);
   assert.match(panel, /Télécharge une copie complète des données actuelles de Campus Agenda/);
   assert.match(panel, /Télécharger une sauvegarde/);

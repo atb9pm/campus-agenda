@@ -2,6 +2,20 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.43.4] — Administration : sauvegarde et restauration en onglets
+
+Sauvegarde et restauration deviennent deux onglets Administration. Le choix de fichier de restauration est un vrai bouton.
+
+### Modifié
+
+- Onglets **Sauvegarde des données** et **Restaurer une sauvegarde** à la fin de la barre d’onglets, sur **une seule ligne**.
+- Bouton **Choisir un fichier de sauvegarde** (plus d’affichage natif « Aucun fichier n’a été sélectionné »).
+- Le bloc « Référentiel pédagogique » n’occupe plus le haut de page.
+
+### Non inclus
+
+Aucune migration SQL. La logique de restauration sécurisée (backup préalable, `RESTAURER`) est inchangée.
+
 ## [2.43.3] — Administration : restauration sécurisée des sauvegardes
 
 L’administrateur peut restaurer Campus Agenda depuis un fichier JSON, après une sauvegarde de sécurité automatique et une confirmation `RESTAURER`.
