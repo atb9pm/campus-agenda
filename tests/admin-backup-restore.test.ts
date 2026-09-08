@@ -45,10 +45,9 @@ const RAW_V3 = {
   items: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }],
 };
 
-test("version 2.43.4 — restauration admin sécurisée, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.43.4");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
-  assert.equal(SQL_MIGRATION_FILES.some((file) => file.startsWith("0025")), false);
+test("version 2.44.0 — restauration admin sécurisée", async () => {
+  assert.equal(APP_VERSION, "2.44.0");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0025_structured_student_access.sql");
   assert.deepEqual([...COMPATIBLE_BACKUP_VERSIONS], [1, 2, 3, 4]);
 
   const panel = await readFile(new URL("../web/app/components/admin-backup-panel.tsx", import.meta.url), "utf8");

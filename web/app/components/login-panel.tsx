@@ -4,9 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 
 import {
   DEFAULT_LOGIN_TAB,
-  LAST_STUDENT_CODE_KEY,
   LAST_TEACHER_INITIALS_KEY,
-  readClassCodeFromQuery,
   readStoredValue,
   type LoginTab,
 } from "@campus/features/auth-entry";
@@ -20,6 +18,8 @@ interface LoginPanelProps {
   onTeacherSubmit: (initials: string, password: string, remember: boolean) => void;
 }
 
+const SHOW_DEMO_STUDENT_CODES = process.env.NODE_ENV === "development";
+
 export function LoginPanel({
   appVersion,
   pending,
@@ -32,23 +32,14 @@ export function LoginPanel({
   const [studentCode, setStudentCode] = useState("");
   const [initials, setInitials] = useState("");
   const [remember, setRemember] = useState(true);
-  const [autoSubmitted, setAutoSubmitted] = useState(false);
 
-  // L'URL et le stockage local n'existent pas au rendu serveur : la reprise des
-  // valeurs mémorisées ne peut se faire qu'après montage.
-  /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
+  // Le stockage local n'existe pas au rendu serveur : la reprise des initiales
+  // enseignant ne peut se faire qu'après montage. Le code apprentis n'est jamais mémorisé.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    const fromLink = readClassCodeFromQuery(window.location.search);
-    setStudentCode(fromLink ?? readStoredValue(LAST_STUDENT_CODE_KEY) ?? "");
     setInitials(readStoredValue(LAST_TEACHER_INITIALS_KEY) ?? "");
-
-    // Lien de classe partagé : l'élève n'a rien à saisir.
-    if (fromLink && !autoSubmitted) {
-      setAutoSubmitted(true);
-      onStudentSubmit(fromLink);
-    }
   }, []);
-  /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   function submitStudent(event: FormEvent) {
     event.preventDefault();
@@ -107,17 +98,25 @@ export function LoginPanel({
                     name="code"
                     value={studentCode}
                     onChange={(event) => setStudentCode(event.target.value)}
-                    placeholder="ma2"
+                    placeholder="MECAUTO3A-K7M4-R2P8"
                     autoComplete="off"
                     autoCapitalize="none"
                     spellCheck={false}
                     required
+                    aria-invalid={studentError ? true : undefined}
+                    aria-describedby={studentError ? "student-login-error" : undefined}
                   />
                 </label>
-                <p className="teacher-login-hint">
-                  Codes de démonstration&nbsp;: <strong>eleve-ma2</strong>, <strong>eleve-mma3a</strong>.
-                </p>
-                {studentError && <p className="teacher-login-error" role="alert">{studentError}</p>}
+                {SHOW_DEMO_STUDENT_CODES ? (
+                  <p className="teacher-login-hint">
+                    Environnement de développement : les codes se génèrent dans Administration → Classes.
+                  </p>
+                ) : null}
+                {studentError && (
+                  <p className="teacher-login-error" id="student-login-error" role="alert">
+                    {studentError}
+                  </p>
+                )}
                 <button type="submit" disabled={pending}>
                   {pending ? "Ouverture…" : "Voir mon agenda"}
                 </button>

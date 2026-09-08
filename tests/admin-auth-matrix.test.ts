@@ -72,7 +72,10 @@ test("session élève révoquée après suppression de l'accès", async () => {
   const session = {
     kind: "student" as const,
     accessId: "student-access-demo-2a",
+    accessVersion: 1,
     classroomId: "classe-demo-tma-2a",
+    schoolClassId: "school-class-ma2",
+    schoolYearId: "year-active-test",
     label: "eleve-test-001",
     issuedAt: Date.now(),
   };

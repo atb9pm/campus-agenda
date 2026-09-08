@@ -254,10 +254,10 @@ function slot(
   return { dayOfWeek, weekKind };
 }
 
-test("version — jours de présence, 0023 puis 0024, pas de 0025", () => {
+test("version — jours de présence, 0023 puis 0024 puis 0025", () => {
   assert.match(APP_VERSION, /^\d+\.\d+\.\d+$/);
   assert.ok(SQL_MIGRATION_FILES.includes("0022_course_schedule_slots.sql"));
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0025_structured_student_access.sql");
   assert.ok(
     SQL_MIGRATION_FILES.indexOf("0022_course_schedule_slots.sql") <
       SQL_MIGRATION_FILES.indexOf("0023_class_attendance_days.sql"),
@@ -266,9 +266,9 @@ test("version — jours de présence, 0023 puis 0024, pas de 0025", () => {
     SQL_MIGRATION_FILES.indexOf("0023_class_attendance_days.sql") <
       SQL_MIGRATION_FILES.indexOf("0024_structured_agenda_bridge.sql"),
   );
-  assert.equal(
-    SQL_MIGRATION_FILES.some((file) => file.startsWith("0025")),
-    false,
+  assert.ok(
+    SQL_MIGRATION_FILES.indexOf("0024_structured_agenda_bridge.sql") <
+      SQL_MIGRATION_FILES.indexOf("0025_structured_student_access.sql"),
   );
 });
 

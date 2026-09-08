@@ -20,7 +20,10 @@ test("phase 0.7 — flux élève : session signée puis lecture agenda", async (
   const token = await createSessionToken({
     kind: "student",
     accessId: access.id,
+    accessVersion: 1,
     classroomId: access.classroomId,
+    schoolClassId: "school-class-ma2",
+    schoolYearId: "year-active-test",
     label: access.label,
     issuedAt: Date.now(),
   });

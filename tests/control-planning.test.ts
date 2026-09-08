@@ -146,7 +146,7 @@ function planningDeps(items: PrototypeAgendaItem[] = DEMO_PROTOTYPE_ITEMS): Cont
 }
 
 test("version 2.38.0 — planning semestriel, sans table dédiée", () => {
-  assert.equal(APP_VERSION, "2.43.4");
+  assert.equal(APP_VERSION, "2.44.0");
   assert.equal(TEACHER_NAV_LABELS.controles, "Contrôles");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",
@@ -157,8 +157,7 @@ test("version 2.38.0 — planning semestriel, sans table dédiée", () => {
   ]);
   assert.equal(formatControlPlanningYearLabel("2026-2027"), "2026–2027");
   assert.equal(formatControlTeacherName("François Martin", "FM"), "F. Martin");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
-  assert.equal(SQL_MIGRATION_FILES.some((file) => file.startsWith("0025")), false);
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0025_structured_student_access.sql");
   assert.equal(TEST_ALERT_THRESHOLD, 3);
 });
 

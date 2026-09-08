@@ -50,6 +50,9 @@ import type { CourseScheduleStore } from "./course-schedule-types.ts";
 import { getMemoryCourseScheduleStore, MemoryCourseScheduleStore } from "./memory-course-schedule-store.ts";
 import { SqlCourseScheduleStore } from "./sql/sql-course-schedule-store.ts";
 
+import type { StudentAccessStore } from "./student-access-types.ts";
+import { getMemoryStudentAccessStore } from "./memory-student-access-store.ts";
+import { SqlStudentAccessStore } from "./sql/sql-student-access-store.ts";
 import { setActiveSchoolWeekEntries } from "../../features/calendar/active-calendar.ts";
 
 export { APP_VERSION } from "../app-version.ts";
@@ -68,6 +71,7 @@ interface ResolvedStore {
   annualCourseNotesStore: AnnualCourseNotesStore;
   annualCourseStore: AnnualCourseStore;
   courseScheduleStore: CourseScheduleStore;
+  studentAccessStore: StudentAccessStore;
   kind: StoreKind;
   sqlDb: import("./sql/types.ts").SqlDatabase | null;
   classroomExists: (classroomId: string) => Promise<boolean>;
@@ -191,6 +195,7 @@ async function createStore(): Promise<ResolvedStore> {
       annualCourseNotesStore,
       annualCourseStore,
       courseScheduleStore,
+      studentAccessStore: getMemoryStudentAccessStore(),
       kind: "memory",
       sqlDb: null,
       adapters: getMemoryRuntimeAgendaAdapterStore(),
@@ -229,6 +234,7 @@ async function createStore(): Promise<ResolvedStore> {
       annualCourseNotesStore,
       annualCourseStore,
       courseScheduleStore,
+      studentAccessStore: new SqlStudentAccessStore(sqlite),
       kind: "sqlite",
       sqlDb: sqlite,
       adapters: new SqlRuntimeAgendaAdapterStore(sqlite),
@@ -270,6 +276,7 @@ async function createStore(): Promise<ResolvedStore> {
         annualCourseNotesStore,
         annualCourseStore,
         courseScheduleStore,
+        studentAccessStore: new SqlStudentAccessStore(db),
         kind: "d1",
         sqlDb: db,
         adapters: new SqlRuntimeAgendaAdapterStore(db),
@@ -309,6 +316,7 @@ async function createStore(): Promise<ResolvedStore> {
     annualCourseNotesStore,
     annualCourseStore,
     courseScheduleStore,
+    studentAccessStore: getMemoryStudentAccessStore(),
     kind: "memory",
     sqlDb: null,
     adapters: getMemoryRuntimeAgendaAdapterStore(),
@@ -385,6 +393,10 @@ export async function getAnnualCourseStore(): Promise<AnnualCourseStore> {
 
 export async function getCourseScheduleStore(): Promise<CourseScheduleStore> {
   return (await resolveAgendaStore()).courseScheduleStore;
+}
+
+export async function getStudentAccessStore(): Promise<StudentAccessStore> {
+  return (await resolveAgendaStore()).studentAccessStore;
 }
 
 export async function getStoreKind(): Promise<StoreKind> {

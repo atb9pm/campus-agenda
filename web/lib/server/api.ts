@@ -10,7 +10,7 @@ import {
   revalidateLiveSession,
   unauthorizedResponse,
 } from "@campus/lib/auth/index.ts";
-import { checkClassroomExists, getAgendaStore, getAnnualCourseNotesStore, getAnnualCourseStore, getCourseScheduleStore, getMembershipStore, getPedagogicalPathStore, getRuntimeAgendaAdapterStore, getSchoolCatalogStore, getSchoolYearStore, getTeacherAccountStore, getTeacherNotesStore as resolveTeacherNotesStore, getTeacherSetupStore, getTemplateStore, resolveClassroomSubjectNames } from "@campus/lib/persistence/store-factory.ts";
+import { checkClassroomExists, getAgendaStore, getAnnualCourseNotesStore, getAnnualCourseStore, getCourseScheduleStore, getMembershipStore, getPedagogicalPathStore, getRuntimeAgendaAdapterStore, getSchoolCatalogStore, getSchoolYearStore, getStudentAccessStore, getTeacherAccountStore, getTeacherNotesStore as resolveTeacherNotesStore, getTeacherSetupStore, getTemplateStore, resolveClassroomSubjectNames } from "@campus/lib/persistence/store-factory.ts";
 import { resolveAnnualCourseForPublication } from "@campus/features/annual-courses/index.ts";
 import { validateAgendaScheduleTarget } from "@campus/features/agenda/schedule-target.ts";
 import type { AnnualCourseServiceDeps } from "@campus/features/annual-courses/index.ts";
@@ -29,16 +29,31 @@ import { isoDateForSchoolWeekDay } from "@campus/features/school-days/index.ts";
 import { evaluateAgendaBranchForClass, assertAgendaClassMutable } from "@campus/features/school-catalog/index.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import { ARCHIVED_YEAR_READONLY_REASON, getArchivedYearIds, isArchivedYearItem } from "@campus/features/school-year/archived-readonly.ts";
+import { revalidateStructuredStudentSession } from "@campus/features/student-access/index.ts";
 import type { AppSession } from "@campus/lib/persistence/types.ts";
 
 export async function getRequestSession(request: Request): Promise<AppSession | null> {
   const parsed = await parseSessionToken(readSessionTokenFromRequest(request));
   if (!parsed) return null;
-  const accounts = await getTeacherAccountStore();
-  const store = await getAgendaStore();
+  const [accounts, accesses, catalog, years, adapters] = await Promise.all([
+    getTeacherAccountStore(),
+    getStudentAccessStore(),
+    getSchoolCatalogStore(),
+    getSchoolYearStore(),
+    getRuntimeAgendaAdapterStore(),
+  ]);
   return revalidateLiveSession(parsed, {
     findAccount: (teacherId) => accounts.findAccount(teacherId),
-    findStudentAccessById: (accessId) => store.findStudentAccessById(accessId),
+    revalidateStudent: (session) =>
+      revalidateStructuredStudentSession(session, {
+        getAccessById: (accessId) => accesses.getById(accessId),
+        getSchoolClassById: async (schoolClassId) => {
+          const classes = await catalog.listClasses();
+          return classes.find((entry) => entry.id === schoolClassId) ?? null;
+        },
+        getActiveSchoolYear: () => years.getActiveSchoolYear(),
+        findClassroomBySchoolClassId: (schoolClassId) => adapters.findClassroomBySchoolClassId(schoolClassId),
+      }),
   });
 }
 
