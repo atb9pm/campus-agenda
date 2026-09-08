@@ -7,3 +7,32 @@ export {
   isUsableBackupPayload,
   triggerJsonFileDownload,
 } from "./download-backup.ts";
+export {
+  COMPATIBLE_BACKUP_VERSIONS,
+  CURRENT_BACKUP_FORMAT_VERSION,
+  INVALID_BACKUP_FILE_MESSAGE,
+  LEGACY_BACKUP_FILE_NOTICE,
+  backupFormatVersionLabel,
+  countSnapshotElements,
+  extractBackupSnapshot,
+  formatBackupExportedAt,
+  isCompatibleBackupVersion,
+  isLegacyBackupVersion,
+  parseBackupFile,
+  type BackupFileMeta,
+  type ParsedBackupFile,
+} from "./parse-backup-file.ts";
+export {
+  RESTORE_CONFIRM_TOKEN,
+  RESTORE_FAILED_MESSAGE,
+  RESTORE_LOSS_WARNING,
+  RESTORE_SAFETY_BACKUP_FAILED_MESSAGE,
+  RESTORE_SUCCESS_TITLE,
+  createSafetyBackupDownload,
+  isRestoreConfirmToken,
+  restoreReplaceWarning,
+  restoreRequestBody,
+  restoreSuccessDetail,
+  runSecureRestore,
+  type SecureRestoreResult,
+} from "./secure-restore.ts";

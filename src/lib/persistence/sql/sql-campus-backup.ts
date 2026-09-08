@@ -189,6 +189,7 @@ export function validateCampusTables(tables: unknown): { ok: true; tables: Campu
   return { ok: true, tables: dump };
 }
 
+/** Restaure toutes les tables v4 en une seule transaction (`db.batch` → BEGIN/COMMIT/ROLLBACK). */
 export async function restoreCampusTables(db: SqlDatabase, dump: CampusTableDump): Promise<void> {
   const statements: Array<{ sql: string; values: unknown[] }> = [];
   for (const table of CAMPUS_BACKUP_DELETE_ORDER) {

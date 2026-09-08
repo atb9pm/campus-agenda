@@ -646,6 +646,60 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .admin-backup-status { margin: 12px 0 0; font-size: 12px; font-weight: 700; }
 .admin-backup-status.is-success { color: #2f6b3f; }
 .admin-backup-status.is-error { color: #b42318; }
+.admin-restore-zone { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.admin-restore-zone h4 { margin: 0 0 6px; color: var(--navy); font-size: 13px; }
+.admin-restore-zone > p { margin: 0 0 12px; color: #516582; font-size: 12px; line-height: 1.45; }
+.admin-restore-file { display: grid; gap: 8px; color: #445a7c; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.admin-restore-file input[type="file"] { max-width: 100%; color: var(--navy); font-size: 12px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+.admin-restore-meta { margin: 12px 0 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: #f8fafc; }
+.admin-restore-meta dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: baseline; }
+.admin-restore-meta dt { color: #8793a9; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.admin-restore-meta dd { margin: 0; color: var(--navy); font-size: 12px; font-weight: 700; word-break: break-all; }
+.admin-restore-legacy { margin: 10px 0 0; color: #b54708; font-size: 12px; font-weight: 600; line-height: 1.45; }
+.admin-restore-zone .workspace-action.is-danger { margin-top: 12px; background: #b42318; }
+.admin-restore-zone .workspace-action.is-danger:hover { background: #912018; }
+.admin-restore-zone .workspace-action.is-danger:disabled { background: #e4a0a0; cursor: not-allowed; }
+.admin-restore-success p { margin: 8px 0 0; color: #516582; font-size: 12px; font-weight: 600; }
+.admin-restore-modal p { margin: 14px 0 0; color: #445a7c; font-size: 13px; line-height: 1.45; font-weight: 600; }
+.admin-restore-modal label {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  color: #445a7c;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.admin-restore-modal input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 14px;
+  letter-spacing: .04em;
+  text-transform: none;
+}
+.admin-restore-modal input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(7,93,255,.08); outline: none; }
+.admin-restore-modal footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+.admin-restore-modal footer button {
+  padding: 9px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: #4b5f7e;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.admin-restore-modal footer button.is-danger { border-color: #b42318; color: #fff; background: #b42318; }
+.admin-restore-modal footer button.is-danger:disabled { background: #e4a0a0; border-color: #e4a0a0; cursor: not-allowed; }
 .admin-panel-block .school-year-admin { padding: 0; }
 .admin-inline-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; }
 .admin-inline-form label { display: grid; gap: 4px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8793a9; }

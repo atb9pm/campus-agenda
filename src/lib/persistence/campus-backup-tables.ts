@@ -1,4 +1,9 @@
-/** Tables 0001→0024 — ordre d'INSERT (parents avant enfants). */
+/**
+ * Source de vérité du backup v4 (format courant complet).
+ * Toute nouvelle table persistante doit être ajoutée ici — dump, validation,
+ * restore et tests — dans la même PR que la table.
+ * Ordre d'INSERT : parents avant enfants.
+ */
 export const CAMPUS_BACKUP_INSERT_ORDER = [
   "teachers",
   "classrooms",

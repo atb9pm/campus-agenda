@@ -15,7 +15,7 @@ export const BACKUP_FORMAT_VERSION_V2 = 2 as const;
 /** Format v1 : agenda uniquement. */
 export const LEGACY_BACKUP_FORMAT_VERSION = 1 as const;
 
-export function backupDownloadFilename(exportedAt: string, now = new Date()): string {
+function utcStamp(exportedAt: string, now: Date): string {
   const parsed = Date.parse(exportedAt);
   const date = Number.isFinite(parsed) ? new Date(parsed) : now;
   const year = String(date.getUTCFullYear());
@@ -23,7 +23,15 @@ export function backupDownloadFilename(exportedAt: string, now = new Date()): st
   const day = String(date.getUTCDate()).padStart(2, "0");
   const hours = String(date.getUTCHours()).padStart(2, "0");
   const minutes = String(date.getUTCMinutes()).padStart(2, "0");
-  return `campus-agenda-backup-${year}-${month}-${day}-${hours}${minutes}.json`;
+  return `${year}-${month}-${day}-${hours}${minutes}`;
+}
+
+export function backupDownloadFilename(exportedAt: string, now = new Date()): string {
+  return `campus-agenda-backup-${utcStamp(exportedAt, now)}.json`;
+}
+
+export function beforeRestoreDownloadFilename(exportedAt: string, now = new Date()): string {
+  return `campus-agenda-before-restore-${utcStamp(exportedAt, now)}.json`;
 }
 
 export interface AgendaBackupSnapshot {

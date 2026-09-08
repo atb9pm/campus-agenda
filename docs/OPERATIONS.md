@@ -1,27 +1,34 @@
 # Exploitation — Campus Agenda
 
-Guide opérationnel pour la version **1.0.2**.
+Guide opérationnel, **septembre 2026**. Version applicative : voir `APP_VERSION` (`2.43.3` et suivantes).
+
+## Production actuelle
+
+| Élément | Valeur |
+|---|---|
+| Hébergement | **Infomaniak Node.js** (`campusagenda.ch`) |
+| Persistance | **SQLite** (`CAMPUS_STORE=sqlite`) |
+| Format de sauvegarde | **v4** (complet) |
+| Déploiement | merge GitHub → Infomaniak **Build** → Infomaniak **Restart** |
+| GitHub Actions | ne déploie **plus** par SSH ; vérifie `https://campusagenda.ch/api/health` |
+
+Détail du cycle Infomaniak : **`docs/infomaniak-deploy.md`**.
+
+Cloudflare Workers / D1 n’est **pas** le mode de production actuel. Les indications D1 restantes sont historiques (annexe).
 
 ## Modes de persistance
 
 | Mode | Variable | Usage |
 |---|---|---|
+| SQLite | `CAMPUS_STORE=sqlite` + `CAMPUS_SQLITE_PATH` | **Production Infomaniak** et développement local |
 | Mémoire | `CAMPUS_STORE=memory` | Tests, démo éphémère |
-| SQLite local | `CAMPUS_STORE=sqlite` + `CAMPUS_SQLITE_PATH` | Développement hors Cloudflare |
-| D1 Cloudflare | binding `CAMPUS_DB` | Production sur Workers |
+| D1 Cloudflare | binding `CAMPUS_DB` | Historique / optionnel, pas la production actuelle |
 
 Initialiser une base SQLite locale :
 
 ```bash
 cd web && pnpm db:local
 CAMPUS_STORE=sqlite pnpm dev
-```
-
-Appliquer le schéma D1 en production :
-
-```bash
-cd web
-npx wrangler d1 migrations apply campus-agenda-db --remote
 ```
 
 ## Santé du service
@@ -36,13 +43,13 @@ Réponse attendue :
 {
   "ok": true,
   "service": "campus-agenda",
-  "version": "1.0.0",
-  "store": "d1",
+  "version": "2.43.3",
+  "store": "sqlite",
   "uptimeSeconds": 42
 }
 ```
 
-Le champ `store` indique le backend actif : `memory`, `sqlite` ou `d1`.
+Le champ `store` indique le backend actif : `sqlite` en production, `memory` en tests, éventuellement `d1`.
 
 Chaque réponse API instrumentée inclut un en-tête `x-request-id`.
 
@@ -55,8 +62,8 @@ Journaux JSON sur la sortie standard, sans contenu scolaire :
 | Variable | Rôle |
 |---|---|
 | `AUTH_SECRET` | Signature des cookies (obligatoire en production) |
-| `CAMPUS_STORE` | Backend de persistance |
-| `CAMPUS_SQLITE_PATH` | Fichier SQLite local |
+| `CAMPUS_STORE` | Backend de persistance (`sqlite` en production) |
+| `CAMPUS_SQLITE_PATH` | Fichier SQLite |
 | `APP_ENV` | Contexte d'exécution |
 | `CAMPUS_DISABLE_RATE_LIMIT` | Désactive le rate limit (tests uniquement) |
 | `CAMPUS_AUTH_RATE_LIMIT_TEACHER` | Limite personnalisée connexion enseignant (défaut : 10/min) |
@@ -64,12 +71,12 @@ Journaux JSON sur la sortie standard, sans contenu scolaire :
 
 ## Rate limiting
 
-Les tentatives de connexion (`POST /api/auth/teacher`, `POST /api/auth/student`) sont limitées par adresse IP (`cf-connecting-ip`).
+Les tentatives de connexion (`POST /api/auth/teacher`, `POST /api/auth/student`) sont limitées par adresse IP.
 
 | Environnement | Mécanisme | Limite |
 |---|---|---|
-| Production Cloudflare | Binding `AUTH_RATE_LIMITER` (wrangler) | 10 req / 60 s par clé |
-| Dev / tests | Compteur mémoire par processus | 10 enseignant, 20 élève / min |
+| Production Infomaniak | Compteur mémoire par processus Node.js | 10 enseignant, 20 élève / min |
+| Tests / aperçu local | Idem, ou `CAMPUS_DISABLE_RATE_LIMIT=1` | — |
 
 Réponse en cas de dépassement :
 
@@ -81,54 +88,77 @@ Content-Type: application/json
 {"ok":false,"reason":"Trop de tentatives. Réessayez dans une minute."}
 ```
 
-Le binding est déclaré dans `web/wrangler.jsonc`. Aucune configuration dashboard supplémentaire n'est requise.
+## Sauvegardes et restauration
 
-## Sauvegardes
+Fonction **critique de sécurité**. Réservée aux **administrateurs** (`requireAdminSession` + UI Administration).
 
-Réservées aux enseignants authentifiés. Fonctionnent avec tous les backends.
+Le format **v4** est le format courant **complet**. La liste des tables est la source de vérité `CAMPUS_BACKUP_INSERT_ORDER` (années, semaines, exceptions, classes, professions, branches, contextes, cours annuels, attributions, événements d’attribution, horaires, jours de présence, comptes, configurations, notes, memberships, agenda, modèles, parcours, notes annuelles, timetable, etc.).
 
-```http
-GET /api/admin/backup
-POST /api/admin/restore
-```
+Les formats **v1 / v2 / v3** restent restaurables pour compatibilité historique uniquement. Ils **ne** contiennent **pas** l’intégralité des données modernes.
 
-`GET /api/admin/backup` envoie un fichier `campus-agenda-backup-AAAA-MM-JJ-HHmm.json`
-(`Content-Disposition: attachment`). Dans l’application : Administration →
-**Sauvegarde des données** → **Télécharger une sauvegarde**. Le JSON n’est pas
-affiché à l’écran.
-
-Le format **v3** inclut l'agenda, les configurations enseignant (`teacher_setups`),
-les notes de carnet (`teacher_notes`) et les **comptes enseignant** (empreintes
-hachées, jamais le mot de passe en clair).
-
-Les sauvegardes **v2** (sans comptes) et **v1** (agenda seul) restent restaurables :
-les parties absentes du fichier ne sont alors pas modifiées.
-
-Le fichier JSON de sauvegarde est sensible (empreintes) : le garder privé
-(ordinateur local ou espace Infomaniak), jamais sur GitHub.
+Le fichier JSON est **sensible** (empreintes / hashes de mots de passe, jamais le mot de passe en clair). Ne jamais l’envoyer sur GitHub. Le conserver dans un emplacement privé (ordinateur local, espace Infomaniak).
 
 > Ne jamais versionner les exports dans Git.
 
-## Mise en service Cloudflare
+### Créer une sauvegarde
 
-1. Créer la base D1 `campus-agenda-db` dans le dashboard Cloudflare.
-2. Mettre à jour `database_id` dans `web/wrangler.jsonc`.
-3. Appliquer `migrations/0001_initial.sql` via Wrangler.
-4. Définir `AUTH_SECRET` comme secret Worker.
-5. Déployer : `cd web && pnpm build && npx wrangler deploy`.
-6. Vérifier `GET /api/health` → `ok: true`, `store: "d1"`.
+Administration → **Sauvegarde des données** → **Télécharger une sauvegarde**
 
-## Mise en service Infomaniak (Node.js + SQLite)
+- API : `GET /api/admin/backup`
+- Nom : `campus-agenda-backup-YYYY-MM-DD-HHmm.json` (heure UTC du snapshot)
+- Format courant : **v4**
 
-Pour un hébergement **Infomaniak** (sans Cloudflare), suivre le guide dédié :
+### Restaurer une sauvegarde
 
-→ **`docs/infomaniak-deploy.md`**
+Administration → **Sauvegarde des données** → **Restaurer une sauvegarde**
 
-Résumé : dossier d'exécution `.` (racine du dépôt), build Infomaniak via `scripts/infomaniak-build.sh`, lancement `cd web && AUTH_SECRET=… CAMPUS_STORE=sqlite npm run start:infomaniak`. Après merge sur `main` : bouton **Build** puis **Redémarrer** dans le Manager. GitHub Actions ne fait plus de SSH ; il vérifie `https://campusagenda.ch/api/health` (voir `docs/infomaniak-deploy.md`).
+1. Choisir un fichier `.json`.
+2. Contrôler les métadonnées affichées (nom, date, version, éventuellement nombre d’éléments). Le JSON complet n’est jamais affiché.
+3. Si la version est v1/v2/v3, l’interface signale une **ancienne sauvegarde**.
+4. Cliquer sur **Restaurer cette sauvegarde**.
+5. Saisir exactement `RESTAURER`.
+6. Confirmer avec **Restaurer maintenant**.
+7. Campus Agenda crée automatiquement une sauvegarde de sécurité `campus-agenda-before-restore-YYYY-MM-DD-HHmm.json` (`GET /api/admin/backup`). Si cette étape échoue, **rien n’est restauré**.
+8. Restauration : `POST /api/admin/restore` avec `{ "snapshot": snapshot }`.
+9. Succès : message, puis rechargement complet de la page.
+
+API : `POST /api/admin/restore`
+
+En production SQLite, la restauration v4 est **atomique** (`BEGIN` → suppressions/inserts → `COMMIT` ; erreur → `ROLLBACK`). Aucune restauration partielle ne reste dans la base.
+
+### Règle d’architecture — nouvelle table = backup + restore
+
+Toute nouvelle donnée persistante ou nouvelle table ajoutée à Campus Agenda doit être intégrée au mécanisme de sauvegarde/restauration complète **dans la même PR** :
+
+**nouvelle table = dump + restore + validation + tests obligatoires**
+
+Source de vérité : `CAMPUS_BACKUP_INSERT_ORDER` (et colonnes associées). On ne doit jamais livrer une fonctionnalité qui ne puisse pas être restaurée (multi-années, préparation d’année, reprise de classes, attributions, parcours, projections, etc.).
+
+## Déploiement Infomaniak
+
+1. Merger la PR sur `main`.
+2. Infomaniak Manager → **Build**.
+3. Infomaniak Manager → **Restart**.
+4. Vérifier `GET /api/health` (`ok: true`, `store: "sqlite"`, version attendue).
+
+GitHub Actions ne pousse plus le code par SSH. Il vérifie uniquement la santé de production.
+
+Guide complet : **`docs/infomaniak-deploy.md`**.
 
 ## Vérifications
 
-1. `pnpm test`
+1. `pnpm typecheck` (depuis `web/`)
 2. `pnpm lint`
-3. `GET /api/health`
-4. Aucun secret ni donnée réelle dans les journaux ou exports
+3. `pnpm test`
+4. `GET /api/health`
+5. Aucun secret ni donnée réelle dans les journaux ou dans Git
+
+## Annexe — Cloudflare / D1 (historique)
+
+Ces étapes concernent un hébergement Workers + D1, **pas** la production actuelle :
+
+1. Créer la base D1 `campus-agenda-db`.
+2. Mettre à jour `database_id` dans `web/wrangler.jsonc`.
+3. Appliquer les migrations via Wrangler.
+4. Définir `AUTH_SECRET` comme secret Worker.
+5. Déployer : `cd web && pnpm build && npx wrangler deploy`.

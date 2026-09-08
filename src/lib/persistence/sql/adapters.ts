@@ -57,7 +57,7 @@ export class NodeSqliteDatabase implements SqlDatabase {
       try {
         this.db.exec("ROLLBACK");
       } catch {
-        // la transaction est déjà close
+        // Transaction déjà close (COMMIT/ROLLBACK déjà survenu).
       }
       throw error;
     }
