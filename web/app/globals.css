@@ -130,6 +130,7 @@ button { color: inherit; }
 .branch-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .branch-tags li { padding: 5px 10px; border-radius: 999px; color: #30558f; background: #eef4fd; font-size: 9px; font-weight: 700; }
 .workspace-action { justify-self: start; padding: 10px 14px; border: 0; border-radius: 8px; color: #fff; background: var(--navy); font-size: 10px; font-weight: 700; cursor: pointer; }
+a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: none; }
 .workspace-action:hover { background: #0a2f73; }
 .workspace-action.secondary { color: var(--navy); background: #eef4fd; }
 .workspace-action.secondary:hover { background: #dfeafb; }
@@ -641,6 +642,10 @@ button { color: inherit; }
 .annual-course-dialog fieldset { display: flex; flex-direction: column; gap: 8px; border: 0; padding: 0; }
 .annual-course-dates { display: flex; gap: 12px; flex-wrap: wrap; }
 .admin-panel-block { margin: 0 38px 28px; padding: 22px 24px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.admin-backup-block .workspace-action { margin-top: 4px; }
+.admin-backup-status { margin: 12px 0 0; font-size: 12px; font-weight: 700; }
+.admin-backup-status.is-success { color: #2f6b3f; }
+.admin-backup-status.is-error { color: #b42318; }
 .admin-panel-block .school-year-admin { padding: 0; }
 .admin-inline-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; }
 .admin-inline-form label { display: grid; gap: 4px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8793a9; }

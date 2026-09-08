@@ -92,6 +92,11 @@ GET /api/admin/backup
 POST /api/admin/restore
 ```
 
+`GET /api/admin/backup` envoie un fichier `campus-agenda-backup-AAAA-MM-JJ-HHmm.json`
+(`Content-Disposition: attachment`). Dans l’application : Administration →
+**Sauvegarde des données** → **Télécharger une sauvegarde**. Le JSON n’est pas
+affiché à l’écran.
+
 Le format **v3** inclut l'agenda, les configurations enseignant (`teacher_setups`),
 les notes de carnet (`teacher_notes`) et les **comptes enseignant** (empreintes
 hachées, jamais le mot de passe en clair).

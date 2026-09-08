@@ -2,6 +2,23 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.43.2] — Sauvegarde administrateur : téléchargement manuel
+
+Administration propose une section **Sauvegarde des données** : l’administrateur télécharge une copie JSON complète, sans restauration ni reset.
+
+### Ajouté
+
+- Section Administration, visible uniquement via `teacherIsAdmin`.
+- Bouton **Télécharger une sauvegarde** : `GET /api/admin/backup`, puis fichier
+  `campus-agenda-backup-YYYY-MM-DD-HHmm.json` (heure UTC du snapshot).
+- États : « Création de la sauvegarde… » (bouton désactivé), succès, ou
+  « La sauvegarde n’a pas pu être créée. Aucune donnée n’a été modifiée. »
+- L’API conserve `requireAdminSession` et `Content-Disposition: attachment`.
+
+### Non inclus
+
+Aucune migration SQL. Pas de reset, pas de vidage, pas d’upload, pas de restauration dans l’interface.
+
 ## [2.43.1] — Infomaniak : plus de SSH GitHub bloquant
 
 Le workflow « Infomaniak — vérifier production » ne tente plus de se connecter au serveur Node.js. Infomaniak n’expose pas encore de secret SSH utilisable depuis Actions ; le `sshpass` restait bloqué jusqu’à la limite de 6 h. Le déploiement reste manuel (Build puis Redémarrer dans le Manager). GitHub vérifie seulement `https://campusagenda.ch/api/health`. Un commit de production différent de `main` reste un succès, signalé en warning avec résumé d’action Infomaniak.
