@@ -24,7 +24,17 @@ import {
   type SchoolYearSummary,
 } from "../../lib/api-client.ts";
 
-type AdminTab = "classes" | "branches" | "professions" | "plans" | "teachers" | "assignments" | "schedules" | "weeks";
+type AdminTab =
+  | "classes"
+  | "branches"
+  | "professions"
+  | "plans"
+  | "teachers"
+  | "assignments"
+  | "schedules"
+  | "weeks"
+  | "backup"
+  | "restore";
 
 interface AdministrationPanelProps {
   currentTeacherId: string;
@@ -46,6 +56,8 @@ const TAB_LABELS: Record<AdminTab, string> = {
   assignments: "Attributions des cours",
   schedules: "Horaire des classes",
   weeks: "Plan des semaines A/B",
+  backup: "Sauvegarde des données",
+  restore: "Restaurer une sauvegarde",
 };
 
 function branchCardClass(entry: SchoolBranchRecord): string {
@@ -239,19 +251,17 @@ export function AdministrationPanel({
 
   const visibleError = sectionError?.tab === tab ? sectionError.message : null;
 
+  const catalogTabLoading =
+    loading
+    && tab !== "professions"
+    && tab !== "plans"
+    && tab !== "teachers"
+    && tab !== "schedules"
+    && tab !== "backup"
+    && tab !== "restore";
+
   return (
     <section className="teacher-workspace admin-workspace" aria-label="Administration">
-      <div className="workspace-intro">
-        <p className="eyebrow">ADMINISTRATION ÉCOLE</p>
-        <h2>Référentiel pédagogique</h2>
-        <p>
-          Catalogue des branches → professions → plans de formation (CTX) → classes →
-          attributions → horaire. Les branches d’une classe viennent du plan, jamais d’une saisie libre.
-        </p>
-      </div>
-
-      <AdminBackupPanel />
-
       <div className="admin-tabs" role="tablist" aria-label="Sections administration">
         {(Object.keys(TAB_LABELS) as AdminTab[]).map((entry) => (
           <button
@@ -270,9 +280,12 @@ export function AdministrationPanel({
         ))}
       </div>
 
-      {loading && tab !== "professions" && tab !== "plans" && tab !== "teachers" && tab !== "schedules" ? (
+      {catalogTabLoading ? (
         <p className="admin-loading">Chargement…</p>
       ) : null}
+
+      {tab === "backup" ? <AdminBackupPanel mode="download" /> : null}
+      {tab === "restore" ? <AdminBackupPanel mode="restore" /> : null}
 
       {tab === "classes" && !loading ? (
         <ClassesAdminPanel

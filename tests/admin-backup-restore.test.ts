@@ -45,8 +45,8 @@ const RAW_V3 = {
   items: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }],
 };
 
-test("version 2.43.3 — restauration admin sécurisée, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.43.3");
+test("version 2.43.4 — restauration admin sécurisée, pas de migration", async () => {
+  assert.equal(APP_VERSION, "2.43.4");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
   assert.equal(SQL_MIGRATION_FILES.some((file) => file.startsWith("0025")), false);
   assert.deepEqual([...COMPATIBLE_BACKUP_VERSIONS], [1, 2, 3, 4]);
@@ -64,7 +64,11 @@ test("version 2.43.3 — restauration admin sécurisée, pas de migration", asyn
   const operations = await readFile(new URL("../docs/OPERATIONS.md", import.meta.url), "utf8");
 
   assert.match(page, /activeSection === "administration" && teacherIsAdmin/);
-  assert.match(admin, /<AdminBackupPanel/);
+  assert.match(admin, /<AdminBackupPanel mode="download"/);
+  assert.match(admin, /<AdminBackupPanel mode="restore"/);
+  assert.match(admin, /backup: "Sauvegarde des données"/);
+  assert.match(admin, /restore: "Restaurer une sauvegarde"/);
+  assert.doesNotMatch(admin, /Référentiel pédagogique/);
   assert.match(backupRoute, /requireAdminSession/);
   assert.match(restoreRoute, /requireAdminSession/);
   assert.match(restoreRoute, /restoreStoreSnapshot/);
@@ -77,6 +81,9 @@ test("version 2.43.3 — restauration admin sécurisée, pas de migration", asyn
   assert.match(panel, /Restaurer une sauvegarde/);
   assert.match(panel, /Restaure les données de Campus Agenda à l’état contenu dans une sauvegarde précédente/);
   assert.match(panel, /Choisir un fichier de sauvegarde/);
+  assert.match(panel, /data-admin-restore-pick/);
+  assert.match(panel, /fileInputRef\.current\?\.click/);
+  assert.match(panel, /admin-restore-file-input/);
   assert.match(panel, /accept="\.json,application\/json"/);
   assert.match(panel, /type="file"/);
   assert.match(panel, /Restaurer cette sauvegarde/);
@@ -114,7 +121,8 @@ test("version 2.43.3 — restauration admin sécurisée, pas de migration", asyn
   assert.match(operations, /CAMPUS_BACKUP_INSERT_ORDER/);
   assert.match(operations, /nouvelle table = dump \+ restore \+ validation \+ tests/);
   assert.match(operations, /ne déploie \*\*plus\*\* par SSH/);
-  assert.match(operations, /RESTAURER/);
+  assert.match(operations, /onglet \*\*Sauvegarde des données\*\*/);
+  assert.match(operations, /onglet \*\*Restaurer une sauvegarde\*\*/);
   assert.doesNotMatch(panel, /Reset usine/);
   assert.doesNotMatch(panel, /Vider la base/);
   assert.doesNotMatch(panel, /Réinitialiser Campus Agenda/);

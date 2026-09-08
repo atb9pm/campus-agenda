@@ -1,6 +1,6 @@
 # Exploitation — Campus Agenda
 
-Guide opérationnel, **septembre 2026**. Version applicative : voir `APP_VERSION` (`2.43.3` et suivantes).
+Guide opérationnel, **septembre 2026**. Version applicative : voir `APP_VERSION` (`2.43.4` et suivantes).
 
 ## Production actuelle
 
@@ -43,7 +43,7 @@ Réponse attendue :
 {
   "ok": true,
   "service": "campus-agenda",
-  "version": "2.43.3",
+  "version": "2.43.4",
   "store": "sqlite",
   "uptimeSeconds": 42
 }
@@ -102,7 +102,7 @@ Le fichier JSON est **sensible** (empreintes / hashes de mots de passe, jamais l
 
 ### Créer une sauvegarde
 
-Administration → **Sauvegarde des données** → **Télécharger une sauvegarde**
+Administration → onglet **Sauvegarde des données** → **Télécharger une sauvegarde**
 
 - API : `GET /api/admin/backup`
 - Nom : `campus-agenda-backup-YYYY-MM-DD-HHmm.json` (heure UTC du snapshot)
@@ -110,7 +110,7 @@ Administration → **Sauvegarde des données** → **Télécharger une sauvegard
 
 ### Restaurer une sauvegarde
 
-Administration → **Sauvegarde des données** → **Restaurer une sauvegarde**
+Administration → onglet **Restaurer une sauvegarde** → **Choisir un fichier de sauvegarde**
 
 1. Choisir un fichier `.json`.
 2. Contrôler les métadonnées affichées (nom, date, version, éventuellement nombre d’éléments). Le JSON complet n’est jamais affiché.
