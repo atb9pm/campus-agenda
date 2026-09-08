@@ -75,7 +75,36 @@ export type GenerateStudentAccessResult =
   | { ok: true; access: StudentAccessMetadata; code: string }
   | { ok: false; reason: string; status: 400 | 404 };
 
+/** Sérialise génération/révocation d'une même classe dans le process (anti double-clic). */
+const classAccessLocks = new Map<string, Promise<unknown>>();
+
+async function withSchoolClassAccessLock<T>(schoolClassId: string, work: () => Promise<T>): Promise<T> {
+  const previous = classAccessLocks.get(schoolClassId) ?? Promise.resolve();
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const current = previous.then(() => gate);
+  classAccessLocks.set(schoolClassId, current);
+  await previous.catch(() => undefined);
+  try {
+    return await work();
+  } finally {
+    release();
+    if (classAccessLocks.get(schoolClassId) === current) {
+      classAccessLocks.delete(schoolClassId);
+    }
+  }
+}
+
 export async function generateStudentAccess(
+  deps: StudentAccessAdminDeps,
+  schoolClassId: string,
+): Promise<GenerateStudentAccessResult> {
+  return withSchoolClassAccessLock(schoolClassId, () => generateStudentAccessUnlocked(deps, schoolClassId));
+}
+
+async function generateStudentAccessUnlocked(
   deps: StudentAccessAdminDeps,
   schoolClassId: string,
 ): Promise<GenerateStudentAccessResult> {
@@ -110,6 +139,13 @@ export type RevokeStudentAccessResult =
   | { ok: false; reason: string; status: 400 | 404 };
 
 export async function revokeStudentAccess(
+  deps: StudentAccessAdminDeps,
+  schoolClassId: string,
+): Promise<RevokeStudentAccessResult> {
+  return withSchoolClassAccessLock(schoolClassId, () => revokeStudentAccessUnlocked(deps, schoolClassId));
+}
+
+async function revokeStudentAccessUnlocked(
   deps: StudentAccessAdminDeps,
   schoolClassId: string,
 ): Promise<RevokeStudentAccessResult> {

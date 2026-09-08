@@ -13,6 +13,7 @@ Campus Agenda n’utilise plus le libellé comme secret. Chaque vraie SchoolClas
 - Rattachement `student_accesses.school_class_id` + `access_version` + `revoked_at`.
 - Préparation possible en année DRAFT ; connexion uniquement si l’année de la classe est l’unique ACTIVE.
 - Rotation et révocation : `access_version` incrémenté, sessions élèves invalidées à la requête suivante.
+- Génération/révocation d’une même classe sérialisée dans le process (un double-clic n’affiche plus un code déjà invalidé).
 - API admin `GET/POST/DELETE /api/admin/student-access` et zone **Accès apprentis** dans Administration → Classes.
 - Migration `0025_structured_student_access.sql`.
 

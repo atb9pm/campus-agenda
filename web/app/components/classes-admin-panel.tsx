@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   PedagogicalContextRecord,
@@ -77,6 +77,7 @@ export function ClassesAdminPanel({
   const [pending, setPending] = useState(false);
   const [accesses, setAccesses] = useState<Record<string, StudentAccessMetadata>>({});
   const [revealedCodeByClass, setRevealedCodeByClass] = useState<Record<string, string>>({});
+  const accessMutationLock = useRef(false);
 
   const counts = useMemo(() => countClassesByStatus(classes), [classes]);
   const visibleClasses = useMemo(
@@ -120,10 +121,12 @@ export function ClassesAdminPanel({
   );
 
   async function generateStudentAccess(entry: SchoolClassRecord, isRegenerate: boolean) {
+    if (accessMutationLock.current) return;
     const confirmMessage = isRegenerate
       ? `Régénérer le code de ${entry.code} ?\nL’ancien code et les sessions élèves actuellement ouvertes seront immédiatement invalidés.`
       : null;
     if (confirmMessage && !window.confirm(confirmMessage)) return;
+    accessMutationLock.current = true;
     onClearError();
     setPending(true);
     try {
@@ -147,11 +150,13 @@ export function ClassesAdminPanel({
       setRevealedCodeByClass((current) => ({ ...current, [entry.id]: payload.code! }));
       onNotice(isRegenerate ? `Nouveau code apprentis pour ${entry.code}.` : `Code apprentis généré pour ${entry.code}.`);
     } finally {
+      accessMutationLock.current = false;
       setPending(false);
     }
   }
 
   async function revokeStudentAccess(entry: SchoolClassRecord) {
+    if (accessMutationLock.current) return;
     if (
       !window.confirm(
         `Désactiver l’accès apprentis de ${entry.code} ?\nLes élèves actuellement connectés seront déconnectés.`,
@@ -159,6 +164,7 @@ export function ClassesAdminPanel({
     ) {
       return;
     }
+    accessMutationLock.current = true;
     onClearError();
     setPending(true);
     try {
@@ -183,6 +189,7 @@ export function ClassesAdminPanel({
       });
       onNotice(`Accès apprentis de ${entry.code} désactivé.`);
     } finally {
+      accessMutationLock.current = false;
       setPending(false);
     }
   }

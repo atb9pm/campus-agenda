@@ -302,6 +302,26 @@ test("C/D — rotation et révocation invalidént immédiatement l'ancienne sess
   assert.equal(afterRevoke, null);
 });
 
+test("C — deux générations concurrentes : seul le dernier code reste valable", async () => {
+  resetWorld();
+  const admin = await adminDeps();
+  const schoolClass = (await admin.listClasses()).find((entry) => entry.code === "MA2");
+  assert.ok(schoolClass);
+  const [first, second] = await Promise.all([
+    generateStudentAccess(admin, schoolClass.id),
+    generateStudentAccess(admin, schoolClass.id),
+  ]);
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+  if (!first.ok || !second.ok) return;
+  assert.notEqual(first.code, second.code);
+  const deps = await loginDepsFrom(admin);
+  const firstLogin = await authenticateStudentAccessCode(first.code, deps);
+  const secondLogin = await authenticateStudentAccessCode(second.code, deps);
+  assert.equal(firstLogin.ok, false);
+  assert.equal(secondLogin.ok, true);
+});
+
 test("E — changement d'année ACTIVE invalide la session", async () => {
   resetWorld();
   const admin = await adminDeps();
@@ -364,10 +384,12 @@ test("G — API admin : non-admin refusé, hash jamais envoyé, plaintext une se
 
   const route = await readFile(new URL("../web/app/api/admin/student-access/route.ts", import.meta.url), "utf8");
   const studentRoute = await readFile(new URL("../web/app/api/auth/student/route.ts", import.meta.url), "utf8");
+  const classesAdmin = await readFile(new URL("../web/app/components/classes-admin-panel.tsx", import.meta.url), "utf8");
   assert.match(route, /requireAdminSession/);
   assert.match(route, /assertNoSecretLeak/);
   assert.match(studentRoute, /authenticateStudentAccessCode/);
   assert.match(studentRoute, /STUDENT_LOGIN_INVALID_REASON/);
+  assert.match(classesAdmin, /accessMutationLock/);
 });
 
 test("H — localStorage : le secret élève n'est plus enregistré, login enseignant inchangé", async () => {
