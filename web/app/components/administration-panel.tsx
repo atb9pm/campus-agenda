@@ -247,6 +247,11 @@ export function AdministrationPanel({
           Catalogue des branches → professions → plans de formation (CTX) → classes →
           attributions → horaire. Les branches d’une classe viennent du plan, jamais d’une saisie libre.
         </p>
+        <p>
+          <a className="workspace-action" href="/api/admin/backup" download>
+            Télécharger une sauvegarde
+          </a>
+        </p>
       </div>
 
       <div className="admin-tabs" role="tablist" aria-label="Sections administration">

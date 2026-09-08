@@ -130,6 +130,7 @@ button { color: inherit; }
 .branch-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .branch-tags li { padding: 5px 10px; border-radius: 999px; color: #30558f; background: #eef4fd; font-size: 9px; font-weight: 700; }
 .workspace-action { justify-self: start; padding: 10px 14px; border: 0; border-radius: 8px; color: #fff; background: var(--navy); font-size: 10px; font-weight: 700; cursor: pointer; }
+a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: none; }
 .workspace-action:hover { background: #0a2f73; }
 .workspace-action.secondary { color: var(--navy); background: #eef4fd; }
 .workspace-action.secondary:hover { background: #dfeafb; }

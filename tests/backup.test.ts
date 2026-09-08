@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { hashPassword } from "../src/lib/auth/password.ts";
-import { exportAgendaSnapshot, restoreAgendaSnapshot } from "../src/lib/persistence/backup.ts";
+import { backupDownloadFilename, exportAgendaSnapshot, restoreAgendaSnapshot } from "../src/lib/persistence/backup.ts";
+import { APP_VERSION } from "../src/lib/app-version.ts";
 import { resetMemoryAgendaStore, getMemoryAgendaStore } from "../src/lib/persistence/memory-store.ts";
 import {
   getMemoryTeacherAccountStore,
@@ -226,4 +228,19 @@ test("backup — restauration v2 ne touche pas les comptes", async () => {
 
   const auth = await deps.teacherAccounts.authenticate("CI", "Compte-Intact-2026!");
   assert.equal(auth.ok, true);
+});
+
+test("backup — GET admin envoie un fichier JSON à télécharger", async () => {
+  assert.equal(APP_VERSION, "2.43.2");
+  const route = await readFile(new URL("../web/app/api/admin/backup/route.ts", import.meta.url), "utf8");
+  const panel = await readFile(new URL("../web/app/components/administration-panel.tsx", import.meta.url), "utf8");
+
+  assert.equal(backupDownloadFilename("2026-09-08T06:45:53.133Z"), "campus-agenda-backup-2026-09-08.json");
+  assert.equal(backupDownloadFilename("invalide"), "campus-agenda-backup-export.json");
+  assert.match(route, /Content-Disposition/);
+  assert.match(route, /attachment; filename=/);
+  assert.match(route, /backupDownloadFilename/);
+  assert.match(panel, /Télécharger une sauvegarde/);
+  assert.match(panel, /href="\/api\/admin\/backup"/);
+  assert.match(panel, /download/);
 });

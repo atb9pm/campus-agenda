@@ -15,6 +15,12 @@ export const BACKUP_FORMAT_VERSION_V2 = 2 as const;
 /** Format v1 : agenda uniquement. */
 export const LEGACY_BACKUP_FORMAT_VERSION = 1 as const;
 
+export function backupDownloadFilename(exportedAt: string): string {
+  const day = exportedAt.slice(0, 10);
+  const safe = /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : "export";
+  return `campus-agenda-backup-${safe}.json`;
+}
+
 export interface AgendaBackupSnapshot {
   version: typeof BACKUP_FORMAT_VERSION;
   exportedAt: string;
