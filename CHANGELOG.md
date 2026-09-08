@@ -8,7 +8,7 @@ Sauvegarde et restauration deviennent deux onglets Administration. Le choix de f
 
 ### Modifié
 
-- Onglets **Sauvegarde des données** et **Restaurer une sauvegarde** à la fin de la barre d’onglets.
+- Onglets **Sauvegarde des données** et **Restaurer une sauvegarde** à la fin de la barre d’onglets, sur **une seule ligne**.
 - Bouton **Choisir un fichier de sauvegarde** (plus d’affichage natif « Aucun fichier n’a été sélectionné »).
 - Le bloc « Référentiel pédagogique » n’occupe plus le haut de page.
 

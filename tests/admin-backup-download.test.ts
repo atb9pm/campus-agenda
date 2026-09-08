@@ -34,6 +34,8 @@ test("version 2.43.4 — sauvegarde admin manuelle, pas de migration", async () 
   assert.match(admin, /backup: "Sauvegarde des données"/);
   assert.match(admin, /restore: "Restaurer une sauvegarde"/);
   assert.doesNotMatch(admin, /Référentiel pédagogique/);
+  const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /\.admin-workspace \.admin-tabs \{[^}]*flex-wrap: nowrap/);
   assert.match(panel, /Sauvegarde des données/);
   assert.match(panel, /Télécharge une copie complète des données actuelles de Campus Agenda/);
   assert.match(panel, /Télécharger une sauvegarde/);
