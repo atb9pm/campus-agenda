@@ -14,8 +14,8 @@ import { APP_VERSION } from "../src/lib/app-version.ts";
 import { backupDownloadFilename } from "../src/lib/persistence/backup.ts";
 import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 
-test("version 2.43.2 — sauvegarde admin manuelle, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.43.2");
+test("version 2.43.3 — sauvegarde admin manuelle, pas de migration", async () => {
+  assert.equal(APP_VERSION, "2.43.3");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0024_structured_agenda_bridge.sql");
 
   const panel = await readFile(new URL("../web/app/components/admin-backup-panel.tsx", import.meta.url), "utf8");
@@ -41,13 +41,11 @@ test("version 2.43.2 — sauvegarde admin manuelle, pas de migration", async () 
   assert.doesNotMatch(panel, /localStorage/);
   assert.doesNotMatch(panel, /sessionStorage/);
   assert.doesNotMatch(panel, /console\.log/);
-  assert.doesNotMatch(panel, /Reset/);
+  assert.doesNotMatch(panel, /Reset usine/);
   assert.doesNotMatch(panel, /Vider la base/);
-  assert.doesNotMatch(panel, /Réinitialiser/);
-  assert.doesNotMatch(panel, /\/api\/admin\/restore/);
-  assert.doesNotMatch(panel, /type="file"/);
+  assert.doesNotMatch(panel, /Réinitialiser Campus Agenda/);
   assert.doesNotMatch(admin, /href="\/api\/admin\/backup"/);
-  assert.doesNotMatch(admin, /Reset|Vider la base|Réinitialiser/);
+  assert.doesNotMatch(admin, /Reset usine|Vider la base|Réinitialiser Campus Agenda/);
 });
 
 test("nom de fichier — date et heure UTC depuis exportedAt", () => {
@@ -116,13 +114,9 @@ test("téléchargement seulement si ok === true et snapshot présent", async () 
   assert.match(BACKUP_ERROR_MESSAGE, /Aucune donnée n’a été modifiée/);
 });
 
-test("sauvegarde — lecture seule, pas de POST restore dans le panneau", async () => {
-  const panel = await readFile(new URL("../web/app/components/admin-backup-panel.tsx", import.meta.url), "utf8");
+test("sauvegarde GET — lecture seule, pas de restauration dans /api/admin/backup", async () => {
   const route = await readFile(new URL("../web/app/api/admin/backup/route.ts", import.meta.url), "utf8");
   assert.match(route, /export const GET/);
   assert.doesNotMatch(route, /export const POST/);
   assert.doesNotMatch(route, /restoreStoreSnapshot/);
-  assert.doesNotMatch(panel, /method: "POST"/);
-  assert.doesNotMatch(panel, /method: "PUT"/);
-  assert.doesNotMatch(panel, /method: "DELETE"/);
 });

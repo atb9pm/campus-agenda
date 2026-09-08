@@ -21,6 +21,7 @@ export {
   BACKUP_FORMAT_VERSION_V2,
   LEGACY_BACKUP_FORMAT_VERSION,
   backupDownloadFilename,
+  beforeRestoreDownloadFilename,
   exportAgendaSnapshot,
   restoreAgendaSnapshot,
   type AgendaBackupSnapshot,

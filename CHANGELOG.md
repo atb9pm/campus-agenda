@@ -2,6 +2,22 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.43.3] — Administration : restauration sécurisée des sauvegardes
+
+L’administrateur peut restaurer Campus Agenda depuis un fichier JSON, après une sauvegarde de sécurité automatique et une confirmation `RESTAURER`.
+
+### Ajouté
+
+- Section **Restaurer une sauvegarde** sous **Télécharger une sauvegarde**.
+- Validation du fichier (JSON, snapshot enveloppé ou brut, versions 1–4).
+- Sauvegarde préalable `campus-agenda-before-restore-YYYY-MM-DD-HHmm.json` via `GET /api/admin/backup`.
+- Modale de confirmation : saisie exacte de `RESTAURER`, puis `POST /api/admin/restore`.
+- Rechargement complet après succès. Aucune persistance du snapshot dans le navigateur.
+
+### Non inclus
+
+Aucune migration SQL. Pas de reset usine, pas de vidage de base, pas d’automatisation quotidienne.
+
 ## [2.43.2] — Sauvegarde administrateur : téléchargement manuel
 
 Administration propose une section **Sauvegarde des données** : l’administrateur télécharge une copie JSON complète, sans restauration ni reset.
