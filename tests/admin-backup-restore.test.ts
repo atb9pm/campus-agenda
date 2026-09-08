@@ -4,14 +4,18 @@ import test from "node:test";
 
 import {
   COMPATIBLE_BACKUP_VERSIONS,
+  CURRENT_BACKUP_FORMAT_VERSION,
   INVALID_BACKUP_FILE_MESSAGE,
+  LEGACY_BACKUP_FILE_NOTICE,
   RESTORE_CONFIRM_TOKEN,
   RESTORE_FAILED_MESSAGE,
   RESTORE_LOSS_WARNING,
   RESTORE_SAFETY_BACKUP_FAILED_MESSAGE,
   RESTORE_SUCCESS_TITLE,
+  backupFormatVersionLabel,
   countSnapshotElements,
   extractBackupSnapshot,
+  isLegacyBackupVersion,
   isRestoreConfirmToken,
   parseBackupFile,
   restoreReplaceWarning,
@@ -21,6 +25,7 @@ import {
 } from "../src/features/admin-backup/index.ts";
 import { APP_VERSION } from "../src/lib/app-version.ts";
 import { beforeRestoreDownloadFilename } from "../src/lib/persistence/backup.ts";
+import { CAMPUS_BACKUP_INSERT_ORDER } from "../src/lib/persistence/campus-backup-tables.ts";
 import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 
 const WRAPPED_V4 = {
@@ -54,6 +59,9 @@ test("version 2.43.3 — restauration admin sécurisée, pas de migration", asyn
   const e2e = await readFile(new URL("../web/tests/e2e-api.test.mjs", import.meta.url), "utf8");
   const parseSource = await readFile(new URL("../src/features/admin-backup/parse-backup-file.ts", import.meta.url), "utf8");
   const restoreSource = await readFile(new URL("../src/features/admin-backup/secure-restore.ts", import.meta.url), "utf8");
+  const adapter = await readFile(new URL("../src/lib/persistence/sql/adapters.ts", import.meta.url), "utf8");
+  const restoreSql = await readFile(new URL("../src/lib/persistence/sql/sql-campus-backup.ts", import.meta.url), "utf8");
+  const operations = await readFile(new URL("../docs/OPERATIONS.md", import.meta.url), "utf8");
 
   assert.match(page, /activeSection === "administration" && teacherIsAdmin/);
   assert.match(admin, /<AdminBackupPanel/);
@@ -83,11 +91,30 @@ test("version 2.43.3 — restauration admin sécurisée, pas de migration", asyn
   assert.match(panel, /window\.location\.reload/);
   assert.match(panel, /RESTORE_SUCCESS_TITLE/);
   assert.match(panel, /restoreSuccessDetail/);
+  assert.match(panel, /LEGACY_BACKUP_FILE_NOTICE/);
+  assert.match(panel, /meta\.isLegacy/);
+  assert.match(panel, /window\.location\.reload/);
+  const afterSuccess = panel.slice(panel.indexOf('setRestorePhase("success")'));
+  assert.match(afterSuccess, /window\.location\.reload/);
+  const afterFailure = panel.slice(panel.indexOf("if (!outcome.ok)"), panel.indexOf('setRestorePhase("success")'));
+  assert.doesNotMatch(afterFailure, /location\.reload/);
   assert.doesNotMatch(panel, /localStorage/);
   assert.doesNotMatch(panel, /sessionStorage/);
   assert.doesNotMatch(panel, /console\.log/);
   assert.doesNotMatch(parseSource, /localStorage|sessionStorage|console\.log/);
   assert.doesNotMatch(restoreSource, /localStorage|sessionStorage|console\.log/);
+  assert.match(adapter, /this\.db\.exec\("BEGIN"\)/);
+  assert.match(adapter, /this\.db\.exec\("COMMIT"\)/);
+  assert.match(adapter, /this\.db\.exec\("ROLLBACK"\)/);
+  assert.match(restoreSql, /await db\.batch\(statements\)/);
+  assert.match(restoreSql, /CAMPUS_BACKUP_INSERT_ORDER/);
+  assert.match(operations, /Infomaniak Node\.js/);
+  assert.match(operations, /SQLite/);
+  assert.match(operations, /format courant \*\*complet\*\*|Format courant : \*\*v4\*\*/);
+  assert.match(operations, /CAMPUS_BACKUP_INSERT_ORDER/);
+  assert.match(operations, /nouvelle table = dump \+ restore \+ validation \+ tests/);
+  assert.match(operations, /ne déploie \*\*plus\*\* par SSH/);
+  assert.match(operations, /RESTAURER/);
   assert.doesNotMatch(panel, /Reset usine/);
   assert.doesNotMatch(panel, /Vider la base/);
   assert.doesNotMatch(panel, /Réinitialiser Campus Agenda/);
@@ -100,6 +127,10 @@ test("fichier JSON — enveloppé, brut, invalide et version incompatible", () =
   if (!wrapped.ok) return;
   assert.equal(wrapped.meta.fileName, "campus-agenda-backup-2026-09-08-0826.json");
   assert.equal(wrapped.meta.version, 4);
+  assert.equal(wrapped.meta.isLegacy, false);
+  assert.equal(wrapped.meta.versionLabel, "4 — format courant");
+  assert.equal(CURRENT_BACKUP_FORMAT_VERSION, 4);
+  assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 29);
   assert.equal(wrapped.meta.exportedAt, "2026-09-08T08:26:00.000Z");
   assert.equal(wrapped.meta.exportedAtLabel, "08/09/2026 08:26 UTC");
   assert.equal(wrapped.meta.itemCount, 12);
@@ -110,8 +141,25 @@ test("fichier JSON — enveloppé, brut, invalide et version incompatible", () =
   assert.equal(raw.ok, true);
   if (!raw.ok) return;
   assert.equal(raw.meta.version, 3);
+  assert.equal(raw.meta.isLegacy, true);
+  assert.equal(raw.meta.versionLabel, "3 — ancienne sauvegarde");
   assert.equal(raw.meta.itemCount, 4);
   assert.deepEqual(extractBackupSnapshot(RAW_V3), RAW_V3);
+
+  const rawV1 = parseBackupFile("v1.json", JSON.stringify({ version: 1, exportedAt: "2026-01-01T00:00:00.000Z", items: [] }));
+  assert.equal(rawV1.ok, true);
+  if (rawV1.ok) {
+    assert.equal(rawV1.meta.isLegacy, true);
+    assert.equal(isLegacyBackupVersion(1), true);
+  }
+  const rawV2 = parseBackupFile("v2.json", JSON.stringify({ version: 2, exportedAt: "2026-01-01T00:00:00.000Z", items: [] }));
+  assert.equal(rawV2.ok, true);
+  if (rawV2.ok) {
+    assert.equal(rawV2.meta.isLegacy, true);
+    assert.match(LEGACY_BACKUP_FILE_NOTICE, /Ancienne sauvegarde/);
+    assert.equal(backupFormatVersionLabel(2), "2 — ancienne sauvegarde");
+  }
+  assert.equal(isLegacyBackupVersion(4), false);
 
   const invalidJson = parseBackupFile("x.json", "{not json");
   assert.equal(invalidJson.ok, false);

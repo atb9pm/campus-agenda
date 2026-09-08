@@ -9,11 +9,15 @@ export {
 } from "./download-backup.ts";
 export {
   COMPATIBLE_BACKUP_VERSIONS,
+  CURRENT_BACKUP_FORMAT_VERSION,
   INVALID_BACKUP_FILE_MESSAGE,
+  LEGACY_BACKUP_FILE_NOTICE,
+  backupFormatVersionLabel,
   countSnapshotElements,
   extractBackupSnapshot,
   formatBackupExportedAt,
   isCompatibleBackupVersion,
+  isLegacyBackupVersion,
   parseBackupFile,
   type BackupFileMeta,
   type ParsedBackupFile,

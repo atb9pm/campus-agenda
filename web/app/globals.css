@@ -655,6 +655,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .admin-restore-meta dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: baseline; }
 .admin-restore-meta dt { color: #8793a9; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
 .admin-restore-meta dd { margin: 0; color: var(--navy); font-size: 12px; font-weight: 700; word-break: break-all; }
+.admin-restore-legacy { margin: 10px 0 0; color: #b54708; font-size: 12px; font-weight: 600; line-height: 1.45; }
 .admin-restore-zone .workspace-action.is-danger { margin-top: 12px; background: #b42318; }
 .admin-restore-zone .workspace-action.is-danger:hover { background: #912018; }
 .admin-restore-zone .workspace-action.is-danger:disabled { background: #e4a0a0; cursor: not-allowed; }

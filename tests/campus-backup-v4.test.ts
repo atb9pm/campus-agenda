@@ -288,6 +288,7 @@ test("backup v4 — roundtrip mémoire", async () => {
   const snapshot = await exportCampusSnapshot(deps);
   assert.equal(snapshot.version, 4);
   assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 29);
+  assert.deepEqual(Object.keys(snapshot.tables), [...CAMPUS_BACKUP_INSERT_ORDER]);
   for (const table of CAMPUS_BACKUP_INSERT_ORDER) {
     assert.ok(Array.isArray(snapshot.tables[table]), table);
   }
@@ -332,6 +333,7 @@ test("backup v4 — roundtrip SQLite", async () => {
   const snapshot = await exportCampusSnapshot(deps);
   assert.equal(snapshot.version, 4);
   assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 29);
+  assert.deepEqual(Object.keys(snapshot.tables), [...CAMPUS_BACKUP_INSERT_ORDER]);
   for (const table of CAMPUS_BACKUP_INSERT_ORDER) {
     assert.ok(Array.isArray(snapshot.tables[table]), table);
   }
@@ -477,20 +479,21 @@ test("backup v4 — FK incohérente refusée, SQL inchangé", async () => {
   assert.equal((await dumpCampusTables(db)).agenda_items.length, before);
 });
 
-test("backup v4 — rollback SQL si l'INSERT échoue", async () => {
+test("backup v4 — rollback SQL intégral : l'état précédent est entièrement conservé", async () => {
   const db = createNodeSqliteDatabase(":memory:");
   await applyMigrations(db);
   await seedDemoDatabase(db);
   const deps = sqlDeps(db);
   await deps.years.seedDefaultActiveYearIfEmpty();
   const snapshot = await exportCampusSnapshot(deps);
-  const beforeTeachers = (await dumpCampusTables(db)).teachers.length;
+  const before = canonicalizeCampusDump(await dumpCampusTables(db));
   const week = snapshot.tables.school_weeks?.[0];
   assert.ok(week);
   snapshot.tables.school_weeks = [...(snapshot.tables.school_weeks ?? []), { ...week }];
   const restored = await restoreCampusSnapshot(deps, snapshot);
   assert.equal(restored.ok, false);
-  assert.equal((await dumpCampusTables(db)).teachers.length, beforeTeachers);
+  if (!restored.ok) assert.match(restored.reason, /conservée|échouée/);
+  assert.deepEqual(canonicalizeCampusDump(await dumpCampusTables(db)), before);
 });
 
 test("backup v1 reste lisible selon son périmètre historique", async () => {
@@ -527,3 +530,37 @@ test("backup v3 historique toujours restaurable via restoreAgendaSnapshot", asyn
   const restored = await restoreAgendaSnapshot(deps, snapshot);
   assert.equal(restored.ok, true);
 });
+
+test("NodeSqliteDatabase.batch — ROLLBACK intégral si une instruction échoue", async () => {
+  const db = createNodeSqliteDatabase(":memory:");
+  await db.exec("CREATE TABLE items (id TEXT PRIMARY KEY, label TEXT NOT NULL)");
+  await db.prepare("INSERT INTO items (id, label) VALUES (?, ?)").bind("keep-a", "A").run();
+  await db.prepare("INSERT INTO items (id, label) VALUES (?, ?)").bind("keep-b", "B").run();
+
+  await assert.rejects(
+    () =>
+      db.batch([
+        { sql: "DELETE FROM items", values: [] },
+        { sql: "INSERT INTO items (id, label) VALUES (?, ?)", values: ["new-c", "C"] },
+        { sql: "INSERT INTO items (id, label) VALUES (?, ?)", values: ["new-c", "duplicate"] },
+      ]),
+  );
+
+  const { results } = await db.prepare("SELECT id, label FROM items ORDER BY id").bind().all<{ id: string; label: string }>();
+  assert.deepEqual(
+    results.map((row) => ({ id: row.id, label: row.label })),
+    [
+      { id: "keep-a", label: "A" },
+      { id: "keep-b", label: "B" },
+    ],
+  );
+});
+
+test("backup v4 — dump SQL couvre exactement CAMPUS_BACKUP_INSERT_ORDER", async () => {
+  const db = createNodeSqliteDatabase(":memory:");
+  await applyMigrations(db);
+  await seedDemoDatabase(db);
+  const dump = await dumpCampusTables(db);
+  assert.deepEqual(Object.keys(dump), [...CAMPUS_BACKUP_INSERT_ORDER]);
+});
+

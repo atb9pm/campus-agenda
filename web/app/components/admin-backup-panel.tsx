@@ -7,6 +7,7 @@ import {
   BACKUP_PENDING_MESSAGE,
   BACKUP_SUCCESS_MESSAGE,
   INVALID_BACKUP_FILE_MESSAGE,
+  LEGACY_BACKUP_FILE_NOTICE,
   RESTORE_CONFIRM_TOKEN,
   RESTORE_FAILED_MESSAGE,
   RESTORE_LOSS_WARNING,
@@ -203,7 +204,7 @@ export function AdminBackupPanel() {
               <dt>Date de la sauvegarde</dt>
               <dd>{meta.exportedAtLabel}</dd>
               <dt>Version du format</dt>
-              <dd>{meta.version}</dd>
+              <dd>{meta.versionLabel}</dd>
               {meta.itemCount != null ? (
                 <>
                   <dt>Éléments</dt>
@@ -211,6 +212,11 @@ export function AdminBackupPanel() {
                 </>
               ) : null}
             </dl>
+            {meta.isLegacy ? (
+              <p className="admin-restore-legacy" role="note" data-admin-restore-legacy="">
+                {LEGACY_BACKUP_FILE_NOTICE}
+              </p>
+            ) : null}
           </div>
         ) : null}
         <button
@@ -254,6 +260,11 @@ export function AdminBackupPanel() {
             </header>
             <p>{restoreReplaceWarning(dateLabel)}</p>
             <p>{RESTORE_LOSS_WARNING}</p>
+            {meta?.isLegacy ? (
+              <p className="admin-restore-legacy" role="note">
+                {LEGACY_BACKUP_FILE_NOTICE}
+              </p>
+            ) : null}
             <label>
               Saisir {RESTORE_CONFIRM_TOKEN} pour confirmer
               <input

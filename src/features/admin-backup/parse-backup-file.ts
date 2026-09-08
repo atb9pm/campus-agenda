@@ -15,9 +15,16 @@ export const COMPATIBLE_BACKUP_VERSIONS: readonly number[] = [
   BACKUP_FORMAT_VERSION_V4,
 ];
 
+export const CURRENT_BACKUP_FORMAT_VERSION = BACKUP_FORMAT_VERSION_V4;
+
+export const LEGACY_BACKUP_FILE_NOTICE =
+  "Ancienne sauvegarde : elle ne contient pas l’intégralité des données modernes de Campus Agenda (années, classes, attributions, horaires, etc.). Le backend peut quand même la restaurer dans son périmètre historique.";
+
 export interface BackupFileMeta {
   fileName: string;
   version: number;
+  versionLabel: string;
+  isLegacy: boolean;
   exportedAt: string | null;
   exportedAtLabel: string;
   itemCount: number | null;
@@ -41,6 +48,19 @@ export function formatBackupExportedAt(exportedAt: string | null): string {
 
 export function isCompatibleBackupVersion(version: unknown): version is number {
   return typeof version === "number" && COMPATIBLE_BACKUP_VERSIONS.includes(version);
+}
+
+export function isLegacyBackupVersion(version: number): boolean {
+  return (
+    version === LEGACY_BACKUP_FORMAT_VERSION
+    || version === BACKUP_FORMAT_VERSION_V2
+    || version === BACKUP_FORMAT_VERSION
+  );
+}
+
+export function backupFormatVersionLabel(version: number): string {
+  if (version === CURRENT_BACKUP_FORMAT_VERSION) return `${version} — format courant`;
+  return `${version} — ancienne sauvegarde`;
 }
 
 export function extractBackupSnapshot(parsed: unknown): Record<string, unknown> | null {
@@ -109,6 +129,8 @@ export function parseBackupFile(fileName: string, text: string): ParsedBackupFil
     meta: {
       fileName,
       version: snapshot.version,
+      versionLabel: backupFormatVersionLabel(snapshot.version),
+      isLegacy: isLegacyBackupVersion(snapshot.version),
       exportedAt,
       exportedAtLabel: formatBackupExportedAt(exportedAt),
       itemCount: countSnapshotElements(snapshot),

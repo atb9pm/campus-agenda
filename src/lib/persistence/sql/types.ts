@@ -14,7 +14,11 @@ export interface SqlDatabase {
     bind(...values: unknown[]): SqlStatement;
   };
   exec(query: string): Promise<void>;
-  /** Exécute les instructions dans une transaction unique (tout ou rien). */
+  /**
+   * Transaction unique SQLite (tout ou rien) :
+   * BEGIN → instructions → COMMIT ; erreur → ROLLBACK.
+   * Aucune modification partielle ne doit rester dans la base.
+   */
   batch(statements: SqlBatchStatement[]): Promise<void>;
 }
 

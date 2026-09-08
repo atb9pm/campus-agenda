@@ -13,10 +13,14 @@ L’administrateur peut restaurer Campus Agenda depuis un fichier JSON, après u
 - Sauvegarde préalable `campus-agenda-before-restore-YYYY-MM-DD-HHmm.json` via `GET /api/admin/backup`.
 - Modale de confirmation : saisie exacte de `RESTAURER`, puis `POST /api/admin/restore`.
 - Rechargement complet après succès. Aucune persistance du snapshot dans le navigateur.
+- Format **v4** présenté comme format courant complet (`CAMPUS_BACKUP_INSERT_ORDER`).
+- Les fichiers v1/v2/v3 sont signalés comme **ancienne sauvegarde** (compatibilité historique).
+- Restauration SQLite atomique (`BEGIN` / `COMMIT` / `ROLLBACK`) avec tests de conservation intégrale de l’état précédent.
+- `docs/OPERATIONS.md` aligné sur Infomaniak + SQLite (septembre 2026) et sur la règle « nouvelle table = backup + restore ».
 
 ### Non inclus
 
-Aucune migration SQL. Pas de reset usine, pas de vidage de base, pas d’automatisation quotidienne.
+Aucune migration SQL. Pas de reset usine, pas de vidage de base, pas d’automatisation quotidienne, pas de multi-années.
 
 ## [2.43.2] — Sauvegarde administrateur : téléchargement manuel
 
