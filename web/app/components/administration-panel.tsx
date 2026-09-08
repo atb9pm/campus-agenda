@@ -11,6 +11,7 @@ import type {
 import { formatBranchUsageLine, summarizeBranchUsages } from "@campus/features/school-catalog";
 import { BRANCH_TEACHING_TYPE_LABELS, type TeachingType } from "@campus/features/teaching-types/index.ts";
 import { AnnualCoursesAdminPanel } from "./annual-courses-admin-panel.tsx";
+import { AdminBackupPanel } from "./admin-backup-panel.tsx";
 import { ClassScheduleAdminPanel } from "./class-schedule-admin-panel.tsx";
 import { ClassesAdminPanel } from "./classes-admin-panel.tsx";
 import { ProfessionsAdminPanel } from "./professions-admin-panel.tsx";
@@ -247,12 +248,9 @@ export function AdministrationPanel({
           Catalogue des branches → professions → plans de formation (CTX) → classes →
           attributions → horaire. Les branches d’une classe viennent du plan, jamais d’une saisie libre.
         </p>
-        <p>
-          <a className="workspace-action" href="/api/admin/backup" download>
-            Télécharger une sauvegarde
-          </a>
-        </p>
       </div>
+
+      <AdminBackupPanel />
 
       <div className="admin-tabs" role="tablist" aria-label="Sections administration">
         {(Object.keys(TAB_LABELS) as AdminTab[]).map((entry) => (

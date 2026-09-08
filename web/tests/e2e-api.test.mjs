@@ -89,7 +89,7 @@ test("phase 0.8 — E2E enseignant publie puis élève consulte", async () => {
   assert.equal(backupResponse.status, 200);
   assert.match(
     backupResponse.headers.get("content-disposition") ?? "",
-    /attachment; filename="campus-agenda-backup-\d{4}-\d{2}-\d{2}\.json"/,
+    /attachment; filename="campus-agenda-backup-\d{4}-\d{2}-\d{2}-\d{4}\.json"/,
   );
   const backupPayload = await backupResponse.json();
   assert.equal(backupPayload.snapshot.version, 4);

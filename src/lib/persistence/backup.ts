@@ -15,10 +15,15 @@ export const BACKUP_FORMAT_VERSION_V2 = 2 as const;
 /** Format v1 : agenda uniquement. */
 export const LEGACY_BACKUP_FORMAT_VERSION = 1 as const;
 
-export function backupDownloadFilename(exportedAt: string): string {
-  const day = exportedAt.slice(0, 10);
-  const safe = /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : "export";
-  return `campus-agenda-backup-${safe}.json`;
+export function backupDownloadFilename(exportedAt: string, now = new Date()): string {
+  const parsed = Date.parse(exportedAt);
+  const date = Number.isFinite(parsed) ? new Date(parsed) : now;
+  const year = String(date.getUTCFullYear());
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  const hours = String(date.getUTCHours()).padStart(2, "0");
+  const minutes = String(date.getUTCMinutes()).padStart(2, "0");
+  return `campus-agenda-backup-${year}-${month}-${day}-${hours}${minutes}.json`;
 }
 
 export interface AgendaBackupSnapshot {

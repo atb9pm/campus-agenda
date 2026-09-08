@@ -2,21 +2,22 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
-## [2.43.2] — Sauvegarde : téléchargement d’un fichier JSON
+## [2.43.2] — Sauvegarde administrateur : téléchargement manuel
 
-`GET /api/admin/backup` n’affiche plus le JSON dans l’onglet : le navigateur enregistre
-`campus-agenda-backup-AAAA-MM-JJ.json`. Un bouton **Télécharger une sauvegarde** est ajouté
-dans Administration.
+Administration propose une section **Sauvegarde des données** : l’administrateur télécharge une copie JSON complète, sans restauration ni reset.
 
 ### Ajouté
 
-- En-tête `Content-Disposition: attachment`.
-- Lien de téléchargement dans l’écran Administration.
+- Section Administration, visible uniquement via `teacherIsAdmin`.
+- Bouton **Télécharger une sauvegarde** : `GET /api/admin/backup`, puis fichier
+  `campus-agenda-backup-YYYY-MM-DD-HHmm.json` (heure UTC du snapshot).
+- États : « Création de la sauvegarde… » (bouton désactivé), succès, ou
+  « La sauvegarde n’a pas pu être créée. Aucune donnée n’a été modifiée. »
+- L’API conserve `requireAdminSession` et `Content-Disposition: attachment`.
 
 ### Non inclus
 
-Aucune migration SQL. La restauration reste `POST /api/admin/restore` (pas de bouton
-dans l’interface, volontairement).
+Aucune migration SQL. Pas de reset, pas de vidage, pas d’upload, pas de restauration dans l’interface.
 
 ## [2.43.1] — Infomaniak : plus de SSH GitHub bloquant
 

@@ -233,14 +233,15 @@ test("backup — restauration v2 ne touche pas les comptes", async () => {
 test("backup — GET admin envoie un fichier JSON à télécharger", async () => {
   assert.equal(APP_VERSION, "2.43.2");
   const route = await readFile(new URL("../web/app/api/admin/backup/route.ts", import.meta.url), "utf8");
-  const panel = await readFile(new URL("../web/app/components/administration-panel.tsx", import.meta.url), "utf8");
+  const panel = await readFile(new URL("../web/app/components/admin-backup-panel.tsx", import.meta.url), "utf8");
 
-  assert.equal(backupDownloadFilename("2026-09-08T06:45:53.133Z"), "campus-agenda-backup-2026-09-08.json");
-  assert.equal(backupDownloadFilename("invalide"), "campus-agenda-backup-export.json");
+  assert.equal(
+    backupDownloadFilename("2026-09-08T09:15:53.133Z"),
+    "campus-agenda-backup-2026-09-08-0915.json",
+  );
   assert.match(route, /Content-Disposition/);
   assert.match(route, /attachment; filename=/);
   assert.match(route, /backupDownloadFilename/);
   assert.match(panel, /Télécharger une sauvegarde/);
-  assert.match(panel, /href="\/api\/admin\/backup"/);
-  assert.match(panel, /download/);
+  assert.match(panel, /fetch\("\/api\/admin\/backup"/);
 });

@@ -642,6 +642,10 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .annual-course-dialog fieldset { display: flex; flex-direction: column; gap: 8px; border: 0; padding: 0; }
 .annual-course-dates { display: flex; gap: 12px; flex-wrap: wrap; }
 .admin-panel-block { margin: 0 38px 28px; padding: 22px 24px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.admin-backup-block .workspace-action { margin-top: 4px; }
+.admin-backup-status { margin: 12px 0 0; font-size: 12px; font-weight: 700; }
+.admin-backup-status.is-success { color: #2f6b3f; }
+.admin-backup-status.is-error { color: #b42318; }
 .admin-panel-block .school-year-admin { padding: 0; }
 .admin-inline-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; }
 .admin-inline-form label { display: grid; gap: 4px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8793a9; }
