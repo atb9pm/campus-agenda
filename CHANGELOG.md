@@ -12,7 +12,8 @@ Le parcours pédagogique de référence reste la source durable. Les publication
 - Un clic ouvre directement le carnet de la bonne SchoolClass, en conservant la semaine scolaire courante et le **contexte de la branche** cliquée (ex. MECAUTO3A · Transmission, pas la première branche de la classe).
 - Les publications affichées et créées (« Taper + Entrée ») utilisent le `subjectId` de la branche sélectionnée.
 - Les contrôles affichés et ajoutés depuis cette ouverture utilisent le même contexte de branche, sans réécrire la coordination existante.
-- Le chemin classique **Ma semaine → classe → Ouvrir le carnet** continue de fonctionner.
+- Depuis Mes cours, `resolveNotebookSubjectId` est **strict** : correspondance unique par `annualCourseId`, sinon par `branchLabel` ; ambiguïté ou absence → `null`, jamais le premier subject. Publication et contrôle sont alors bloqués (« Le cours Transmission n’est pas relié à une matière de cette classe. »).
+- Le chemin classique **Ma semaine → classe → Ouvrir le carnet** continue de fonctionner (fallback première branche inchangé).
 - La vue annuelle consultative `TeacherCourseTimelinePanel` n’est plus le chemin utilisateur depuis Mes cours.
 
 ### Non inclus
