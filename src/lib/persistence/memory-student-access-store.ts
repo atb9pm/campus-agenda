@@ -4,6 +4,10 @@ import {
   replaceMemoryLegacySchool,
   type LegacyStudentAccess,
 } from "./memory-legacy-school.ts";
+import {
+  deterministicStudentAccessId,
+  pickReusableStudentAccess,
+} from "../../features/student-access/reuse.ts";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -61,11 +65,12 @@ export class MemoryStudentAccessStore implements StudentAccessStore {
     accessCodeHash: string;
   }): Promise<StudentAccessRecord> {
     const stamp = nowIso();
-    const existing = await this.getBySchoolClassId(input.schoolClassId);
+    const existing = pickReusableStudentAccess(await this.listAll(), input);
     const record: StudentAccessRecord = existing
       ? {
           ...existing,
           classroomId: input.classroomId,
+          schoolClassId: input.schoolClassId,
           label: input.label,
           accessCodeHash: input.accessCodeHash,
           accessVersion: existing.accessVersion + 1,
@@ -73,7 +78,7 @@ export class MemoryStudentAccessStore implements StudentAccessStore {
           revokedAt: null,
         }
       : {
-          id: `student-access-${input.schoolClassId}`,
+          id: deterministicStudentAccessId(input.schoolClassId),
           classroomId: input.classroomId,
           schoolClassId: input.schoolClassId,
           label: input.label,

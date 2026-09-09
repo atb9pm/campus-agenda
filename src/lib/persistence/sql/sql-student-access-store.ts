@@ -1,5 +1,10 @@
 import type { SqlDatabase } from "./types.ts";
 import type { StudentAccessRecord, StudentAccessStore } from "../student-access-types.ts";
+import {
+  deterministicStudentAccessId,
+  isPersistenceConstraintError,
+  pickReusableStudentAccess,
+} from "../../../features/student-access/reuse.ts";
 
 const COLUMNS =
   "id, classroom_id, school_class_id, label, access_code_hash, access_version, created_at, updated_at, revoked_at";
@@ -72,16 +77,17 @@ export class SqlStudentAccessStore implements StudentAccessStore {
     accessCodeHash: string;
   }): Promise<StudentAccessRecord> {
     const stamp = nowIso();
-    const existing = await this.getBySchoolClassId(input.schoolClassId);
+    const existing = pickReusableStudentAccess(await this.listAll(), input);
     if (existing) {
       await this.db
         .prepare(
           `UPDATE student_accesses
-           SET classroom_id = ?, label = ?, access_code_hash = ?, access_version = ?, updated_at = ?, revoked_at = NULL
+           SET classroom_id = ?, school_class_id = ?, label = ?, access_code_hash = ?, access_version = ?, updated_at = ?, revoked_at = NULL
            WHERE id = ?`,
         )
         .bind(
           input.classroomId,
+          input.schoolClassId,
           input.label,
           input.accessCodeHash,
           existing.accessVersion + 1,
@@ -94,15 +100,40 @@ export class SqlStudentAccessStore implements StudentAccessStore {
       return updated;
     }
 
-    const id = `student-access-${input.schoolClassId}`;
-    await this.db
-      .prepare(
-        `INSERT INTO student_accesses
-          (id, classroom_id, school_class_id, label, access_code_hash, access_version, created_at, updated_at, revoked_at)
-         VALUES (?, ?, ?, ?, ?, 1, ?, ?, NULL)`,
-      )
-      .bind(id, input.classroomId, input.schoolClassId, input.label, input.accessCodeHash, stamp, stamp)
-      .run();
+    const id = deterministicStudentAccessId(input.schoolClassId);
+    try {
+      await this.db
+        .prepare(
+          `INSERT INTO student_accesses
+            (id, classroom_id, school_class_id, label, access_code_hash, access_version, created_at, updated_at, revoked_at)
+           VALUES (?, ?, ?, ?, ?, 1, ?, ?, NULL)`,
+        )
+        .bind(id, input.classroomId, input.schoolClassId, input.label, input.accessCodeHash, stamp, stamp)
+        .run();
+    } catch (error) {
+      if (!isPersistenceConstraintError(error)) throw error;
+      const fallback = pickReusableStudentAccess(await this.listAll(), input);
+      if (!fallback) throw error;
+      await this.db
+        .prepare(
+          `UPDATE student_accesses
+           SET classroom_id = ?, school_class_id = ?, label = ?, access_code_hash = ?, access_version = ?, updated_at = ?, revoked_at = NULL
+           WHERE id = ?`,
+        )
+        .bind(
+          input.classroomId,
+          input.schoolClassId,
+          input.label,
+          input.accessCodeHash,
+          fallback.accessVersion + 1,
+          stamp,
+          fallback.id,
+        )
+        .run();
+      const recovered = await this.getById(fallback.id);
+      if (!recovered) throw error;
+      return recovered;
+    }
     const created = await this.getById(id);
     if (!created) throw new Error("Accès apprentis introuvable après génération.");
     return created;

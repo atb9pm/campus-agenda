@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+
 import type { SchoolClassRecord } from "@campus/features/school-catalog";
 import type { StudentAccessMetadata } from "@campus/types/student-access";
 import type { SchoolYearSummary } from "../../lib/api-client.ts";
@@ -10,6 +12,7 @@ interface StudentAccessAdminBlockProps {
   access: StudentAccessMetadata | null;
   revealedCode: string | null;
   pending: boolean;
+  error: string | null;
   onGenerate: (schoolClass: SchoolClassRecord, isRegenerate: boolean) => void;
   onRevoke: (schoolClass: SchoolClassRecord) => void;
   onDismissCode: () => void;
@@ -36,6 +39,7 @@ export function StudentAccessAdminBlock({
   access,
   revealedCode,
   pending,
+  error,
   onGenerate,
   onRevoke,
   onDismissCode,
@@ -45,6 +49,12 @@ export function StudentAccessAdminBlock({
   const readOnly = schoolClass.isArchived || year?.status === "archived";
   const status = access?.status ?? "none";
   const isRegenerate = status === "active" || status === "prepared";
+  const secretRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!revealedCode) return;
+    secretRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [revealedCode]);
 
   let statusLabel = "Aucun accès";
   let statusClass = "badge-status is-off";
@@ -75,8 +85,14 @@ export function StudentAccessAdminBlock({
         <p>{description}</p>
       </div>
 
+      {error ? (
+        <p className="admin-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+
       {revealedCode ? (
-        <div className="admin-secret" role="status">
+        <div className="admin-secret" role="status" ref={secretRef}>
           <p className="admin-secret-title">Nouveau code apprentis</p>
           <p className="admin-secret-value">{revealedCode}</p>
           <p className="admin-secret-hint">
@@ -108,6 +124,7 @@ export function StudentAccessAdminBlock({
               onClick={() => onGenerate(schoolClass, false)}
             >
               Générer un code
+              {pending ? "…" : ""}
             </button>
           )}
           {isRegenerate && (
@@ -118,7 +135,7 @@ export function StudentAccessAdminBlock({
                 aria-label={`Régénérer le code apprentis de ${schoolClass.code}`}
                 onClick={() => onGenerate(schoolClass, true)}
               >
-                {status === "prepared" ? "Régénérer" : "Régénérer le code"}
+                {pending ? "Génération…" : status === "prepared" ? "Régénérer" : "Régénérer le code"}
               </button>
               <button
                 type="button"

@@ -30,3 +30,8 @@ export {
   studentAccessAllowsAdminWrite,
   studentAccessMetadataFromRecord,
 } from "./status.ts";
+export {
+  deterministicStudentAccessId,
+  isPersistenceConstraintError,
+  pickReusableStudentAccess,
+} from "./reuse.ts";
