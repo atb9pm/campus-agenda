@@ -27,7 +27,9 @@ import {
   revokeStudentAccess,
   teacherClassAccessViews,
   isSealedStudentAccessCode,
+  sealStudentAccessCode,
   unsealStudentAccessCode,
+  compactClassCodeKey,
   STUDENT_ACCESS_ALPHABET,
   STUDENT_LOGIN_INVALID_REASON,
 } from "../src/features/student-access/index.ts";
@@ -391,7 +393,7 @@ test("F — permissions : lecture seule de sa classe, pas de mutation Agenda", a
   assert.equal(canMutateAgenda(logged.session), false);
 });
 
-test("G — API admin : non-admin refusé, hash jamais envoyé, plaintext une seule fois", async () => {
+test("G — API admin : non-admin refusé, hash jamais envoyé, code courant lisible", async () => {
   resetWorld();
   const admin = await adminDeps();
   const schoolClass = (await admin.listClasses()).find((entry) => entry.code === "MA2");
@@ -399,17 +401,23 @@ test("G — API admin : non-admin refusé, hash jamais envoyé, plaintext une se
   const generated = await generateStudentAccess(admin, schoolClass.id);
   assert.equal(generated.ok, true);
   if (!generated.ok) return;
+  assert.equal(generated.access.currentCode, generated.code);
   const listed = JSON.stringify({ ok: true, access: generated.access });
   assert.equal(listed.includes("accessCodeHash"), false);
   assert.equal(listed.includes("pbkdf2-sha256"), false);
-  assert.equal(listed.includes(generated.code), false);
+  assert.equal(listed.includes("aes-gcm-v1$"), false);
+  assert.equal(listed.includes(generated.code), true);
   const createPayload = JSON.stringify({ ok: true, access: generated.access, code: generated.code });
   assert.match(createPayload, /"code":"/);
   assert.equal(createPayload.includes("accessCodeHash"), false);
 
+  const fromList = await listStudentAccessMetadata(admin, schoolClass.id);
+  assert.equal(fromList[0]?.currentCode, generated.code);
+
   const route = await readFile(new URL("../web/app/api/admin/student-access/route.ts", import.meta.url), "utf8");
   const studentRoute = await readFile(new URL("../web/app/api/auth/student/route.ts", import.meta.url), "utf8");
   const classesAdmin = await readFile(new URL("../web/app/components/classes-admin-panel.tsx", import.meta.url), "utf8");
+  const adminBlock = await readFile(new URL("../web/app/components/student-access-admin.tsx", import.meta.url), "utf8");
   assert.match(route, /requireAdminSession/);
   assert.match(route, /assertNoSecretLeak/);
   assert.match(studentRoute, /authenticateStudentAccessCode/);
@@ -417,13 +425,24 @@ test("G — API admin : non-admin refusé, hash jamais envoyé, plaintext une se
   assert.match(classesAdmin, /accessMutationLock/);
   assert.match(classesAdmin, /accessErrorByClass/);
   assert.match(classesAdmin, /revealedCodeByClass/);
+  assert.match(adminBlock, /Code apprentis en vigueur/);
+  assert.doesNotMatch(adminBlock, /ne pourra plus/);
   const mesCours = await readFile(new URL("../web/app/components/mes-cours-panel.tsx", import.meta.url), "utf8");
   const teacherCoursesRoute = await readFile(new URL("../web/app/api/teacher/courses/route.ts", import.meta.url), "utf8");
+  const teacherAccessRoute = await readFile(
+    new URL("../web/app/api/teacher/class-accesses/route.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(mesCours, /Code d’accès classe/);
+  assert.match(mesCours, /teacherAccessViewForClass/);
   assert.doesNotMatch(mesCours, /Régénérer le code/);
   assert.doesNotMatch(mesCours, /Générer un code/);
+  const page = await readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /fetchTeacherClassAccessesApi/);
   assert.match(teacherCoursesRoute, /teacherClassAccessViews/);
   assert.match(teacherCoursesRoute, /requireTeacherSession/);
+  assert.match(teacherAccessRoute, /requireTeacherSession/);
+  assert.match(teacherAccessRoute, /teacherClassAccessViews/);
 });
 
 test("H — localStorage : le secret élève n'est plus enregistré, login enseignant inchangé", async () => {
@@ -918,9 +937,12 @@ test("enseignant attribué voit le code courant, un autre identifiant ne le voit
   assert.equal(generated.ok, true);
   if (!generated.ok) return;
 
-  const assigned = await teacherClassAccessViews(admin.accesses, [schoolClass.id]);
+  const assigned = await teacherClassAccessViews(admin.accesses, [
+    { schoolClassId: schoolClass.id, classCode: schoolClass.code },
+  ]);
   assert.equal(assigned[schoolClass.id]?.status, "active");
   assert.equal(assigned[schoolClass.id]?.code, generated.code);
+  assert.equal(assigned[schoolClass.id]?.classCode, schoolClass.code);
 
   const stranger = await teacherClassAccessViews(admin.accesses, ["class-not-mine"]);
   assert.equal(stranger[schoolClass.id], undefined);
@@ -944,6 +966,37 @@ test("enseignant attribué voit le code courant, un autre identifiant ne le voit
 
   const mesCours = await readFile(new URL("../web/app/components/mes-cours-panel.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(mesCours, /localStorage/);
+});
+
+test("enseignant voit le code si MECAUTO 3A et MECAUTO3A désignent la même classe", async () => {
+  resetWorld();
+  assert.equal(compactClassCodeKey("MECAUTO 3A"), "MECAUTO3A");
+  const plaintext = "MECAUTO3A-K7M4-R2P8";
+  const store = getMemoryStudentAccessStore();
+  await store.replaceAll([
+    {
+      id: "orphan-mecauto",
+      classroomId: "classroom-mecauto",
+      schoolClassId: null,
+      label: "MECAUTO 3A",
+      accessCodeHash: "pbkdf2-sha256$10000$YQ==$Yg==",
+      accessCodeCiphertext: await sealStudentAccessCode(plaintext),
+      accessVersion: 1,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      revokedAt: null,
+    },
+  ]);
+  const views = await teacherClassAccessViews(store, [
+    { schoolClassId: "class-mecauto-3a", classCode: "MECAUTO3A" },
+  ]);
+  assert.equal(views["class-mecauto-3a"]?.status, "active");
+  assert.equal(views["class-mecauto-3a"]?.code, plaintext);
+  const other = await teacherClassAccessViews(store, [
+    { schoolClassId: "class-other", classCode: "MMA1A" },
+  ]);
+  assert.equal(other["class-other"]?.code, null);
+  assert.equal(JSON.stringify(other).includes(plaintext), false);
 });
 
 test("login HTTP — mauvais code 401 identique, bon code 200", async () => {

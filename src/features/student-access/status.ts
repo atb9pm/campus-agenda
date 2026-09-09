@@ -7,6 +7,7 @@ export function studentAccessMetadataFromRecord(
   record: StudentAccessRecord,
   schoolClass: Pick<SchoolClassRecord, "id" | "isArchived">,
   yearStatus: SchoolYearStatus | null,
+  currentCode: string | null = null,
 ): StudentAccessMetadata {
   return {
     accessId: record.id,
@@ -16,6 +17,7 @@ export function studentAccessMetadataFromRecord(
     updatedAt: record.updatedAt,
     revokedAt: record.revokedAt,
     status: resolveStudentAccessUiStatus(record, schoolClass, yearStatus),
+    currentCode: record.revokedAt ? null : currentCode,
   };
 }
 

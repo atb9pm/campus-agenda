@@ -9,6 +9,7 @@ import {
   WORKSPACE_ASSIGNMENT_ROLE_LABELS,
   type TeacherCourseWorkspaceEntry,
 } from "@campus/features/teacher-workspace";
+import { teacherAccessViewForClass } from "@campus/features/student-access/match.ts";
 import type { TeacherClassAccessView } from "@campus/types/student-access";
 import type { TeacherClassSetup } from "@campus/features/teacher-setup";
 
@@ -106,6 +107,7 @@ export function MesCoursPanel({
           {groups.map((group) => {
             const meta = formatTeacherCourseClassMeta(group);
             const setup = displaySetups.find((entry) => entry.id === group.classId || entry.name === group.classCode);
+            const view = teacherAccessViewForClass(classAccesses, group.classId, group.classCode);
             return (
               <article className="workspace-card mes-cours-class" key={group.classId}>
                 <header>
@@ -113,7 +115,7 @@ export function MesCoursPanel({
                   <h3>{group.classCode}</h3>
                   {meta ? <p>{meta}</p> : null}
                 </header>
-                <ClassAccessReadonly view={classAccesses[group.classId]} />
+                <ClassAccessReadonly view={view} />
                 <ul className="mes-cours-branches">
                   {group.courses.map((course) => (
                     <li key={course.annualCourseId}>

@@ -304,6 +304,27 @@ export async function fetchTeacherCoursesApi(schoolYearId?: string | null): Prom
   };
 }
 
+export async function fetchTeacherClassAccessesApi(schoolYearId?: string | null): Promise<{
+  schoolYearId: string | null;
+  classAccesses: Record<string, TeacherClassAccessView>;
+}> {
+  const params = schoolYearId ? `?schoolYearId=${encodeURIComponent(schoolYearId)}` : "";
+  const response = await fetch(`/api/teacher/class-accesses${params}`, { credentials: "include" });
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    schoolYearId?: string | null;
+    classAccesses?: Record<string, TeacherClassAccessView>;
+  }>(response);
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.reason ?? "Chargement des codes d’accès impossible.");
+  }
+  return {
+    schoolYearId: payload.schoolYearId ?? null,
+    classAccesses: payload.classAccesses ?? {},
+  };
+}
+
 export interface CourseTimelinePublicationSummary {
   agendaItemId: number;
   referenceItemId: string | null;

@@ -1,4 +1,5 @@
 import type { StudentAccessRecord } from "../../lib/persistence/student-access-types.ts";
+import { compactClassCodeKey } from "./code.ts";
 
 export function deterministicStudentAccessId(schoolClassId: string): string {
   return `student-access-${schoolClassId}`;
@@ -23,9 +24,10 @@ export function pickReusableStudentAccess(
       && (!row.schoolClassId || row.schoolClassId === input.schoolClassId),
   );
   if (byClassroom) return byClassroom;
-  const wanted = input.label.trim().toLowerCase();
+  const wanted = compactClassCodeKey(input.label);
+  if (!wanted) return null;
   return (
-    records.find((row) => !row.schoolClassId && row.label.trim().toLowerCase() === wanted) ?? null
+    records.find((row) => !row.schoolClassId && compactClassCodeKey(row.label) === wanted) ?? null
   );
 }
 

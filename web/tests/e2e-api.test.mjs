@@ -410,12 +410,27 @@ test("2.24.0 — E2E Mes cours : session uniquement, teacherId client ignoré", 
   assert.equal(payload.ok, true);
   assert.ok(Array.isArray(payload.courses));
   assert.ok("schoolYearId" in payload);
+  assert.equal(typeof payload.classAccesses, "object");
+  assert.equal(JSON.stringify(payload).includes("accessCodeHash"), false);
+  assert.equal(JSON.stringify(payload).includes("aes-gcm-v1$"), false);
+
+  const classAccessesResponse = await request("/api/teacher/class-accesses", {
+    headers: { cookie: teacherCookie },
+  });
+  assert.equal(classAccessesResponse.status, 200);
+  const classAccessesPayload = await classAccessesResponse.json();
+  assert.equal(classAccessesPayload.ok, true);
+  assert.equal(typeof classAccessesPayload.classAccesses, "object");
 
   const student = await loginGeneratedStudent();
   const studentForbidden = await request("/api/teacher/courses", {
     headers: { cookie: student.cookie },
   });
   assert.equal(studentForbidden.status, 401);
+  const studentForbiddenAccess = await request("/api/teacher/class-accesses", {
+    headers: { cookie: student.cookie },
+  });
+  assert.equal(studentForbiddenAccess.status, 401);
 });
 
 test("2.27.0 — API CTX refuse profession désactivée et restaure le même id", async () => {

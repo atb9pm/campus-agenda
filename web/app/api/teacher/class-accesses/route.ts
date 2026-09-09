@@ -5,7 +5,6 @@ import {
 } from "@campus/features/teacher-workspace";
 import { teacherClassAccessViews } from "@campus/features/student-access/index.ts";
 import { getStudentAccessStore } from "@campus/lib/persistence/store-factory.ts";
-import type { TeacherClassAccessView } from "@campus/types/student-access";
 import {
   getAnnualCourseServiceDeps,
   jsonResponse,
@@ -26,52 +25,30 @@ function assertNoSecretLeak(body: unknown): void {
   }
 }
 
-async function classAccessesForTeacherCourses(
-  courses: readonly { classId: string; classCode: string }[],
-): Promise<Record<string, TeacherClassAccessView>> {
-  try {
-    const assigned = courses.map((course) => ({
-      schoolClassId: course.classId,
-      classCode: course.classCode,
-    }));
-    const classAccesses = await teacherClassAccessViews(await getStudentAccessStore(), assigned);
-    assertNoSecretLeak(classAccesses);
-    return classAccesses;
-  } catch {
-    return {};
-  }
-}
-
 async function handleGet(request: Request) {
   const auth = await requireTeacherSession(request);
   if ("error" in auth && auth.error) return auth.error;
 
   const url = new URL(request.url);
-  // teacherId fourni par le client est ignoré — seule la session fait foi.
   const teacherId = sessionTeacherIdForCoursesApi(auth.session!.teacherId);
   const schoolYearId = schoolYearIdFromSearchParams(url.searchParams);
 
-  const deps = await getAnnualCourseServiceDeps();
-  const result = await listTeacherCourses(deps, { teacherId, schoolYearId });
-  const classAccesses = await classAccessesForTeacherCourses(result.courses);
-
-  const body = {
-    ok: true,
-    schoolYearId: result.schoolYearId,
-    courses: result.courses,
-    classAccesses,
-  };
   try {
+    const deps = await getAnnualCourseServiceDeps();
+    const result = await listTeacherCourses(deps, { teacherId, schoolYearId });
+    const assigned = result.courses.map((course) => ({
+      schoolClassId: course.classId,
+      classCode: course.classCode,
+    }));
+    const classAccesses = await teacherClassAccessViews(await getStudentAccessStore(), assigned);
+    const body = { ok: true, schoolYearId: result.schoolYearId, classAccesses };
     assertNoSecretLeak(body);
     return jsonResponse(body);
   } catch {
-    return jsonResponse({
-      ok: true,
-      schoolYearId: result.schoolYearId,
-      courses: result.courses,
-      classAccesses: {},
+    return jsonResponse({ ok: false, reason: "Chargement des codes d’accès impossible.", classAccesses: {} }, {
+      status: 500,
     });
   }
 }
 
-export const GET = withApiObservability("/api/teacher/courses", handleGet);
+export const GET = withApiObservability("/api/teacher/class-accesses", handleGet);

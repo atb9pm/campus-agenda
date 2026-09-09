@@ -49,6 +49,8 @@ export function StudentAccessAdminBlock({
   const readOnly = schoolClass.isArchived || year?.status === "archived";
   const status = access?.status ?? "none";
   const isRegenerate = status === "active" || status === "prepared";
+  const liveCode = revealedCode ?? access?.currentCode ?? null;
+  const isFreshReveal = Boolean(revealedCode);
   const secretRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -91,27 +93,34 @@ export function StudentAccessAdminBlock({
         </p>
       ) : null}
 
-      {revealedCode ? (
+      {liveCode ? (
         <div className="admin-secret" role="status" ref={secretRef}>
-          <p className="admin-secret-title">Nouveau code apprentis</p>
-          <p className="admin-secret-value">{revealedCode}</p>
+          <p className="admin-secret-title">{isFreshReveal ? "Nouveau code apprentis" : "Code apprentis en vigueur"}</p>
+          <p className="admin-secret-value">{liveCode}</p>
           <p className="admin-secret-hint">
-            Copiez ce code maintenant. Pour des raisons de sécurité, Campus Agenda ne pourra plus
-            l’afficher.
+            {isFreshReveal
+              ? "Copiez ce code et communiquez-le aux apprentis. Il reste visible ici et dans Mes cours pour les enseignants attribués."
+              : "Code actuel de la classe. Les enseignants attribués le voient aussi dans Mes cours."}
           </p>
           <div className="admin-teacher-edit-actions">
             <button
               type="button"
               aria-label={`Copier le code apprentis de ${schoolClass.code}`}
-              onClick={() => void copyCode(revealedCode)}
+              onClick={() => void copyCode(liveCode)}
             >
               Copier
             </button>
-            <button type="button" onClick={onDismissCode}>
-              J’ai noté
-            </button>
+            {isFreshReveal ? (
+              <button type="button" onClick={onDismissCode}>
+                J’ai noté
+              </button>
+            ) : null}
           </div>
         </div>
+      ) : status === "active" || status === "prepared" ? (
+        <p className="admin-student-access-status">
+          Le code n’est pas affichable. Régénérez-le pour le voir ici et dans Mes cours.
+        </p>
       ) : null}
 
       {readOnly ? null : (

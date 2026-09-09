@@ -55,6 +55,7 @@ import {
   fetchApiSession,
   fetchSchoolCalendar,
   fetchTeacherClassroomsApi,
+  fetchTeacherClassAccessesApi,
   fetchTeacherCoursesApi,
   fetchTeacherNotesApi,
   fetchTeacherSetupApi,
@@ -367,6 +368,13 @@ export default function Home() {
         setTeacherClassAccesses(payload.classAccesses);
         setTeacherCoursesYearLabel(payload.courses[0]?.schoolYearLabel ?? null);
         setTeacherCoursesReady(true);
+        try {
+          const accesses = await fetchTeacherClassAccessesApi();
+          if (cancelled) return;
+          setTeacherClassAccesses(accesses.classAccesses);
+        } catch {
+          // Conservez les codes déjà reçus avec les cours.
+        }
       } catch {
         if (cancelled) return;
         setTeacherCourses([]);

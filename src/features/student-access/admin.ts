@@ -7,7 +7,7 @@ import { runtimeClassroomIdForSchoolClass } from "../agenda-bridge/ids.ts";
 import type { StudentAccessMetadata } from "../../types/student-access.ts";
 import { generateStudentAccessCode } from "./code.ts";
 import { isPersistenceConstraintError, pickReusableStudentAccess } from "./reuse.ts";
-import { sealStudentAccessCode } from "./seal.ts";
+import { sealStudentAccessCode, unsealStudentAccessCode } from "./seal.ts";
 import { studentAccessAllowsAdminWrite, studentAccessMetadataFromRecord } from "./status.ts";
 
 export interface StudentAccessAdminDeps {
@@ -32,7 +32,15 @@ async function metadataFor(
   schoolClass: SchoolClassRecord,
   years: readonly SchoolYearRecord[],
 ): Promise<StudentAccessMetadata> {
-  return studentAccessMetadataFromRecord(record, schoolClass, yearStatusForClass(schoolClass, years));
+  const currentCode = record.revokedAt
+    ? null
+    : await unsealStudentAccessCode(record.accessCodeCiphertext);
+  return studentAccessMetadataFromRecord(
+    record,
+    schoolClass,
+    yearStatusForClass(schoolClass, years),
+    currentCode,
+  );
 }
 
 export async function listStudentAccessMetadata(

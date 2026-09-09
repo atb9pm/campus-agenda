@@ -36,8 +36,14 @@ async function adminDeps(): Promise<StudentAccessAdminDeps> {
 
 function assertNoSecretLeak(body: unknown): void {
   const serialized = JSON.stringify(body);
-  if (serialized.includes("accessCodeHash") || serialized.includes("access_code_hash")) {
-    throw new Error("Le hash d'accès apprentis ne doit jamais être envoyé au client.");
+  if (
+    serialized.includes("accessCodeHash")
+    || serialized.includes("access_code_hash")
+    || serialized.includes("accessCodeCiphertext")
+    || serialized.includes("access_code_ciphertext")
+    || serialized.includes("aes-gcm-v1$")
+  ) {
+    throw new Error("Le hash ou le chiffrement d'accès apprentis ne doit jamais être envoyé au client.");
   }
 }
 

@@ -167,7 +167,13 @@ export function ClassesAdminPanel({
         onError(message);
         return;
       }
-      setAccesses((current) => ({ ...current, [entry.id]: payload.access! }));
+      setAccesses((current) => ({
+        ...current,
+        [entry.id]: {
+          ...payload.access!,
+          currentCode: payload.access!.currentCode ?? payload.code!,
+        },
+      }));
       setRevealedCodeByClass((current) => ({ ...current, [entry.id]: payload.code! }));
       onNotice(isRegenerate ? `Nouveau code apprentis pour ${entry.code}.` : `Code apprentis généré pour ${entry.code}.`);
     } catch {

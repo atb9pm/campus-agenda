@@ -16,8 +16,8 @@ Campus Agenda n’utilise plus le libellé comme secret. Chaque vraie SchoolClas
 - Rotation et révocation : `access_version` incrémenté, sessions élèves invalidées à la requête suivante.
 - Génération/révocation d’une même classe sérialisée dans le process (un double-clic n’affiche plus un code déjà invalidé).
 - Génération et régénération réutilisent un accès orphelin (sans `school_class_id`, même code de classe ou même agenda) au lieu d’échouer silencieusement.
-- Le code nouvellement généré s’affiche sur la carte de la classe ; une erreur de génération s’affiche au même endroit, pas seulement en haut de page.
-- **Mes cours** (espace enseignant) affiche en lecture seule le code d’accès de chaque classe attribuée. Seul l’administrateur peut le générer ou le changer ; après régénération, l’affichage enseignant suit le code en vigueur.
+- Le code nouvellement généré s’affiche sur la carte de la classe et **reste visible** (code en vigueur) ; une erreur de génération s’affiche au même endroit, pas seulement en haut de page.
+- **Mes cours** (espace enseignant) charge le code d’accès de chaque classe attribuée (`GET /api/teacher/courses` et `GET /api/teacher/class-accesses`). Seul l’administrateur peut le générer ou le changer ; après régénération, l’affichage enseignant suit le code en vigueur. `MECAUTO 3A` et `MECAUTO3A` sont reconnus comme la même classe.
 - Migration `0026_student_access_ciphertext.sql` (code courant chiffré au repos, hash PBKDF2 inchangé pour la connexion élève).
 - API admin `GET/POST/DELETE /api/admin/student-access` et zone **Accès apprentis** dans Administration → Classes.
 - Migration `0025_structured_student_access.sql`.
