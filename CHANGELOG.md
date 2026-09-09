@@ -28,6 +28,7 @@ Campus Agenda n’utilise plus le libellé comme secret. Chaque vraie SchoolClas
 - Session élève structurée (`schoolClassId`, `schoolYearId`, `accessVersion`).
 - Plus de stockage du secret dans `localStorage`, plus d’auto-login `?classe=<secret>`.
 - Backup/restore v4 étendu rétrocompatiblement (nouvelles colonnes optionnelles, jamais de plaintext).
+- Les confirmations Administration → Classes (régénérer / désactiver un code, archiver, supprimer) s’affichent au centre de la page, plus en fenêtre native du navigateur.
 
 ### Non inclus
 

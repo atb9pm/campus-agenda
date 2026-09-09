@@ -709,6 +709,24 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 }
 .admin-restore-modal footer button.is-danger { border-color: #b42318; color: #fff; background: #b42318; }
 .admin-restore-modal footer button.is-danger:disabled { background: #e4a0a0; border-color: #e4a0a0; cursor: not-allowed; }
+.admin-confirm-modal p { margin: 14px 0 0; color: #445a7c; font-size: 13px; line-height: 1.5; font-weight: 600; }
+.admin-confirm-modal footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+.admin-confirm-modal footer button {
+  padding: 9px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: #4b5f7e;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.admin-confirm-modal footer button.is-danger { border-color: #b42318; color: #fff; background: #b42318; }
 .admin-panel-block .school-year-admin { padding: 0; }
 .admin-inline-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; }
 .admin-inline-form label { display: grid; gap: 4px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8793a9; }
