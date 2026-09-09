@@ -51,8 +51,8 @@ export function filterNotebookItemsForSubject(
   return items.filter((item) => {
     if (item.classroomId !== options.classroomId) return false;
     if (item.authorTeacherId !== options.teacherId) return false;
-    if (options.restrictToSubject && options.subjectId) {
-      return item.subjectId === options.subjectId;
+    if (options.restrictToSubject) {
+      return Boolean(options.subjectId) && item.subjectId === options.subjectId;
     }
     return true;
   });

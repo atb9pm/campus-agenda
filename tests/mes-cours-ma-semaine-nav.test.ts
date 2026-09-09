@@ -5,10 +5,13 @@ import test from "node:test";
 import {
   filterNotebookItemsForSubject,
   notebookContextFromCourse,
+  notebookUnlinkedCourseReason,
   openCourseInWeekTarget,
+  resolveDefaultSubjectId,
   resolveNotebookClassroomId,
   resolveNotebookSubjectId,
   type NotebookRuntimeClassroom,
+  type NotebookRuntimeSubject,
 } from "../src/features/class-notebook/index.ts";
 import type { PrototypeAgendaItem } from "../src/features/agenda/demo-items.ts";
 import type { ClassroomCatalog } from "../src/features/classes/index.ts";
@@ -26,6 +29,35 @@ const EMPTY_CATALOG: ClassroomCatalog = {
   subjects: [],
   memberships: [],
   teachers: [],
+};
+
+const MECAUTO_CATALOG: ClassroomCatalog = {
+  classrooms: [{ id: "classroom-mecauto3a", name: "MECAUTO3A", programLabel: "", accessCodeHint: "" }],
+  subjects: [
+    {
+      id: "subj-chassis",
+      classroomId: "classroom-mecauto3a",
+      name: "Châssis",
+      annualCourseId: "ac-chassis",
+    },
+    {
+      id: "subj-transmission",
+      classroomId: "classroom-mecauto3a",
+      name: "Transmission",
+      annualCourseId: "ac-transmission",
+    },
+  ],
+  teachers: [{ id: TEACHER_ID, displayName: "DelP", initials: "DP" }],
+  memberships: [
+    {
+      id: "mem-delp-mecauto3a",
+      teacherId: TEACHER_ID,
+      classroomId: "classroom-mecauto3a",
+      subjectIds: ["subj-chassis", "subj-transmission"],
+      validFrom: "2026-08-01",
+      validTo: null,
+    },
+  ],
 };
 
 function mecautoCourse(
@@ -133,6 +165,7 @@ function subjectFor(course: TeacherCourseWorkspaceEntry): string {
     branchLabel: course.branchLabel,
     annualCourseId: course.annualCourseId,
     runtimeSubjects: RUNTIME[0]?.subjects,
+    strict: true,
   });
   assert.ok(subjectId);
   return subjectId!;
@@ -244,6 +277,117 @@ test("H — créer un contrôle depuis Transmission utilise le subjectId Transmi
   assert.notEqual(created.subjectId, subjectFor(CHASSIS));
 });
 
+test("resolveNotebookSubjectId — Transmission correctement reliée", () => {
+  assert.equal(
+    resolveNotebookSubjectId({
+      catalog: MECAUTO_CATALOG,
+      teacherId: TEACHER_ID,
+      classroomId: "classroom-mecauto3a",
+      branchLabel: "Transmission",
+      annualCourseId: "ac-transmission",
+      runtimeSubjects: RUNTIME[0]?.subjects,
+      strict: true,
+    }),
+    "subj-transmission",
+  );
+});
+
+test("resolveNotebookSubjectId — Châssis correctement relié", () => {
+  assert.equal(
+    resolveNotebookSubjectId({
+      catalog: MECAUTO_CATALOG,
+      teacherId: TEACHER_ID,
+      classroomId: "classroom-mecauto3a",
+      branchLabel: "Châssis",
+      annualCourseId: "ac-chassis",
+      runtimeSubjects: RUNTIME[0]?.subjects,
+      strict: true,
+    }),
+    "subj-chassis",
+  );
+});
+
+test("resolveNotebookSubjectId — annualCourseId inconnu + aucun label → null, jamais le 1er subject", () => {
+  const firstDefault = resolveDefaultSubjectId(
+    MECAUTO_CATALOG,
+    TEACHER_ID,
+    "classroom-mecauto3a",
+    [],
+  );
+  assert.equal(firstDefault, "subj-chassis");
+
+  const resolved = resolveNotebookSubjectId({
+    catalog: MECAUTO_CATALOG,
+    teacherId: TEACHER_ID,
+    classroomId: "classroom-mecauto3a",
+    branchLabel: "Moteur",
+    annualCourseId: "ac-inconnu",
+    runtimeSubjects: RUNTIME[0]?.subjects,
+    strict: true,
+  });
+  assert.equal(resolved, null);
+  assert.notEqual(resolved, firstDefault);
+  assert.notEqual(resolved, "subj-chassis");
+  assert.equal(
+    notebookUnlinkedCourseReason("Transmission"),
+    "Le cours Transmission n’est pas relié à une matière de cette classe.",
+  );
+});
+
+test("resolveNotebookSubjectId — deux correspondances ambiguës → null", () => {
+  const ambiguous: NotebookRuntimeSubject[] = [
+    {
+      id: "subj-t1",
+      name: "Transmission",
+      classroomId: "classroom-mecauto3a",
+      annualCourseId: "ac-transmission",
+    },
+    {
+      id: "subj-t2",
+      name: "Transmission",
+      classroomId: "classroom-mecauto3a",
+      annualCourseId: "ac-transmission",
+    },
+  ];
+  assert.equal(
+    resolveNotebookSubjectId({
+      catalog: EMPTY_CATALOG,
+      teacherId: TEACHER_ID,
+      classroomId: "classroom-mecauto3a",
+      branchLabel: "Transmission",
+      annualCourseId: "ac-transmission",
+      runtimeSubjects: ambiguous,
+      strict: true,
+    }),
+    null,
+  );
+  assert.equal(
+    resolveNotebookSubjectId({
+      catalog: EMPTY_CATALOG,
+      teacherId: TEACHER_ID,
+      classroomId: "classroom-mecauto3a",
+      branchLabel: "Transmission",
+      annualCourseId: "ac-inconnu",
+      runtimeSubjects: ambiguous,
+      strict: true,
+    }),
+    null,
+  );
+});
+
+test("resolveNotebookSubjectId — chemin classique Ma semaine peut encore prendre le fallback", () => {
+  const classic = resolveNotebookSubjectId({
+    catalog: MECAUTO_CATALOG,
+    teacherId: TEACHER_ID,
+    classroomId: "classroom-mecauto3a",
+    branchLabel: null,
+    annualCourseId: null,
+    runtimeSubjects: RUNTIME[0]?.subjects,
+    strict: false,
+  });
+  assert.equal(classic, "subj-chassis");
+});
+
 test("I — Ma semaine → classe → carnet n’est pas restreint à la première branche", () => {
   const classic = filterNotebookItemsForSubject(AGENDA_ITEMS, {
     classroomId: "classroom-mecauto3a",
@@ -253,6 +397,16 @@ test("I — Ma semaine → classe → carnet n’est pas restreint à la premiè
   });
   assert.equal(classic.length, 4);
   assert.ok(classic.some((entry) => entry.subjectId === "subj-chassis"));
+});
+
+test("filtre — subjectId null en mode cours explicite n’affiche aucune publication", () => {
+  const blocked = filterNotebookItemsForSubject(AGENDA_ITEMS, {
+    classroomId: "classroom-mecauto3a",
+    teacherId: TEACHER_ID,
+    subjectId: null,
+    restrictToSubject: true,
+  });
+  assert.deepEqual(blocked, []);
 });
 
 test("sources — page.tsx ouvre le carnet avec le cours, plus le déroulement", async () => {
@@ -269,6 +423,8 @@ test("sources — page.tsx ouvre le carnet avec le cours, plus le déroulement",
   assert.match(page, /openNotebookCourse/);
   assert.match(page, /onOpenCourse=\{openCourseInWeek\}/);
   assert.match(page, /resolveNotebookSubjectId/);
+  assert.match(page, /strict: Boolean\(openNotebookCourse\)/);
+  assert.match(page, /notebookUnlinkedCourseReason/);
   assert.match(page, /filterNotebookItemsForSubject/);
   assert.match(page, /restrictToSubject: Boolean\(openNotebookCourse\)/);
   assert.match(page, /onOpenClass=\{openClassNotebook\}/);
@@ -277,6 +433,13 @@ test("sources — page.tsx ouvre le carnet avec le cours, plus le déroulement",
   assert.doesNotMatch(page, /TeacherCourseTimelinePanel/);
   assert.doesNotMatch(page, /resolveDefaultSubjectId/);
   assert.doesNotMatch(page, /branchNames\[0\].*resolveDefaultSubjectId/);
+
+  const resolveSource = await readFile(
+    new URL("../src/features/class-notebook/resolve.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(resolveSource, /if \(strict\) return null;/);
+  assert.match(resolveSource, /uniqueSubjectMatch/);
 
   assert.match(notebook, /branchLabel: selectedBranchLabel/);
   assert.match(notebook, /data-annual-course-id/);

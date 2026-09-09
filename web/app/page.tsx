@@ -96,6 +96,7 @@ import {
   notebookContextFromCourse,
   openCourseInWeekTarget,
   peekNotesFromBrowser,
+  notebookUnlinkedCourseReason,
   resolveNotebookClassroomId,
   resolveNotebookSubjectId,
   weekdayToCourseDayIndex,
@@ -597,6 +598,7 @@ export default function Home() {
             branchLabel: openNotebookCourse?.branchLabel ?? openNotebookClass.branchNames[0] ?? null,
             annualCourseId: openNotebookCourse?.annualCourseId ?? null,
             runtimeSubjects: notebookRuntimeSubjects,
+            strict: Boolean(openNotebookCourse),
           })
         : null,
     [
@@ -622,7 +624,9 @@ export default function Home() {
     : !notebookClassroomId
       ? "Cette classe n'est pas reliée au catalogue — publications élèves indisponibles."
       : !notebookSubjectId
-        ? "Aucune branche enseignée trouvée pour publier."
+        ? openNotebookCourse
+          ? notebookUnlinkedCourseReason(openNotebookCourse.branchLabel)
+          : "Aucune branche enseignée trouvée pour publier."
         : undefined;
 
   const studentAutoCourseDay = useMemo(

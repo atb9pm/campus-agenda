@@ -1,4 +1,5 @@
 export {
+  notebookUnlinkedCourseReason,
   resolveCatalogClassroomId,
   resolveDefaultSubjectId,
   resolveNotebookClassroomId,
