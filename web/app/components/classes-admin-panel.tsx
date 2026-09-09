@@ -27,7 +27,47 @@ import {
 import { ClassCreationWizard } from "./class-creation-wizard.tsx";
 import type { SchoolYearSummary } from "../../lib/api-client.ts";
 import type { StudentAccessMetadata } from "@campus/types/student-access";
+import { ConfirmDialog } from "./confirm-dialog.tsx";
 import { StudentAccessAdminBlock } from "./student-access-admin.tsx";
+
+type ClassConfirmAction =
+  | { kind: "regenerate"; entry: SchoolClassRecord }
+  | { kind: "revoke"; entry: SchoolClassRecord }
+  | { kind: "archive"; entry: SchoolClassRecord }
+  | { kind: "delete"; entry: SchoolClassRecord };
+
+function classConfirmCopy(action: ClassConfirmAction): {
+  title: string;
+  body: string;
+  confirmLabel: string;
+} {
+  switch (action.kind) {
+    case "regenerate":
+      return {
+        title: `Régénérer le code de ${action.entry.code} ?`,
+        body: "L’ancien code et les sessions élèves actuellement ouvertes seront immédiatement invalidés.",
+        confirmLabel: "Régénérer",
+      };
+    case "revoke":
+      return {
+        title: `Désactiver l’accès apprentis de ${action.entry.code} ?`,
+        body: "Les élèves actuellement connectés seront déconnectés.",
+        confirmLabel: "Désactiver",
+      };
+    case "archive":
+      return {
+        title: `Archiver la classe « ${action.entry.code} » ?`,
+        body: "Elle sera conservée pour l’historique et retirée des listes opérationnelles.",
+        confirmLabel: "Archiver",
+      };
+    case "delete":
+      return {
+        title: `Supprimer définitivement la classe « ${action.entry.code} » ?`,
+        body: "Cette action est irréversible.",
+        confirmLabel: "Supprimer",
+      };
+  }
+}
 
 interface ClassEditDraft {
   classId: string;
@@ -79,6 +119,7 @@ export function ClassesAdminPanel({
   const [accesses, setAccesses] = useState<Record<string, StudentAccessMetadata>>({});
   const [revealedCodeByClass, setRevealedCodeByClass] = useState<Record<string, string>>({});
   const [accessErrorByClass, setAccessErrorByClass] = useState<Record<string, string>>({});
+  const [confirmAction, setConfirmAction] = useState<ClassConfirmAction | null>(null);
   const accessMutationLock = useRef(false);
 
   const counts = useMemo(() => countClassesByStatus(classes), [classes]);
@@ -130,10 +171,15 @@ export function ClassesAdminPanel({
 
   async function generateStudentAccess(entry: SchoolClassRecord, isRegenerate: boolean) {
     if (accessMutationLock.current) return;
-    const confirmMessage = isRegenerate
-      ? `Régénérer le code de ${entry.code} ?\nL’ancien code et les sessions élèves actuellement ouvertes seront immédiatement invalidés.`
-      : null;
-    if (confirmMessage && !window.confirm(confirmMessage)) return;
+    if (isRegenerate) {
+      setConfirmAction({ kind: "regenerate", entry });
+      return;
+    }
+    await applyGenerateStudentAccess(entry, false);
+  }
+
+  async function applyGenerateStudentAccess(entry: SchoolClassRecord, isRegenerate: boolean) {
+    if (accessMutationLock.current) return;
     accessMutationLock.current = true;
     onClearError();
     setAccessErrorByClass((current) => {
@@ -189,13 +235,11 @@ export function ClassesAdminPanel({
 
   async function revokeStudentAccess(entry: SchoolClassRecord) {
     if (accessMutationLock.current) return;
-    if (
-      !window.confirm(
-        `Désactiver l’accès apprentis de ${entry.code} ?\nLes élèves actuellement connectés seront déconnectés.`,
-      )
-    ) {
-      return;
-    }
+    setConfirmAction({ kind: "revoke", entry });
+  }
+
+  async function applyRevokeStudentAccess(entry: SchoolClassRecord) {
+    if (accessMutationLock.current) return;
     accessMutationLock.current = true;
     onClearError();
     setAccessErrorByClass((current) => {
@@ -294,14 +338,28 @@ export function ClassesAdminPanel({
     setClassDraft(null);
   }
 
-  async function archiveClass(entry: SchoolClassRecord) {
-    if (
-      !window.confirm(
-        `Archiver la classe « ${entry.code} » ?\nElle sera conservée pour l’historique et retirée des listes opérationnelles.`,
-      )
-    ) {
+  function runConfirmedAction(action: ClassConfirmAction) {
+    setConfirmAction(null);
+    if (action.kind === "regenerate") {
+      void applyGenerateStudentAccess(action.entry, true);
       return;
     }
+    if (action.kind === "revoke") {
+      void applyRevokeStudentAccess(action.entry);
+      return;
+    }
+    if (action.kind === "archive") {
+      void applyArchiveClass(action.entry);
+      return;
+    }
+    void applyDeleteClass(action.entry);
+  }
+
+  async function archiveClass(entry: SchoolClassRecord) {
+    setConfirmAction({ kind: "archive", entry });
+  }
+
+  async function applyArchiveClass(entry: SchoolClassRecord) {
     setPending(true);
     try {
       const ok = await patchClass(entry, { isArchived: true });
@@ -338,13 +396,10 @@ export function ClassesAdminPanel({
   }
 
   async function deleteClass(entry: SchoolClassRecord) {
-    if (
-      !window.confirm(
-        `Supprimer définitivement la classe « ${entry.code} » ?\nCette action est irréversible.`,
-      )
-    ) {
-      return;
-    }
+    setConfirmAction({ kind: "delete", entry });
+  }
+
+  async function applyDeleteClass(entry: SchoolClassRecord) {
     setPending(true);
     onClearError();
     try {
@@ -370,6 +425,7 @@ export function ClassesAdminPanel({
       : statusFilter === "inactive"
         ? "Aucune classe désactivée."
         : "Aucune classe active.";
+  const confirmCopy = confirmAction ? classConfirmCopy(confirmAction) : null;
 
   return (
     <div className="admin-panel-block">
@@ -693,6 +749,17 @@ export function ClassesAdminPanel({
           </section>
         ))
       )}
+      {confirmCopy && confirmAction ? (
+        <ConfirmDialog
+          open
+          title={confirmCopy.title}
+          body={confirmCopy.body}
+          confirmLabel={confirmCopy.confirmLabel}
+          danger
+          onCancel={() => setConfirmAction(null)}
+          onConfirm={() => runConfirmedAction(confirmAction)}
+        />
+      ) : null}
     </div>
   );
 }

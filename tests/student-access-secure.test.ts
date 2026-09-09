@@ -425,6 +425,8 @@ test("G — API admin : non-admin refusé, hash jamais envoyé, code courant lis
   assert.match(classesAdmin, /accessMutationLock/);
   assert.match(classesAdmin, /accessErrorByClass/);
   assert.match(classesAdmin, /revealedCodeByClass/);
+  assert.match(classesAdmin, /ConfirmDialog/);
+  assert.doesNotMatch(classesAdmin, /window\.confirm/);
   assert.match(adminBlock, /Code apprentis en vigueur/);
   assert.doesNotMatch(adminBlock, /ne pourra plus/);
   const mesCours = await readFile(new URL("../web/app/components/mes-cours-panel.tsx", import.meta.url), "utf8");
