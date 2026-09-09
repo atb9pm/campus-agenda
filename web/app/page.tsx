@@ -91,12 +91,18 @@ import {
 import {
   clearNotesFromBrowser,
   createEmptyNotesDocument,
+  filterNotebookItemsForSubject,
   loadNotesFromBrowser,
+  notebookContextFromCourse,
+  openCourseInWeekTarget,
   peekNotesFromBrowser,
-  resolveCatalogClassroomId,
-  resolveDefaultSubjectId,
+  notebookUnlinkedCourseReason,
+  resolveNotebookClassroomId,
+  resolveNotebookSubjectId,
   weekdayToCourseDayIndex,
   type ClassNotesDocument,
+  type NotebookCourseContext,
+  type NotebookRuntimeClassroom,
 } from "@campus/features/class-notebook";
 import { ConfigurationPanel } from "./components/configuration-panel.tsx";
 import { AdministrationPanel } from "./components/administration-panel.tsx";
@@ -106,7 +112,6 @@ import { ClassNotebookPanel } from "./components/class-notebook-panel.tsx";
 import { MaSemainePanel } from "./components/ma-semaine-panel.tsx";
 import { MesCoursPanel } from "./components/mes-cours-panel.tsx";
 import { ControlPlanningPanel } from "./components/control-planning-panel.tsx";
-import { TeacherCourseTimelinePanel } from "./components/teacher-course-timeline-panel.tsx";
 
 type AppMode = "teacher" | "student";
 type StudentEntry = "code" | "teacher-preview";
@@ -184,7 +189,7 @@ function sectionDescription(activeSection: TeacherNavSection, isStudentView: boo
 export default function Home() {
   const [currentTeacherId, setCurrentTeacherId] = useState(DEMO_CURRENT_TEACHER_ID);
   const [authenticatedTeacher, setAuthenticatedTeacher] = useState<AuthenticatedTeacherIdentity | null>(null);
-  const [runtimeClassrooms, setRuntimeClassrooms] = useState<Array<{ id: string; name: string }>>([]);
+  const [runtimeClassrooms, setRuntimeClassrooms] = useState<NotebookRuntimeClassroom[]>([]);
   const teacherClassrooms = useMemo(() => {
     if (runtimeClassrooms.length) {
       return runtimeClassrooms.map((classroom) => ({
@@ -237,10 +242,10 @@ export default function Home() {
   const [teacherClassAccesses, setTeacherClassAccesses] = useState<Record<string, TeacherClassAccessView>>({});
   const [teacherCoursesYearLabel, setTeacherCoursesYearLabel] = useState<string | null>(null);
   const [teacherCoursesReady, setTeacherCoursesReady] = useState(false);
-  const [openTimelineCourseId, setOpenTimelineCourseId] = useState<string | null>(null);
   /** Évite d'écrire sur le serveur juste après un chargement / une migration. */
   const skipTeacherSetupSaveRef = useRef(false);
   const [openNotebookClassId, setOpenNotebookClassId] = useState<string | null>(null);
+  const [openNotebookCourse, setOpenNotebookCourse] = useState<NotebookCourseContext | null>(null);
   const [notebookCenterWeek, setNotebookCenterWeek] = useState(selectedSchoolWeekNumber);
   const [classNotesDocument, setClassNotesDocument] = useState<ClassNotesDocument>(() =>
     createEmptyNotesDocument(),
@@ -271,7 +276,7 @@ export default function Home() {
     setTeacherAuthenticated(true);
     setStudentSession(null);
     setStudentEntry(null);
-    setOpenTimelineCourseId(null);
+    setOpenNotebookCourse(null);
     setLoginError("");
     const fallbackIds = getClassroomsForTeacher(DEMO_CATALOG, session.teacherId).map((classroom) => classroom.id);
     let classroomIds = fallbackIds;
@@ -568,34 +573,60 @@ export default function Home() {
     [openNotebookClassId, assignedDisplaySetups],
   );
   const notebookClassroomId = useMemo(
-    () => (openNotebookClass ? resolveCatalogClassroomId(openNotebookClass, DEMO_CATALOG) : null),
-    [openNotebookClass],
+    () =>
+      openNotebookClass
+        ? resolveNotebookClassroomId(
+            openNotebookClass,
+            runtimeClassrooms,
+            DEMO_CATALOG,
+            openNotebookCourse?.classId ?? openNotebookClass.id,
+          )
+        : null,
+    [openNotebookClass, openNotebookCourse, runtimeClassrooms],
+  );
+  const notebookRuntimeSubjects = useMemo(
+    () => runtimeClassrooms.find((entry) => entry.id === notebookClassroomId)?.subjects,
+    [notebookClassroomId, runtimeClassrooms],
   );
   const notebookSubjectId = useMemo(
     () =>
       openNotebookClass && notebookClassroomId
-        ? resolveDefaultSubjectId(
-            DEMO_CATALOG,
-            currentTeacherId,
-            notebookClassroomId,
-            openNotebookClass.branchNames,
-          )
+        ? resolveNotebookSubjectId({
+            catalog: DEMO_CATALOG,
+            teacherId: currentTeacherId,
+            classroomId: notebookClassroomId,
+            branchLabel: openNotebookCourse?.branchLabel ?? openNotebookClass.branchNames[0] ?? null,
+            annualCourseId: openNotebookCourse?.annualCourseId ?? null,
+            runtimeSubjects: notebookRuntimeSubjects,
+            strict: Boolean(openNotebookCourse),
+          })
         : null,
-    [currentTeacherId, notebookClassroomId, openNotebookClass],
+    [
+      currentTeacherId,
+      notebookClassroomId,
+      notebookRuntimeSubjects,
+      openNotebookClass,
+      openNotebookCourse,
+    ],
   );
   const notebookItems = useMemo(() => {
     if (!notebookClassroomId) return [];
-    return items.filter(
-      (item) => item.classroomId === notebookClassroomId && item.authorTeacherId === currentTeacherId,
-    );
-  }, [currentTeacherId, items, notebookClassroomId]);
+    return filterNotebookItemsForSubject(items, {
+      classroomId: notebookClassroomId,
+      teacherId: currentTeacherId,
+      subjectId: notebookSubjectId,
+      restrictToSubject: Boolean(openNotebookCourse),
+    });
+  }, [currentTeacherId, items, notebookClassroomId, notebookSubjectId, openNotebookCourse]);
   const notebookCanPublish = Boolean(notebookClassroomId && notebookSubjectId);
   const notebookBlockedReason = !openNotebookClass
     ? undefined
     : !notebookClassroomId
       ? "Cette classe n'est pas reliée au catalogue — publications élèves indisponibles."
       : !notebookSubjectId
-        ? "Aucune branche enseignée trouvée pour publier."
+        ? openNotebookCourse
+          ? notebookUnlinkedCourseReason(openNotebookCourse.branchLabel)
+          : "Aucune branche enseignée trouvée pour publier."
         : undefined;
 
   const studentAutoCourseDay = useMemo(
@@ -711,7 +742,7 @@ export default function Home() {
     setAuthenticatedTeacher(null);
     setTeacherAuthenticated(false);
     setTeacherIsAdmin(false);
-    setOpenTimelineCourseId(null);
+    setOpenNotebookCourse(null);
   }
 
   function exitStudentMode() {
@@ -780,7 +811,6 @@ export default function Home() {
 
   function navigate(section: TeacherNavSection) {
     setActiveSection(section);
-    setOpenTimelineCourseId(null);
   }
 
   function showNotice(message: string) {
@@ -839,17 +869,41 @@ export default function Home() {
   }
 
   function openClassNotebook(classSetup: TeacherClassSetup) {
+    setOpenNotebookCourse(null);
     setOpenNotebookClassId(classSetup.id);
     setActiveSection("ma-semaine");
     setNotebookCenterWeek(selectedSchoolWeekNumber);
-    const mappedClassroomId = resolveCatalogClassroomId(classSetup, DEMO_CATALOG);
+    const mappedClassroomId = resolveNotebookClassroomId(classSetup, runtimeClassrooms, DEMO_CATALOG);
     if (mappedClassroomId) {
       setSelectedClassroomId(mappedClassroomId);
     }
   }
 
+  function openCourseInWeek(course: TeacherCourseWorkspaceEntry) {
+    const target = openCourseInWeekTarget(course, selectedSchoolWeekNumber);
+    setOpenNotebookCourse(notebookContextFromCourse(course));
+    setOpenNotebookClassId(target.classId);
+    setActiveSection(target.section);
+    setNotebookCenterWeek(target.schoolWeekNumber);
+    const setup = assignedDisplaySetups.find((entry) => entry.id === target.classId) ?? {
+      id: target.classId,
+      name: course.classCode,
+    };
+    const mappedClassroomId = resolveNotebookClassroomId(
+      setup,
+      runtimeClassrooms,
+      DEMO_CATALOG,
+      target.classId,
+    );
+    if (mappedClassroomId) {
+      setSelectedClassroomId(mappedClassroomId);
+    }
+    window.scrollTo(0, 0);
+  }
+
   function closeClassNotebook() {
     setOpenNotebookClassId(null);
+    setOpenNotebookCourse(null);
   }
 
   function shiftNotebookWeeks(direction: -1 | 1) {
@@ -1225,7 +1279,7 @@ export default function Home() {
           </div>
         </header>
 
-        {activeSection === "mes-cours" && openTimelineCourseId === null && (
+        {activeSection === "mes-cours" && (
           <MesCoursPanel
             courses={teacherCourses}
             classAccesses={teacherClassAccesses}
@@ -1233,18 +1287,7 @@ export default function Home() {
             loading={!teacherCoursesReady}
             displaySetups={assignedDisplaySetups}
             onOpenClass={openClassNotebook}
-            onOpenCourse={(course) => setOpenTimelineCourseId(course.annualCourseId)}
-          />
-        )}
-
-        {activeSection === "mes-cours" && openTimelineCourseId !== null && (
-          <TeacherCourseTimelinePanel
-            key={openTimelineCourseId}
-            annualCourseId={openTimelineCourseId}
-            onBack={() => setOpenTimelineCourseId(null)}
-            onAgendaItemCreated={(item) => {
-              setItems((previous) => upsertAgendaItem(previous, item));
-            }}
+            onOpenCourse={openCourseInWeek}
           />
         )}
 
@@ -1259,6 +1302,9 @@ export default function Home() {
         {activeSection === "ma-semaine" && openNotebookClass && (
           <ClassNotebookPanel
             classSetup={openNotebookClass}
+            branchLabel={openNotebookCourse?.branchLabel}
+            annualCourseId={openNotebookCourse?.annualCourseId}
+            subjectId={notebookSubjectId}
             schoolWeeks={schoolWeeksMemo}
             centerWeekNumber={notebookCenterWeek}
             items={notebookItems}

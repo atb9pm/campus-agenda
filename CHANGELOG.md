@@ -2,6 +2,24 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.44.1] — Navigation Mes cours vers Ma semaine
+
+Le parcours pédagogique de référence reste la source durable. Les publications, contrôles et informations concrètes se gèrent depuis **Ma semaine**, espace de travail principal de l’enseignant.
+
+### Modifié
+
+- Dans **Mes cours**, le bouton **Voir le déroulement** est remplacé par **Ouvrir dans Ma semaine** sur chaque AnnualCourse / branche.
+- Un clic ouvre directement le carnet de la bonne SchoolClass, en conservant la semaine scolaire courante et le **contexte de la branche** cliquée (ex. MECAUTO3A · Transmission, pas la première branche de la classe).
+- Les publications affichées et créées (« Taper + Entrée ») utilisent le `subjectId` de la branche sélectionnée.
+- Les contrôles affichés et ajoutés depuis cette ouverture utilisent le même contexte de branche, sans réécrire la coordination existante.
+- Depuis Mes cours, `resolveNotebookSubjectId` est **strict** : correspondance unique par `annualCourseId`, sinon par `branchLabel` ; ambiguïté ou absence → `null`, jamais le premier subject. Publication et contrôle sont alors bloqués (« Le cours Transmission n’est pas relié à une matière de cette classe. »).
+- Le chemin classique **Ma semaine → classe → Ouvrir le carnet** continue de fonctionner (fallback première branche inchangé).
+- La vue annuelle consultative `TeacherCourseTimelinePanel` n’est plus le chemin utilisateur depuis Mes cours.
+
+### Non inclus
+
+Pas de reprise multi-années du parcours pédagogique, pas de préparation / activation d’année, pas de nouvelle synchronisation du parcours. Les APIs `course-timeline` et `pedagogical-path` restent disponibles. Aucune migration SQL, aucun changement backup v4 ni accès apprentis.
+
 ## [2.44.0] — Accès apprentis sécurisés et structurés
 
 Campus Agenda n’utilise plus le libellé comme secret. Chaque vraie SchoolClass possède un accès partagé, hashé, rattaché à son année scolaire.

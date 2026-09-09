@@ -361,7 +361,7 @@ async function seedAssignedCourse(
 }
 
 test("version 2.32.0 — déroulement conservé, nav Contrôles, migration 0024", () => {
-  assert.equal(APP_VERSION, "2.44.0");
+  assert.equal(APP_VERSION, "2.44.1");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0026_student_access_ciphertext.sql");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",
@@ -1105,12 +1105,14 @@ test("sources — GET enseignant lecture seule, pas d’ensurePath, pas de calen
   assert.doesNotMatch(route, /export const PATCH/);
   assert.doesNotMatch(route, /export const DELETE/);
 
-  assert.match(page, /openTimelineCourseId/);
-  assert.match(page, /TeacherCourseTimelinePanel/);
+  assert.doesNotMatch(page, /openTimelineCourseId/);
+  assert.doesNotMatch(page, /TeacherCourseTimelinePanel/);
   assert.match(page, /onOpenCourse/);
+  assert.match(page, /openCourseInWeek/);
   assert.doesNotMatch(nav, /déroulement/);
   assert.match(nav, /"mes-cours"/);
-  assert.match(mesCours, /Voir le déroulement/);
+  assert.doesNotMatch(mesCours, /Voir le déroulement/);
+  assert.match(mesCours, /Ouvrir dans Ma semaine/);
   assert.match(mesCours, /Ouvrir le carnet/);
   assert.match(mesCours, /Code d’accès classe/);
   assert.match(timelineUi, /Retour à Mes cours/);
