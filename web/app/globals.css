@@ -870,6 +870,12 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .week-kind-b { color: #6b4d0a; background: #fff1cc; }
 .mes-cours-groups { display: grid; gap: 14px; }
 .mes-cours-class header h3 { margin: 4px 0 0; }
+.mes-cours-access { margin-top: 12px; padding: 12px 14px; border: 1px dashed var(--line); border-radius: 10px; background: #f8fbff; display: grid; gap: 6px; }
+.mes-cours-access-title { margin: 0; color: #516582; font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.mes-cours-access-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.mes-cours-access-code { margin: 0; color: var(--navy); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 16px; font-weight: 700; letter-spacing: .08em; }
+.mes-cours-access-empty { margin: 0; color: #667085; font-size: 13px; }
+.mes-cours-access-hint { margin: 0; color: #667085; font-size: 11px; line-height: 1.4; }
 .mes-cours-branches { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
 .mes-cours-branches li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #f8fbff; }
 .mes-cours-branches strong { display: block; color: var(--navy); font-size: 14px; }

@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+
 import type { SchoolClassRecord } from "@campus/features/school-catalog";
 import type { StudentAccessMetadata } from "@campus/types/student-access";
 import type { SchoolYearSummary } from "../../lib/api-client.ts";
@@ -10,6 +12,7 @@ interface StudentAccessAdminBlockProps {
   access: StudentAccessMetadata | null;
   revealedCode: string | null;
   pending: boolean;
+  error: string | null;
   onGenerate: (schoolClass: SchoolClassRecord, isRegenerate: boolean) => void;
   onRevoke: (schoolClass: SchoolClassRecord) => void;
   onDismissCode: () => void;
@@ -36,6 +39,7 @@ export function StudentAccessAdminBlock({
   access,
   revealedCode,
   pending,
+  error,
   onGenerate,
   onRevoke,
   onDismissCode,
@@ -45,6 +49,14 @@ export function StudentAccessAdminBlock({
   const readOnly = schoolClass.isArchived || year?.status === "archived";
   const status = access?.status ?? "none";
   const isRegenerate = status === "active" || status === "prepared";
+  const liveCode = revealedCode ?? access?.currentCode ?? null;
+  const isFreshReveal = Boolean(revealedCode);
+  const secretRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!revealedCode) return;
+    secretRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [revealedCode]);
 
   let statusLabel = "Aucun accès";
   let statusClass = "badge-status is-off";
@@ -75,27 +87,40 @@ export function StudentAccessAdminBlock({
         <p>{description}</p>
       </div>
 
-      {revealedCode ? (
-        <div className="admin-secret" role="status">
-          <p className="admin-secret-title">Nouveau code apprentis</p>
-          <p className="admin-secret-value">{revealedCode}</p>
+      {error ? (
+        <p className="admin-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      {liveCode ? (
+        <div className="admin-secret" role="status" ref={secretRef}>
+          <p className="admin-secret-title">{isFreshReveal ? "Nouveau code apprentis" : "Code apprentis en vigueur"}</p>
+          <p className="admin-secret-value">{liveCode}</p>
           <p className="admin-secret-hint">
-            Copiez ce code maintenant. Pour des raisons de sécurité, Campus Agenda ne pourra plus
-            l’afficher.
+            {isFreshReveal
+              ? "Copiez ce code et communiquez-le aux apprentis. Il reste visible ici et dans Mes cours pour les enseignants attribués."
+              : "Code actuel de la classe. Les enseignants attribués le voient aussi dans Mes cours."}
           </p>
           <div className="admin-teacher-edit-actions">
             <button
               type="button"
               aria-label={`Copier le code apprentis de ${schoolClass.code}`}
-              onClick={() => void copyCode(revealedCode)}
+              onClick={() => void copyCode(liveCode)}
             >
               Copier
             </button>
-            <button type="button" onClick={onDismissCode}>
-              J’ai noté
-            </button>
+            {isFreshReveal ? (
+              <button type="button" onClick={onDismissCode}>
+                J’ai noté
+              </button>
+            ) : null}
           </div>
         </div>
+      ) : status === "active" || status === "prepared" ? (
+        <p className="admin-student-access-status">
+          Le code n’est pas affichable. Régénérez-le pour le voir ici et dans Mes cours.
+        </p>
       ) : null}
 
       {readOnly ? null : (
@@ -108,6 +133,7 @@ export function StudentAccessAdminBlock({
               onClick={() => onGenerate(schoolClass, false)}
             >
               Générer un code
+              {pending ? "…" : ""}
             </button>
           )}
           {isRegenerate && (
@@ -118,7 +144,7 @@ export function StudentAccessAdminBlock({
                 aria-label={`Régénérer le code apprentis de ${schoolClass.code}`}
                 onClick={() => onGenerate(schoolClass, true)}
               >
-                {status === "prepared" ? "Régénérer" : "Régénérer le code"}
+                {pending ? "Génération…" : status === "prepared" ? "Régénérer" : "Régénérer le code"}
               </button>
               <button
                 type="button"

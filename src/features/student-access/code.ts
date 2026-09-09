@@ -15,6 +15,11 @@ export function normalizeStudentAccessCode(raw: string): string {
   return raw.trim().toUpperCase().replace(/\s+/g, "");
 }
 
+/** Compare MECAUTO 3A et MECAUTO3A comme le même code de classe. */
+export function compactClassCodeKey(code: string): string {
+  return normalizeStudentAccessCode(code).replace(/[^A-Z0-9]/g, "");
+}
+
 function isAlphabetChar(char: string): boolean {
   return STUDENT_ACCESS_ALPHABET.includes(char);
 }

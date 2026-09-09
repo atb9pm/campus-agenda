@@ -4,6 +4,10 @@ import {
   replaceMemoryLegacySchool,
   type LegacyStudentAccess,
 } from "./memory-legacy-school.ts";
+import {
+  deterministicStudentAccessId,
+  pickReusableStudentAccess,
+} from "../../features/student-access/reuse.ts";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -16,6 +20,7 @@ export function toStudentAccessRecord(entry: LegacyStudentAccess): StudentAccess
     schoolClassId: entry.schoolClassId ?? null,
     label: entry.label,
     accessCodeHash: entry.accessCodeHash ?? null,
+    accessCodeCiphertext: entry.accessCodeCiphertext ?? null,
     accessVersion: entry.accessVersion ?? 1,
     createdAt: entry.createdAt ?? null,
     updatedAt: entry.updatedAt ?? null,
@@ -30,6 +35,7 @@ function fromRecord(record: StudentAccessRecord): LegacyStudentAccess {
     schoolClassId: record.schoolClassId,
     label: record.label,
     accessCodeHash: record.accessCodeHash,
+    accessCodeCiphertext: record.accessCodeCiphertext,
     accessVersion: record.accessVersion,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
@@ -59,25 +65,29 @@ export class MemoryStudentAccessStore implements StudentAccessStore {
     classroomId: string;
     label: string;
     accessCodeHash: string;
+    accessCodeCiphertext: string;
   }): Promise<StudentAccessRecord> {
     const stamp = nowIso();
-    const existing = await this.getBySchoolClassId(input.schoolClassId);
+    const existing = pickReusableStudentAccess(await this.listAll(), input);
     const record: StudentAccessRecord = existing
       ? {
           ...existing,
           classroomId: input.classroomId,
+          schoolClassId: input.schoolClassId,
           label: input.label,
           accessCodeHash: input.accessCodeHash,
+          accessCodeCiphertext: input.accessCodeCiphertext,
           accessVersion: existing.accessVersion + 1,
           updatedAt: stamp,
           revokedAt: null,
         }
       : {
-          id: `student-access-${input.schoolClassId}`,
+          id: deterministicStudentAccessId(input.schoolClassId),
           classroomId: input.classroomId,
           schoolClassId: input.schoolClassId,
           label: input.label,
           accessCodeHash: input.accessCodeHash,
+          accessCodeCiphertext: input.accessCodeCiphertext,
           accessVersion: 1,
           createdAt: stamp,
           updatedAt: stamp,
@@ -99,6 +109,7 @@ export class MemoryStudentAccessStore implements StudentAccessStore {
     const record: StudentAccessRecord = {
       ...existing,
       revokedAt: stamp,
+      accessCodeCiphertext: null,
       accessVersion: existing.accessVersion + 1,
       updatedAt: stamp,
     };

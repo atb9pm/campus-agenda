@@ -2,6 +2,7 @@ import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts"
 import type { TeacherAccountRecord } from "@campus/features/teacher-accounts";
 import type { TeacherSetupConfig } from "@campus/features/teacher-setup";
 import type { TeacherCourseWorkspaceEntry } from "@campus/features/teacher-workspace";
+import type { TeacherClassAccessView } from "@campus/types/student-access";
 import type {
   CourseTimelineProjection,
   TeacherCourseTimelineCourse,
@@ -282,6 +283,7 @@ export async function deleteTeacherControlApi(agendaItemId: number): Promise<voi
 export async function fetchTeacherCoursesApi(schoolYearId?: string | null): Promise<{
   schoolYearId: string | null;
   courses: TeacherCourseWorkspaceEntry[];
+  classAccesses: Record<string, TeacherClassAccessView>;
 }> {
   const params = schoolYearId ? `?schoolYearId=${encodeURIComponent(schoolYearId)}` : "";
   const response = await fetch(`/api/teacher/courses${params}`, { credentials: "include" });
@@ -290,6 +292,7 @@ export async function fetchTeacherCoursesApi(schoolYearId?: string | null): Prom
     reason?: string;
     schoolYearId?: string | null;
     courses?: TeacherCourseWorkspaceEntry[];
+    classAccesses?: Record<string, TeacherClassAccessView>;
   }>(response);
   if (!response.ok || !payload.ok) {
     throw new Error(payload.reason ?? "Chargement des cours impossible.");
@@ -297,6 +300,28 @@ export async function fetchTeacherCoursesApi(schoolYearId?: string | null): Prom
   return {
     schoolYearId: payload.schoolYearId ?? null,
     courses: payload.courses ?? [],
+    classAccesses: payload.classAccesses ?? {},
+  };
+}
+
+export async function fetchTeacherClassAccessesApi(schoolYearId?: string | null): Promise<{
+  schoolYearId: string | null;
+  classAccesses: Record<string, TeacherClassAccessView>;
+}> {
+  const params = schoolYearId ? `?schoolYearId=${encodeURIComponent(schoolYearId)}` : "";
+  const response = await fetch(`/api/teacher/class-accesses${params}`, { credentials: "include" });
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    schoolYearId?: string | null;
+    classAccesses?: Record<string, TeacherClassAccessView>;
+  }>(response);
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.reason ?? "Chargement des codes d’accès impossible.");
+  }
+  return {
+    schoolYearId: payload.schoolYearId ?? null,
+    classAccesses: payload.classAccesses ?? {},
   };
 }
 

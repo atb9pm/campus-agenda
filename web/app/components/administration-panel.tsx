@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   PedagogicalContextRecord,
@@ -123,6 +123,7 @@ export function AdministrationPanel({
   const [contexts, setContexts] = useState<PedagogicalContextRecord[]>([]);
   const [schoolYears, setSchoolYears] = useState<SchoolYearSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const catalogReadyRef = useRef(false);
   const [sectionError, setSectionError] = useState<{ tab: AdminTab; message: string } | null>(null);
 
   const [branchLabel, setBranchLabel] = useState("");
@@ -131,7 +132,7 @@ export function AdministrationPanel({
   const [showArchivedBranches, setShowArchivedBranches] = useState(false);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
+    if (!catalogReadyRef.current) setLoading(true);
     try {
       const [catalog, years] = await Promise.all([fetchCatalog(false), fetchSchoolYears()]);
       setClasses(catalog.classes);
@@ -145,6 +146,7 @@ export function AdministrationPanel({
         message: loadError instanceof Error ? loadError.message : "Chargement impossible.",
       });
     } finally {
+      catalogReadyRef.current = true;
       setLoading(false);
     }
   }, [tab]);

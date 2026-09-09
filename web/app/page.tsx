@@ -24,7 +24,7 @@ import {
   groupItemsBySubject,
   studentAccessFromApiSession,
 } from "@campus/features/student";
-import type { StudentAccess } from "@campus/types/student-access";
+import type { StudentAccess, TeacherClassAccessView } from "@campus/types/student-access";
 import {
   buildSchoolWeeks,
   buildSchoolWeeksFromEntries,
@@ -55,6 +55,7 @@ import {
   fetchApiSession,
   fetchSchoolCalendar,
   fetchTeacherClassroomsApi,
+  fetchTeacherClassAccessesApi,
   fetchTeacherCoursesApi,
   fetchTeacherNotesApi,
   fetchTeacherSetupApi,
@@ -233,6 +234,7 @@ export default function Home() {
   );
   const [teacherSetupReady, setTeacherSetupReady] = useState(false);
   const [teacherCourses, setTeacherCourses] = useState<TeacherCourseWorkspaceEntry[]>([]);
+  const [teacherClassAccesses, setTeacherClassAccesses] = useState<Record<string, TeacherClassAccessView>>({});
   const [teacherCoursesYearLabel, setTeacherCoursesYearLabel] = useState<string | null>(null);
   const [teacherCoursesReady, setTeacherCoursesReady] = useState(false);
   const [openTimelineCourseId, setOpenTimelineCourseId] = useState<string | null>(null);
@@ -350,6 +352,7 @@ export default function Home() {
     if (!teacherAuthenticated) {
       setTeacherCoursesReady(false);
       setTeacherCourses([]);
+      setTeacherClassAccesses({});
       setTeacherCoursesYearLabel(null);
       return;
     }
@@ -362,11 +365,20 @@ export default function Home() {
         const payload = await fetchTeacherCoursesApi();
         if (cancelled) return;
         setTeacherCourses(payload.courses);
+        setTeacherClassAccesses(payload.classAccesses);
         setTeacherCoursesYearLabel(payload.courses[0]?.schoolYearLabel ?? null);
         setTeacherCoursesReady(true);
+        try {
+          const accesses = await fetchTeacherClassAccessesApi();
+          if (cancelled) return;
+          setTeacherClassAccesses(accesses.classAccesses);
+        } catch {
+          // Conservez les codes déjà reçus avec les cours.
+        }
       } catch {
         if (cancelled) return;
         setTeacherCourses([]);
+        setTeacherClassAccesses({});
         setTeacherCoursesYearLabel(null);
         setTeacherCoursesReady(true);
       }
@@ -1216,6 +1228,7 @@ export default function Home() {
         {activeSection === "mes-cours" && openTimelineCourseId === null && (
           <MesCoursPanel
             courses={teacherCourses}
+            classAccesses={teacherClassAccesses}
             schoolYearLabel={teacherCoursesYearLabel}
             loading={!teacherCoursesReady}
             displaySetups={assignedDisplaySetups}

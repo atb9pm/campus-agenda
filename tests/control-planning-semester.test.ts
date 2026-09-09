@@ -159,7 +159,7 @@ function testItem(input: {
 
 test("version 2.38.0 — semestre visuel, pas de migration", () => {
   assert.equal(APP_VERSION, "2.44.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0025_structured_student_access.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0026_student_access_ciphertext.sql");
 });
 
 test("semestres — tri par monday, coupe continue, aucune semaine inventée", () => {

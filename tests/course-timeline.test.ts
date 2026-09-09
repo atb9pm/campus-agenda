@@ -362,7 +362,7 @@ async function seedAssignedCourse(
 
 test("version 2.32.0 — déroulement conservé, nav Contrôles, migration 0024", () => {
   assert.equal(APP_VERSION, "2.44.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0025_structured_student_access.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0026_student_access_ciphertext.sql");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",
     "controles",
@@ -1112,6 +1112,7 @@ test("sources — GET enseignant lecture seule, pas d’ensurePath, pas de calen
   assert.match(nav, /"mes-cours"/);
   assert.match(mesCours, /Voir le déroulement/);
   assert.match(mesCours, /Ouvrir le carnet/);
+  assert.match(mesCours, /Code d’accès classe/);
   assert.match(timelineUi, /Retour à Mes cours/);
   assert.match(timelineUi, /formatCourseSessionNumber/);
   assert.match(timelineUi, /formatCourseSessionPeriods/);

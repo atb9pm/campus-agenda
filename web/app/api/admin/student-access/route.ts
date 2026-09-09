@@ -36,60 +36,78 @@ async function adminDeps(): Promise<StudentAccessAdminDeps> {
 
 function assertNoSecretLeak(body: unknown): void {
   const serialized = JSON.stringify(body);
-  if (serialized.includes("accessCodeHash") || serialized.includes("access_code_hash")) {
-    throw new Error("Le hash d'accès apprentis ne doit jamais être envoyé au client.");
+  if (
+    serialized.includes("accessCodeHash")
+    || serialized.includes("access_code_hash")
+    || serialized.includes("accessCodeCiphertext")
+    || serialized.includes("access_code_ciphertext")
+    || serialized.includes("aes-gcm-v1$")
+  ) {
+    throw new Error("Le hash ou le chiffrement d'accès apprentis ne doit jamais être envoyé au client.");
   }
 }
 
 async function handleGet(request: Request) {
-  const auth = await requireAdminSession(request);
-  if ("error" in auth && auth.error) return auth.error;
+  try {
+    const auth = await requireAdminSession(request);
+    if ("error" in auth && auth.error) return auth.error;
 
-  const schoolClassId = new URL(request.url).searchParams.get("schoolClassId")?.trim() || undefined;
-  const deps = await adminDeps();
-  const accesses = await listStudentAccessMetadata(deps, schoolClassId);
-  const body = schoolClassId
-    ? { ok: true, access: accesses[0] ?? null }
-    : { ok: true, accesses };
-  assertNoSecretLeak(body);
-  return jsonResponse(body);
+    const schoolClassId = new URL(request.url).searchParams.get("schoolClassId")?.trim() || undefined;
+    const deps = await adminDeps();
+    const accesses = await listStudentAccessMetadata(deps, schoolClassId);
+    const body = schoolClassId
+      ? { ok: true, access: accesses[0] ?? null }
+      : { ok: true, accesses };
+    assertNoSecretLeak(body);
+    return jsonResponse(body);
+  } catch {
+    return jsonResponse({ ok: false, reason: "Chargement des accès apprentis impossible." }, { status: 500 });
+  }
 }
 
 async function handlePost(request: Request) {
-  const auth = await requireAdminSession(request);
-  if ("error" in auth && auth.error) return auth.error;
+  try {
+    const auth = await requireAdminSession(request);
+    if ("error" in auth && auth.error) return auth.error;
 
-  const body = (await request.json()) as { schoolClassId?: string };
-  const schoolClassId = String(body.schoolClassId ?? "").trim();
-  if (!schoolClassId) {
-    return jsonResponse({ ok: false, reason: "Identifiant de classe manquant." }, { status: 400 });
-  }
+    const body = (await request.json()) as { schoolClassId?: string };
+    const schoolClassId = String(body.schoolClassId ?? "").trim();
+    if (!schoolClassId) {
+      return jsonResponse({ ok: false, reason: "Identifiant de classe manquant." }, { status: 400 });
+    }
 
-  const result = await generateStudentAccess(await adminDeps(), schoolClassId);
-  if (!result.ok) {
-    return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
+    const result = await generateStudentAccess(await adminDeps(), schoolClassId);
+    if (!result.ok) {
+      return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
+    }
+    const payload = { ok: true, access: result.access, code: result.code };
+    assertNoSecretLeak(payload);
+    return jsonResponse(payload);
+  } catch {
+    return jsonResponse({ ok: false, reason: "Génération impossible. Réessayez." }, { status: 500 });
   }
-  const payload = { ok: true, access: result.access, code: result.code };
-  assertNoSecretLeak(payload);
-  return jsonResponse(payload);
 }
 
 async function handleDelete(request: Request) {
-  const auth = await requireAdminSession(request);
-  if ("error" in auth && auth.error) return auth.error;
+  try {
+    const auth = await requireAdminSession(request);
+    if ("error" in auth && auth.error) return auth.error;
 
-  const schoolClassId = new URL(request.url).searchParams.get("schoolClassId")?.trim() ?? "";
-  if (!schoolClassId) {
-    return jsonResponse({ ok: false, reason: "Identifiant de classe manquant." }, { status: 400 });
-  }
+    const schoolClassId = new URL(request.url).searchParams.get("schoolClassId")?.trim() ?? "";
+    if (!schoolClassId) {
+      return jsonResponse({ ok: false, reason: "Identifiant de classe manquant." }, { status: 400 });
+    }
 
-  const result = await revokeStudentAccess(await adminDeps(), schoolClassId);
-  if (!result.ok) {
-    return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
+    const result = await revokeStudentAccess(await adminDeps(), schoolClassId);
+    if (!result.ok) {
+      return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
+    }
+    const payload = { ok: true, access: result.access };
+    assertNoSecretLeak(payload);
+    return jsonResponse(payload);
+  } catch {
+    return jsonResponse({ ok: false, reason: "Désactivation impossible. Réessayez." }, { status: 500 });
   }
-  const payload = { ok: true, access: result.access };
-  assertNoSecretLeak(payload);
-  return jsonResponse(payload);
 }
 
 export const GET = withApiObservability("/api/admin/student-access", handleGet);

@@ -75,8 +75,10 @@ export function ClassesAdminPanel({
   const [groupBy, setGroupBy] = useState<ClassGroupBy>("profession");
   const [classDraft, setClassDraft] = useState<ClassEditDraft | null>(null);
   const [pending, setPending] = useState(false);
+  const [pendingClassId, setPendingClassId] = useState<string | null>(null);
   const [accesses, setAccesses] = useState<Record<string, StudentAccessMetadata>>({});
   const [revealedCodeByClass, setRevealedCodeByClass] = useState<Record<string, string>>({});
+  const [accessErrorByClass, setAccessErrorByClass] = useState<Record<string, string>>({});
   const accessMutationLock = useRef(false);
 
   const counts = useMemo(() => countClassesByStatus(classes), [classes]);
@@ -98,17 +100,23 @@ export function ClassesAdminPanel({
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const response = await fetch("/api/admin/student-access", { credentials: "include" });
-      const payload = (await response.json()) as {
-        ok?: boolean;
-        accesses?: StudentAccessMetadata[];
-      };
-      if (cancelled || !response.ok || !payload.ok) return;
-      const next: Record<string, StudentAccessMetadata> = {};
-      for (const access of payload.accesses ?? []) {
-        next[access.schoolClassId] = access;
+      try {
+        const response = await fetch("/api/admin/student-access", { credentials: "include" });
+        let payload: { ok?: boolean; accesses?: StudentAccessMetadata[] } = {};
+        try {
+          payload = (await response.json()) as typeof payload;
+        } catch {
+          return;
+        }
+        if (cancelled || !response.ok || !payload.ok) return;
+        const next: Record<string, StudentAccessMetadata> = {};
+        for (const access of payload.accesses ?? []) {
+          next[access.schoolClassId] = access;
+        }
+        setAccesses(next);
+      } catch {
+        // Le bandeau « Aucun accès » reste affiché ; la génération affichera l'erreur sur la carte.
       }
-      setAccesses(next);
     })();
     return () => {
       cancelled = true;
@@ -128,7 +136,13 @@ export function ClassesAdminPanel({
     if (confirmMessage && !window.confirm(confirmMessage)) return;
     accessMutationLock.current = true;
     onClearError();
+    setAccessErrorByClass((current) => {
+      const next = { ...current };
+      delete next[entry.id];
+      return next;
+    });
     setPending(true);
+    setPendingClassId(entry.id);
     try {
       const response = await fetch("/api/admin/student-access", {
         method: "POST",
@@ -136,22 +150,40 @@ export function ClassesAdminPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ schoolClassId: entry.id }),
       });
-      const payload = (await response.json()) as {
-        ok: boolean;
+      let payload: {
+        ok?: boolean;
         reason?: string;
         access?: StudentAccessMetadata;
         code?: string;
-      };
+      } = {};
+      try {
+        payload = (await response.json()) as typeof payload;
+      } catch {
+        payload = { ok: false, reason: "Génération impossible. Réessayez." };
+      }
       if (!response.ok || !payload.ok || !payload.access || !payload.code) {
-        onError(payload.reason ?? "Génération impossible.");
+        const message = payload.reason ?? "Génération impossible.";
+        setAccessErrorByClass((current) => ({ ...current, [entry.id]: message }));
+        onError(message);
         return;
       }
-      setAccesses((current) => ({ ...current, [entry.id]: payload.access! }));
+      setAccesses((current) => ({
+        ...current,
+        [entry.id]: {
+          ...payload.access!,
+          currentCode: payload.access!.currentCode ?? payload.code!,
+        },
+      }));
       setRevealedCodeByClass((current) => ({ ...current, [entry.id]: payload.code! }));
       onNotice(isRegenerate ? `Nouveau code apprentis pour ${entry.code}.` : `Code apprentis généré pour ${entry.code}.`);
+    } catch {
+      const message = "Génération impossible. Réessayez.";
+      setAccessErrorByClass((current) => ({ ...current, [entry.id]: message }));
+      onError(message);
     } finally {
       accessMutationLock.current = false;
       setPending(false);
+      setPendingClassId(null);
     }
   }
 
@@ -166,19 +198,32 @@ export function ClassesAdminPanel({
     }
     accessMutationLock.current = true;
     onClearError();
+    setAccessErrorByClass((current) => {
+      const next = { ...current };
+      delete next[entry.id];
+      return next;
+    });
     setPending(true);
+    setPendingClassId(entry.id);
     try {
       const response = await fetch(`/api/admin/student-access?schoolClassId=${encodeURIComponent(entry.id)}`, {
         method: "DELETE",
         credentials: "include",
       });
-      const payload = (await response.json()) as {
-        ok: boolean;
+      let payload: {
+        ok?: boolean;
         reason?: string;
         access?: StudentAccessMetadata;
-      };
+      } = {};
+      try {
+        payload = (await response.json()) as typeof payload;
+      } catch {
+        payload = { ok: false, reason: "Désactivation impossible. Réessayez." };
+      }
       if (!response.ok || !payload.ok || !payload.access) {
-        onError(payload.reason ?? "Désactivation impossible.");
+        const message = payload.reason ?? "Désactivation impossible.";
+        setAccessErrorByClass((current) => ({ ...current, [entry.id]: message }));
+        onError(message);
         return;
       }
       setAccesses((current) => ({ ...current, [entry.id]: payload.access! }));
@@ -188,9 +233,14 @@ export function ClassesAdminPanel({
         return next;
       });
       onNotice(`Accès apprentis de ${entry.code} désactivé.`);
+    } catch {
+      const message = "Désactivation impossible. Réessayez.";
+      setAccessErrorByClass((current) => ({ ...current, [entry.id]: message }));
+      onError(message);
     } finally {
       accessMutationLock.current = false;
       setPending(false);
+      setPendingClassId(null);
     }
   }
 
@@ -549,7 +599,8 @@ export function ClassesAdminPanel({
                             schoolYears={schoolYears}
                             access={accesses[entry.id] ?? null}
                             revealedCode={revealedCodeByClass[entry.id] ?? null}
-                            pending={pending}
+                            pending={pending && pendingClassId === entry.id}
+                            error={accessErrorByClass[entry.id] ?? null}
                             onGenerate={(schoolClass, isRegenerate) =>
                               void generateStudentAccess(schoolClass, isRegenerate)
                             }

@@ -157,7 +157,7 @@ test("version 2.38.0 — planning semestriel, sans table dédiée", () => {
   ]);
   assert.equal(formatControlPlanningYearLabel("2026-2027"), "2026–2027");
   assert.equal(formatControlTeacherName("François Martin", "FM"), "F. Martin");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0025_structured_student_access.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0026_student_access_ciphertext.sql");
   assert.equal(TEST_ALERT_THRESHOLD, 3);
 });
 

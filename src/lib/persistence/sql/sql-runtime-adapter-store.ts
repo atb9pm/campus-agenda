@@ -80,31 +80,49 @@ export class SqlRuntimeAgendaAdapterStore implements RuntimeAgendaAdapterStore {
     const schoolClassId = classroom.schoolClassId?.trim() || null;
     const existing = await this.findClassroomById(classroom.id);
     if (existing) {
-      await this.db
-        .prepare(
-          "UPDATE classrooms SET name = ?, program_label = ?, access_code_hint = ?, school_class_id = ? WHERE id = ?",
-        )
-        .bind(
-          classroom.name,
-          classroom.programLabel,
-          classroom.accessCodeHint,
-          schoolClassId,
-          classroom.id,
-        )
-        .run();
+      try {
+        await this.db
+          .prepare(
+            "UPDATE classrooms SET name = ?, program_label = ?, access_code_hint = ?, school_class_id = ? WHERE id = ?",
+          )
+          .bind(
+            classroom.name,
+            classroom.programLabel,
+            classroom.accessCodeHint,
+            schoolClassId,
+            classroom.id,
+          )
+          .run();
+      } catch {
+        if (schoolClassId) {
+          const linked = await this.findClassroomBySchoolClassId(schoolClassId);
+          if (linked) return linked;
+        }
+        throw new Error("Impossible d'établir le pont Agenda de manière sûre.");
+      }
     } else {
-      await this.db
-        .prepare(
-          "INSERT INTO classrooms (id, name, program_label, access_code_hint, school_class_id) VALUES (?, ?, ?, ?, ?)",
-        )
-        .bind(
-          classroom.id,
-          classroom.name,
-          classroom.programLabel,
-          classroom.accessCodeHint,
-          schoolClassId,
-        )
-        .run();
+      try {
+        await this.db
+          .prepare(
+            "INSERT INTO classrooms (id, name, program_label, access_code_hint, school_class_id) VALUES (?, ?, ?, ?, ?)",
+          )
+          .bind(
+            classroom.id,
+            classroom.name,
+            classroom.programLabel,
+            classroom.accessCodeHint,
+            schoolClassId,
+          )
+          .run();
+      } catch {
+        if (schoolClassId) {
+          const linked = await this.findClassroomBySchoolClassId(schoolClassId);
+          if (linked) return linked;
+        }
+        const byId = await this.findClassroomById(classroom.id);
+        if (byId) return byId;
+        throw new Error("Impossible d'établir le pont Agenda de manière sûre.");
+      }
     }
     const saved = await this.findClassroomById(classroom.id);
     if (!saved) throw new Error("Classroom runtime introuvable après écriture.");
