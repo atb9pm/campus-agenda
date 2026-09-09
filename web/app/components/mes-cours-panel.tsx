@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import {
   formatTeacherCourseClassMeta,
   groupTeacherCoursesByClass,
@@ -7,10 +9,12 @@ import {
   WORKSPACE_ASSIGNMENT_ROLE_LABELS,
   type TeacherCourseWorkspaceEntry,
 } from "@campus/features/teacher-workspace";
+import type { TeacherClassAccessView } from "@campus/types/student-access";
 import type { TeacherClassSetup } from "@campus/features/teacher-setup";
 
 interface MesCoursPanelProps {
   courses: TeacherCourseWorkspaceEntry[];
+  classAccesses?: Record<string, TeacherClassAccessView>;
   schoolYearLabel?: string | null;
   loading?: boolean;
   onOpenClass?: (classSetup: TeacherClassSetup) => void;
@@ -18,8 +22,62 @@ interface MesCoursPanelProps {
   displaySetups?: TeacherClassSetup[];
 }
 
+function accessHint(view: TeacherClassAccessView | undefined): string {
+  if (!view || view.status === "none") {
+    return "Aucun accès — l’administrateur peut générer un code.";
+  }
+  if (view.status === "revoked") return "Accès désactivé par l’administrateur.";
+  if (view.status === "needs_admin") {
+    return "L’administrateur doit régénérer le code pour l’afficher ici.";
+  }
+  return "À communiquer aux apprentis. Seul l’administrateur peut le changer.";
+}
+
+async function copyAccessCode(code: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(code);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function ClassAccessReadonly({ view }: { view: TeacherClassAccessView | undefined }) {
+  const [copied, setCopied] = useState(false);
+  const code = view?.status === "active" ? view.code : null;
+
+  return (
+    <div className="mes-cours-access">
+      <p className="mes-cours-access-title">Code d’accès classe</p>
+      {code ? (
+        <div className="mes-cours-access-row">
+          <p className="mes-cours-access-code">{code}</p>
+          <button
+            type="button"
+            className="workspace-action secondary"
+            aria-label={`Copier le code d’accès de la classe`}
+            onClick={() => {
+              void copyAccessCode(code).then((ok) => {
+                if (!ok) return;
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 2000);
+              });
+            }}
+          >
+            {copied ? "Copié" : "Copier"}
+          </button>
+        </div>
+      ) : (
+        <p className="mes-cours-access-empty">Pas de code affiché</p>
+      )}
+      <p className="mes-cours-access-hint">{accessHint(view)}</p>
+    </div>
+  );
+}
+
 export function MesCoursPanel({
   courses,
+  classAccesses = {},
   schoolYearLabel,
   loading = false,
   onOpenClass,
@@ -55,6 +113,7 @@ export function MesCoursPanel({
                   <h3>{group.classCode}</h3>
                   {meta ? <p>{meta}</p> : null}
                 </header>
+                <ClassAccessReadonly view={classAccesses[group.classId]} />
                 <ul className="mes-cours-branches">
                   {group.courses.map((course) => (
                     <li key={course.annualCourseId}>

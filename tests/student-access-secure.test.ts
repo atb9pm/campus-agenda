@@ -25,6 +25,9 @@ import {
   deterministicStudentAccessId,
   revalidateStructuredStudentSession,
   revokeStudentAccess,
+  teacherClassAccessViews,
+  isSealedStudentAccessCode,
+  unsealStudentAccessCode,
   STUDENT_ACCESS_ALPHABET,
   STUDENT_LOGIN_INVALID_REASON,
 } from "../src/features/student-access/index.ts";
@@ -163,19 +166,26 @@ async function loginDepsFrom(admin: Awaited<ReturnType<typeof adminDeps>>) {
   };
 }
 
-test("PR79 — version 2.44.0 et migration 0025", async () => {
+test("PR79 — version 2.44.0 et migrations 0025–0026", async () => {
   assert.equal(APP_VERSION, "2.44.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0025_structured_student_access.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0026_student_access_ciphertext.sql");
+  assert.ok(SQL_MIGRATION_FILES.includes("0025_structured_student_access.sql"));
   assert.ok(SQL_MIGRATION_FILES.includes("0024_structured_agenda_bridge.sql"));
   const columns = CAMPUS_BACKUP_COLUMNS.student_accesses.map((column) => column.name);
   assert.ok(columns.includes("school_class_id"));
   assert.ok(columns.includes("access_version"));
   assert.ok(columns.includes("revoked_at"));
+  assert.ok(columns.includes("access_code_ciphertext"));
   const migration = await readFile(new URL("../migrations/0025_structured_student_access.sql", import.meta.url), "utf8");
   assert.match(migration, /label TEXT NOT NULL/);
   assert.doesNotMatch(migration, /label TEXT NOT NULL UNIQUE/);
   assert.match(migration, /student_accesses_structured_0025/);
   assert.match(migration, /idx_student_accesses_school_class_id/);
+  const cipherMigration = await readFile(
+    new URL("../migrations/0026_student_access_ciphertext.sql", import.meta.url),
+    "utf8",
+  );
+  assert.match(cipherMigration, /access_code_ciphertext/);
 });
 
 test("A — génération : format, alphabet, hash, pas de plaintext", async () => {
@@ -208,6 +218,8 @@ test("A — génération : format, alphabet, hash, pas de plaintext", async () =
   assert.notEqual(stored.accessCodeHash, generated.code);
   assert.equal(JSON.stringify(stored).includes(generated.code), false);
   assert.equal("code" in stored, false);
+  assert.equal(isSealedStudentAccessCode(stored.accessCodeCiphertext), true);
+  assert.equal(await unsealStudentAccessCode(stored.accessCodeCiphertext), generated.code);
   assert.equal(await verifyPassword(generated.code, stored.accessCodeHash), true);
 });
 
@@ -405,6 +417,13 @@ test("G — API admin : non-admin refusé, hash jamais envoyé, plaintext une se
   assert.match(classesAdmin, /accessMutationLock/);
   assert.match(classesAdmin, /accessErrorByClass/);
   assert.match(classesAdmin, /revealedCodeByClass/);
+  const mesCours = await readFile(new URL("../web/app/components/mes-cours-panel.tsx", import.meta.url), "utf8");
+  const teacherCoursesRoute = await readFile(new URL("../web/app/api/teacher/courses/route.ts", import.meta.url), "utf8");
+  assert.match(mesCours, /Code d’accès classe/);
+  assert.doesNotMatch(mesCours, /Régénérer le code/);
+  assert.doesNotMatch(mesCours, /Générer un code/);
+  assert.match(teacherCoursesRoute, /teacherClassAccessViews/);
+  assert.match(teacherCoursesRoute, /requireTeacherSession/);
 });
 
 test("H — localStorage : le secret élève n'est plus enregistré, login enseignant inchangé", async () => {
@@ -437,6 +456,8 @@ test("I — backup v4 : round-trip, colonnes, pas de plaintext, ancien snapshot"
   assert.equal(typeof row.access_code_hash, "string");
   assert.ok(String(row.access_code_hash).startsWith("pbkdf2-sha256$"));
   assert.equal(JSON.stringify(snapshot.tables.student_accesses).includes(generated.code), false);
+  assert.equal(typeof row.access_code_ciphertext, "string");
+  assert.ok(String(row.access_code_ciphertext).startsWith("aes-gcm-v1$"));
   assert.ok(Number(row.access_version) >= 1);
   assert.ok("school_class_id" in row);
   assert.ok("revoked_at" in row);
@@ -448,6 +469,7 @@ test("I — backup v4 : round-trip, colonnes, pas de plaintext, ancien snapshot"
   const after = await admin.accesses.getBySchoolClassId(schoolClass.id);
   assert.ok(after);
   assert.equal(await verifyPassword(generated.code, after.accessCodeHash), true);
+  assert.equal(await unsealStudentAccessCode(after.accessCodeCiphertext), generated.code);
 
   const oldTables = JSON.parse(JSON.stringify(snapshot.tables)) as typeof snapshot.tables;
   for (const access of oldTables.student_accesses ?? []) {
@@ -456,6 +478,7 @@ test("I — backup v4 : round-trip, colonnes, pas de plaintext, ancien snapshot"
     delete access.created_at;
     delete access.updated_at;
     delete access.revoked_at;
+    delete access.access_code_ciphertext;
     access.access_code_hash = "demo:legacy-unusable";
   }
   const validated = validateCampusTables(oldTables);
@@ -678,6 +701,7 @@ test("pickReusableStudentAccess — classe, id déterministe, classroom, label o
       schoolClassId: "class-other",
       label: "MMA1A",
       accessCodeHash: "pbkdf2-sha256$10000$YQ==$Yg==",
+      accessCodeCiphertext: null,
       accessVersion: 1,
       createdAt: null,
       updatedAt: null,
@@ -689,6 +713,7 @@ test("pickReusableStudentAccess — classe, id déterministe, classroom, label o
       schoolClassId: null,
       label: "MMA1A",
       accessCodeHash: "pbkdf2-sha256$10000$YQ==$Yg==",
+      accessCodeCiphertext: null,
       accessVersion: 2,
       createdAt: null,
       updatedAt: null,
@@ -741,6 +766,7 @@ test("accès orphelin (label sans school_class_id) : générer réclame la ligne
       schoolClassId: null,
       label: "MMA1A",
       accessCodeHash: "pbkdf2-sha256$10000$YQ==$Yg==",
+      accessCodeCiphertext: null,
       accessVersion: 3,
       createdAt: "2026-09-01T00:00:00.000Z",
       updatedAt: "2026-09-01T00:00:00.000Z",
@@ -881,6 +907,43 @@ test("SQLite — orphelin UNIQUE(label) historique et id déterministe : génér
   });
   assert.equal(pkLogin.ok, true);
   db.close();
+});
+
+test("enseignant attribué voit le code courant, un autre identifiant ne le voit pas, régénération met à jour, révocation masque", async () => {
+  resetWorld();
+  const admin = await adminDeps();
+  const schoolClass = (await admin.listClasses()).find((entry) => entry.code === "MA2");
+  assert.ok(schoolClass);
+  const generated = await generateStudentAccess(admin, schoolClass.id);
+  assert.equal(generated.ok, true);
+  if (!generated.ok) return;
+
+  const assigned = await teacherClassAccessViews(admin.accesses, [schoolClass.id]);
+  assert.equal(assigned[schoolClass.id]?.status, "active");
+  assert.equal(assigned[schoolClass.id]?.code, generated.code);
+
+  const stranger = await teacherClassAccessViews(admin.accesses, ["class-not-mine"]);
+  assert.equal(stranger[schoolClass.id], undefined);
+  assert.equal(stranger["class-not-mine"]?.code, null);
+  assert.equal(JSON.stringify(stranger).includes(generated.code), false);
+
+  const rotated = await generateStudentAccess(admin, schoolClass.id);
+  assert.equal(rotated.ok, true);
+  if (!rotated.ok) return;
+  assert.notEqual(rotated.code, generated.code);
+  const afterRotate = await teacherClassAccessViews(admin.accesses, [schoolClass.id]);
+  assert.equal(afterRotate[schoolClass.id]?.code, rotated.code);
+  assert.notEqual(afterRotate[schoolClass.id]?.code, generated.code);
+
+  const revoked = await revokeStudentAccess(admin, schoolClass.id);
+  assert.equal(revoked.ok, true);
+  const afterRevoke = await teacherClassAccessViews(admin.accesses, [schoolClass.id]);
+  assert.equal(afterRevoke[schoolClass.id]?.status, "revoked");
+  assert.equal(afterRevoke[schoolClass.id]?.code, null);
+  assert.equal(JSON.stringify(afterRevoke).includes(rotated.code), false);
+
+  const mesCours = await readFile(new URL("../web/app/components/mes-cours-panel.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(mesCours, /localStorage/);
 });
 
 test("login HTTP — mauvais code 401 identique, bon code 200", async () => {

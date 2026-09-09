@@ -7,6 +7,7 @@ import { runtimeClassroomIdForSchoolClass } from "../agenda-bridge/ids.ts";
 import type { StudentAccessMetadata } from "../../types/student-access.ts";
 import { generateStudentAccessCode } from "./code.ts";
 import { isPersistenceConstraintError, pickReusableStudentAccess } from "./reuse.ts";
+import { sealStudentAccessCode } from "./seal.ts";
 import { studentAccessAllowsAdminWrite, studentAccessMetadataFromRecord } from "./status.ts";
 
 export interface StudentAccessAdminDeps {
@@ -186,12 +187,16 @@ async function generateStudentAccessUnlocked(
 
     const classroom = await ensureClassroomForSchoolClass(deps, schoolClass);
     const code = generateStudentAccessCode(schoolClass.code);
-    const accessCodeHash = await hashPassword(code);
+    const [accessCodeHash, accessCodeCiphertext] = await Promise.all([
+      hashPassword(code),
+      sealStudentAccessCode(code),
+    ]);
     const record = await deps.accesses.saveGenerated({
       schoolClassId: schoolClass.id,
       classroomId: classroom.id,
       label: schoolClass.code,
       accessCodeHash,
+      accessCodeCiphertext,
     });
     const years = year ? [year] : [];
     return {

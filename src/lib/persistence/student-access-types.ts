@@ -4,6 +4,7 @@ export interface StudentAccessRecord {
   schoolClassId: string | null;
   label: string;
   accessCodeHash: string | null;
+  accessCodeCiphertext: string | null;
   accessVersion: number;
   createdAt: string | null;
   updatedAt: string | null;
@@ -19,6 +20,7 @@ export interface StudentAccessStore {
     classroomId: string;
     label: string;
     accessCodeHash: string;
+    accessCodeCiphertext: string;
   }): Promise<StudentAccessRecord>;
   revokeBySchoolClassId(schoolClassId: string): Promise<StudentAccessRecord | null>;
   replaceAll(records: StudentAccessRecord[]): Promise<void>;

@@ -7,7 +7,7 @@ import {
 } from "../../../features/student-access/reuse.ts";
 
 const COLUMNS =
-  "id, classroom_id, school_class_id, label, access_code_hash, access_version, created_at, updated_at, revoked_at";
+  "id, classroom_id, school_class_id, label, access_code_hash, access_code_ciphertext, access_version, created_at, updated_at, revoked_at";
 
 interface StudentAccessSqlRow {
   id: string;
@@ -15,6 +15,7 @@ interface StudentAccessSqlRow {
   school_class_id: string | null;
   label: string;
   access_code_hash: string | null;
+  access_code_ciphertext: string | null;
   access_version: number | null;
   created_at: string | null;
   updated_at: string | null;
@@ -28,6 +29,7 @@ function rowToRecord(row: StudentAccessSqlRow): StudentAccessRecord {
     schoolClassId: row.school_class_id,
     label: row.label,
     accessCodeHash: row.access_code_hash,
+    accessCodeCiphertext: row.access_code_ciphertext,
     accessVersion: Number(row.access_version ?? 1) || 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -75,6 +77,7 @@ export class SqlStudentAccessStore implements StudentAccessStore {
     classroomId: string;
     label: string;
     accessCodeHash: string;
+    accessCodeCiphertext: string;
   }): Promise<StudentAccessRecord> {
     const stamp = nowIso();
     const existing = pickReusableStudentAccess(await this.listAll(), input);
@@ -82,7 +85,7 @@ export class SqlStudentAccessStore implements StudentAccessStore {
       await this.db
         .prepare(
           `UPDATE student_accesses
-           SET classroom_id = ?, school_class_id = ?, label = ?, access_code_hash = ?, access_version = ?, updated_at = ?, revoked_at = NULL
+           SET classroom_id = ?, school_class_id = ?, label = ?, access_code_hash = ?, access_code_ciphertext = ?, access_version = ?, updated_at = ?, revoked_at = NULL
            WHERE id = ?`,
         )
         .bind(
@@ -90,6 +93,7 @@ export class SqlStudentAccessStore implements StudentAccessStore {
           input.schoolClassId,
           input.label,
           input.accessCodeHash,
+          input.accessCodeCiphertext,
           existing.accessVersion + 1,
           stamp,
           existing.id,
@@ -105,10 +109,19 @@ export class SqlStudentAccessStore implements StudentAccessStore {
       await this.db
         .prepare(
           `INSERT INTO student_accesses
-            (id, classroom_id, school_class_id, label, access_code_hash, access_version, created_at, updated_at, revoked_at)
-           VALUES (?, ?, ?, ?, ?, 1, ?, ?, NULL)`,
+            (id, classroom_id, school_class_id, label, access_code_hash, access_code_ciphertext, access_version, created_at, updated_at, revoked_at)
+           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, NULL)`,
         )
-        .bind(id, input.classroomId, input.schoolClassId, input.label, input.accessCodeHash, stamp, stamp)
+        .bind(
+          id,
+          input.classroomId,
+          input.schoolClassId,
+          input.label,
+          input.accessCodeHash,
+          input.accessCodeCiphertext,
+          stamp,
+          stamp,
+        )
         .run();
     } catch (error) {
       if (!isPersistenceConstraintError(error)) throw error;
@@ -117,7 +130,7 @@ export class SqlStudentAccessStore implements StudentAccessStore {
       await this.db
         .prepare(
           `UPDATE student_accesses
-           SET classroom_id = ?, school_class_id = ?, label = ?, access_code_hash = ?, access_version = ?, updated_at = ?, revoked_at = NULL
+           SET classroom_id = ?, school_class_id = ?, label = ?, access_code_hash = ?, access_code_ciphertext = ?, access_version = ?, updated_at = ?, revoked_at = NULL
            WHERE id = ?`,
         )
         .bind(
@@ -125,6 +138,7 @@ export class SqlStudentAccessStore implements StudentAccessStore {
           input.schoolClassId,
           input.label,
           input.accessCodeHash,
+          input.accessCodeCiphertext,
           fallback.accessVersion + 1,
           stamp,
           fallback.id,
@@ -146,7 +160,7 @@ export class SqlStudentAccessStore implements StudentAccessStore {
     await this.db
       .prepare(
         `UPDATE student_accesses
-         SET revoked_at = ?, access_version = ?, updated_at = ?
+         SET revoked_at = ?, access_version = ?, updated_at = ?, access_code_ciphertext = NULL
          WHERE id = ?`,
       )
       .bind(stamp, existing.accessVersion + 1, stamp, existing.id)
@@ -160,8 +174,8 @@ export class SqlStudentAccessStore implements StudentAccessStore {
       await this.db
         .prepare(
           `INSERT INTO student_accesses
-            (id, classroom_id, school_class_id, label, access_code_hash, access_version, created_at, updated_at, revoked_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, classroom_id, school_class_id, label, access_code_hash, access_code_ciphertext, access_version, created_at, updated_at, revoked_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           record.id,
@@ -169,6 +183,7 @@ export class SqlStudentAccessStore implements StudentAccessStore {
           record.schoolClassId,
           record.label,
           record.accessCodeHash ?? "",
+          record.accessCodeCiphertext,
           record.accessVersion,
           record.createdAt,
           record.updatedAt,

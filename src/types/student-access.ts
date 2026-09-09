@@ -17,3 +17,12 @@ export interface StudentAccessMetadata {
   revokedAt: string | null;
   status: StudentAccessUiStatus;
 }
+
+/** Vue lecture seule pour Mes cours : jamais de hash, jamais de chiffrement. */
+export type TeacherClassAccessStatus = "active" | "none" | "revoked" | "needs_admin";
+
+export interface TeacherClassAccessView {
+  schoolClassId: string;
+  code: string | null;
+  status: TeacherClassAccessStatus;
+}

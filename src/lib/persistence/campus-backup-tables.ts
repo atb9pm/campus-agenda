@@ -125,6 +125,7 @@ export const CAMPUS_BACKUP_COLUMNS: Record<CampusBackupTableName, BackupColumnSp
     { name: "classroom_id", type: "text", required: true },
     { name: "label", type: "text", required: true },
     { name: "access_code_hash", type: "text" },
+    { name: "access_code_ciphertext", type: "text" },
     { name: "school_class_id", type: "text" },
     { name: "access_version", type: "integer" },
     { name: "created_at", type: "text" },

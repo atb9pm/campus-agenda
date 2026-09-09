@@ -35,3 +35,13 @@ export {
   isPersistenceConstraintError,
   pickReusableStudentAccess,
 } from "./reuse.ts";
+export {
+  isSealedStudentAccessCode,
+  sealStudentAccessCode,
+  unsealStudentAccessCode,
+} from "./seal.ts";
+export {
+  teacherClassAccessViews,
+  type TeacherClassAccessStatus,
+  type TeacherClassAccessView,
+} from "./teacher-view.ts";
