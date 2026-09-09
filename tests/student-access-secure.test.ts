@@ -169,7 +169,7 @@ async function loginDepsFrom(admin: Awaited<ReturnType<typeof adminDeps>>) {
 }
 
 test("PR79 — version 2.44.0 et migrations 0025–0026", async () => {
-  assert.equal(APP_VERSION, "2.44.0");
+  assert.equal(APP_VERSION, "2.44.1");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0026_student_access_ciphertext.sql");
   assert.ok(SQL_MIGRATION_FILES.includes("0025_structured_student_access.sql"));
   assert.ok(SQL_MIGRATION_FILES.includes("0024_structured_agenda_bridge.sql"));

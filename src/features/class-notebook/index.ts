@@ -1,9 +1,19 @@
 export {
   resolveCatalogClassroomId,
   resolveDefaultSubjectId,
+  resolveNotebookClassroomId,
+  resolveNotebookSubjectId,
   weekdayToCourseDayIndex,
   weekNotesKey,
+  type NotebookRuntimeClassroom,
+  type NotebookRuntimeSubject,
 } from "./resolve.ts";
+export {
+  filterNotebookItemsForSubject,
+  notebookContextFromCourse,
+  openCourseInWeekTarget,
+  type NotebookCourseContext,
+} from "./open-course.ts";
 export {
   appendWeekNote,
   classNotesStorageKey,

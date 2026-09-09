@@ -7,7 +7,7 @@ import type {
   CourseTimelineProjection,
   TeacherCourseTimelineCourse,
 } from "@campus/features/course-timeline";
-import type { ClassNotesDocument } from "@campus/features/class-notebook";
+import type { ClassNotesDocument, NotebookRuntimeClassroom } from "@campus/features/class-notebook";
 import type {
   ControlPlanningLayout,
   ControlPlanningMode,
@@ -108,11 +108,13 @@ export async function changeTeacherPasswordApi(
   }
 }
 
-export async function fetchTeacherClassroomsApi(): Promise<Array<{ id: string; name: string }>> {
+export async function fetchTeacherClassroomsApi(): Promise<NotebookRuntimeClassroom[]> {
   const response = await fetch("/api/teacher/classrooms", { credentials: "include" });
-  const payload = await parseJson<{ ok: boolean; classrooms?: Array<{ id: string; name: string }>; reason?: string }>(
-    response,
-  );
+  const payload = await parseJson<{
+    ok: boolean;
+    classrooms?: NotebookRuntimeClassroom[];
+    reason?: string;
+  }>(response);
   if (!response.ok || !payload.ok || !payload.classrooms) {
     throw new Error(payload.reason ?? "Chargement des classes impossible.");
   }

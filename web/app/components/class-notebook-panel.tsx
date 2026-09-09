@@ -29,6 +29,9 @@ import { ControlsModal } from "./controls-modal.tsx";
 
 interface ClassNotebookPanelProps {
   classSetup: TeacherClassSetup;
+  branchLabel?: string | null;
+  annualCourseId?: string | null;
+  subjectId?: string | null;
   schoolWeeks: SchoolWeek[];
   centerWeekNumber: number;
   items: PrototypeAgendaItem[];
@@ -57,6 +60,9 @@ function isPublicationLine(item: PrototypeAgendaItem): boolean {
 
 export function ClassNotebookPanel({
   classSetup,
+  branchLabel: selectedBranchLabel,
+  annualCourseId,
+  subjectId,
   schoolWeeks,
   centerWeekNumber,
   items,
@@ -95,7 +101,7 @@ export function ClassNotebookPanel({
     [items],
   );
 
-  const branchLabel = classSetup.branchNames[0] ?? "Branche";
+  const branchLabel = selectedBranchLabel?.trim() || classSetup.branchNames[0] || "Branche";
 
   const handlePaste = useCallback(
     async (targetWeekNumber: number) => {
@@ -245,7 +251,12 @@ export function ClassNotebookPanel({
   }
 
   return (
-    <section className="teacher-workspace class-notebook" aria-label={`Carnet ${classSetup.name}`}>
+    <section
+      className="teacher-workspace class-notebook"
+      aria-label={`Carnet ${classSetup.name} · ${branchLabel}`}
+      data-annual-course-id={annualCourseId ?? undefined}
+      data-subject-id={subjectId ?? undefined}
+    >
       <div className="class-notebook-toolbar">
         <button type="button" className="workspace-action secondary" onClick={onBack}>
           ← Ma semaine

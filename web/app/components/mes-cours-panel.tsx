@@ -126,10 +126,11 @@ export function MesCoursPanel({
                       {onOpenCourse ? (
                         <button
                           type="button"
-                          className="workspace-action secondary"
+                          className="workspace-action secondary mes-cours-open-week"
+                          aria-label={`Ouvrir ${course.branchLabel} dans Ma semaine`}
                           onClick={() => onOpenCourse(course)}
                         >
-                          Voir le déroulement
+                          Ouvrir dans Ma semaine
                         </button>
                       ) : null}
                     </li>
