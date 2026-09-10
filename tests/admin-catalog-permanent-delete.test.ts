@@ -268,6 +268,103 @@ test("A — classe vide : suppression OK", async () => {
   }
 });
 
+test("A1 — classe vide sans confirmation : refus, classe conservée", async () => {
+  const world = await openWorld();
+  try {
+    await seedYear(world.db);
+    const created = await world.catalog.createClass({
+      code: "VIDE0",
+      label: "Vide sans confirm",
+      schoolYearId: "year-2026",
+      schoolYearLabel: "2026-2027",
+    });
+    const refused = await deleteCatalogItemPermanently(world.deps, {
+      kind: "class",
+      id: created.id,
+    });
+    assert.equal(refused.ok, false);
+    assert.equal(refused.status, 409);
+    assert.equal(await existsId(world.db, "school_classes", created.id), true);
+  } finally {
+    world.db.close();
+    await rm(world.dir, { recursive: true, force: true });
+  }
+});
+
+test("A2 — classe vide mauvaise confirmation : refus", async () => {
+  const world = await openWorld();
+  try {
+    await seedYear(world.db);
+    const created = await world.catalog.createClass({
+      code: "VIDE2",
+      label: "Vide mauvaise saisie",
+      schoolYearId: "year-2026",
+      schoolYearLabel: "2026-2027",
+    });
+    const refused = await deleteCatalogItemPermanently(world.deps, {
+      kind: "class",
+      id: created.id,
+      confirmationText: "vide2",
+    });
+    assert.equal(refused.ok, false);
+    assert.equal(refused.status, 400);
+    assert.equal(await existsId(world.db, "school_classes", created.id), true);
+  } finally {
+    world.db.close();
+    await rm(world.dir, { recursive: true, force: true });
+  }
+});
+
+test("A3 — branche / profession / CTX vides sans confirmation : refus", async () => {
+  const world = await openWorld();
+  try {
+    await seedYear(world.db);
+    const profession = await world.catalog.createProfession({
+      label: "Profession vide",
+      durationYears: 3,
+      classCodePrefix: "ZEM",
+    });
+    const branch = await world.catalog.createBranch({
+      code: "ZEMBR",
+      label: "Branche-vide",
+      teachingType: "TECHNICAL",
+    });
+
+    const refusedBranch = await deleteCatalogItemPermanently(world.deps, {
+      kind: "branch",
+      id: branch.id,
+    });
+    assert.equal(refusedBranch.ok, false);
+    assert.equal(refusedBranch.status, 409);
+    assert.equal(await existsId(world.db, "school_branches", branch.id), true);
+
+    const refusedProfession = await deleteCatalogItemPermanently(world.deps, {
+      kind: "profession",
+      id: profession.id,
+    });
+    assert.equal(refusedProfession.ok, false);
+    assert.equal(refusedProfession.status, 409);
+    assert.equal(await existsId(world.db, "school_professions", profession.id), true);
+
+    const ctx = await world.catalog.createContext({
+      professionId: profession.id,
+      trainingYear: 1,
+      branchId: branch.id,
+    });
+    assert.equal(ctx.ok, true);
+    const refusedCtx = await deleteCatalogItemPermanently(world.deps, {
+      kind: "context",
+      id: ctx.value!.id,
+    });
+    assert.equal(refusedCtx.ok, false);
+    assert.equal(refusedCtx.status, 409);
+    assert.equal(await existsId(world.db, "pedagogical_contexts", ctx.value!.id), true);
+  } finally {
+    world.db.close();
+    await rm(world.dir, { recursive: true, force: true });
+  }
+});
+
 test("B — classe configurée : preview + cascade", async () => {
   const world = await openWorld();
   try {
@@ -1252,4 +1349,14 @@ test("API — admin only 401/403", async () => {
 
   const planSource = await readFile(new URL("../src/features/admin-catalog-delete/plan.ts", import.meta.url), "utf8");
   assert.doesNotMatch(planSource, /=== ["']MA2["']/);
+  const serviceSource = await readFile(
+    new URL("../src/features/admin-catalog-delete/service.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(serviceSource, /hasDestructiveDependencies/);
+  const plans = await readFile(
+    new URL("../web/app/components/training-plans-admin-panel.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(plans, /JSON\.stringify\(\{ confirmationText \}\)/);
 });

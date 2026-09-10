@@ -199,69 +199,8 @@ export function TrainingPlansAdminPanel({ onNotice, onOpenBranches }: TrainingPl
     }
   }
 
-  async function removeAssignment(context: PedagogicalContextRecord, branchLabel: string) {
-    const key = cellKey(context.branchId, context.trainingYear);
-    setPendingCell(key);
-    setError("");
-    try {
-      const deleteResponse = await fetch(`/api/admin/catalog/${context.id}?kind=context`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      const deletePayload = (await deleteResponse.json().catch(() => ({}))) as {
-        ok?: boolean;
-        reason?: string;
-      };
-      if (deleteResponse.ok && deletePayload.ok) {
-        onNotice("Enregistré");
-        await refresh({ silent: true });
-        return;
-      }
-
-      const inUse = deleteResponse.status === 409;
-      if (!inUse) {
-        setError(
-          deletePayload.reason ??
-            (deleteResponse.status
-              ? `Retrait impossible (${deleteResponse.status}).`
-              : "Retrait impossible."),
-        );
-        return;
-      }
-
-      const confirmed = window.confirm(
-        `Cette affectation est déjà utilisée par des cours ou un parcours pédagogique. ` +
-          `Elle ne peut pas être supprimée définitivement.\n\n` +
-          `Archiver ${formatPedagogicalContextLabel({
-            branchLabel,
-            trainingYear: context.trainingYear,
-            mode: "short",
-          })} ?`,
-      );
-      if (!confirmed) return;
-
-      const archiveResponse = await fetch(`/api/admin/catalog/${context.id}`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "context", isArchived: true }),
-      });
-      const archivePayload = (await archiveResponse.json()) as { ok: boolean; reason?: string };
-      if (!archiveResponse.ok || !archivePayload.ok) {
-        setError(
-          deletePayload.reason ??
-            archivePayload.reason ??
-            "Retrait impossible. Archivez l’affectation manuellement.",
-        );
-        return;
-      }
-      onNotice("Affectation archivée. L’historique pédagogique est conservé.");
-      await refresh({ silent: true });
-    } catch (removeError) {
-      setError(removeError instanceof Error ? removeError.message : "Retrait impossible.");
-    } finally {
-      setPendingCell("");
-    }
+  async function removeAssignment(context: PedagogicalContextRecord) {
+    await openDeleteContext(context);
   }
 
   async function openDeleteContext(context: PedagogicalContextRecord) {
@@ -339,7 +278,7 @@ export function TrainingPlansAdminPanel({ onNotice, onOpenBranches }: TrainingPl
       return;
     }
     if (!context) return;
-    await removeAssignment(context, branch.label);
+    await removeAssignment(context);
   }
 
   if (loading) {

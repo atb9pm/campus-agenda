@@ -6,7 +6,6 @@ import { loadCatalogDeleteSnapshot, type CatalogDeleteSnapshotDeps } from "./sna
 import { buildCatalogDeleteStatements, SQL_ROLLBACK_PROBE } from "./sql-statements.ts";
 import {
   confirmationMatches,
-  hasDestructiveDependencies,
   missingConfirmationReason,
   wrongConfirmationReason,
   type CatalogDeleteKind,
@@ -51,8 +50,8 @@ export async function deleteCatalogItemPermanently(
   }
 
   const confirmed = confirmationMatches(plan.confirmationText, options.confirmationText);
-  if (hasDestructiveDependencies(plan) && !confirmed) {
-    if (options.confirmationText && options.confirmationText.trim()) {
+  if (!confirmed) {
+    if (options.confirmationText?.trim()) {
       return {
         ok: false,
         status: 400,
@@ -61,6 +60,7 @@ export async function deleteCatalogItemPermanently(
         plan,
       };
     }
+
     return {
       ok: false,
       status: 409,

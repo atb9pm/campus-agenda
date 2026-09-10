@@ -9,7 +9,7 @@ L’administrateur peut supprimer définitivement une classe, une profession, un
 ### Ajouté
 
 - Aperçu serveur des conséquences (`GET /api/admin/catalog/:id/delete-preview`).
-- Confirmation par saisie exacte du code / libellé / code CTX.
+- Confirmation par saisie exacte du code / libellé / code CTX, y compris pour un élément vide.
 - Cascade SQLite atomique (publications, accès, cours, horaires, parcours, etc.).
 - Modal danger « Suppression définitive » dans Administration.
 
