@@ -27,7 +27,9 @@ import {
 import { ClassCreationWizard } from "./class-creation-wizard.tsx";
 import type { SchoolYearSummary } from "../../lib/api-client.ts";
 import type { StudentAccessMetadata } from "@campus/types/student-access";
+import type { CatalogDeletePreview } from "@campus/features/admin-catalog-delete/index.ts";
 import { ConfirmDialog } from "./confirm-dialog.tsx";
+import { DestructiveConfirmDialog } from "./destructive-confirm-dialog.tsx";
 import { StudentAccessAdminBlock } from "./student-access-admin.tsx";
 
 type ClassConfirmAction =
@@ -63,8 +65,8 @@ function classConfirmCopy(action: ClassConfirmAction): {
     case "delete":
       return {
         title: `Supprimer définitivement la classe « ${action.entry.code} » ?`,
-        body: "Cette action est irréversible.",
-        confirmLabel: "Supprimer",
+        body: "Cette suppression effacera définitivement toutes les données liées à cette classe.",
+        confirmLabel: "Supprimer définitivement",
       };
   }
 }
@@ -120,6 +122,9 @@ export function ClassesAdminPanel({
   const [revealedCodeByClass, setRevealedCodeByClass] = useState<Record<string, string>>({});
   const [accessErrorByClass, setAccessErrorByClass] = useState<Record<string, string>>({});
   const [confirmAction, setConfirmAction] = useState<ClassConfirmAction | null>(null);
+  const [deletePreview, setDeletePreview] = useState<CatalogDeletePreview | null>(null);
+  const [deletePreviewError, setDeletePreviewError] = useState<string | null>(null);
+  const [deletePreviewLoading, setDeletePreviewLoading] = useState(false);
   const accessMutationLock = useRef(false);
 
   const counts = useMemo(() => countClassesByStatus(classes), [classes]);
@@ -350,9 +355,7 @@ export function ClassesAdminPanel({
     }
     if (action.kind === "archive") {
       void applyArchiveClass(action.entry);
-      return;
     }
-    void applyDeleteClass(action.entry);
   }
 
   async function archiveClass(entry: SchoolClassRecord) {
@@ -397,21 +400,45 @@ export function ClassesAdminPanel({
 
   async function deleteClass(entry: SchoolClassRecord) {
     setConfirmAction({ kind: "delete", entry });
+    setDeletePreview(null);
+    setDeletePreviewError(null);
+    setDeletePreviewLoading(true);
+    try {
+      const response = await fetch(
+        `/api/admin/catalog/${entry.id}/delete-preview?kind=class`,
+        { credentials: "include" },
+      );
+      const payload = (await response.json()) as CatalogDeletePreview & { reason?: string };
+      if (!response.ok || !payload.ok) {
+        setDeletePreviewError(payload.reason ?? "Aperçu impossible.");
+        return;
+      }
+      setDeletePreview(payload);
+    } catch {
+      setDeletePreviewError("Aperçu impossible.");
+    } finally {
+      setDeletePreviewLoading(false);
+    }
   }
 
-  async function applyDeleteClass(entry: SchoolClassRecord) {
+  async function applyDeleteClass(entry: SchoolClassRecord, confirmationText: string) {
     setPending(true);
     onClearError();
     try {
       const response = await fetch(`/api/admin/catalog/${entry.id}?kind=class`, {
         method: "DELETE",
         credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmationText }),
       });
       const payload = (await response.json()) as { ok: boolean; reason?: string };
       if (!response.ok || !payload.ok) {
+        setDeletePreviewError(payload.reason ?? "Suppression impossible.");
         onError(payload.reason ?? "Suppression impossible.");
         return;
       }
+      setConfirmAction(null);
+      setDeletePreview(null);
       onNotice(`Classe « ${entry.code} » supprimée.`);
       await onCreated();
     } finally {
@@ -693,6 +720,7 @@ export function ClassesAdminPanel({
                           </button>
                           <button
                             type="button"
+                            className="is-danger"
                             disabled={pending}
                             onClick={() => void deleteClass(entry)}
                           >
@@ -734,6 +762,7 @@ export function ClassesAdminPanel({
                           </button>
                           <button
                             type="button"
+                            className="is-danger"
                             disabled={pending}
                             onClick={() => void deleteClass(entry)}
                           >
@@ -749,7 +778,7 @@ export function ClassesAdminPanel({
           </section>
         ))
       )}
-      {confirmCopy && confirmAction ? (
+      {confirmCopy && confirmAction && confirmAction.kind !== "delete" ? (
         <ConfirmDialog
           open
           title={confirmCopy.title}
@@ -758,6 +787,21 @@ export function ClassesAdminPanel({
           danger
           onCancel={() => setConfirmAction(null)}
           onConfirm={() => runConfirmedAction(confirmAction)}
+        />
+      ) : null}
+      {confirmAction?.kind === "delete" ? (
+        <DestructiveConfirmDialog
+          open
+          preview={deletePreview}
+          loading={deletePreviewLoading}
+          error={deletePreviewError}
+          pending={pending}
+          onCancel={() => {
+            setConfirmAction(null);
+            setDeletePreview(null);
+            setDeletePreviewError(null);
+          }}
+          onConfirm={(confirmationText) => void applyDeleteClass(confirmAction.entry, confirmationText)}
         />
       ) : null}
     </div>

@@ -2,11 +2,13 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
+import type { CatalogDeletePreview } from "@campus/features/admin-catalog-delete/index.ts";
 import {
   formatProfessionPrefixBadge,
   type SchoolClassRecord,
   type SchoolProfessionRecord,
 } from "@campus/features/school-catalog";
+import { DestructiveConfirmDialog } from "./destructive-confirm-dialog.tsx";
 
 interface ProfessionsAdminPanelProps {
   onNotice: (message: string) => void;
@@ -61,6 +63,11 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
   const [durationYears, setDurationYears] = useState("3");
   const [showArchived, setShowArchived] = useState(false);
   const [editDraft, setEditDraft] = useState<ProfessionEditDraft | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SchoolProfessionRecord | null>(null);
+  const [deletePreview, setDeletePreview] = useState<CatalogDeletePreview | null>(null);
+  const [deletePreviewError, setDeletePreviewError] = useState<string | null>(null);
+  const [deletePreviewLoading, setDeletePreviewLoading] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -192,25 +199,50 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
   }
 
   async function deleteProfession(entry: SchoolProfessionRecord) {
-    const confirmed = window.confirm(
-      `Supprimer définitivement la profession « ${entry.label} » (${entry.adminCode}) ?`,
-    );
-    if (!confirmed) return;
-    setError("");
-    const response = await fetch(`/api/admin/catalog/${entry.id}?kind=profession`, {
-      method: "DELETE",
-      credentials: "include",
-    });
-    const payload = (await response.json()) as { ok: boolean; reason?: string };
-    if (!response.ok || !payload.ok) {
-      setError(
-        (payload.reason ?? "Suppression impossible.") +
-          " Vous pouvez archiver la profession à la place.",
+    setDeleteTarget(entry);
+    setDeletePreview(null);
+    setDeletePreviewError(null);
+    setDeletePreviewLoading(true);
+    try {
+      const response = await fetch(
+        `/api/admin/catalog/${entry.id}/delete-preview?kind=profession`,
+        { credentials: "include" },
       );
-      return;
+      const payload = (await response.json()) as CatalogDeletePreview & { reason?: string };
+      if (!response.ok || !payload.ok) {
+        setDeletePreviewError(payload.reason ?? "Aperçu impossible.");
+        return;
+      }
+      setDeletePreview(payload);
+    } catch {
+      setDeletePreviewError("Aperçu impossible.");
+    } finally {
+      setDeletePreviewLoading(false);
     }
-    onNotice(`Profession « ${entry.label} » supprimée.`);
-    await refresh();
+  }
+
+  async function applyDeleteProfession(entry: SchoolProfessionRecord, confirmationText: string) {
+    setDeletePending(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/admin/catalog/${entry.id}?kind=profession`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmationText }),
+      });
+      const payload = (await response.json()) as { ok: boolean; reason?: string };
+      if (!response.ok || !payload.ok) {
+        setDeletePreviewError(payload.reason ?? "Suppression impossible.");
+        return;
+      }
+      setDeleteTarget(null);
+      setDeletePreview(null);
+      onNotice(`Profession « ${entry.label} » supprimée.`);
+      await refresh();
+    } finally {
+      setDeletePending(false);
+    }
   }
 
   async function handleCopy(code: string) {
@@ -435,7 +467,7 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
                   >
                     {entry.isArchived ? "Désarchiver" : "Archiver"}
                   </button>
-                  <button type="button" onClick={() => void deleteProfession(entry)}>
+                  <button type="button" className="is-danger" onClick={() => void deleteProfession(entry)}>
                     Supprimer
                   </button>
                 </div>
@@ -444,6 +476,21 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
           })}
         </ul>
       )}
+      {deleteTarget ? (
+        <DestructiveConfirmDialog
+          open
+          preview={deletePreview}
+          loading={deletePreviewLoading}
+          error={deletePreviewError}
+          pending={deletePending}
+          onCancel={() => {
+            setDeleteTarget(null);
+            setDeletePreview(null);
+            setDeletePreviewError(null);
+          }}
+          onConfirm={(confirmationText) => void applyDeleteProfession(deleteTarget, confirmationText)}
+        />
+      ) : null}
     </div>
   );
 }

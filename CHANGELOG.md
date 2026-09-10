@@ -2,6 +2,27 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.46.0] — Suppression définitive contrôlée
+
+L’administrateur peut supprimer définitivement une classe, une profession, une branche ou un CTX après aperçu des dépendances et confirmation forte. La cascade est transactionnelle. Aucun nettoyage automatique au déploiement.
+
+### Ajouté
+
+- Aperçu serveur des conséquences (`GET /api/admin/catalog/:id/delete-preview`).
+- Confirmation par saisie exacte du code / libellé / code CTX, y compris pour un élément vide.
+- Cascade SQLite atomique (publications, accès, cours, horaires, parcours, etc.).
+- Modal danger « Suppression définitive » dans Administration.
+
+### Modifié
+
+- Les dépendances d’une classe (cours, publications, memberships, accès apprentis…) ne bloquent plus la suppression administrateur confirmée : elles sont effacées avec la classe.
+- Profession / branche / CTX : même principe, sans supprimer une classe multi-branches lorsqu’on retire une seule branche.
+- Cascade FK : `membership_subjects` retiré aussi par `subject_id` ; `agenda_items` avant `publication_templates` ; templates rattachés au subject inclus dans l’aperçu.
+
+### Non inclus
+
+Pas de migration destructive, pas de suppression automatique de MA2 ni d’aucune donnée existante au merge. Archiver conserve l’historique. Le bootstrap de base vierge (2.45.0) n’est pas modifié.
+
 ## [2.45.0] — Production propre / bootstrap sans données de démonstration
 
 Une base SQLite neuve démarre avec le schéma, les migrations, et un unique administrateur initial. Aucune donnée métier de démonstration n’est créée automatiquement.

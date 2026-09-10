@@ -727,6 +727,13 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   cursor: pointer;
 }
 .admin-confirm-modal footer button.is-danger { border-color: #b42318; color: #fff; background: #b42318; }
+.admin-confirm-modal footer button.is-danger:disabled { background: #e4a0a0; border-color: #e4a0a0; cursor: not-allowed; }
+.admin-delete-modal { width: min(560px, 100%); }
+.admin-delete-lead { font-size: 15px !important; color: var(--navy) !important; }
+.admin-delete-irreversible { color: #b42318 !important; font-weight: 800 !important; }
+.admin-delete-consequences { margin: 12px 0 0; padding-left: 18px; color: #445a7c; font-size: 13px; font-weight: 600; line-height: 1.5; }
+.admin-delete-confirm { display: grid; gap: 6px; margin-top: 16px; color: #445a7c; font-size: 11px; font-weight: 800; }
+.admin-delete-confirm input { width: 100%; padding: 10px; border: 1px solid var(--line-strong); border-radius: 6px; font-size: 14px; }
 .admin-panel-block .school-year-admin { padding: 0; }
 .admin-inline-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 16px; }
 .admin-inline-form label { display: grid; gap: 4px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8793a9; }
@@ -868,6 +875,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .admin-teacher-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .admin-teacher-actions button, .admin-teacher-edit-actions button { padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: #f8fafc; color: var(--navy); font-size: 9px; font-weight: 700; cursor: pointer; }
 .admin-teacher-actions button:disabled { opacity: .45; cursor: not-allowed; }
+.admin-teacher-actions button.is-danger { border-color: #b42318; color: #b42318; background: #fff5f5; }
 .admin-teacher-edit-form { display: grid; gap: 8px; width: 100%; }
 .admin-teacher-edit-form label { display: grid; gap: 4px; color: #8793a9; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .admin-teacher-edit-form input { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); font-size: 11px; }
