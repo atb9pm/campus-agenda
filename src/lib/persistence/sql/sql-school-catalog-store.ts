@@ -43,6 +43,7 @@ import type {
   SchoolClassRecord,
 } from "../../../features/school-catalog/types.ts";
 import type { SchoolCatalogStore } from "../school-catalog-types.ts";
+import { shouldSeedDemoData } from "../demo-seed-policy.ts";
 import type { SqlDatabase } from "./types.ts";
 
 function createId(prefix: string): string {
@@ -244,7 +245,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
     }
   }
 
-  async ensureSeeded(): Promise<void> {
+  async seedDefaultCatalogIfEmpty(): Promise<void> {
     const classCount = await this.db
       .prepare("SELECT COUNT(*) AS count FROM school_classes")
       .bind()
@@ -300,7 +301,9 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
           .run();
       }
     }
+  }
 
+  async ensureCatalogReady(): Promise<void> {
     await this.backfillBranchAdminCodes();
     await this.ensureCounterRow("PRF");
     await this.ensureCounterRow("CTX");
@@ -322,6 +325,13 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       "CTX",
       (contextCodes.results ?? []).map((row) => row.admin_code),
     );
+  }
+
+  async ensureSeeded(): Promise<void> {
+    if (shouldSeedDemoData()) {
+      await this.seedDefaultCatalogIfEmpty();
+    }
+    await this.ensureCatalogReady();
   }
 
   async listClasses(): Promise<SchoolClassRecord[]> {

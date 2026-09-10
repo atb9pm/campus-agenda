@@ -27,6 +27,7 @@ import {
 } from "../../features/school-catalog/ctx-guards.ts";
 import { findUniqueSchoolYearIdForLabel } from "../../features/school-catalog/school-year-attachment.ts";
 import type { SchoolYearRef } from "../../features/school-catalog/school-year-attachment.ts";
+import { shouldSeedDemoData } from "./demo-seed-policy.ts";
 import type {
   PedagogicalContextInput,
   PedagogicalContextRecord,
@@ -64,11 +65,23 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
     return { ...this.counters };
   }
 
+  async seedDefaultCatalogIfEmpty(): Promise<void> {
+    if (this.classes.length === 0) {
+      this.classes = buildDefaultSchoolClasses();
+    }
+    if (this.branches.length === 0) {
+      this.branches = buildDefaultSchoolBranches();
+      this.counters.BR = this.branches.length + 1;
+    }
+    this.seeded = true;
+  }
+
   async ensureSeeded(): Promise<void> {
     if (this.seeded) return;
-    this.classes = buildDefaultSchoolClasses();
-    this.branches = buildDefaultSchoolBranches();
-    this.counters.BR = this.branches.length + 1;
+    if (shouldSeedDemoData()) {
+      await this.seedDefaultCatalogIfEmpty();
+      return;
+    }
     this.seeded = true;
   }
 

@@ -158,7 +158,7 @@ function testItem(input: {
 }
 
 test("version 2.38.0 — semestre visuel, pas de migration", () => {
-  assert.equal(APP_VERSION, "2.44.1");
+  assert.equal(APP_VERSION, "2.45.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0026_student_access_ciphertext.sql");
 });
 
@@ -387,6 +387,7 @@ function structuredWorld() {
     },
     catalog: {
       ensureSeeded: async () => undefined,
+      seedDefaultCatalogIfEmpty: async () => undefined,
       listClasses: async () => [ma3a, mecauto, mma2a, mma1a],
       listContexts: async () => [
         {

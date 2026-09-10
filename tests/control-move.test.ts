@@ -411,7 +411,7 @@ async function publishTest(
 }
 
 test("version 2.38.0 — déplacement structuré, pas de migration 0025", async () => {
-  assert.equal(APP_VERSION, "2.44.1");
+  assert.equal(APP_VERSION, "2.45.0");
   assert.equal(TEST_ALERT_THRESHOLD, 3);
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0026_student_access_ciphertext.sql");
 

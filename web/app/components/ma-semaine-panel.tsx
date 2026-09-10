@@ -8,7 +8,7 @@ import {
   groupClassesByWeekday,
   type TeacherClassSetup,
 } from "@campus/features/teacher-setup";
-import { TEACHER_COURSES_EMPTY_MESSAGE } from "@campus/features/teacher-workspace";
+import { TEACHER_WEEK_EMPTY_CLASSES_MESSAGE } from "@campus/features/teacher-workspace";
 
 interface MaSemainePanelProps {
   classes: TeacherClassSetup[];
@@ -76,7 +76,7 @@ export function MaSemainePanel({
       )}
 
       {!activeClasses.length ? (
-        <p className="ma-semaine-empty">{TEACHER_COURSES_EMPTY_MESSAGE}</p>
+        <p className="ma-semaine-empty">{TEACHER_WEEK_EMPTY_CLASSES_MESSAGE}</p>
       ) : (
         <div className="ma-semaine-days">
           {grouped.map((group) => (

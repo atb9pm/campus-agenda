@@ -6,6 +6,7 @@ import type { SchoolDayException } from "../../features/school-days/types.ts";
 import type { ParsedWeekPlan, SchoolWeekEntry, SchoolYearRecord, SchoolYearWithWeeks } from "../../features/school-year/types.ts";
 import type { SchoolYearStore } from "./school-year-types.ts";
 import { schoolYearBoundsFromLabel } from "../../features/school-year/week-plan-logic.ts";
+import { shouldSeedDemoData } from "./demo-seed-policy.ts";
 
 let memorySchoolYears: SchoolYearWithWeeks[] = [];
 let memoryDayExceptions = new Map<string, SchoolDayException[]>();
@@ -148,11 +149,9 @@ export function replaceMemorySchoolYears(
 
 export async function hydrateMemorySchoolCalendar(): Promise<SchoolWeekEntry[]> {
   const store = new MemorySchoolYearStore();
-  await store.seedDefaultActiveYearIfEmpty();
+  if (shouldSeedDemoData()) {
+    await store.seedDefaultActiveYearIfEmpty();
+  }
   const active = await store.getActiveSchoolYear();
-  return active?.weeks ?? SCHOOL_WEEK_MONDAYS.map((entry) => ({
-    number: entry.number,
-    kind: entry.kind,
-    monday: entry.monday,
-  }));
+  return active?.weeks ?? [];
 }

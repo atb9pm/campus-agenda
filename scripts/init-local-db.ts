@@ -1,3 +1,7 @@
+/**
+ * Initialise une base SQLite locale **avec** le contenu de démonstration.
+ * Ne pas utiliser en production : le seed démo n'est plus automatique.
+ */
 import { createNodeSqliteDatabase } from "../src/lib/persistence/sql/adapters.ts";
 import { applyMigrations } from "../src/lib/persistence/sql/migrate.ts";
 import { seedDemoDatabase } from "../src/lib/persistence/sql/seed.ts";

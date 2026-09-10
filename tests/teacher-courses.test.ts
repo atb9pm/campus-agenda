@@ -228,7 +228,7 @@ test("version 2.24.0 — Mes cours depuis les attributions", () => {
   assert.equal(WORKSPACE_ASSIGNMENT_ROLE_LABELS.PRIMARY, "Titulaire");
   assert.equal(WORKSPACE_ASSIGNMENT_ROLE_LABELS.CO_TEACHER, "Co-enseignant");
   assert.equal(WORKSPACE_ASSIGNMENT_ROLE_LABELS.REPLACEMENT, "Remplacement temporaire");
-  assert.match(TEACHER_COURSES_EMPTY_MESSAGE, /Aucun cours ne vous est actuellement attribué/);
+  assert.match(TEACHER_COURSES_EMPTY_MESSAGE, /Aucun cours ne vous est encore attribué/);
 });
 
 test("A — PRIMARY visible", async () => {

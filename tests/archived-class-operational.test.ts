@@ -222,6 +222,7 @@ function planningDeps(classes: SchoolClassRecord[]): ControlPlanningServiceDeps 
     },
     catalog: {
       ensureSeeded: async () => undefined,
+      seedDefaultCatalogIfEmpty: async () => undefined,
       listClasses: async () => classes,
       listContexts: async () => contexts,
       listBranches: async () => branches,
@@ -276,7 +277,7 @@ function adminBadge(schoolClass: SchoolClassRecord | null) {
 }
 
 test("version 2.38.0 — classe archivée hors opérationnel, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.44.1");
+  assert.equal(APP_VERSION, "2.45.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0026_student_access_ciphertext.sql");
   const [classroomsSrc, panel, lifecycle] = await Promise.all([
     readFile(new URL("../src/features/control-planning/classrooms.ts", import.meta.url), "utf8"),

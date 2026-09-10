@@ -1,4 +1,5 @@
 import { DEMO_CATALOG, DEMO_CURRENT_TEACHER_ID } from "../../features/classes/demo-data.ts";
+import { shouldSeedDemoData } from "./demo-seed-policy.ts";
 import {
   buildTeacherId,
   checkAccountInput,
@@ -66,6 +67,8 @@ export class MemoryTeacherAccountStore implements TeacherAccountStore {
 
   private ensureSeeded(): void {
     if (this.seeded) return;
+    this.seeded = true;
+    if (!shouldSeedDemoData()) return;
     const now = new Date().toISOString();
     this.accounts = DEMO_CATALOG.teachers.map((teacher) => ({
       id: teacher.id,

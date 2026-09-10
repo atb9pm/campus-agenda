@@ -39,6 +39,10 @@ export function buildDefaultTeacherSetup(
   return { version: 1, classes };
 }
 
+export function emptyTeacherSetup(): TeacherSetupConfig {
+  return { version: 1, classes: [] };
+}
+
 export function createEmptyClassSetup(index = 0): TeacherClassSetup {
   return {
     id: `classe-manuelle-${Date.now()}-${index}`,

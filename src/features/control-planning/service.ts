@@ -92,6 +92,9 @@ export async function getControlPlanning(
     ? await deps.years.getSchoolYearById(requestedYearId)
     : active;
   if (!year || !isConsultablePlanningYear(year)) {
+    if (!requestedYearId && yearList.length === 0) {
+      return { ok: false, reason: "Aucun cours disponible.", status: 404 };
+    }
     return { ok: false, reason: "Année scolaire introuvable.", status: 404 };
   }
 

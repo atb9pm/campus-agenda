@@ -1,6 +1,6 @@
 # Exploitation — Campus Agenda
 
-Guide opérationnel, **septembre 2026**. Version applicative : voir `APP_VERSION` (`2.44.1` et suivantes).
+Guide opérationnel, **septembre 2026**. Version applicative : voir `APP_VERSION` (`2.45.0` et suivantes).
 
 ## Production actuelle
 
@@ -43,7 +43,7 @@ Réponse attendue :
 {
   "ok": true,
   "service": "campus-agenda",
-  "version": "2.44.1",
+  "version": "2.45.0",
   "store": "sqlite",
   "uptimeSeconds": 42
 }
@@ -64,6 +64,10 @@ Journaux JSON sur la sortie standard, sans contenu scolaire :
 | `AUTH_SECRET` | Signature des cookies (obligatoire en production) |
 | `CAMPUS_STORE` | Backend de persistance (`sqlite` en production) |
 | `CAMPUS_SQLITE_PATH` | Fichier SQLite |
+| `CAMPUS_ADMIN_INITIALS` | Initiales de l’administrateur bootstrap (`ChF` par défaut) |
+| `CAMPUS_ADMIN_DISPLAY_NAME` | Nom affiché du premier admin (sinon les initiales ou « Administrateur ») |
+| `CAMPUS_ADMIN_PASSWORD` | Mot de passe du premier admin — **obligatoire** si la base SQLite est totalement vide |
+| `CAMPUS_DEMO_SEED` | Seed de démonstration hors production uniquement (`false` pour le désactiver). **Ignoré en production.** |
 | `APP_ENV` | Contexte d'exécution |
 | `CAMPUS_DISABLE_RATE_LIMIT` | Désactive le rate limit (tests uniquement) |
 | `CAMPUS_AUTH_RATE_LIMIT_TEACHER` | Limite personnalisée connexion enseignant (défaut : 10/min) |
@@ -144,6 +148,41 @@ Source de vérité : `CAMPUS_BACKUP_INSERT_ORDER` (et colonnes associées). On n
 GitHub Actions ne pousse plus le code par SSH. Il vérifie uniquement la santé de production.
 
 Guide complet : **`docs/infomaniak-deploy.md`**.
+
+**Le merge de cette version ne réinitialise pas la base existante.** Tant que `CAMPUS_SQLITE_PATH` pointe vers le fichier actuel, les données métier restent intactes. Une base vierge n’est créée que si l’on pointe explicitement vers un **nouveau** fichier SQLite (voir ci-dessous).
+
+## Réinitialisation contrôlée vers une base de production vierge
+
+Cette procédure est **manuelle**. Elle n’est déclenchée ni par le merge, ni par le Build Infomaniak, ni par un redémarrage sur l’ancien chemin SQLite.
+
+1. Télécharger un backup v4 complet depuis Administration → **Sauvegarde des données**.
+2. Noter le commit / la version actuellement déployée (`GET /api/health`).
+3. Conserver l’ancien fichier SQLite **intact** (ne pas l’écraser, ne pas le supprimer).
+4. Déployer la version Clean Production Bootstrap (`2.45.0` ou suivante) : `main` → **Build** → **Redémarrer**.
+5. Configurer les variables d’environnement :
+   - `CAMPUS_ADMIN_INITIALS` (défaut `ChF`)
+   - `CAMPUS_ADMIN_DISPLAY_NAME` si souhaité
+   - `CAMPUS_ADMIN_PASSWORD` (**obligatoire** pour une base totalement vide)
+6. Choisir un **nouveau** chemin `CAMPUS_SQLITE_PATH` (fichier inexistant ou vide).
+7. Redémarrer l’application.
+8. Les migrations créent le schéma dans la nouvelle base.
+9. Seul le compte administrateur bootstrap est créé. Aucune classe, année, horaire ni donnée démo.
+10. Vérifier l’état vierge (Administration : « Aucune année scolaire configurée. », catalogue vide).
+11. Commencer la configuration réelle depuis Administration (import du calendrier scolaire, puis professions / classes).
+12. **Ne pas** restaurer l’ancien backup dans la nouvelle base.
+13. Conserver l’ancien backup et l’ancien fichier SQLite comme archive / rollback.
+
+### Rollback
+
+1. Remettre l’ancien `CAMPUS_SQLITE_PATH`.
+2. Redémarrer.
+3. L’ancienne base redevient utilisable immédiatement.
+
+Ne jamais :
+
+- exécuter un `DELETE` métier sur la base actuelle ;
+- ajouter une migration du type `0027_delete_demo_data.sql` ;
+- laisser `CAMPUS_DEMO_SEED=true` en production (la variable est ignorée, mais elle n’a rien à y faire).
 
 ## Vérifications
 
