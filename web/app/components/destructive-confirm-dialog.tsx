@@ -23,12 +23,32 @@ export function DestructiveConfirmDialog({
   onConfirm,
   onCancel,
 }: DestructiveConfirmDialogProps) {
+  if (!open) return null;
+  return (
+    <DestructiveConfirmDialogBody
+      key={preview?.target.id ?? "loading"}
+      preview={preview}
+      loading={loading}
+      error={error}
+      pending={pending}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
+  );
+}
+
+function DestructiveConfirmDialogBody({
+  preview,
+  loading,
+  error,
+  pending,
+  onConfirm,
+  onCancel,
+}: Omit<DestructiveConfirmDialogProps, "open">) {
   const titleId = useId();
   const [typed, setTyped] = useState("");
 
   useEffect(() => {
-    if (!open) return;
-    setTyped("");
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -37,9 +57,7 @@ export function DestructiveConfirmDialog({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onCancel, preview?.target.id]);
-
-  if (!open) return null;
+  }, [onCancel]);
 
   const matches = Boolean(preview && typed.trim() === preview.confirmationText);
   const targetLabel = preview ? `« ${preview.target.label || preview.target.code} »` : "";

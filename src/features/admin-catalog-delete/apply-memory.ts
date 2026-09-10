@@ -8,8 +8,14 @@ import {
   exportMemoryTimetableTables,
   replaceMemoryTimetableTables,
 } from "../../lib/persistence/memory-timetable-store.ts";
+import type { AnnualCourseNote } from "../pedagogical-path/index.ts";
 import type { CatalogDeleteSnapshotDeps } from "./snapshot.ts";
 import type { CatalogDeletePlan } from "./types.ts";
+
+interface AnnualNotesBulkStore {
+  exportAllNotes(): AnnualCourseNote[];
+  replaceAllNotes(notes: AnnualCourseNote[]): void;
+}
 
 function withoutIds<T extends { id: string | number }>(rows: T[], ids: Array<string | number>): T[] {
   const banned = new Set(ids.map(String));
@@ -67,11 +73,10 @@ export async function applyCatalogDeleteInMemory(
     for (const classId of plan.classIds) await deps.schedules.replaceAttendanceDaysForClass(classId, []);
   }
 
-  if ("exportAllNotes" in deps.notes && typeof deps.notes.exportAllNotes === "function" && "replaceAllNotes" in deps.notes) {
-    const notes = deps.notes.exportAllNotes();
-    (deps.notes as { replaceAllNotes: (notes: typeof notes) => void }).replaceAllNotes(
-      notes.filter((note) => !plan.annualCourseNoteIds.includes(note.id)),
-    );
+  const bulkNotes = deps.notes as Partial<AnnualNotesBulkStore>;
+  if (typeof bulkNotes.exportAllNotes === "function" && typeof bulkNotes.replaceAllNotes === "function") {
+    const exported = bulkNotes.exportAllNotes();
+    bulkNotes.replaceAllNotes(exported.filter((note) => !plan.annualCourseNoteIds.includes(note.id)));
   } else {
     for (const id of plan.annualCourseNoteIds) await deps.notes.deleteNote(id);
   }
