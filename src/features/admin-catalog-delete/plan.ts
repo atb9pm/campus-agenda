@@ -203,13 +203,36 @@ function attachCourseGraph(plan: CatalogDeletePlan, courseIds: string[], snapsho
   ]);
 }
 
-function attachTemplates(plan: CatalogDeletePlan, snapshot: CatalogDeleteSnapshot): void {
+function attachSubjectAndTemplateDependents(
+  plan: CatalogDeletePlan,
+  snapshot: CatalogDeleteSnapshot,
+): void {
+  const subjectIds = new Set(plan.subjectIds);
+  plan.agendaItemIds = unique([
+    ...plan.agendaItemIds,
+    ...snapshot.agendaItems
+      .filter((item) => item.subjectId && subjectIds.has(item.subjectId))
+      .map((item) => item.id),
+  ]);
+
   const agendaIds = new Set(plan.agendaItemIds);
+  const templates = snapshot.templates.filter((template) => {
+    if (template.subjectId && subjectIds.has(template.subjectId)) return true;
+    if (template.sourceItemId == null || !agendaIds.has(template.sourceItemId)) return false;
+    const users = snapshot.agendaItems.filter((item) => item.templateId === template.id);
+    return users.every((item) => agendaIds.has(item.id));
+  });
   plan.publicationTemplateIds = unique([
     ...plan.publicationTemplateIds,
-    ...snapshot.templates
-      .filter((template) => template.sourceItemId != null && agendaIds.has(template.sourceItemId))
-      .map((template) => template.id),
+    ...templates.map((template) => template.id),
+  ]);
+
+  const templateIds = new Set(plan.publicationTemplateIds);
+  plan.agendaItemIds = unique([
+    ...plan.agendaItemIds,
+    ...snapshot.agendaItems
+      .filter((item) => item.templateId && templateIds.has(item.templateId))
+      .map((item) => item.id),
   ]);
 }
 
@@ -276,8 +299,14 @@ export function planSchoolClassDelete(
       ),
     )
     .map((mapping) => ({ importId: mapping.importId, classCode: mapping.classCode }));
+  plan.timetableMappingKeys = uniqueMappings([
+    ...plan.timetableMappingKeys,
+    ...snapshot.timetableMappings
+      .filter((mapping) => classroomIds.includes(mapping.classroomId))
+      .map((mapping) => ({ importId: mapping.importId, classCode: mapping.classCode })),
+  ]);
 
-  attachTemplates(plan, snapshot);
+  attachSubjectAndTemplateDependents(plan, snapshot);
   return finalizeCounts(plan, snapshot);
 }
 
@@ -299,7 +328,7 @@ export function planContextDelete(
     ...plan.annualCourseNoteIds,
     ...snapshot.notes.filter((note) => note.contextId === context.id).map((note) => note.id),
   ]);
-  attachTemplates(plan, snapshot);
+  attachSubjectAndTemplateDependents(plan, snapshot);
   return finalizeCounts(plan, snapshot);
 }
 

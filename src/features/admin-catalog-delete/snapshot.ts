@@ -203,9 +203,9 @@ async function loadAuxiliaryRows(deps: CatalogDeleteSnapshotDeps): Promise<{
 }> {
   if (deps.sqlDb) {
     const templates = await deps.sqlDb
-      .prepare("SELECT id, source_item_id FROM publication_templates")
+      .prepare("SELECT id, source_item_id, subject_id FROM publication_templates")
       .bind()
-      .all<{ id: string; source_item_id: number | null }>();
+      .all<{ id: string; source_item_id: number | null; subject_id: string | null }>();
     const slots = await deps.sqlDb
       .prepare(
         `SELECT s.id AS id, s.import_id AS import_id, s.class_code AS class_code,
@@ -226,7 +226,7 @@ async function loadAuxiliaryRows(deps: CatalogDeleteSnapshotDeps): Promise<{
         title: "",
         detail: "",
         type: "INFORMATION",
-        subjectId: null,
+        subjectId: row.subject_id,
         defaultSchoolWeekNumber: null,
         defaultDay: null,
         sourceSchoolYearId: null,

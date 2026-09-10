@@ -9,8 +9,10 @@ process.env.AUTH_SECRET ??= "test-secret-permanent-delete";
 
 import { APP_VERSION } from "../src/lib/app-version.ts";
 import {
+  buildMembershipSubjectDeletes,
   confirmationMatches,
   deleteCatalogItemPermanently,
+  emptyCatalogDeleteCounts,
   hasDestructiveDependencies,
   previewCatalogDelete,
   SQL_ROLLBACK_PROBE,
@@ -59,6 +61,7 @@ async function openWorld() {
   process.env.CAMPUS_DEMO_SEED = "false";
   try {
     await prepareSqlDatabase(db);
+    await db.exec("PRAGMA foreign_keys = ON");
   } finally {
     if (previous === undefined) delete process.env.CAMPUS_DEMO_SEED;
     else process.env.CAMPUS_DEMO_SEED = previous;
@@ -91,6 +94,123 @@ async function openWorld() {
     sqlDb: db,
   };
   return { dir, db, deps, catalog, courses, notes, paths, schedules, agenda, adapters };
+}
+
+async function seedTwoBranchClass(world: Awaited<ReturnType<typeof openWorld>>) {
+  const yearId = await seedYear(world.db);
+  const teacherId = await seedTeacher(world.db);
+  const profession = await world.catalog.createProfession({
+    label: "Mécanicien FK",
+    durationYears: 3,
+    classCodePrefix: "ZFK",
+  });
+  const transmission = await world.catalog.createBranch({
+    code: "DELTRN",
+    label: "Transmission-FK",
+    teachingType: "TECHNICAL",
+  });
+  const chassis = await world.catalog.createBranch({
+    code: "DELCHS",
+    label: "Châssis-FK",
+    teachingType: "TECHNICAL",
+  });
+  const ctxTrans = await world.catalog.createContext({
+    professionId: profession.id,
+    trainingYear: 2,
+    branchId: transmission.id,
+  });
+  const ctxChas = await world.catalog.createContext({
+    professionId: profession.id,
+    trainingYear: 2,
+    branchId: chassis.id,
+  });
+  assert.equal(ctxTrans.ok, true);
+  assert.equal(ctxChas.ok, true);
+  const schoolClass = await world.catalog.createClass({
+    code: "ZFK2A",
+    label: "ZFK 2A",
+    schoolYearId: yearId,
+    schoolYearLabel: "2026-2027",
+    professionId: profession.id,
+    trainingYear: 2,
+  });
+  const courseTrans = await world.courses.createCourse({
+    id: "course-fk-trans",
+    schoolYearId: yearId,
+    classId: schoolClass.id,
+    contextId: ctxTrans.value!.id,
+    isArchived: false,
+    archivedAt: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
+  const courseChas = await world.courses.createCourse({
+    id: "course-fk-chas",
+    schoolYearId: yearId,
+    classId: schoolClass.id,
+    contextId: ctxChas.value!.id,
+    isArchived: false,
+    archivedAt: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
+  await world.adapters.upsertClassroom({
+    id: "rt-zfk2a",
+    name: "ZFK2A",
+    programLabel: "",
+    accessCodeHint: "",
+    schoolClassId: schoolClass.id,
+  });
+  await world.adapters.upsertSubject({
+    id: "sub-fk-trans",
+    classroomId: "rt-zfk2a",
+    name: "Transmission",
+    annualCourseId: courseTrans.id,
+  });
+  await world.adapters.upsertSubject({
+    id: "sub-fk-chas",
+    classroomId: "rt-zfk2a",
+    name: "Châssis",
+    annualCourseId: courseChas.id,
+  });
+  await world.db
+    .prepare("INSERT INTO memberships (id, teacher_id, classroom_id, valid_from) VALUES (?, ?, ?, ?)")
+    .bind("mem-fk", teacherId, "rt-zfk2a", "2026-08-17")
+    .run();
+  await world.db
+    .prepare("INSERT INTO membership_subjects (membership_id, subject_id) VALUES (?, ?)")
+    .bind("mem-fk", "sub-fk-trans")
+    .run();
+  await world.db
+    .prepare("INSERT INTO membership_subjects (membership_id, subject_id) VALUES (?, ?)")
+    .bind("mem-fk", "sub-fk-chas")
+    .run();
+  return {
+    yearId,
+    teacherId,
+    profession,
+    transmission,
+    chassis,
+    ctxTrans: ctxTrans.value!,
+    ctxChas: ctxChas.value!,
+    schoolClass,
+    courseTrans,
+    courseChas,
+  };
+}
+
+async function membershipSubjectExists(
+  db: SqlDatabase,
+  membershipId: string,
+  subjectId: string,
+): Promise<boolean> {
+  const row = await db
+    .prepare(
+      "SELECT COUNT(*) AS count FROM membership_subjects WHERE membership_id = ? AND subject_id = ?",
+    )
+    .bind(membershipId, subjectId)
+    .first<{ count: number }>();
+  return Number(row?.count ?? 0) > 0;
 }
 
 async function seedYear(db: SqlDatabase, id = "year-2026") {
@@ -786,6 +906,221 @@ test("L — aucun orphelin après suppression de classe", async () => {
     world.db.close();
     await rm(world.dir, { recursive: true, force: true });
   }
+});
+
+test("C/FK — membership_subjects par subject : CTX Transmission", async () => {
+  const world = await openWorld();
+  try {
+    const seeded = await seedTwoBranchClass(world);
+    const preview = await previewCatalogDelete(world.deps, "context", seeded.ctxTrans.id);
+    assert.equal(preview.ok, true);
+    assert.ok((preview.preview?.counts.subjects ?? 0) >= 1);
+    assert.equal(preview.preview?.counts.memberships, 0);
+
+    const deleted = await deleteCatalogItemPermanently(world.deps, {
+      kind: "context",
+      id: seeded.ctxTrans.id,
+      confirmationText: seeded.ctxTrans.adminCode,
+    });
+    assert.equal(deleted.ok, true);
+    assert.equal(await existsId(world.db, "subjects", "sub-fk-trans"), false);
+    assert.equal(await existsId(world.db, "subjects", "sub-fk-chas"), true);
+    assert.equal(await existsId(world.db, "memberships", "mem-fk"), true);
+    assert.equal(await membershipSubjectExists(world.db, "mem-fk", "sub-fk-trans"), false);
+    assert.equal(await membershipSubjectExists(world.db, "mem-fk", "sub-fk-chas"), true);
+    assert.equal(await existsId(world.db, "school_classes", seeded.schoolClass.id), true);
+    assert.equal(await existsId(world.db, "annual_courses", seeded.courseChas.id), true);
+  } finally {
+    world.db.close();
+    await rm(world.dir, { recursive: true, force: true });
+  }
+});
+
+test("C/FK — membership_subjects par subject : branche Transmission", async () => {
+  const world = await openWorld();
+  try {
+    const seeded = await seedTwoBranchClass(world);
+    const deleted = await deleteCatalogItemPermanently(world.deps, {
+      kind: "branch",
+      id: seeded.transmission.id,
+      confirmationText: "Transmission-FK",
+    });
+    assert.equal(deleted.ok, true);
+    assert.equal(await existsId(world.db, "school_branches", seeded.transmission.id), false);
+    assert.equal(await existsId(world.db, "school_branches", seeded.chassis.id), true);
+    assert.equal(await existsId(world.db, "subjects", "sub-fk-trans"), false);
+    assert.equal(await existsId(world.db, "subjects", "sub-fk-chas"), true);
+    assert.equal(await existsId(world.db, "memberships", "mem-fk"), true);
+    assert.equal(await membershipSubjectExists(world.db, "mem-fk", "sub-fk-trans"), false);
+    assert.equal(await membershipSubjectExists(world.db, "mem-fk", "sub-fk-chas"), true);
+    assert.equal(await existsId(world.db, "school_classes", seeded.schoolClass.id), true);
+  } finally {
+    world.db.close();
+    await rm(world.dir, { recursive: true, force: true });
+  }
+});
+
+test("A/FK — AgendaItem supprimé avant son template", async () => {
+  const world = await openWorld();
+  try {
+    const seeded = await seedTwoBranchClass(world);
+    await world.db
+      .prepare(
+        `INSERT INTO publication_templates (id, owner_teacher_id, title, detail, type, subject_id)
+         VALUES (?, ?, 'Tpl Trans', 'x', 'INFORMATION', ?)`,
+      )
+      .bind("tpl-fk-trans", seeded.teacherId, "sub-fk-trans")
+      .run();
+    const item = await world.agenda.createAgendaItem({
+      classroomId: "rt-zfk2a",
+      subjectId: "sub-fk-trans",
+      authorTeacherId: seeded.teacherId,
+      day: 1,
+      hour: 8,
+      schoolWeekNumber: 1,
+      type: "INFORMATION",
+      title: "Depuis modèle",
+      detail: "x",
+      schoolYearId: seeded.yearId,
+      annualCourseId: seeded.courseTrans.id,
+      templateId: "tpl-fk-trans",
+    });
+    const statements = buildCatalogDeleteStatements(
+      (await previewCatalogDelete(world.deps, "context", seeded.ctxTrans.id)).plan!,
+      await loadCatalogDeleteSnapshot(world.deps),
+    );
+    const agendaIdx = statements.findIndex((entry) => entry.sql.startsWith("DELETE FROM agenda_items"));
+    const templateIdx = statements.findIndex((entry) =>
+      entry.sql.startsWith("DELETE FROM publication_templates"),
+    );
+    assert.ok(agendaIdx >= 0 && templateIdx >= 0 && agendaIdx < templateIdx);
+
+    const deleted = await deleteCatalogItemPermanently(world.deps, {
+      kind: "context",
+      id: seeded.ctxTrans.id,
+      confirmationText: seeded.ctxTrans.adminCode,
+    });
+    assert.equal(deleted.ok, true);
+    assert.equal(await existsId(world.db, "publication_templates", "tpl-fk-trans"), false);
+    const leftover = await world.db
+      .prepare("SELECT COUNT(*) AS count FROM agenda_items WHERE id = ?")
+      .bind(item.id)
+      .first<{ count: number }>();
+    assert.equal(Number(leftover?.count ?? 0), 0);
+  } finally {
+    world.db.close();
+    await rm(world.dir, { recursive: true, force: true });
+  }
+});
+
+test("B/FK — template.subjectId du subject CTX inclus dans la cascade", async () => {
+  const world = await openWorld();
+  try {
+    const seeded = await seedTwoBranchClass(world);
+    await world.db
+      .prepare(
+        `INSERT INTO publication_templates (id, owner_teacher_id, title, detail, type, subject_id)
+         VALUES (?, ?, 'Tpl Trans', 'x', 'HOMEWORK', ?)`,
+      )
+      .bind("tpl-fk-trans-b", seeded.teacherId, "sub-fk-trans")
+      .run();
+    await world.db
+      .prepare(
+        `INSERT INTO publication_templates (id, owner_teacher_id, title, detail, type, subject_id)
+         VALUES (?, ?, 'Tpl Châssis', 'x', 'HOMEWORK', ?)`,
+      )
+      .bind("tpl-fk-chas-b", seeded.teacherId, "sub-fk-chas")
+      .run();
+    const preview = await previewCatalogDelete(world.deps, "context", seeded.ctxTrans.id);
+    assert.ok((preview.preview?.counts.publicationTemplates ?? 0) >= 1);
+    assert.ok(preview.plan?.publicationTemplateIds.includes("tpl-fk-trans-b"));
+    assert.equal(preview.plan?.publicationTemplateIds.includes("tpl-fk-chas-b"), false);
+
+    const deleted = await deleteCatalogItemPermanently(world.deps, {
+      kind: "context",
+      id: seeded.ctxTrans.id,
+      confirmationText: seeded.ctxTrans.adminCode,
+    });
+    assert.equal(deleted.ok, true);
+    assert.equal(await existsId(world.db, "publication_templates", "tpl-fk-trans-b"), false);
+    assert.equal(await existsId(world.db, "publication_templates", "tpl-fk-chas-b"), true);
+    const orphan = await world.db
+      .prepare(
+        `SELECT COUNT(*) AS count FROM publication_templates
+         WHERE subject_id IS NOT NULL
+           AND subject_id NOT IN (SELECT id FROM subjects)`,
+      )
+      .bind()
+      .first<{ count: number }>();
+    assert.equal(Number(orphan?.count ?? 0), 0);
+  } finally {
+    world.db.close();
+    await rm(world.dir, { recursive: true, force: true });
+  }
+});
+
+test("ordre DELETE — FK membership_subjects / templates / subjects", () => {
+  const plan = {
+    kind: "context" as const,
+    target: { id: "ctx", kind: "context" as const, code: "CTX-0001", label: "CTX-0001" },
+    confirmationText: "CTX-0001",
+    counts: emptyCatalogDeleteCounts(),
+    classIds: [],
+    professionIds: [],
+    branchIds: [],
+    contextIds: ["ctx"],
+    annualCourseIds: ["ac"],
+    assignmentIds: [],
+    assignmentEventIds: [],
+    annualCourseNoteIds: [],
+    courseScheduleSlotIds: [],
+    attendanceDayIds: [],
+    agendaItemIds: [9],
+    classroomIds: [],
+    subjectIds: ["sub"],
+    membershipIds: ["mem"],
+    studentAccessIds: [],
+    publicationTemplateIds: ["tpl"],
+    timetableSlotIds: [],
+    timetableMappingKeys: [],
+  };
+  const emptySnapshot = {
+    classes: [],
+    professions: [],
+    branches: [],
+    contexts: [],
+    courses: [],
+    assignments: [],
+    events: [],
+    notes: [],
+    paths: [],
+    scheduleSlots: [],
+    attendanceDays: [],
+    agendaItems: [],
+    classrooms: [],
+    subjects: [],
+    memberships: [],
+    studentAccesses: [],
+    templates: [],
+    teacherSetups: [],
+    teacherNotes: [],
+    timetableSlots: [],
+    timetableMappings: [],
+  };
+  const statements = buildCatalogDeleteStatements(plan, emptySnapshot);
+  const sql = statements.map((entry) => entry.sql);
+  const indexOf = (table: string) => sql.findIndex((line) => line.startsWith(`DELETE FROM ${table}`));
+  assert.ok(indexOf("membership_subjects") < indexOf("memberships"));
+  assert.ok(indexOf("membership_subjects") < indexOf("subjects"));
+  assert.ok(indexOf("agenda_items") < indexOf("publication_templates"));
+  assert.ok(indexOf("publication_templates") < indexOf("subjects"));
+  assert.ok(indexOf("agenda_items") < indexOf("subjects"));
+  assert.ok(indexOf("subjects") < indexOf("annual_courses"));
+  assert.ok(indexOf("annual_courses") < indexOf("pedagogical_contexts"));
+  const ms = buildMembershipSubjectDeletes(plan);
+  assert.match(ms[0]!.sql, /membership_id IN/);
+  assert.match(ms[0]!.sql, /subject_id IN/);
+  assert.match(ms[0]!.sql, / OR /);
 });
 
 test("E/UI — modal danger et pas de fallback silencieux", async () => {

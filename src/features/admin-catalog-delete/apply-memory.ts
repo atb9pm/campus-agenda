@@ -30,16 +30,26 @@ export async function applyCatalogDeleteInMemory(
   const agendaItems = await deps.agenda.exportAllItems();
   await deps.agenda.replaceAllItems(withoutIds(agendaItems, plan.agendaItemIds));
 
+  const subjectBanned = new Set(plan.subjectIds);
+  const stripSubjects = <T extends { id: string; subjectIds: string[] }>(entry: T): T => ({
+    ...entry,
+    subjectIds: entry.subjectIds.filter((id) => !subjectBanned.has(id)),
+  });
+
   const legacy = getMemoryLegacySchool();
   replaceMemoryLegacySchool({
     classrooms: legacy.classrooms.filter((entry) => !classroomIds.has(entry.id)),
     subjects: legacy.subjects.filter((entry) => !plan.subjectIds.includes(entry.id)),
     studentAccesses: legacy.studentAccesses.filter((entry) => !plan.studentAccessIds.includes(entry.id)),
-    memberships: legacy.memberships.filter((entry) => !plan.membershipIds.includes(entry.id)),
+    memberships: legacy.memberships
+      .filter((entry) => !plan.membershipIds.includes(entry.id))
+      .map(stripSubjects),
   });
 
   const memberships = await deps.memberships.listMemberships();
-  setMemoryMemberships(memberships.filter((entry) => !plan.membershipIds.includes(entry.id)));
+  setMemoryMemberships(
+    memberships.filter((entry) => !plan.membershipIds.includes(entry.id)).map(stripSubjects),
+  );
 
   const accesses = await deps.studentAccesses.listAll();
   await deps.studentAccesses.replaceAll(accesses.filter((entry) => !plan.studentAccessIds.includes(entry.id)));

@@ -17,6 +17,7 @@ L’administrateur peut supprimer définitivement une classe, une profession, un
 
 - Les dépendances d’une classe (cours, publications, memberships, accès apprentis…) ne bloquent plus la suppression administrateur confirmée : elles sont effacées avec la classe.
 - Profession / branche / CTX : même principe, sans supprimer une classe multi-branches lorsqu’on retire une seule branche.
+- Cascade FK : `membership_subjects` retiré aussi par `subject_id` ; `agenda_items` avant `publication_templates` ; templates rattachés au subject inclus dans l’aperçu.
 
 ### Non inclus
 

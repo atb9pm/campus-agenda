@@ -10,6 +10,26 @@ function deleteIn(table: string, column: string, ids: Array<string | number>): S
   return [{ sql: `DELETE FROM ${table} WHERE ${column} IN (${placeholders})`, values: ids }];
 }
 
+/**
+ * membership_subjects a deux parents FK :
+ * membership_id → memberships, subject_id → subjects.
+ * Un CTX/branche peut supprimer un subject sans supprimer le membership.
+ */
+export function buildMembershipSubjectDeletes(plan: CatalogDeletePlan): SqlBatchStatement[] {
+  const clauses: string[] = [];
+  const values: unknown[] = [];
+  if (plan.membershipIds.length > 0) {
+    clauses.push(`membership_id IN (${plan.membershipIds.map(() => "?").join(", ")})`);
+    values.push(...plan.membershipIds);
+  }
+  if (plan.subjectIds.length > 0) {
+    clauses.push(`subject_id IN (${plan.subjectIds.map(() => "?").join(", ")})`);
+    values.push(...plan.subjectIds);
+  }
+  if (clauses.length === 0) return [];
+  return [{ sql: `DELETE FROM membership_subjects WHERE ${clauses.join(" OR ")}`, values }];
+}
+
 export function buildTeacherJsonUpdates(
   plan: CatalogDeletePlan,
   snapshot: CatalogDeleteSnapshot,
@@ -42,6 +62,21 @@ export function buildTeacherJsonUpdates(
   return statements;
 }
 
+/**
+ * Ordre aligné sur les FK des migrations (enfants d’abord) :
+ * - membership_subjects → memberships + subjects
+ * - memberships / student_accesses → classrooms
+ * - agenda_items.template_id → publication_templates
+ * - agenda_items.subject_id → subjects
+ * - publication_templates.subject_id → subjects
+ * - assignments / slots / notes → annual_courses
+ * - class_attendance_days → school_classes
+ * - subjects → classrooms
+ * - timetable_class_mappings → classrooms
+ * - annual_courses → school_classes + pedagogical_contexts
+ * - pedagogical_paths → pedagogical_contexts
+ * - pedagogical_contexts → professions + branches
+ */
 export function buildCatalogDeleteStatements(
   plan: CatalogDeletePlan,
   snapshot: CatalogDeleteSnapshot,
@@ -52,11 +87,11 @@ export function buildCatalogDeleteStatements(
   }));
 
   return [
-    ...deleteIn("membership_subjects", "membership_id", plan.membershipIds),
+    ...buildMembershipSubjectDeletes(plan),
     ...deleteIn("memberships", "id", plan.membershipIds),
     ...deleteIn("student_accesses", "id", plan.studentAccessIds),
-    ...deleteIn("publication_templates", "id", plan.publicationTemplateIds),
     ...deleteIn("agenda_items", "id", plan.agendaItemIds),
+    ...deleteIn("publication_templates", "id", plan.publicationTemplateIds),
     ...deleteIn("teacher_course_assignment_events", "id", plan.assignmentEventIds),
     ...deleteIn("teacher_course_assignments", "id", plan.assignmentIds),
     ...deleteIn("course_schedule_slots", "id", plan.courseScheduleSlotIds),
