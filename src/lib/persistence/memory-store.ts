@@ -9,12 +9,14 @@ import { getMemoryLegacySchool } from "./memory-legacy-school.ts";
 import { getMemoryTeacherAccountStore } from "./memory-teacher-account-store.ts";
 import type { AgendaMutationResult, AgendaStore, CreateAgendaInput, StructuredControlPlacement } from "./types.ts";
 import type { PrototypeAgendaItem } from "../../features/agenda/demo-items.ts";
+import { shouldSeedDemoData } from "./demo-seed-policy.ts";
 
 export class MemoryAgendaStore implements AgendaStore {
   private items: PrototypeAgendaItem[];
 
-  constructor(seedItems: PrototypeAgendaItem[] = DEMO_PROTOTYPE_ITEMS) {
-    this.items = seedItems.map((item) => ({ ...item }));
+  constructor(seedItems?: PrototypeAgendaItem[]) {
+    const initial = seedItems ?? (shouldSeedDemoData() ? DEMO_PROTOTYPE_ITEMS : []);
+    this.items = initial.map((item) => ({ ...item }));
   }
 
   async listAgendaItems(classroomId: string): Promise<PrototypeAgendaItem[]> {

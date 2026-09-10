@@ -20,6 +20,9 @@ export function buildSchoolWeeks(): SchoolWeek[] {
 }
 
 export function findSchoolWeekForDate(date: Date, weeks = buildSchoolWeeks()): SchoolWeek {
+  if (weeks.length === 0) {
+    throw new Error("Aucune semaine scolaire configurée.");
+  }
   const target = startOfDay(date).getTime();
   for (const week of weeks) {
     const monday = startOfDay(week.monday).getTime();

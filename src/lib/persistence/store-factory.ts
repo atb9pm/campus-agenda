@@ -4,6 +4,7 @@ import type { AgendaStore, StoreKind, TemplateStore } from "./types.ts";
 import { createNodeSqliteDatabase, wrapD1Database } from "./sql/adapters.ts";
 import { applyMigrations, isDatabaseSeeded } from "./sql/migrate.ts";
 import { seedDemoDatabase } from "./sql/seed.ts";
+import { isDemoSeedFlagEnabled, isProductionEnv, shouldSeedDemoData } from "./demo-seed-policy.ts";
 import { SqlAgendaStore, classroomExistsInDatabase, listClassroomsInDatabase, listStudentAccessesInDatabase, resolveClassroomSubjectNamesInDatabase } from "./sql/sql-agenda-store.ts";
 import type { RuntimeAgendaAdapterStore, RuntimeClassroomListItem } from "./runtime-agenda-types.ts";
 import { getMemoryRuntimeAgendaAdapterStore } from "./memory-runtime-adapter-store.ts";
@@ -97,7 +98,7 @@ async function bootstrapTeacherAccounts(teacherAccountStore: TeacherAccountStore
   if (message) console.warn(message);
 }
 
-async function prepareSqlDatabase(
+export async function prepareSqlDatabase(
   db: Awaited<ReturnType<typeof createNodeSqliteDatabase>> | ReturnType<typeof wrapD1Database>,
 ): Promise<{
   schoolYearStore: SqlSchoolYearStore;
@@ -111,7 +112,10 @@ async function prepareSqlDatabase(
   courseScheduleStore: SqlCourseScheduleStore;
 }> {
   await applyMigrations(db);
-  if (!(await isDatabaseSeeded(db))) {
+  if (isProductionEnv() && isDemoSeedFlagEnabled()) {
+    console.warn("[campus-agenda] CAMPUS_DEMO_SEED est ignoré en production.");
+  }
+  if (shouldSeedDemoData() && !(await isDatabaseSeeded(db))) {
     await seedDemoDatabase(db);
   }
   const weeks = await hydrateActiveSchoolCalendar(db);
@@ -149,7 +153,9 @@ async function prepareMemoryStores(): Promise<{
   const weeks = await hydrateMemorySchoolCalendar();
   setActiveSchoolWeekEntries(weeks);
   const schoolYearStore = new MemorySchoolYearStore();
-  await schoolYearStore.seedDefaultActiveYearIfEmpty();
+  if (shouldSeedDemoData()) {
+    await schoolYearStore.seedDefaultActiveYearIfEmpty();
+  }
   const schoolCatalogStore = getMemorySchoolCatalogStore();
   await schoolCatalogStore.ensureSeeded();
   await schoolCatalogStore.applySchoolYearBackfill(await schoolYearStore.listSchoolYears());

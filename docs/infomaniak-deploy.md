@@ -76,18 +76,28 @@ Le mot de passe de démonstration `campus-demo` est **refusé** en production : 
 compte ne peut s'en servir. Deux façons d'obtenir le premier accès administrateur.
 
 **Choisir soi-même le mot de passe** — ajouter `CAMPUS_ADMIN_PASSWORD` (et au besoin
-`CAMPUS_ADMIN_INITIALS`, `ChF` par défaut) à la commande de lancement :
+`CAMPUS_ADMIN_INITIALS`, `ChF` par défaut, et `CAMPUS_ADMIN_DISPLAY_NAME`) à la commande de lancement :
 
 ```bash
 cd web && AUTH_SECRET=… CAMPUS_STORE=sqlite CAMPUS_ADMIN_INITIALS=ChF CAMPUS_ADMIN_PASSWORD=Direction-2027 npm run start:infomaniak
 ```
 
-Il n'est appliqué que si le compte n'a **pas encore** de mot de passe personnel :
-un mot de passe choisi dans l'application n'est jamais écrasé au redémarrage.
-Retirez la variable de la commande une fois le mot de passe défini dans l'application.
+Sur une **base SQLite totalement vide**, `CAMPUS_ADMIN_PASSWORD` est **obligatoire**.
+Sans cette variable, le processus refuse de démarrer :
 
-**Laisser le serveur en tirer un** — sans variable, un mot de passe provisoire est
-généré au démarrage et inscrit dans les journaux Node.js du Manager :
+```
+Base Campus Agenda vierge : CAMPUS_ADMIN_PASSWORD est requis pour créer
+l'administrateur initial.
+```
+
+Aucun mot de passe de démonstration n’est créé. Le mot de passe n’est jamais journalisé.
+
+Il n'est appliqué que si aucun compte enseignant n'existe encore, ou si le compte visé n'a
+**pas encore** de mot de passe personnel : un mot de passe choisi dans l'application n'est
+jamais écrasé au redémarrage.
+
+**Comptes déjà présents** — sans variable, un mot de passe provisoire peut encore être
+tiré au démarrage (base non vide) et inscrit dans les journaux Node.js du Manager :
 
 ```
 ==================== CAMPUS AGENDA — ACCÈS ADMINISTRATEUR ====================
@@ -104,7 +114,8 @@ enseignants** (mot de passe provisoire affiché à l'écran, à transmettre de v
 | `AUTH_SECRET` | Signature des sessions (obligatoire) |
 | `CAMPUS_STORE=sqlite` | Persistance sur disque |
 | `CAMPUS_ADMIN_INITIALS` | Compte administrateur visé par l'amorçage (`ChF` par défaut) |
-| `CAMPUS_ADMIN_PASSWORD` | Mot de passe d'amorçage, appliqué une seule fois |
+| `CAMPUS_ADMIN_DISPLAY_NAME` | Nom affiché du premier admin (base vide) |
+| `CAMPUS_ADMIN_PASSWORD` | Mot de passe d'amorçage ; **obligatoire** si la table `teachers` est vide |
 | `CAMPUS_ALLOW_DEMO_PASSWORD` | **À ne pas définir en production** : rouvrirait `campus-demo` |
 
 ## Déploiement manuel (première fois)

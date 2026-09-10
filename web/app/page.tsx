@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DEMO_PROTOTYPE_ITEMS, type PrototypeAgendaItem } from "@campus/features/agenda";
+import { type PrototypeAgendaItem } from "@campus/features/agenda";
 import {
   DEMO_CATALOG,
   DEMO_CURRENT_TEACHER_ID,
-  getClassroomById,
-  getClassroomsForTeacher,
   getSubjectsForClassroom,
+  type ClassroomCatalog,
 } from "@campus/features/classes";
 import {
   TEACHER_NAV_ICONS,
@@ -26,7 +25,6 @@ import {
 } from "@campus/features/student";
 import type { StudentAccess, TeacherClassAccessView } from "@campus/types/student-access";
 import {
-  buildSchoolWeeks,
   buildSchoolWeeksFromEntries,
   courseDayKey,
   findSchoolWeekForDate,
@@ -78,8 +76,8 @@ import {
   type AuthenticatedTeacherIdentity,
 } from "@campus/features/auth-entry";
 import {
-  buildDefaultTeacherSetup,
   clearTeacherSetupFromBrowser,
+  emptyTeacherSetup,
   loadTeacherSetupFromBrowser,
   type TeacherSetupConfig,
   type TeacherClassSetup,
@@ -121,6 +119,34 @@ const TYPE_LABELS: Record<AgendaItemType, string> = {
   TEST: "Contrôle",
   INFORMATION: "Information",
 };
+
+const EMPTY_CLASSROOM_CATALOG: ClassroomCatalog = {
+  classrooms: [],
+  subjects: [],
+  memberships: [],
+  teachers: [],
+};
+
+function catalogFromRuntime(runtime: NotebookRuntimeClassroom[]): ClassroomCatalog {
+  return {
+    classrooms: runtime.map((classroom) => ({
+      id: classroom.id,
+      name: classroom.name,
+      programLabel: "",
+      accessCodeHint: "",
+    })),
+    subjects: runtime.flatMap((classroom) =>
+      (classroom.subjects ?? []).map((subject) => ({
+        id: subject.id,
+        name: subject.name,
+        classroomId: classroom.id,
+        annualCourseId: subject.annualCourseId ?? null,
+      })),
+    ),
+    memberships: [],
+    teachers: [],
+  };
+}
 
 function upsertAgendaItem(previous: PrototypeAgendaItem[], item: PrototypeAgendaItem): PrototypeAgendaItem[] {
   const index = previous.findIndex((entry) => entry.id === item.id);
@@ -191,18 +217,14 @@ export default function Home() {
   const [authenticatedTeacher, setAuthenticatedTeacher] = useState<AuthenticatedTeacherIdentity | null>(null);
   const [runtimeClassrooms, setRuntimeClassrooms] = useState<NotebookRuntimeClassroom[]>([]);
   const teacherClassrooms = useMemo(() => {
-    if (runtimeClassrooms.length) {
-      return runtimeClassrooms.map((classroom) => ({
-        id: classroom.id,
-        name: classroom.name,
-        programLabel: "",
-        accessCodeHint: "",
-      }));
-    }
-    // LEGACY ADAPTER — catalogue démo uniquement tant qu'aucune classe runtime n'est chargée.
-    return getClassroomsForTeacher(DEMO_CATALOG, currentTeacherId);
-  }, [currentTeacherId, runtimeClassrooms]);
-  const defaultClassroomId = teacherClassrooms[0]?.id ?? DEMO_CATALOG.classrooms[0].id;
+    return runtimeClassrooms.map((classroom) => ({
+      id: classroom.id,
+      name: classroom.name,
+      programLabel: "",
+      accessCodeHint: "",
+    }));
+  }, [runtimeClassrooms]);
+  const defaultClassroomId = teacherClassrooms[0]?.id ?? "";
 
   const [activeSection, setActiveSection] = useState<TeacherNavSection>(DEFAULT_TEACHER_NAV_SECTION);
   const [selectedClassroomId, setSelectedClassroomId] = useState(defaultClassroomId);
@@ -216,10 +238,8 @@ export default function Home() {
   }>>([]);
   const [studentEntry, setStudentEntry] = useState<StudentEntry | null>(null);
   const [studentCodeModalOpen, setStudentCodeModalOpen] = useState(false);
-  const [selectedSchoolWeekNumber, setSelectedSchoolWeekNumber] = useState(
-    () => findSchoolWeekForDate(new Date()).number,
-  );
-  const [items, setItems] = useState<PrototypeAgendaItem[]>(DEMO_PROTOTYPE_ITEMS);
+  const [selectedSchoolWeekNumber, setSelectedSchoolWeekNumber] = useState(1);
+  const [items, setItems] = useState<PrototypeAgendaItem[]>([]);
   const [notice, setNotice] = useState("");
   const [teacherAuthenticated, setTeacherAuthenticated] = useState(false);
   const [teacherIsAdmin, setTeacherIsAdmin] = useState(false);
@@ -232,16 +252,15 @@ export default function Home() {
   const [studentHistoryOpen, setStudentHistoryOpen] = useState(false);
   /** Onglet mobile élève : cours du jour, contrôles, historique. */
   const [studentMobileTab, setStudentMobileTab] = useState<"cours" | "controles" | "historique">("cours");
-  const [schoolWeeks, setSchoolWeeks] = useState<SchoolWeek[]>(() => buildSchoolWeeks());
+  const [schoolWeeks, setSchoolWeeks] = useState<SchoolWeek[]>([]);
   const [controlAlert, setControlAlert] = useState<ThirdTestAlert | null>(null);
-  const [teacherSetup, setTeacherSetup] = useState<TeacherSetupConfig>(() =>
-    buildDefaultTeacherSetup(DEMO_CATALOG, currentTeacherId),
-  );
+  const [teacherSetup, setTeacherSetup] = useState<TeacherSetupConfig>(() => emptyTeacherSetup());
   const [teacherSetupReady, setTeacherSetupReady] = useState(false);
   const [teacherCourses, setTeacherCourses] = useState<TeacherCourseWorkspaceEntry[]>([]);
   const [teacherClassAccesses, setTeacherClassAccesses] = useState<Record<string, TeacherClassAccessView>>({});
   const [teacherCoursesYearLabel, setTeacherCoursesYearLabel] = useState<string | null>(null);
   const [teacherCoursesReady, setTeacherCoursesReady] = useState(false);
+  const [teacherCoursesError, setTeacherCoursesError] = useState("");
   /** Évite d'écrire sur le serveur juste après un chargement / une migration. */
   const skipTeacherSetupSaveRef = useRef(false);
   const [openNotebookClassId, setOpenNotebookClassId] = useState<string | null>(null);
@@ -278,16 +297,16 @@ export default function Home() {
     setStudentEntry(null);
     setOpenNotebookCourse(null);
     setLoginError("");
-    const fallbackIds = getClassroomsForTeacher(DEMO_CATALOG, session.teacherId).map((classroom) => classroom.id);
+    const fallbackIds: string[] = [];
     let classroomIds = fallbackIds;
     try {
       const runtime = await fetchTeacherClassroomsApi();
       setRuntimeClassrooms(runtime);
-      const runtimeIds = runtime.map((entry) => entry.id);
-      // Les classes runtime (membership + store) priment ; le catalogue démo n'est qu'un filet.
-      classroomIds = runtimeIds.length ? runtimeIds : fallbackIds;
-    } catch {
-      classroomIds = fallbackIds;
+      classroomIds = runtime.map((entry) => entry.id);
+    } catch (loadError) {
+      setRuntimeClassrooms([]);
+      classroomIds = [];
+      setNotice(loadError instanceof Error ? loadError.message : "Chargement des classes impossible.");
     }
     const loadedItems = await loadTeacherAgendaItems(classroomIds);
     setItems(loadedItems);
@@ -310,8 +329,7 @@ export default function Home() {
 
     async function loadTeacherSetup() {
       const fallback = () =>
-        loadTeacherSetupFromBrowser(currentTeacherId) ??
-        buildDefaultTeacherSetup(DEMO_CATALOG, currentTeacherId);
+        loadTeacherSetupFromBrowser(currentTeacherId) ?? emptyTeacherSetup();
 
       try {
         const remote = await fetchTeacherSetupApi();
@@ -337,13 +355,14 @@ export default function Home() {
         }
 
         skipTeacherSetupSaveRef.current = true;
-        setTeacherSetup(buildDefaultTeacherSetup(DEMO_CATALOG, currentTeacherId));
+        setTeacherSetup(emptyTeacherSetup());
         setTeacherSetupReady(true);
       } catch {
         if (cancelled) return;
         skipTeacherSetupSaveRef.current = true;
         setTeacherSetup(fallback());
         setTeacherSetupReady(true);
+        setNotice("Chargement de la configuration impossible.");
       }
     }
 
@@ -356,6 +375,7 @@ export default function Home() {
   useEffect(() => {
     if (!teacherAuthenticated) {
       setTeacherCoursesReady(false);
+      setTeacherCoursesError("");
       setTeacherCourses([]);
       setTeacherClassAccesses({});
       setTeacherCoursesYearLabel(null);
@@ -364,6 +384,7 @@ export default function Home() {
 
     let cancelled = false;
     setTeacherCoursesReady(false);
+    setTeacherCoursesError("");
 
     async function loadTeacherCourses() {
       try {
@@ -372,6 +393,7 @@ export default function Home() {
         setTeacherCourses(payload.courses);
         setTeacherClassAccesses(payload.classAccesses);
         setTeacherCoursesYearLabel(payload.courses[0]?.schoolYearLabel ?? null);
+        setTeacherCoursesError("");
         setTeacherCoursesReady(true);
         try {
           const accesses = await fetchTeacherClassAccessesApi();
@@ -380,11 +402,14 @@ export default function Home() {
         } catch {
           // Conservez les codes déjà reçus avec les cours.
         }
-      } catch {
+      } catch (loadError) {
         if (cancelled) return;
         setTeacherCourses([]);
         setTeacherClassAccesses({});
         setTeacherCoursesYearLabel(null);
+        setTeacherCoursesError(
+          loadError instanceof Error ? loadError.message : "Chargement des cours impossible.",
+        );
         setTeacherCoursesReady(true);
       }
     }
@@ -489,11 +514,22 @@ export default function Home() {
       try {
         void fetchSchoolCalendar()
           .then((calendar) => {
-            if (!cancelled && calendar?.weeks.length) {
-              setSchoolWeeks(buildSchoolWeeksFromEntries(calendar.weeks));
+            if (cancelled) return;
+            if (calendar.configured && calendar.weeks.length) {
+              const weeks = buildSchoolWeeksFromEntries(calendar.weeks);
+              setSchoolWeeks(weeks);
+              try {
+                setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date(), weeks).number);
+              } catch {
+                setSelectedSchoolWeekNumber(weeks[0]?.number ?? 1);
+              }
+            } else {
+              setSchoolWeeks([]);
             }
           })
-          .catch(() => undefined);
+          .catch(() => {
+            if (!cancelled) setSchoolWeeks([]);
+          });
 
         const session = await Promise.race([
           fetchApiSession(),
@@ -558,10 +594,11 @@ export default function Home() {
       })
     : null;
 
-  const selectedClassroom = (isStudentView ? studentClassroom : (
-    teacherClassrooms.find((classroom) => classroom.id === selectedClassroomId)
-    ?? getClassroomById(DEMO_CATALOG, selectedClassroomId)
-  )) ?? teacherClassrooms[0] ?? DEMO_CATALOG.classrooms[0];
+  const selectedClassroom = isStudentView
+    ? studentClassroom
+    : (teacherClassrooms.find((classroom) => classroom.id === selectedClassroomId)
+      ?? teacherClassrooms[0]
+      ?? null);
 
   const schoolWeeksMemo = schoolWeeks;
   const assignedDisplaySetups = useMemo(
@@ -578,7 +615,7 @@ export default function Home() {
         ? resolveNotebookClassroomId(
             openNotebookClass,
             runtimeClassrooms,
-            DEMO_CATALOG,
+            EMPTY_CLASSROOM_CATALOG,
             openNotebookCourse?.classId ?? openNotebookClass.id,
           )
         : null,
@@ -592,7 +629,7 @@ export default function Home() {
     () =>
       openNotebookClass && notebookClassroomId
         ? resolveNotebookSubjectId({
-            catalog: DEMO_CATALOG,
+            catalog: catalogFromRuntime(runtimeClassrooms),
             teacherId: currentTeacherId,
             classroomId: notebookClassroomId,
             branchLabel: openNotebookCourse?.branchLabel ?? openNotebookClass.branchNames[0] ?? null,
@@ -607,6 +644,7 @@ export default function Home() {
       notebookRuntimeSubjects,
       openNotebookClass,
       openNotebookCourse,
+      runtimeClassrooms,
     ],
   );
   const notebookItems = useMemo(() => {
@@ -629,20 +667,22 @@ export default function Home() {
           : "Aucune branche enseignée trouvée pour publier."
         : undefined;
 
-  const studentAutoCourseDay = useMemo(
-    () =>
+  const studentAutoCourseDay = useMemo(() => {
+    if (!schoolWeeksMemo.length) return null;
+    return (
       (attendanceDays.length
         ? resolveDisplayCourseDayFromAttendance(new Date(), schoolWeeksMemo, attendanceDays)
-        : null) ?? resolveDisplayCourseDay(new Date(), schoolWeeksMemo),
-    [attendanceDays, schoolWeeksMemo],
-  );
+        : null) ?? resolveDisplayCourseDay(new Date(), schoolWeeksMemo)
+    );
+  }, [attendanceDays, schoolWeeksMemo]);
 
   const studentCourseDayCatalog = useMemo(() => {
+    const unique = new Map<string, CourseDaySlot>();
+    if (!studentAutoCourseDay || !schoolWeeksMemo.length) return unique;
     const previous = attendanceDays.length
       ? listPreviousAttendanceCourseDays(studentAutoCourseDay.date, 20, schoolWeeksMemo, attendanceDays)
       : listPreviousCourseDays(studentAutoCourseDay.date, 20, schoolWeeksMemo);
     const all = [studentAutoCourseDay, ...previous];
-    const unique = new Map<string, CourseDaySlot>();
     for (const slot of all) {
       unique.set(courseDayKey(slot), slot);
     }
@@ -656,39 +696,57 @@ export default function Home() {
     return studentAutoCourseDay;
   }, [studentAutoCourseDay, studentCourseDayCatalog, studentCourseDayKey]);
 
-  const studentPreviousCourseDays = useMemo(
-    () =>
-      attendanceDays.length
-        ? listPreviousAttendanceCourseDays(studentDisplayCourseDay.date, 12, schoolWeeksMemo, attendanceDays)
-        : listPreviousCourseDays(studentDisplayCourseDay.date, 12, schoolWeeksMemo),
-    [attendanceDays, studentDisplayCourseDay, schoolWeeksMemo],
-  );
+  const studentPreviousCourseDays = useMemo(() => {
+    if (!studentDisplayCourseDay || !schoolWeeksMemo.length) return [];
+    return attendanceDays.length
+      ? listPreviousAttendanceCourseDays(studentDisplayCourseDay.date, 12, schoolWeeksMemo, attendanceDays)
+      : listPreviousCourseDays(studentDisplayCourseDay.date, 12, schoolWeeksMemo);
+  }, [attendanceDays, studentDisplayCourseDay, schoolWeeksMemo]);
 
   const studentCourseDayGroups = useMemo(() => {
-    if (!studentSession) return [];
+    if (!studentSession || !studentDisplayCourseDay) return [];
     const classroomItems = getStudentAgendaItems(items, studentSession.classroomId);
     const dayItems = filterItemsForCourseDay(classroomItems, studentDisplayCourseDay);
-    return groupItemsBySubject(dayItems, getSubjectsForClassroom(DEMO_CATALOG, studentSession.classroomId));
-  }, [studentSession, items, studentDisplayCourseDay]);
+    const runtimeSubjects = runtimeClassrooms.find((entry) => entry.id === studentSession.classroomId)?.subjects ?? [];
+    const subjects = runtimeSubjects.length
+      ? runtimeSubjects.map((subject) => ({
+          id: subject.id,
+          name: subject.name,
+          classroomId: studentSession.classroomId,
+          annualCourseId: subject.annualCourseId ?? null,
+        }))
+      : getSubjectsForClassroom(DEMO_CATALOG, studentSession.classroomId);
+    return groupItemsBySubject(dayItems, subjects);
+  }, [studentSession, items, studentDisplayCourseDay, runtimeClassrooms]);
 
-  const studentFollowingCourseDay = useMemo(
-    () => courseDayKey(studentDisplayCourseDay) === courseDayKey(studentAutoCourseDay),
-    [studentDisplayCourseDay, studentAutoCourseDay],
-  );
+  const studentFollowingCourseDay = useMemo(() => {
+    if (!studentDisplayCourseDay || !studentAutoCourseDay) return true;
+    return courseDayKey(studentDisplayCourseDay) === courseDayKey(studentAutoCourseDay);
+  }, [studentDisplayCourseDay, studentAutoCourseDay]);
 
   const studentUpcomingTests = useMemo(() => {
-    if (!studentSession) return [];
+    if (!studentSession || !studentAutoCourseDay) return [];
     return listUpcomingTestsForClass(
       items,
-      DEMO_CATALOG,
+      catalogFromRuntime(runtimeClassrooms).classrooms.length
+        ? catalogFromRuntime(runtimeClassrooms)
+        : DEMO_CATALOG,
       studentSession.classroomId,
       studentAutoCourseDay,
       schoolWeeksMemo,
     );
-  }, [studentSession, items, studentAutoCourseDay, schoolWeeksMemo]);
+  }, [studentSession, items, studentAutoCourseDay, schoolWeeksMemo, runtimeClassrooms]);
 
   function resetSelectedWeek() {
-    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date(), schoolWeeksMemo).number);
+    if (!schoolWeeksMemo.length) {
+      setSelectedSchoolWeekNumber(1);
+      return;
+    }
+    try {
+      setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date(), schoolWeeksMemo).number);
+    } catch {
+      setSelectedSchoolWeekNumber(schoolWeeksMemo[0]?.number ?? 1);
+    }
   }
 
   function enterTeacherPreview() {
@@ -873,7 +931,7 @@ export default function Home() {
     setOpenNotebookClassId(classSetup.id);
     setActiveSection("ma-semaine");
     setNotebookCenterWeek(selectedSchoolWeekNumber);
-    const mappedClassroomId = resolveNotebookClassroomId(classSetup, runtimeClassrooms, DEMO_CATALOG);
+    const mappedClassroomId = resolveNotebookClassroomId(classSetup, runtimeClassrooms, EMPTY_CLASSROOM_CATALOG);
     if (mappedClassroomId) {
       setSelectedClassroomId(mappedClassroomId);
     }
@@ -892,7 +950,7 @@ export default function Home() {
     const mappedClassroomId = resolveNotebookClassroomId(
       setup,
       runtimeClassrooms,
-      DEMO_CATALOG,
+      EMPTY_CLASSROOM_CATALOG,
       target.classId,
     );
     if (mappedClassroomId) {
@@ -968,7 +1026,7 @@ export default function Home() {
 
   async function notebookSaveControl(input: { schoolWeekNumber: number; day: number; title: string }) {
     if (!notebookClassroomId || !notebookSubjectId) return;
-    const alert = evaluateThirdTestAlert(items, DEMO_CATALOG, {
+    const alert = evaluateThirdTestAlert(items, catalogFromRuntime(runtimeClassrooms), {
       classroomId: notebookClassroomId,
       type: "TEST",
       courseDay: { schoolWeekNumber: input.schoolWeekNumber, dayIndex: input.day },
@@ -1103,34 +1161,43 @@ export default function Home() {
             data-panel="cours"
             aria-labelledby="student-course-day-title"
           >
-            <p className="eyebrow">{selectedClassroom.name} · {studentSession.label}</p>
-            <p className="student-week-label">{formatSchoolWeekLabel(studentDisplayCourseDay)}</p>
-            <h1 id="student-course-day-title">{formatCourseDayHeading(studentDisplayCourseDay)}</h1>
-            {!studentFollowingCourseDay && (
-              <p className="student-course-day-note">Consultation d’un cours passé.</p>
-            )}
+            <p className="eyebrow">{selectedClassroom?.name ?? studentClassroomName} · {studentSession.label}</p>
+            {studentDisplayCourseDay ? (
+              <>
+                <p className="student-week-label">{formatSchoolWeekLabel(studentDisplayCourseDay)}</p>
+                <h1 id="student-course-day-title">{formatCourseDayHeading(studentDisplayCourseDay)}</h1>
+                {!studentFollowingCourseDay && (
+                  <p className="student-course-day-note">Consultation d’un cours passé.</p>
+                )}
 
-            {studentCourseDayGroups.length ? (
-              <div className="student-branch-list">
-                {studentCourseDayGroups.map((group) => (
-                  <section className="student-branch-block" key={group.subject.id} aria-label={group.subject.name}>
-                    <h2>{group.subject.name}</h2>
-                    <ul>
-                      {group.items.map((item) => (
-                        <li key={item.id} className={`student-branch-item ${item.type.toLowerCase()}`}>
-                          <span className="student-item-type">{TYPE_LABELS[item.type]}</span>
-                          <strong>{item.title}</strong>
-                          <p>{item.detail}</p>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                ))}
-              </div>
+                {studentCourseDayGroups.length ? (
+                  <div className="student-branch-list">
+                    {studentCourseDayGroups.map((group) => (
+                      <section className="student-branch-block" key={group.subject.id} aria-label={group.subject.name}>
+                        <h2>{group.subject.name}</h2>
+                        <ul>
+                          {group.items.map((item) => (
+                            <li key={item.id} className={`student-branch-item ${item.type.toLowerCase()}`}>
+                              <span className="student-item-type">{TYPE_LABELS[item.type]}</span>
+                              <strong>{item.title}</strong>
+                              <p>{item.detail}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="student-course-day-empty">
+                    <strong>Aucun élément publié</strong>
+                    <small>Pas de devoir, contrôle ou information pour ce jour de cours.</small>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="student-course-day-empty">
-                <strong>Aucun élément publié</strong>
-                <small>Pas de devoir, contrôle ou information pour ce jour de cours.</small>
+                <strong>Aucune année scolaire configurée.</strong>
+                <small>L’agenda élève sera disponible dès qu’une année scolaire sera active.</small>
               </div>
             )}
           </section>
@@ -1285,6 +1352,7 @@ export default function Home() {
             classAccesses={teacherClassAccesses}
             schoolYearLabel={teacherCoursesYearLabel}
             loading={!teacherCoursesReady}
+            error={teacherCoursesError || null}
             displaySetups={assignedDisplaySetups}
             onOpenClass={openClassNotebook}
             onOpenCourse={openCourseInWeek}

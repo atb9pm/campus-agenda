@@ -2,6 +2,25 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.45.0] — Production propre / bootstrap sans données de démonstration
+
+Une base SQLite neuve démarre avec le schéma, les migrations, et un unique administrateur initial. Aucune donnée métier de démonstration n’est créée automatiquement.
+
+### Modifié
+
+- Suppression du seed démo automatique en production (`prepareSqlDatabase` n’appelle plus `seedDemoDatabase` lorsque `NODE_ENV=production`).
+- `CAMPUS_DEMO_SEED` reste disponible hors production ; en production il est **ignoré**, même s’il est activé par erreur.
+- Catalogue réellement vide à l’installation : `listClasses` / `listBranches` / `listProfessions` / `listContexts` retournent `[]` sans injecter MA1/MA2 ni les branches démo.
+- Aucune année scolaire 2026-2027 n’est créée automatiquement ; `getActiveSchoolYear()` vaut `null`.
+- Bootstrap sécurisé du premier administrateur : `CAMPUS_ADMIN_PASSWORD` est **obligatoire** sur une base de production totalement vide (`CAMPUS_ADMIN_INITIALS`, `CAMPUS_ADMIN_DISPLAY_NAME` optionnels).
+- États vides UI/API : listes `[]` valides, plus de fallback silencieux vers `DEMO_CATALOG` pour une session enseignant réelle.
+- Procédure de nouvelle base SQLite documentée dans `docs/OPERATIONS.md`.
+- Aucune suppression automatique des données existantes : pas de migration destructive, `CAMPUS_SQLITE_PATH` inchangé.
+
+### Non inclus
+
+Pas de nettoyage de la base de production actuellement utilisée. Le basculement vers un fichier SQLite neuf reste une opération manuelle après backup, audit, merge et déploiement.
+
 ## [2.44.1] — Navigation Mes cours vers Ma semaine
 
 Le parcours pédagogique de référence reste la source durable. Les publications, contrôles et informations concrètes se gèrent depuis **Ma semaine**, espace de travail principal de l’enseignant.

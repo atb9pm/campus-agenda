@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useState } from "react";
 
+import { SCHOOL_YEAR_UNCONFIGURED_MESSAGE } from "@campus/features/teacher-workspace";
 import {
   activateSchoolYear,
   fetchSchoolCalendar,
@@ -55,7 +56,11 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
     try {
       const [yearList, calendar] = await Promise.all([fetchSchoolYears(), fetchSchoolCalendar()]);
       setYears(yearList);
-      setActiveCalendar({ label: calendar.label, weeks: calendar.weeks });
+      if (calendar.configured && calendar.label) {
+        setActiveCalendar({ label: calendar.label, weeks: calendar.weeks });
+      } else {
+        setActiveCalendar(null);
+      }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Chargement impossible.");
     } finally {
@@ -112,6 +117,9 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
     setError("");
     try {
       const calendar = await activateSchoolYear(targetId);
+      if (!calendar.label) {
+        throw new Error("Activation incomplète : année sans libellé.");
+      }
       setActiveCalendar({ label: calendar.label, weeks: calendar.weeks });
       onCalendarUpdated(calendar.weeks);
       setDraftId(null);
@@ -141,6 +149,19 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
 
       {loading && <p className="school-year-status">Chargement…</p>}
       {error && <p className="school-year-error" role="alert">{error}</p>}
+
+      {!loading && !error && !activeCalendar && (
+        <p className="form-hint">
+          <strong>{SCHOOL_YEAR_UNCONFIGURED_MESSAGE}</strong> Importez le calendrier officiel (PDF) pour créer
+          la première année, puis validez-la depuis cette page.
+        </p>
+      )}
+
+      {!loading && activeCalendar && (
+        <p>
+          Année active : <strong>{activeCalendar.label}</strong> — {activeCalendar.weeks.length} semaines.
+        </p>
+      )}
 
       {!loading && activeCalendar && (
         <ActiveYearPlanPanel onCalendarUpdated={onCalendarUpdated} onNotice={onNotice} />

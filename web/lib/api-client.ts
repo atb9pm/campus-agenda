@@ -51,9 +51,10 @@ export interface SchoolCalendarWeek {
 }
 
 export interface SchoolCalendarPayload {
-  label: string;
-  status: string;
+  label: string | null;
+  status: string | null;
   weeks: SchoolCalendarWeek[];
+  configured?: boolean;
 }
 
 async function parseJson<T>(response: Response): Promise<T> {

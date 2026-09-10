@@ -18,6 +18,7 @@ interface MesCoursPanelProps {
   classAccesses?: Record<string, TeacherClassAccessView>;
   schoolYearLabel?: string | null;
   loading?: boolean;
+  error?: string | null;
   onOpenClass?: (classSetup: TeacherClassSetup) => void;
   onOpenCourse?: (course: TeacherCourseWorkspaceEntry) => void;
   displaySetups?: TeacherClassSetup[];
@@ -81,6 +82,7 @@ export function MesCoursPanel({
   classAccesses = {},
   schoolYearLabel,
   loading = false,
+  error = null,
   onOpenClass,
   onOpenCourse,
   displaySetups = [],
@@ -94,12 +96,14 @@ export function MesCoursPanel({
         <h2>Mes cours</h2>
         <p>
           Cours qui vous sont attribués
-          {schoolYearLabel ? ` pour ${schoolYearLabel}` : " pour l’année scolaire active"}.
+          {schoolYearLabel ? ` pour ${schoolYearLabel}` : ""}.
         </p>
       </div>
 
       {loading ? (
         <p className="ma-semaine-empty">Chargement de vos cours…</p>
+      ) : error ? (
+        <p className="ma-semaine-empty" role="alert">{error}</p>
       ) : !courses.length ? (
         <p className="ma-semaine-empty">{TEACHER_COURSES_EMPTY_MESSAGE}</p>
       ) : (

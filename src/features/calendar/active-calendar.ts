@@ -18,7 +18,7 @@ export function resetActiveSchoolWeekEntries(): void {
 }
 
 export function getSchoolWeekEntries(): ReadonlyArray<{ number: number; kind: "A" | "B"; monday: string }> {
-  if (activeWeekEntries && activeWeekEntries.length > 0) {
+  if (activeWeekEntries !== null) {
     return activeWeekEntries;
   }
   return SCHOOL_WEEK_MONDAYS;

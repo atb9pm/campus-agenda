@@ -4,6 +4,7 @@
  * Ce n'est PAS la source de vérité des SchoolClass / AnnualCourse.
  */
 import { DEMO_CATALOG } from "../../features/classes/demo-data.ts";
+import { shouldSeedDemoData } from "./demo-seed-policy.ts";
 import type { Classroom, Subject } from "../../types/classroom.ts";
 import type { Membership } from "../../types/membership.ts";
 import type { StudentAccess } from "../../types/student-access.ts";
@@ -37,10 +38,19 @@ function cloneDemo(): LegacySchoolState {
   };
 }
 
-let state: LegacySchoolState = cloneDemo();
+function initialLegacyState(): LegacySchoolState {
+  return shouldSeedDemoData() ? cloneDemo() : {
+    classrooms: [],
+    subjects: [],
+    studentAccesses: [],
+    memberships: [],
+  };
+}
+
+let state: LegacySchoolState = initialLegacyState();
 
 export function resetMemoryLegacySchool(): void {
-  state = cloneDemo();
+  state = initialLegacyState();
 }
 
 export function getMemoryLegacySchool(): LegacySchoolState {

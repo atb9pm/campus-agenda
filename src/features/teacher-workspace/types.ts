@@ -1,8 +1,13 @@
 import type { AssignmentRole } from "../annual-courses/types.ts";
 import type { TeachingType } from "../teaching-types/index.ts";
 
-export const TEACHER_COURSES_EMPTY_MESSAGE =
-  "Aucun cours ne vous est actuellement attribué. Contactez un administrateur si cette situation n’est pas normale.";
+export const TEACHER_COURSES_EMPTY_MESSAGE = "Aucun cours ne vous est encore attribué.";
+
+export const TEACHER_WEEK_EMPTY_CLASSES_MESSAGE = "Aucune classe configurée.";
+
+export const CONTROL_COURSES_UNAVAILABLE_MESSAGE = "Aucun cours disponible.";
+
+export const SCHOOL_YEAR_UNCONFIGURED_MESSAGE = "Aucune année scolaire configurée.";
 
 /** Libellés d’affichage de l’espace enseignant — pas de nouveaux rôles. */
 export const WORKSPACE_ASSIGNMENT_ROLE_LABELS: Record<AssignmentRole, string> = {

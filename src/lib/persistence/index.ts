@@ -52,6 +52,7 @@ export {
   getTeacherSetupStore,
   getAnnualCourseStore,
   getCourseScheduleStore,
+  prepareSqlDatabase,
   resetStoreFactory,
   resolveAgendaStore,
 } from "./store-factory.ts";
@@ -95,3 +96,9 @@ export { SqlSchoolYearStore } from "./sql/sql-school-year-store.ts";
 export { createNodeSqliteDatabase } from "./sql/adapters.ts";
 export { applyMigrations } from "./sql/migrate.ts";
 export { seedDemoDatabase } from "./sql/seed.ts";
+export {
+  isDemoSeedFlagEnabled,
+  isProductionEnv,
+  MISSING_PRODUCTION_ADMIN_PASSWORD,
+  shouldSeedDemoData,
+} from "./demo-seed-policy.ts";

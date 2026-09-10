@@ -1,6 +1,7 @@
 export {
   buildDefaultTeacherSetup,
   createEmptyClassSetup,
+  emptyTeacherSetup,
 } from "./defaults.ts";
 export {
   buildSchoolWeekPlanRows,

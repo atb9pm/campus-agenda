@@ -121,6 +121,7 @@ function planningDeps(items: PrototypeAgendaItem[] = DEMO_PROTOTYPE_ITEMS): Cont
     },
     catalog: {
       ensureSeeded: async () => undefined,
+      seedDefaultCatalogIfEmpty: async () => undefined,
       listClasses: async () => [],
       listContexts: async () => [],
       listBranches: async () => [],
@@ -146,7 +147,7 @@ function planningDeps(items: PrototypeAgendaItem[] = DEMO_PROTOTYPE_ITEMS): Cont
 }
 
 test("version 2.38.0 — planning semestriel, sans table dédiée", () => {
-  assert.equal(APP_VERSION, "2.44.1");
+  assert.equal(APP_VERSION, "2.45.0");
   assert.equal(TEACHER_NAV_LABELS.controles, "Contrôles");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",
@@ -605,6 +606,7 @@ test("service — classes structurées filtrées par année, même code MMA1A ja
     },
     catalog: {
       ensureSeeded: async () => undefined,
+      seedDefaultCatalogIfEmpty: async () => undefined,
       listClasses: async () => [class2026, class2025],
       listContexts: async () => [motorContext()],
       listBranches: async () => [motorBranch()],
@@ -1129,6 +1131,7 @@ test("service — getControlPlanning : liste = Mes cours, placements toujours ca
     },
     catalog: {
       ensureSeeded: async () => undefined,
+      seedDefaultCatalogIfEmpty: async () => undefined,
       listClasses: async () => classes,
       listContexts: async () => [motorContext()],
       listBranches: async () => [motorBranch()],
