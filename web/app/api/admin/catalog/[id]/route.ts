@@ -1,20 +1,8 @@
-import {
-  getAgendaStore,
-  getAnnualCourseNotesStore,
-  getAnnualCourseStore,
-  getCourseScheduleStore,
-  getMembershipStore,
-  getSchoolCatalogStore,
-  getSchoolYearStore,
-  getTimetableStore,
-  listRuntimeClassrooms,
-  listStudentAccesses,
-} from "@campus/lib/persistence/store-factory.ts";
-import {
-  classDeleteBlockers,
-  loadClassDeleteUsage,
-  validateAdminClassCreate,
-} from "@campus/features/school-catalog/index.ts";
+import { getSchoolCatalogStore, getSchoolYearStore } from "@campus/lib/persistence/store-factory.ts";
+import { deleteCatalogItemPermanently } from "@campus/features/admin-catalog-delete/index.ts";
+import { loadCatalogDeleteDeps } from "@campus/features/admin-catalog-delete/deps.ts";
+import { validateAdminClassCreate } from "@campus/features/school-catalog/index.ts";
+import { logOperationalEvent } from "@campus/lib/observability/index.ts";
 import { jsonResponse, requireAdminSession } from "../../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../../lib/server/observability.ts";
 
@@ -150,71 +138,28 @@ async function handleDelete(request: Request, context?: { params: Promise<{ id: 
     );
   }
 
-  const catalog = await getSchoolCatalogStore();
-
-  if (kind === "class") {
-    const classes = await catalog.listClasses();
-    const schoolClass = classes.find((entry) => entry.id === id) ?? null;
-    if (!schoolClass) {
-      return jsonResponse({ ok: false, reason: "Classe introuvable." }, { status: 404 });
-    }
-    const [courses, notes, agenda, timetable, memberships, classrooms, studentAccesses, schedules] =
-      await Promise.all([
-        getAnnualCourseStore(),
-        getAnnualCourseNotesStore(),
-        getAgendaStore(),
-        getTimetableStore(),
-        getMembershipStore(),
-        listRuntimeClassrooms(),
-        listStudentAccesses(),
-        getCourseScheduleStore(),
-      ]);
-    const usage = await loadClassDeleteUsage({
-      schoolClass,
-      courses,
-      notes,
-      agenda,
-      timetable,
-      memberships,
-      classrooms,
-      studentAccesses,
-      schedules,
-    });
-    const blockers = classDeleteBlockers(schoolClass, classes, usage);
-    if (!blockers.ok) {
-      return jsonResponse({ ok: false, reason: blockers.reason }, { status: 409 });
-    }
-    const deleted = await catalog.deleteClass(id);
-    if (!deleted) {
-      return jsonResponse({ ok: false, reason: "Classe introuvable." }, { status: 404 });
-    }
-    return jsonResponse({ ok: true, id });
+  let confirmationText: string | null = null;
+  const contentType = request.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    const body = (await request.json().catch(() => null)) as { confirmationText?: string } | null;
+    confirmationText = typeof body?.confirmationText === "string" ? body.confirmationText : null;
   }
 
-  if (kind === "branch") {
-    const result = await catalog.deleteBranch(id);
-    if (!result.ok) {
-      const status = result.reason.includes("introuvable") ? 404 : 409;
-      return jsonResponse({ ok: false, reason: result.reason }, { status });
-    }
-    return jsonResponse({ ok: true, id: result.value.id });
-  }
-
-  if (kind === "profession") {
-    const result = await catalog.deleteProfession(id);
-    if (!result.ok) {
-      const status = result.reason.includes("introuvable") ? 404 : 409;
-      return jsonResponse({ ok: false, reason: result.reason }, { status });
-    }
-    return jsonResponse({ ok: true, id: result.value.id });
-  }
-
-  const result = await catalog.deleteContext(id);
+  const deps = await loadCatalogDeleteDeps();
+  const result = await deleteCatalogItemPermanently(deps, { kind, id, confirmationText });
   if (!result.ok) {
-    const status = result.reason.includes("introuvable") ? 404 : 409;
-    return jsonResponse({ ok: false, reason: result.reason }, { status });
+    return jsonResponse(
+      { ok: false, reason: result.reason, preview: result.preview ?? null },
+      { status: result.status },
+    );
   }
-  return jsonResponse({ ok: true, id: result.value.id });
+
+  logOperationalEvent(`Admin ${auth.session!.teacherId} deleted ${kind} ${id}`, {
+    adminId: auth.session!.teacherId,
+    kind,
+    targetId: id,
+  });
+  return jsonResponse({ ok: true, id, preview: result.preview ?? null });
 }
 
 export const PATCH = withApiObservability("/api/admin/catalog/[id]", handlePatch);

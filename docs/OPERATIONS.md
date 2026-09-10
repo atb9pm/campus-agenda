@@ -1,6 +1,6 @@
 # Exploitation — Campus Agenda
 
-Guide opérationnel, **septembre 2026**. Version applicative : voir `APP_VERSION` (`2.45.0` et suivantes).
+Guide opérationnel, **septembre 2026**. Version applicative : voir `APP_VERSION` (`2.46.0` et suivantes).
 
 ## Production actuelle
 
@@ -43,7 +43,7 @@ Réponse attendue :
 {
   "ok": true,
   "service": "campus-agenda",
-  "version": "2.45.0",
+  "version": "2.46.0",
   "store": "sqlite",
   "uptimeSeconds": 42
 }
@@ -183,6 +183,15 @@ Ne jamais :
 - exécuter un `DELETE` métier sur la base actuelle ;
 - ajouter une migration du type `0027_delete_demo_data.sql` ;
 - laisser `CAMPUS_DEMO_SEED=true` en production (la variable est ignorée, mais elle n’a rien à y faire).
+
+## Suppression définitive (Administration)
+
+Depuis **2.46.0**, un administrateur peut supprimer définitivement une classe, une profession, une branche ou un CTX.
+
+- Aperçu des dépendances côté serveur, puis saisie exacte du code / libellé / code CTX.
+- Cascade transactionnelle : tout est retiré, ou rien.
+- **Archiver** conserve l’historique. **Supprimer** est irréversible.
+- Le merge de cette version **ne supprime aucune donnée** existante. MA2 (ou toute autre classe) n’est retirée que si un administrateur le confirme dans l’interface.
 
 ## Vérifications
 

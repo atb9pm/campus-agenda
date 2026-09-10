@@ -8,7 +8,6 @@ import type {
   SchoolProfessionRecord,
 } from "@campus/features/school-catalog";
 import {
-  CTX_IN_USE_DELETE_REASON,
   filterProfessionsForPlanSearch,
   findContextForCell,
   formatPedagogicalContextLabel,
@@ -17,7 +16,9 @@ import {
   projectTrainingPlanMatrix,
   trainingYearsForDuration,
 } from "@campus/features/school-catalog";
+import type { CatalogDeletePreview } from "@campus/features/admin-catalog-delete/index.ts";
 import { BRANCH_TEACHING_TYPE_LABELS } from "@campus/features/teaching-types/index.ts";
+import { DestructiveConfirmDialog } from "./destructive-confirm-dialog.tsx";
 import { PedagogicalPathPanel } from "./pedagogical-path-panel.tsx";
 
 interface TrainingPlansAdminPanelProps {
@@ -66,6 +67,11 @@ export function TrainingPlansAdminPanel({ onNotice, onOpenBranches }: TrainingPl
     adminCode: string;
     contextLabel: string;
   } | null>(null);
+  const [deleteContextTarget, setDeleteContextTarget] = useState<PedagogicalContextRecord | null>(null);
+  const [deleteContextPreview, setDeleteContextPreview] = useState<CatalogDeletePreview | null>(null);
+  const [deleteContextError, setDeleteContextError] = useState<string | null>(null);
+  const [deleteContextLoading, setDeleteContextLoading] = useState(false);
+  const [deleteContextPending, setDeleteContextPending] = useState(false);
 
   const refresh = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) setLoading(true);
@@ -212,7 +218,7 @@ export function TrainingPlansAdminPanel({ onNotice, onOpenBranches }: TrainingPl
         return;
       }
 
-      const inUse = deleteResponse.status === 409 && deletePayload.reason === CTX_IN_USE_DELETE_REASON;
+      const inUse = deleteResponse.status === 409;
       if (!inUse) {
         setError(
           deletePayload.reason ??
@@ -255,6 +261,53 @@ export function TrainingPlansAdminPanel({ onNotice, onOpenBranches }: TrainingPl
       setError(removeError instanceof Error ? removeError.message : "Retrait impossible.");
     } finally {
       setPendingCell("");
+    }
+  }
+
+  async function openDeleteContext(context: PedagogicalContextRecord) {
+    setDeleteContextTarget(context);
+    setDeleteContextPreview(null);
+    setDeleteContextError(null);
+    setDeleteContextLoading(true);
+    try {
+      const response = await fetch(
+        `/api/admin/catalog/${context.id}/delete-preview?kind=context`,
+        { credentials: "include" },
+      );
+      const payload = (await response.json()) as CatalogDeletePreview & { reason?: string };
+      if (!response.ok || !payload.ok) {
+        setDeleteContextError(payload.reason ?? "Aperçu impossible.");
+        return;
+      }
+      setDeleteContextPreview(payload);
+    } catch {
+      setDeleteContextError("Aperçu impossible.");
+    } finally {
+      setDeleteContextLoading(false);
+    }
+  }
+
+  async function applyDeleteContext(context: PedagogicalContextRecord, confirmationText: string) {
+    setDeleteContextPending(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/admin/catalog/${context.id}?kind=context`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmationText }),
+      });
+      const payload = (await response.json()) as { ok: boolean; reason?: string };
+      if (!response.ok || !payload.ok) {
+        setDeleteContextError(payload.reason ?? "Suppression impossible.");
+        return;
+      }
+      setDeleteContextTarget(null);
+      setDeleteContextPreview(null);
+      onNotice(`Contexte ${context.adminCode} supprimé.`);
+      await refresh({ silent: true });
+    } finally {
+      setDeleteContextPending(false);
     }
   }
 
@@ -528,6 +581,14 @@ export function TrainingPlansAdminPanel({ onNotice, onOpenBranches }: TrainingPl
                                       >
                                         Parcours pédagogique
                                       </button>
+                                      <button
+                                        type="button"
+                                        className="is-danger"
+                                        disabled={readOnly || deleteContextPending}
+                                        onClick={() => void openDeleteContext(cell.context!)}
+                                      >
+                                        Supprimer
+                                      </button>
                                     </div>
                                   ) : null}
                                 </li>
@@ -558,6 +619,22 @@ export function TrainingPlansAdminPanel({ onNotice, onOpenBranches }: TrainingPl
           branchLabel={pathEditor.contextLabel}
           onNotice={onNotice}
           onClose={() => setPathEditor(null)}
+        />
+      ) : null}
+
+      {deleteContextTarget ? (
+        <DestructiveConfirmDialog
+          open
+          preview={deleteContextPreview}
+          loading={deleteContextLoading}
+          error={deleteContextError}
+          pending={deleteContextPending}
+          onCancel={() => {
+            setDeleteContextTarget(null);
+            setDeleteContextPreview(null);
+            setDeleteContextError(null);
+          }}
+          onConfirm={(confirmationText) => void applyDeleteContext(deleteContextTarget, confirmationText)}
         />
       ) : null}
     </div>

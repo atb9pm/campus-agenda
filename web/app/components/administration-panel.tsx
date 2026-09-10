@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import type { CatalogDeletePreview } from "@campus/features/admin-catalog-delete/index.ts";
 import type {
   PedagogicalContextRecord,
   SchoolBranchRecord,
@@ -17,6 +18,7 @@ import { ClassesAdminPanel } from "./classes-admin-panel.tsx";
 import { ProfessionsAdminPanel } from "./professions-admin-panel.tsx";
 import { SchoolYearAdminPanel } from "./school-year-admin-panel.tsx";
 import { TeacherAccountsPanel } from "./teacher-accounts-panel.tsx";
+import { DestructiveConfirmDialog } from "./destructive-confirm-dialog.tsx";
 import { TrainingPlansAdminPanel } from "./training-plans-admin-panel.tsx";
 import {
   fetchSchoolYears,
@@ -130,6 +132,11 @@ export function AdministrationPanel({
   const [branchTeachingType, setBranchTeachingType] = useState<TeachingType | "">("");
   const [branchEditDraft, setBranchEditDraft] = useState<BranchEditDraft | null>(null);
   const [showArchivedBranches, setShowArchivedBranches] = useState(false);
+  const [deleteBranchTarget, setDeleteBranchTarget] = useState<SchoolBranchRecord | null>(null);
+  const [deleteBranchPreview, setDeleteBranchPreview] = useState<CatalogDeletePreview | null>(null);
+  const [deleteBranchError, setDeleteBranchError] = useState<string | null>(null);
+  const [deleteBranchLoading, setDeleteBranchLoading] = useState(false);
+  const [deleteBranchPending, setDeleteBranchPending] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!catalogReadyRef.current) setLoading(true);
@@ -249,6 +256,53 @@ export function AdministrationPanel({
     });
     onNotice(`Branche « ${nextLabel} » mise à jour.`);
     setBranchEditDraft(null);
+  }
+
+  async function openDeleteBranch(entry: SchoolBranchRecord) {
+    setDeleteBranchTarget(entry);
+    setDeleteBranchPreview(null);
+    setDeleteBranchError(null);
+    setDeleteBranchLoading(true);
+    try {
+      const response = await fetch(
+        `/api/admin/catalog/${entry.id}/delete-preview?kind=branch`,
+        { credentials: "include" },
+      );
+      const payload = (await response.json()) as CatalogDeletePreview & { reason?: string };
+      if (!response.ok || !payload.ok) {
+        setDeleteBranchError(payload.reason ?? "Aperçu impossible.");
+        return;
+      }
+      setDeleteBranchPreview(payload);
+    } catch {
+      setDeleteBranchError("Aperçu impossible.");
+    } finally {
+      setDeleteBranchLoading(false);
+    }
+  }
+
+  async function applyDeleteBranch(entry: SchoolBranchRecord, confirmationText: string) {
+    setDeleteBranchPending(true);
+    succeed();
+    try {
+      const response = await fetch(`/api/admin/catalog/${entry.id}?kind=branch`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmationText }),
+      });
+      const payload = (await response.json()) as { ok: boolean; reason?: string };
+      if (!response.ok || !payload.ok) {
+        setDeleteBranchError(payload.reason ?? "Suppression impossible.");
+        return;
+      }
+      setDeleteBranchTarget(null);
+      setDeleteBranchPreview(null);
+      onNotice(`Branche « ${entry.label} » supprimée.`);
+      await refresh();
+    } finally {
+      setDeleteBranchPending(false);
+    }
   }
 
   const visibleError = sectionError?.tab === tab ? sectionError.message : null;
@@ -469,6 +523,9 @@ export function AdministrationPanel({
                       >
                         {entry.isArchived ? "Désarchiver" : "Archiver"}
                       </button>
+                      <button type="button" className="is-danger" onClick={() => void openDeleteBranch(entry)}>
+                        Supprimer
+                      </button>
                     </div>
                   </li>
                 );
@@ -496,6 +553,22 @@ export function AdministrationPanel({
 
       {tab === "schedules" ? (
         <ClassScheduleAdminPanel onNotice={onNotice} onOpenAssignments={() => setTab("assignments")} />
+      ) : null}
+
+      {deleteBranchTarget ? (
+        <DestructiveConfirmDialog
+          open
+          preview={deleteBranchPreview}
+          loading={deleteBranchLoading}
+          error={deleteBranchError}
+          pending={deleteBranchPending}
+          onCancel={() => {
+            setDeleteBranchTarget(null);
+            setDeleteBranchPreview(null);
+            setDeleteBranchError(null);
+          }}
+          onConfirm={(confirmationText) => void applyDeleteBranch(deleteBranchTarget, confirmationText)}
+        />
       ) : null}
 
       {tab === "weeks" ? (
