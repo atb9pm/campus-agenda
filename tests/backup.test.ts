@@ -231,7 +231,7 @@ test("backup — restauration v2 ne touche pas les comptes", async () => {
 });
 
 test("backup — GET admin envoie un fichier JSON à télécharger", async () => {
-  assert.equal(APP_VERSION, "2.52.0");
+  assert.equal(APP_VERSION, "2.52.1");
   const route = await readFile(new URL("../web/app/api/admin/backup/route.ts", import.meta.url), "utf8");
   const panel = await readFile(new URL("../web/app/components/admin-backup-panel.tsx", import.meta.url), "utf8");
 

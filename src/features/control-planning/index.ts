@@ -80,6 +80,7 @@ export {
 } from "./live-coordination.ts";
 export {
   getControlPlanning,
+  resolveControlPlanningAssignmentAt,
   type ControlPlanningQuery,
   type ControlPlanningResult,
   type ControlPlanningServiceDeps,

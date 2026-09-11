@@ -8,6 +8,7 @@ import {
   getControlPlanning,
   listAssignedStructuredPlanningClassrooms,
   listControlPlanningFilterSubjects,
+  resolveControlPlanningAssignmentAt,
   resolveControlPlanningSubjectFilter,
   type ControlPlanningServiceDeps,
 } from "../src/features/control-planning/index.ts";
@@ -89,16 +90,17 @@ function tca(
   annualCourseId: string,
   teacherId: string,
   role: TeacherCourseAssignment["role"] = "PRIMARY",
+  validFrom = "2026-08-01T00:00:00.000Z",
 ): TeacherCourseAssignment {
   return {
     id,
     annualCourseId,
     teacherId,
     role,
-    validFrom: "2026-08-01T00:00:00.000Z",
+    validFrom,
     validTo: null,
     createdByAdminId: "admin-1",
-    createdAt: "2026-08-01T00:00:00.000Z",
+    createdAt: validFrom,
     endedAt: null,
     overrideReason: null,
     overrideByAdminId: null,
@@ -188,7 +190,6 @@ const acDraft = course("ac-draft-moteur", draftClass.id, "ctx-moteur", DRAFT_ID)
 
 const assignments: TeacherCourseAssignment[] = [
   tca("a-3a-moteur", ac3aMoteur.id, FRANCOIS, "PRIMARY"),
-  tca("a-3a-trans-francois", ac3aTrans.id, FRANCOIS, "CO_TEACHER"),
   tca("a-3a-trans-patrick", ac3aTrans.id, PATRICK, "PRIMARY"),
   tca("a-3b-moteur", ac3bMoteur.id, FRANCOIS, "PRIMARY"),
   tca("a-3b-electro", ac3bElectro.id, PATRICK, "PRIMARY"),
@@ -201,7 +202,10 @@ const classes = [mecauto3a, mecauto3b, draftClass];
 /** MECAUTO3B n’a volontairement pas de classroom runtime — bug observé en production. */
 const rooms = [{ id: "rt-mecauto3a", name: "MECAUTO3A", schoolClassId: mecauto3a.id }];
 
-function planningDeps(items: Array<Record<string, unknown>> = []): ControlPlanningServiceDeps {
+function planningDeps(
+  items: Array<Record<string, unknown>> = [],
+  assignmentList: TeacherCourseAssignment[] = assignments,
+): ControlPlanningServiceDeps {
   return {
     agenda: {
       listAgendaItems: async (classroomId: string) => items.filter((item) => item.classroomId === classroomId),
@@ -223,7 +227,7 @@ function planningDeps(items: Array<Record<string, unknown>> = []): ControlPlanni
     },
     courses: {
       listCourses: async () => courses,
-      listAssignments: async () => assignments,
+      listAssignments: async () => assignmentList,
     },
     years: {
       listSchoolYears: async () => [active, draft],
@@ -257,25 +261,32 @@ function assignedForFrancois() {
   });
 }
 
-test("version 2.51.1 — classes et matières Contrôles, sans migration", async () => {
-  assert.equal(APP_VERSION, "2.52.0");
+test("version 2.52.1 — affectations à maintenant et matières du professeur, sans migration", async () => {
+  assert.equal(APP_VERSION, "2.52.1");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0028_school_week_kind_nullable.sql");
-  const [classroomsSrc, serviceSrc, panel, filterSrc] = await Promise.all([
+  const [classroomsSrc, serviceSrc, panel, filterSrc, route] = await Promise.all([
     readFile(new URL("../src/features/control-planning/classrooms.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/features/control-planning/service.ts", import.meta.url), "utf8"),
     readFile(new URL("../web/app/components/control-planning-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../src/features/control-planning/filter-subjects.ts", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/api/teacher/controls/planning/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(classroomsSrc, /seenSchoolClassIds/);
   assert.match(classroomsSrc, /runtimeClassroomIdForSchoolClass/);
   assert.match(classroomsSrc, /schoolClassId: schoolClass\.id/);
   assert.doesNotMatch(classroomsSrc, /if \(!classroom \|\| seen\.has\(classroom\.id\)\) continue/);
   assert.match(serviceSrc, /listControlPlanningFilterSubjects/);
+  assert.match(serviceSrc, /resolveControlPlanningAssignmentAt/);
+  assert.match(serviceSrc, /at: assignmentAt/);
+  assert.doesNotMatch(serviceSrc, /\$\{todayIso\}T12:00:00\.000Z/);
   assert.match(serviceSrc, /entry\.schoolClassId/);
+  assert.match(filterSrc, /isAssignmentActiveAt/);
+  assert.match(filterSrc, /assignment\.teacherId !== options\.teacherId/);
   assert.match(filterSrc, /info\.branch\.id/);
   assert.match(panel, /view\?\.filterSubjects/);
   assert.match(panel, /resolveControlPlanningSubjectFilter/);
   assert.match(panel, /Toutes les matières/);
+  assert.doesNotMatch(route, /searchParams\.get\("at"\)/);
 });
 
 test("François ACTIVE — MECAUTO3A et MECAUTO3B même sans classroom runtime 3B", async () => {
@@ -308,6 +319,7 @@ test("François ACTIVE — MECAUTO3A et MECAUTO3B même sans classroom runtime 3
   const planning = await getControlPlanning(planningDeps(), {
     teacherId: FRANCOIS,
     todayIso: TODAY,
+    at: AT,
     view: "semester",
   });
   assert.equal(planning.ok, true);
@@ -323,74 +335,101 @@ test("plusieurs affectations dans MECAUTO3A — une seule entrée, SchoolClass.i
   assert.equal(matches[0]?.name, "MECAUTO3A");
 });
 
-test("matières = AnnualCourse des classes sélectionnées, pas le catalogue global", async () => {
+test("matières = branches attribuées au professeur, pas celles des collègues", async () => {
   const deps = planningDeps();
   const class3a = assignedForFrancois().find((entry) => entry.schoolClassId === mecauto3a.id)!;
   const class3b = assignedForFrancois().find((entry) => entry.schoolClassId === mecauto3b.id)!;
 
-  const all = await getControlPlanning(deps, { teacherId: FRANCOIS, todayIso: TODAY });
+  const all = await getControlPlanning(deps, { teacherId: FRANCOIS, todayIso: TODAY, at: AT });
   const only3a = await getControlPlanning(deps, {
     teacherId: FRANCOIS,
     classroomId: class3a.id,
     todayIso: TODAY,
+    at: AT,
   });
   const only3b = await getControlPlanning(deps, {
     teacherId: FRANCOIS,
     classroomId: class3b.id,
     todayIso: TODAY,
+    at: AT,
   });
   assert.equal(all.ok && only3a.ok && only3b.ok, true);
   if (!all.ok || !only3a.ok || !only3b.ok) return;
 
-  assert.deepEqual(
-    only3a.view.filterSubjects.map((entry) => entry.label),
-    ["Moteur VL", "Transmission"],
-  );
-  assert.deepEqual(
-    only3b.view.filterSubjects.map((entry) => entry.label),
-    ["Moteur VL", "Electrotechnique"],
-  );
-  assert.deepEqual(
-    all.view.filterSubjects.map((entry) => entry.label),
-    ["Moteur VL", "Transmission", "Electrotechnique"],
-  );
-  assert.equal(
-    all.view.filterSubjects.filter((entry) => entry.id === "br-moteur").length,
-    1,
-  );
+  assert.deepEqual(only3a.view.filterSubjects.map((entry) => entry.label), ["Moteur VL"]);
+  assert.deepEqual(only3b.view.filterSubjects.map((entry) => entry.label), ["Moteur VL"]);
+  assert.deepEqual(all.view.filterSubjects.map((entry) => entry.label), ["Moteur VL"]);
+  assert.equal(all.view.filterSubjects.some((entry) => entry.label === "Transmission"), false);
+  assert.equal(all.view.filterSubjects.some((entry) => entry.label === "Electrotechnique"), false);
   assert.equal(
     all.view.filterSubjects.some((entry) => entry.label === "Mathématiques" || entry.label === "Français"),
     false,
   );
-  assert.deepEqual(
-    only3a.view.filterSubjects.map((entry) => entry.id),
-    ["br-moteur", "br-trans"],
-  );
+  assert.deepEqual(only3a.view.filterSubjects.map((entry) => entry.id), ["br-moteur"]);
+});
+
+test("Toutes mes classes — union des matières du professeur, sans doublon", async () => {
+  const unionAssignments = [
+    ...assignments,
+    tca("a-3b-electro-francois", ac3bElectro.id, FRANCOIS, "CO_TEACHER"),
+  ];
+  const deps = planningDeps([], unionAssignments);
+  const class3a = assignedForFrancois().find((entry) => entry.schoolClassId === mecauto3a.id)!;
+  const class3b = assignedForFrancois().find((entry) => entry.schoolClassId === mecauto3b.id)!;
+
+  const only3a = await getControlPlanning(deps, {
+    teacherId: FRANCOIS,
+    classroomId: class3a.id,
+    todayIso: TODAY,
+    at: AT,
+  });
+  const only3b = await getControlPlanning(deps, {
+    teacherId: FRANCOIS,
+    classroomId: class3b.id,
+    todayIso: TODAY,
+    at: AT,
+  });
+  const all = await getControlPlanning(deps, { teacherId: FRANCOIS, todayIso: TODAY, at: AT });
+  assert.equal(only3a.ok && only3b.ok && all.ok, true);
+  if (!only3a.ok || !only3b.ok || !all.ok) return;
+
+  assert.deepEqual(only3a.view.filterSubjects.map((entry) => entry.label), ["Moteur VL"]);
+  assert.deepEqual(only3b.view.filterSubjects.map((entry) => entry.label), ["Moteur VL", "Electrotechnique"]);
+  assert.deepEqual(all.view.filterSubjects.map((entry) => entry.label), ["Moteur VL", "Electrotechnique"]);
+  assert.equal(all.view.filterSubjects.filter((entry) => entry.id === "br-moteur").length, 1);
+  assert.equal(all.view.filterSubjects.some((entry) => entry.label === "Transmission"), false);
 });
 
 test("matière invalide après changement de classe → Toutes les matières", () => {
-  const subjects3a = listControlPlanningFilterSubjects({
-    schoolClassIds: [mecauto3a.id],
+  const unionAssignments = [
+    ...assignments,
+    tca("a-3b-electro-francois", ac3bElectro.id, FRANCOIS, "CO_TEACHER"),
+  ];
+  const subjectOptions = {
+    teacherId: FRANCOIS,
     courses,
+    assignments: unionAssignments,
     contexts,
     branches,
+    at: AT,
+  };
+  const subjects3a = listControlPlanningFilterSubjects({
+    ...subjectOptions,
+    schoolClassIds: [mecauto3a.id],
   });
   const subjects3b = listControlPlanningFilterSubjects({
+    ...subjectOptions,
     schoolClassIds: [mecauto3b.id],
-    courses,
-    contexts,
-    branches,
   });
   const subjectsAll = listControlPlanningFilterSubjects({
+    ...subjectOptions,
     schoolClassIds: [mecauto3a.id, mecauto3b.id],
-    courses,
-    contexts,
-    branches,
   });
-  assert.equal(resolveControlPlanningSubjectFilter("br-trans", subjects3a), "br-trans");
-  assert.equal(resolveControlPlanningSubjectFilter("br-trans", subjects3b), null);
-  assert.equal(resolveControlPlanningSubjectFilter("br-trans", subjectsAll), "br-trans");
+  assert.equal(resolveControlPlanningSubjectFilter("br-moteur", subjects3a), "br-moteur");
   assert.equal(resolveControlPlanningSubjectFilter("br-electro", subjects3a), null);
+  assert.equal(resolveControlPlanningSubjectFilter("br-electro", subjects3b), "br-electro");
+  assert.equal(resolveControlPlanningSubjectFilter("br-electro", subjectsAll), "br-electro");
+  assert.equal(resolveControlPlanningSubjectFilter("br-trans", subjectsAll), null);
   assert.equal(resolveControlPlanningSubjectFilter("", subjects3b), null);
 });
 
@@ -434,6 +473,7 @@ test("portée Mes contrôles / Tous — matières inchangées, contrôles filtr�
     classroomId: class3a.id,
     mode: "mine",
     todayIso: TODAY,
+    at: AT,
     week: 1,
     view: "week",
   });
@@ -442,6 +482,7 @@ test("portée Mes contrôles / Tous — matières inchangées, contrôles filtr�
     classroomId: class3a.id,
     mode: "class-all",
     todayIso: TODAY,
+    at: AT,
     week: 1,
     view: "week",
   });
@@ -451,10 +492,8 @@ test("portée Mes contrôles / Tous — matières inchangées, contrôles filtr�
     mine.view.filterSubjects.map((entry) => entry.id),
     allClass.view.filterSubjects.map((entry) => entry.id),
   );
-  assert.deepEqual(
-    mine.view.filterSubjects.map((entry) => entry.label),
-    ["Moteur VL", "Transmission"],
-  );
+  assert.deepEqual(mine.view.filterSubjects.map((entry) => entry.label), ["Moteur VL"]);
+  assert.equal(mine.view.filterSubjects.some((entry) => entry.label === "Transmission"), false);
   const mineTitles = (mine.view.week?.days ?? []).flatMap((day) => day.controls.map((card) => card.title));
   const allTitles = (allClass.view.week?.days ?? []).flatMap((day) => day.controls.map((card) => card.title));
   assert.deepEqual(mineTitles, ["Contrôle Moteur VL"]);
@@ -479,6 +518,7 @@ test("année DRAFT 2028-2029 invisible dans Contrôles enseignant", async () => 
   const planning = await getControlPlanning(planningDeps(), {
     teacherId: FRANCOIS,
     todayIso: TODAY,
+    at: AT,
   });
   assert.equal(planning.ok, true);
   if (!planning.ok) return;
@@ -491,7 +531,64 @@ test("année DRAFT 2028-2029 invisible dans Contrôles enseignant", async () => 
     teacherId: FRANCOIS,
     schoolYearId: DRAFT_ID,
     todayIso: TODAY,
+    at: AT,
   });
   assert.equal(requestedDraft.ok, false);
   if (!requestedDraft.ok) assert.equal(requestedDraft.status, 404);
+});
+
+test("attribution du jour même après 12:00 UTC — MECAUTO3A et MECAUTO3B visibles à 18:30Z", async () => {
+  const sameDayAssignments = [
+    tca("a-3a-old", ac3aMoteur.id, FRANCOIS, "PRIMARY", "2026-08-01T00:00:00.000Z"),
+    tca("a-3b-1800", ac3bMoteur.id, FRANCOIS, "PRIMARY", "2026-09-11T18:00:00.000Z"),
+    tca("a-3a-trans-patrick", ac3aTrans.id, PATRICK, "PRIMARY"),
+  ];
+  const now = "2026-09-11T18:30:00.000Z";
+  const noon = "2026-09-11T12:00:00.000Z";
+
+  const atNoon = listAssignedStructuredPlanningClassrooms({
+    teacherId: FRANCOIS,
+    classrooms: rooms,
+    classes,
+    courses,
+    assignments: sameDayAssignments,
+    years: [active, draft],
+    contexts,
+    branches,
+    schoolYearId: ACTIVE_ID,
+    at: noon,
+  });
+  assert.deepEqual(atNoon.map((entry) => entry.name), ["MECAUTO3A"]);
+
+  const planning = await getControlPlanning(planningDeps([], sameDayAssignments), {
+    teacherId: FRANCOIS,
+    todayIso: "2026-09-11",
+    at: now,
+  });
+  assert.equal(planning.ok, true);
+  if (!planning.ok) return;
+  assert.deepEqual(planning.view.classes.map((entry) => entry.name).sort(), ["MECAUTO3A", "MECAUTO3B"]);
+  assert.deepEqual(planning.view.filterSubjects.map((entry) => entry.label), ["Moteur VL"]);
+});
+
+test("attribution prévue à 21:00Z — encore invisible à 18:30Z", async () => {
+  const futureAssignments = [
+    tca("a-3a-old", ac3aMoteur.id, FRANCOIS, "PRIMARY", "2026-08-01T00:00:00.000Z"),
+    tca("a-3b-2100", ac3bMoteur.id, FRANCOIS, "PRIMARY", "2026-09-11T21:00:00.000Z"),
+  ];
+  const planning = await getControlPlanning(planningDeps([], futureAssignments), {
+    teacherId: FRANCOIS,
+    todayIso: "2026-09-11",
+    at: "2026-09-11T18:30:00.000Z",
+  });
+  assert.equal(planning.ok, true);
+  if (!planning.ok) return;
+  assert.deepEqual(planning.view.classes.map((entry) => entry.name), ["MECAUTO3A"]);
+  assert.equal(planning.view.classes.some((entry) => entry.name === "MECAUTO3B"), false);
+});
+
+test("resolveControlPlanningAssignmentAt — instant injecté ou horloge réelle, jamais midi UTC du jour", () => {
+  assert.equal(resolveControlPlanningAssignmentAt("2026-09-11T18:30:00.000Z"), "2026-09-11T18:30:00.000Z");
+  const now = resolveControlPlanningAssignmentAt();
+  assert.match(now, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 });
