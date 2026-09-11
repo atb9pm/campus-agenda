@@ -207,7 +207,7 @@ function sectionDescription(activeSection: TeacherNavSection, isStudentView: boo
     return "Vos cours attribués, organisés selon vos préférences d’affichage.";
   }
   if (activeSection === "administration") {
-    return "Référentiel école : classes, branches, accès et plan des semaines A/B.";
+    return "Référentiel école : classes, branches, accès et année scolaire.";
   }
   return "Préférences d’affichage : jour visible et icône. Ce n’est pas une attribution.";
 }
