@@ -27,7 +27,7 @@ type AnnualNoteRow = {
   class_id: string;
   context_id: string;
   reference_session_id: string | null;
-  author_teacher_id: string;
+  author_teacher_id: string | null;
   text: string;
   source_note_id: string | null;
   source_school_year_id: string | null;
@@ -44,7 +44,7 @@ function mapAnnualNote(row: AnnualNoteRow): AnnualCourseNote {
     classId: row.class_id,
     contextId: row.context_id,
     referenceSessionId: row.reference_session_id,
-    authorTeacherId: row.author_teacher_id,
+    authorTeacherId: row.author_teacher_id ?? "",
     text: row.text,
     sourceNoteId: row.source_note_id,
     sourceSchoolYearId: row.source_school_year_id,
@@ -170,7 +170,7 @@ export class SqlAnnualCourseNotesStore implements AnnualCourseNotesStore {
         note.classId,
         note.contextId,
         note.referenceSessionId,
-        note.authorTeacherId,
+        note.authorTeacherId || null,
         note.text,
         note.sourceNoteId,
         note.sourceSchoolYearId,

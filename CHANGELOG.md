@@ -2,6 +2,30 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.47.0] — Suppression définitive sécurisée des professeurs
+
+L’administrateur peut supprimer définitivement un compte professeur. Le travail pédagogique déjà créé (devoirs, contrôles, informations, historique de classe) est conservé.
+
+### Ajouté
+
+- Aperçu serveur (`GET /api/admin/teachers/:id/delete-preview`) : affectations, classes concernées, publications **conservées**.
+- Confirmation forte par initiales (ou identifiant si les initiales ne sont pas uniques), validée côté serveur.
+- Suppression transactionnelle SQLite : compte, sessions/accès, affectations, memberships, notes privées, configuration personnelle, modèles de bibliothèque.
+- Interdiction de supprimer le dernier administrateur : « Impossible de supprimer le dernier administrateur. »
+- Bouton rouge « Supprimer » dans Administration > Professeurs, avec fenêtre de confirmation.
+
+### Conservé
+
+HOMEWORK, TEST, INFORMATION, publications Agenda, classes, AnnualCourses, branches, CTX, notes de cours annuelles (auteur détaché), horaires de cours.
+
+### Migration
+
+`0027_teacher_author_nullable.sql` : `agenda_items.author_teacher_id` et `annual_course_notes.author_teacher_id` deviennent nullables. Reconstruction non destructive (copie intégrale des lignes). Permet de détacher l’auteur sans faux professeur ni cascade.
+
+### Non inclus
+
+Pas de modification de la suppression des classes / professions / branches / CTX. Pas d’archivage supplémentaire des professeurs. Pas de nettoyage automatique en production.
+
 ## [2.46.0] — Suppression définitive contrôlée
 
 L’administrateur peut supprimer définitivement une classe, une profession, une branche ou un CTX après aperçu des dépendances et confirmation forte. La cascade est transactionnelle. Aucun nettoyage automatique au déploiement.

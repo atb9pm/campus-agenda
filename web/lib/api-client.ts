@@ -1,4 +1,5 @@
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
+import type { TeacherDeletePreview } from "@campus/features/admin-teacher-delete/index.ts";
 import type { TeacherAccountRecord } from "@campus/features/teacher-accounts";
 import type { TeacherSetupConfig } from "@campus/features/teacher-setup";
 import type { TeacherCourseWorkspaceEntry } from "@campus/features/teacher-workspace";
@@ -504,6 +505,34 @@ export async function updateTeacherAccountApi(
     throw new Error(payload.reason ?? "Mise à jour du compte impossible.");
   }
   return payload.teacher;
+}
+
+export async function fetchTeacherDeletePreview(teacherId: string): Promise<TeacherDeletePreview> {
+  const response = await fetch(
+    `/api/admin/teachers/${encodeURIComponent(teacherId)}/delete-preview`,
+    { credentials: "include" },
+  );
+  const payload = await parseJson<TeacherDeletePreview & { reason?: string }>(response);
+  if (!response.ok || !payload.target) {
+    throw new Error(payload.reason ?? "Aperçu de suppression impossible.");
+  }
+  return payload;
+}
+
+export async function deleteTeacherPermanentlyApi(
+  teacherId: string,
+  confirmationText: string,
+): Promise<void> {
+  const response = await fetch(`/api/admin/teachers/${encodeURIComponent(teacherId)}`, {
+    method: "DELETE",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirmationText }),
+  });
+  const payload = await parseJson<{ ok: boolean; reason?: string }>(response);
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.reason ?? "Suppression du professeur impossible.");
+  }
 }
 
 export async function resetTeacherPasswordApi(

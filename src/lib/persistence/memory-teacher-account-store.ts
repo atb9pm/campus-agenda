@@ -110,6 +110,14 @@ export class MemoryTeacherAccountStore implements TeacherAccountStore {
     return account ? toRecord(account) : null;
   }
 
+  async deleteAccount(teacherId: string): Promise<boolean> {
+    this.ensureSeeded();
+    const index = this.accounts.findIndex((account) => account.id === teacherId);
+    if (index === -1) return false;
+    this.accounts.splice(index, 1);
+    return true;
+  }
+
   async createAccount(input: TeacherAccountInput): Promise<TeacherAccountSecretResult> {
     this.ensureSeeded();
     const check = checkAccountInput(input.displayName, input.initials);

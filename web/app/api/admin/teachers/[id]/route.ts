@@ -1,3 +1,5 @@
+import { deleteTeacherPermanently, loadTeacherDeleteDeps } from "@campus/features/admin-teacher-delete/index.ts";
+import { logOperationalEvent } from "@campus/lib/observability/index.ts";
 import {
   getTeacherAccountsStore,
   jsonResponse,
@@ -47,4 +49,37 @@ async function handlePatch(request: Request, context?: { params: Promise<{ id: s
   return jsonResponse({ ok: true, teacher: result.account });
 }
 
+async function handleDelete(request: Request, context?: { params: Promise<{ id: string }> }) {
+  const auth = await requireAdminSession(request);
+  if ("error" in auth && auth.error) return auth.error;
+
+  const { id } = await (context?.params ?? Promise.resolve({ id: "" }));
+  if (!id) return jsonResponse({ ok: false, reason: "Identifiant manquant." }, { status: 400 });
+
+  let confirmationText: string | null = null;
+  const contentType = request.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    const body = (await request.json().catch(() => null)) as { confirmationText?: string } | null;
+    confirmationText = typeof body?.confirmationText === "string" ? body.confirmationText : null;
+  }
+
+  const result = await deleteTeacherPermanently(await loadTeacherDeleteDeps(), {
+    teacherId: id,
+    confirmationText,
+  });
+  if (!result.ok) {
+    return jsonResponse(
+      { ok: false, reason: result.reason, preview: result.preview ?? null },
+      { status: result.status },
+    );
+  }
+
+  logOperationalEvent(`Admin ${auth.session!.teacherId} deleted teacher ${id}`, {
+    adminId: auth.session!.teacherId,
+    targetId: id,
+  });
+  return jsonResponse({ ok: true, id, preview: result.preview ?? null });
+}
+
 export const PATCH = withApiObservability("/api/admin/teachers/[id]", handlePatch);
+export const DELETE = withApiObservability("/api/admin/teachers/[id]", handleDelete);

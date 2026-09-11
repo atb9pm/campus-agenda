@@ -7,13 +7,17 @@ import {
   TEACHER_TEACHING_TYPE_LABELS,
   type TeachingType,
 } from "@campus/features/teaching-types/index.ts";
+import type { TeacherDeletePreview } from "@campus/features/admin-teacher-delete/index.ts";
 import {
   createTeacherAccountApi,
+  deleteTeacherPermanentlyApi,
   fetchTeacherAccounts,
+  fetchTeacherDeletePreview,
   resetTeacherPasswordApi,
   updateTeacherAccountApi,
   type TeacherAccountRecord,
 } from "../../lib/api-client.ts";
+import { TeacherDeleteDialog } from "./teacher-delete-dialog.tsx";
 
 interface TeacherAccountsPanelProps {
   currentTeacherId: string;
@@ -60,6 +64,11 @@ export function TeacherAccountsPanel({ currentTeacherId, onNotice }: TeacherAcco
   const [revealed, setRevealed] = useState<RevealedPassword | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<TeacherAccountRecord | null>(null);
+  const [deletePreview, setDeletePreview] = useState<TeacherDeletePreview | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -148,6 +157,37 @@ export function TeacherAccountsPanel({ currentTeacherId, onNotice }: TeacherAcco
     }
   }
 
+  async function openDelete(account: TeacherAccountRecord) {
+    setError("");
+    setDeleteError(null);
+    setDeleteTarget(account);
+    setDeletePreview(null);
+    setDeleteLoading(true);
+    try {
+      setDeletePreview(await fetchTeacherDeletePreview(account.id));
+    } catch (previewError) {
+      setDeleteError(previewError instanceof Error ? previewError.message : "Aperçu impossible.");
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
+
+  async function applyDelete(account: TeacherAccountRecord, confirmationText: string) {
+    setDeleteError(null);
+    setDeletePending(true);
+    try {
+      await deleteTeacherPermanentlyApi(account.id, confirmationText);
+      onNotice(`Compte ${account.initials} supprimé.`);
+      setDeleteTarget(null);
+      setDeletePreview(null);
+      await refresh();
+    } catch (deleteErr) {
+      setDeleteError(deleteErr instanceof Error ? deleteErr.message : "Suppression impossible.");
+    } finally {
+      setDeletePending(false);
+    }
+  }
+
   async function saveEdit(event: FormEvent) {
     event.preventDefault();
     if (!editDraft) return;
@@ -173,7 +213,7 @@ export function TeacherAccountsPanel({ currentTeacherId, onNotice }: TeacherAcco
         <div>
           <h3>Enseignants</h3>
           <p>
-            Création des comptes, type d’enseignement, administrateur, activation et archivage.
+            Création des comptes, type d’enseignement, administrateur, activation, archivage et suppression.
             Le mot de passe provisoire s’affiche une seule fois : notez-le et transmettez-le de vive voix.
             Une préférence personnelle d’affichage dans le setup n’est pas un droit de sécurité.
           </p>
@@ -383,6 +423,13 @@ export function TeacherAccountsPanel({ currentTeacherId, onNotice }: TeacherAcco
                       >
                         {account.isArchived ? "Désarchiver" : "Archiver"}
                       </button>
+                      <button
+                        type="button"
+                        className="is-danger"
+                        onClick={() => void openDelete(account)}
+                      >
+                        Supprimer
+                      </button>
                     </div>
                   </li>
                 );
@@ -391,6 +438,22 @@ export function TeacherAccountsPanel({ currentTeacherId, onNotice }: TeacherAcco
           )}
         </>
       ) : null}
+
+      <TeacherDeleteDialog
+        open={deleteTarget !== null}
+        preview={deletePreview}
+        loading={deleteLoading}
+        error={deleteError}
+        pending={deletePending}
+        onConfirm={(confirmationText) => {
+          if (deleteTarget) void applyDelete(deleteTarget, confirmationText);
+        }}
+        onCancel={() => {
+          setDeleteTarget(null);
+          setDeletePreview(null);
+          setDeleteError(null);
+        }}
+      />
     </div>
   );
 }
