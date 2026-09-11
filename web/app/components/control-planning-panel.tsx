@@ -820,17 +820,17 @@ export function ControlPlanningPanel({
   }, [schoolYearId, classroomIds, mode, week, layout, period, reloadToken, displayMode]);
 
   const filterSubjects = view?.filterSubjects ?? EMPTY_FILTER_SUBJECTS;
-
-  useEffect(() => {
-    setSubjectFilter((current) => resolveControlPlanningSubjectFilter(current, filterSubjects));
-  }, [filterSubjects]);
+  const resolvedSubjectFilter = resolveControlPlanningSubjectFilter(subjectFilter, filterSubjects);
+  if (resolvedSubjectFilter !== subjectFilter) {
+    setSubjectFilter(resolvedSubjectFilter);
+  }
 
   function matchesSubject(entry: {
     branchId?: string | null;
     annualCourseId?: string | null;
     branchLabel?: string | null;
   }): boolean {
-    return controlMatchesSubjectFilter(entry, subjectFilter, filterSubjects);
+    return controlMatchesSubjectFilter(entry, resolvedSubjectFilter, filterSubjects);
   }
 
   function selectYear(nextId: string) {
@@ -1325,7 +1325,7 @@ export function ControlPlanningPanel({
           <span>Matières</span>
           <select
             data-control-subject=""
-            value={subjectFilter ?? ""}
+            value={resolvedSubjectFilter ?? ""}
             onChange={(event) => {
               const value = event.target.value;
               setSubjectFilter(value ? value : null);

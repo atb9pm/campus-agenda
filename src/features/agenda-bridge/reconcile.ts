@@ -288,8 +288,8 @@ export async function reconcileStructuredClassrooms(
 
 export function contextBranchForCourse(options: {
   course: AnnualCourse;
-  contexts: PedagogicalContextRecord[];
-  branches: SchoolBranchRecord[];
+  contexts: readonly PedagogicalContextRecord[];
+  branches: readonly SchoolBranchRecord[];
 }): { context: PedagogicalContextRecord; branch: SchoolBranchRecord } | null {
   const context = options.contexts.find((entry) => entry.id === options.course.contextId) ?? null;
   if (!context) return null;
