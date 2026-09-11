@@ -681,6 +681,12 @@ test("2.32.0 — E2E planning des contrôles : session, années, 403, TEST", asy
   assert.equal(payload.ok, true);
   assert.ok(payload.week);
   assert.ok(Array.isArray(payload.classroomIds));
+  assert.ok(Array.isArray(payload.filterSubjects));
+  assert.ok(
+    payload.filterSubjects.every(
+      (subject) => typeof subject.id === "string" && typeof subject.label === "string",
+    ),
+  );
   assert.equal(payload.layout === "semester" || payload.layout === "week", true);
   assert.ok(payload.semester);
   assert.ok(Array.isArray(payload.semester.weeks));

@@ -4,6 +4,7 @@ import {
   teacherHasStructuredClassroomReadAccess,
   teacherHasStructuredPublishAccess,
 } from "../agenda-bridge/access.ts";
+import { runtimeClassroomIdForSchoolClass } from "../agenda-bridge/ids.ts";
 import type { CourseSession } from "../course-sessions/types.ts";
 import type { PedagogicalContextRecord } from "../school-catalog/profession-types.ts";
 import type { SchoolBranchRecord, SchoolClassRecord } from "../school-catalog/types.ts";
@@ -107,7 +108,8 @@ export const teacherHasControlPlanningClassAccess = teacherHasAssignedStructured
 
 /**
  * Classes proposées dans Contrôles : dérivées des AnnualCourse de « Mes cours »
- * pour l’année. Pas de membership, pas de CourseSession, pas de catalogue démo.
+ * pour l’année. Déduplication par SchoolClass.id. Un classroom runtime manquant
+ * n’exclut plus la classe (identifiant déterministe en repli).
  */
 export function listAssignedStructuredPlanningClassrooms(options: {
   teacherId: string;
@@ -121,40 +123,48 @@ export function listAssignedStructuredPlanningClassrooms(options: {
   schoolYearId: string;
   at?: string;
 }): ControlPlanningClass[] {
-  const assignedClassIds = new Set(
-    assignedSchoolClassIdsFromTeacherCourses(
-      teacherCoursesForPlanningYear({
-        teacherId: options.teacherId,
-        schoolYearId: options.schoolYearId,
-        at: options.at,
-        assignments: options.assignments,
-        courses: options.courses,
-        classes: options.classes,
-        contexts: options.contexts,
-        branches: options.branches,
-        years: options.years,
-      }),
-    ),
+  const assignedClassIds = assignedSchoolClassIdsFromTeacherCourses(
+    teacherCoursesForPlanningYear({
+      teacherId: options.teacherId,
+      schoolYearId: options.schoolYearId,
+      at: options.at,
+      assignments: options.assignments,
+      courses: options.courses,
+      classes: options.classes,
+      contexts: options.contexts,
+      branches: options.branches,
+      years: options.years,
+    }),
   );
   const classroomBySchoolClassId = new Map(
     options.classrooms
       .filter((classroom) => classroom.schoolClassId?.trim())
       .map((classroom) => [classroom.schoolClassId!.trim(), classroom]),
   );
-  const yearClasses = options.classes
-    .filter((schoolClass) => structuredClassMatchesPlanningYear(schoolClass, options.schoolYearId))
-    .filter((schoolClass) => assignedClassIds.has(schoolClass.id))
-    .slice()
-    .sort((left, right) => (left.code || left.label).localeCompare(right.code || right.label, "fr"));
+  const classById = new Map(options.classes.map((entry) => [entry.id, entry]));
   const result: ControlPlanningClass[] = [];
-  const seen = new Set<string>();
-  for (const schoolClass of yearClasses) {
+  const seenSchoolClassIds = new Set<string>();
+  const seenClassroomIds = new Set<string>();
+  for (const classId of assignedClassIds) {
+    const schoolClass = classById.get(classId);
+    if (!schoolClass) continue;
+    if (!structuredClassMatchesPlanningYear(schoolClass, options.schoolYearId)) continue;
+    if (seenSchoolClassIds.has(schoolClass.id)) continue;
+    seenSchoolClassIds.add(schoolClass.id);
     const classroom = classroomBySchoolClassId.get(schoolClass.id);
-    if (!classroom || seen.has(classroom.id)) continue;
-    seen.add(classroom.id);
-    result.push({ id: classroom.id, name: classroom.name });
+    let classroomId = classroom?.id?.trim() || runtimeClassroomIdForSchoolClass(schoolClass.id);
+    if (seenClassroomIds.has(classroomId)) {
+      classroomId = runtimeClassroomIdForSchoolClass(schoolClass.id);
+      if (seenClassroomIds.has(classroomId)) continue;
+    }
+    seenClassroomIds.add(classroomId);
+    result.push({
+      id: classroomId,
+      name: schoolClass.code.trim() || schoolClass.label,
+      schoolClassId: schoolClass.id,
+    });
   }
-  return result;
+  return result.slice().sort((left, right) => left.name.localeCompare(right.name, "fr"));
 }
 
 export async function listAccessibleControlPlanningClassrooms(options: {

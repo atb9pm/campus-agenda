@@ -2,6 +2,26 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.51.1] — Correction des classes et matières dans Contrôles
+
+Les filtres de l’écran enseignant **Contrôles** suivent les affectations réelles de l’année ACTIVE et les AnnualCourse des classes sélectionnées.
+
+### Corrigé
+
+- Toutes les classes attribuées à l’enseignant pour l’année ACTIVE apparaissent dans le filtre (ex. MECAUTO3A **et** MECAUTO3B). Une classe n’est plus omise faute de classroom runtime.
+- Déduplication par `SchoolClass.id`, pas par le libellé.
+- Le menu **Matières** est recalculé à partir des AnnualCourse des classes sélectionnées (identifiant `SchoolBranch.id` / CTX), jamais depuis le catalogue global ni depuis les cartes déjà affichées.
+- **Toutes mes classes** propose l’union dédupliquée des matières. Une matière devenue invalide après changement de classe revient à **Toutes les matières**.
+- Le filtre matières reste orthogonal à **Mes contrôles** / **Tous les contrôles de la classe**.
+
+### Conservé
+
+Espace enseignant = année ACTIVE uniquement. 2028–2029 DRAFT reste invisible. Aucun changement d’affectations, de classes, d’AnnualCourse, de calendrier ni de CourseSession.
+
+### Migration
+
+Aucune.
+
 ## [2.51.0] — Plan complet et jours de classe pour une année en préparation
 
 L’administrateur peut préparer le **calendrier complet** d’une année DRAFT (ex. 2028–2029) avec la même architecture que l’année ACTIVE : plan des semaines A/B et jours de classe / sans cours. 2026–2027 reste l’unique année ACTIVE.

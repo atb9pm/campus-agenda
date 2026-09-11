@@ -197,6 +197,7 @@ export function projectControlCard(
     subjects: Array<{ id: string; name: string }>;
     teachers: Array<{ id: string; displayName: string; initials: string }>;
     date: string | null;
+    branchId?: string | null;
   },
 ): ControlPlanningCard {
   return {
@@ -216,6 +217,7 @@ export function projectControlCard(
     annualCourseId: item.annualCourseId?.trim() || null,
     courseSessionKey: item.courseSessionKey?.trim() || null,
     courseSessionDate: item.courseSessionDate?.trim() || options.date,
+    branchId: options.branchId ?? null,
   };
 }
 
@@ -347,6 +349,9 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
       subjects: input.catalog.subjects,
       teachers: input.catalog.teachers,
       date,
+      branchId: item.annualCourseId
+        ? input.branchIdByAnnualCourseId?.get(item.annualCourseId) ?? null
+        : null,
     });
   });
 
@@ -486,6 +491,7 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
     layout,
     periodId,
     classes: sortClasses(input.accessibleClasses),
+    filterSubjects: input.filterSubjects ?? [],
     years: input.years,
     summary: {
       controlCount: selectedItems.length,
