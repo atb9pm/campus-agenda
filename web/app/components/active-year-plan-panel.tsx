@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { formatSchoolYearLabelFr } from "@campus/features/school-year/official-plan-logic.ts";
+import { schoolWeeksHaveLocalChanges } from "@campus/features/school-year/pedagogical-week-kinds.ts";
 import {
-  fetchActiveSchoolPlan,
-  saveActiveSchoolDay,
-  saveActiveSchoolWeeks,
+  fetchSchoolYearPlan,
+  saveSchoolYearDay,
+  saveSchoolYearWeeks,
   type ActiveSchoolPlan,
   type SchoolCalendarWeek,
   type SchoolDayCell,
@@ -13,7 +15,15 @@ import {
 
 const WEEKDAY_HEADINGS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"];
 
+const PLAN_EYEBROWS: Record<"active" | "draft" | "archived", string> = {
+  active: "ANNÉE ACTIVE",
+  draft: "PRÉPARATION",
+  archived: "ARCHIVÉE",
+};
+
 interface ActiveYearPlanPanelProps {
+  schoolYearId: string;
+  yearStatus: "active" | "draft" | "archived";
   onCalendarUpdated: (weeks: SchoolCalendarWeek[]) => void;
   onNotice: (message: string) => void;
 }
@@ -34,7 +44,12 @@ function formatLongDate(isoDate: string): string {
   }).format(date);
 }
 
-export function ActiveYearPlanPanel({ onCalendarUpdated, onNotice }: ActiveYearPlanPanelProps) {
+export function ActiveYearPlanPanel({
+  schoolYearId,
+  yearStatus,
+  onCalendarUpdated,
+  onNotice,
+}: ActiveYearPlanPanelProps) {
   const [plan, setPlan] = useState<ActiveSchoolPlan | null>(null);
   const [draftWeeks, setDraftWeeks] = useState<SchoolCalendarWeek[]>([]);
   const [selectedDay, setSelectedDay] = useState<SchoolDayCell | null>(null);
@@ -42,12 +57,13 @@ export function ActiveYearPlanPanel({ onCalendarUpdated, onNotice }: ActiveYearP
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
+  const readOnly = yearStatus === "archived";
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const loaded = await fetchActiveSchoolPlan();
+      const loaded = await fetchSchoolYearPlan(schoolYearId);
       setPlan(loaded);
       setDraftWeeks(loaded.weeks);
     } catch (loadError) {
@@ -55,7 +71,7 @@ export function ActiveYearPlanPanel({ onCalendarUpdated, onNotice }: ActiveYearP
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [schoolYearId]);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -65,23 +81,22 @@ export function ActiveYearPlanPanel({ onCalendarUpdated, onNotice }: ActiveYearP
 
   const hasWeekChanges = useMemo(() => {
     if (!plan) return false;
-    return draftWeeks.some((week, index) => {
-      const original = plan.weeks[index];
-      return !original || original.kind !== week.kind || original.monday !== week.monday;
-    });
+    return schoolWeeksHaveLocalChanges(plan.weeks, draftWeeks);
   }, [draftWeeks, plan]);
 
   function patchWeek(number: number, patch: Partial<SchoolCalendarWeek>) {
+    if (readOnly) return;
     setDraftWeeks((current) =>
       current.map((week) => (week.number === number ? { ...week, ...patch } : week)),
     );
   }
 
   async function submitWeeks() {
+    if (readOnly) return;
     setWorking(true);
     setError("");
     try {
-      const saved = await saveActiveSchoolWeeks(draftWeeks);
+      const saved = await saveSchoolYearWeeks(draftWeeks, schoolYearId);
       setPlan(saved);
       setDraftWeeks(saved.weeks);
       onCalendarUpdated(saved.weeks);
@@ -94,16 +109,18 @@ export function ActiveYearPlanPanel({ onCalendarUpdated, onNotice }: ActiveYearP
   }
 
   function selectDay(day: SchoolDayCell) {
+    if (readOnly) return;
     setSelectedDay(day);
     setDayLabel(day.label ?? "");
   }
 
   async function applyDay(state: "class" | "holiday" | null) {
-    if (!selectedDay || !plan) return;
+    if (!selectedDay || !plan || readOnly) return;
     setWorking(true);
     setError("");
     try {
-      const result = await saveActiveSchoolDay({
+      const result = await saveSchoolYearDay({
+        schoolYearId,
         date: selectedDay.date,
         state,
         label: state === "holiday" ? dayLabel : null,
@@ -129,10 +146,12 @@ export function ActiveYearPlanPanel({ onCalendarUpdated, onNotice }: ActiveYearP
   if (!plan) {
     return (
       <p className="school-year-error" role="alert">
-        {error || "Aucune année scolaire active."}
+        {error || "Aucune année scolaire à afficher."}
       </p>
     );
   }
+
+  const statusKey = plan.year.status === "draft" || plan.year.status === "archived" ? plan.year.status : "active";
 
   return (
     <div className="active-plan">
@@ -144,16 +163,17 @@ export function ActiveYearPlanPanel({ onCalendarUpdated, onNotice }: ActiveYearP
 
       <article className="school-year-card">
         <header>
-          <span className="eyebrow">ANNÉE ACTIVE</span>
-          <h3>{plan.year.label} — plan complet</h3>
+          <span className="eyebrow">{PLAN_EYEBROWS[statusKey]}</span>
+          <h3>{formatSchoolYearLabelFr(plan.year.label)} — plan complet</h3>
         </header>
         <p className="school-year-meta">
           <strong>{plan.weeks.length}</strong> semaines · <strong>{plan.classDayCount}</strong> jours de
           classe · <strong>{plan.holidays.length}</strong> jours sans cours.
         </p>
         <p className="school-year-hint">
-          Corrigez le type A/B ou la date d’un lundi mal reconnu dans le PDF, puis enregistrez. Les
-          publications restent attachées au numéro de semaine : rien n’est déplacé ni perdu.
+          {readOnly
+            ? "Cette année est archivée : le plan est visible en lecture seule."
+            : "Corrigez le type A/B ou la date d’un lundi mal reconnu, puis enregistrez. Une correction ne cascade pas sur les semaines suivantes. Les publications restent attachées au numéro de semaine."}
         </p>
 
         {plan.warnings.length > 0 && (
@@ -181,7 +201,7 @@ export function ActiveYearPlanPanel({ onCalendarUpdated, onNotice }: ActiveYearP
                     <select
                       aria-label={`Type de la semaine ${week.number}`}
                       value={week.kind ?? "A"}
-                      disabled={working}
+                      disabled={working || readOnly}
                       onChange={(event) =>
                         patchWeek(week.number, { kind: event.target.value as "A" | "B" })
                       }
@@ -195,7 +215,7 @@ export function ActiveYearPlanPanel({ onCalendarUpdated, onNotice }: ActiveYearP
                       type="date"
                       aria-label={`Lundi de la semaine ${week.number}`}
                       value={week.monday}
-                      disabled={working}
+                      disabled={working || readOnly}
                       onChange={(event) => patchWeek(week.number, { monday: event.target.value })}
                     />
                   </td>
@@ -209,7 +229,7 @@ export function ActiveYearPlanPanel({ onCalendarUpdated, onNotice }: ActiveYearP
           <button
             type="button"
             className="workspace-action"
-            disabled={working || !hasWeekChanges}
+            disabled={working || readOnly || !hasWeekChanges}
             onClick={() => void submitWeeks()}
           >
             Enregistrer les corrections
@@ -217,7 +237,7 @@ export function ActiveYearPlanPanel({ onCalendarUpdated, onNotice }: ActiveYearP
           <button
             type="button"
             className="workspace-action secondary"
-            disabled={working || !hasWeekChanges}
+            disabled={working || readOnly || !hasWeekChanges}
             onClick={() => setDraftWeeks(plan.weeks)}
           >
             Annuler les modifications
@@ -231,8 +251,10 @@ export function ActiveYearPlanPanel({ onCalendarUpdated, onNotice }: ActiveYearP
           <h3>Jours de classe et jours sans cours</h3>
         </header>
         <p className="school-year-hint">
-          Les fêtes valaisannes sont proposées automatiquement (Lundi de Pentecôte, Fête-Dieu,
-          Assomption…). Cliquez sur un jour pour le corriger.
+          Les vacances et jours fériés du calendrier officiel sont préremplis comme jours sans cours.
+          {readOnly
+            ? " Lecture seule pour une année archivée."
+            : " Cliquez sur un jour pour le corriger."}
         </p>
 
         <ul className="day-grid-legend">
@@ -272,9 +294,11 @@ export function ActiveYearPlanPanel({ onCalendarUpdated, onNotice }: ActiveYearP
               <div className="day-grid-row" role="row" key={`week-${row.number}`}>
                 <span className="day-grid-week" role="rowheader">
                   {String(row.number).padStart(2, "0")}
-                  <em className={`week-kind-badge week-kind-${row.weekKind.toLowerCase()}`}>
-                    {row.weekKind}
-                  </em>
+                  {row.weekKind && (
+                    <em className={`week-kind-badge week-kind-${row.weekKind.toLowerCase()}`}>
+                      {row.weekKind}
+                    </em>
+                  )}
                 </span>
                 {row.days.map((day) => (
                   <button
@@ -290,6 +314,7 @@ export function ActiveYearPlanPanel({ onCalendarUpdated, onNotice }: ActiveYearP
                       .join(" ")}
                     title={day.label ? `${formatLongDate(day.date)} — ${day.label}` : formatLongDate(day.date)}
                     aria-label={`${formatLongDate(day.date)}${day.label ? ` — ${day.label}` : ""}`}
+                    disabled={readOnly || working}
                     onClick={() => selectDay(day)}
                   >
                     <span className="day-cell-date">{formatDayNumber(day.date)}</span>
@@ -301,7 +326,7 @@ export function ActiveYearPlanPanel({ onCalendarUpdated, onNotice }: ActiveYearP
           )}
         </div>
 
-        {selectedDay && (
+        {selectedDay && !readOnly && (
           <div className="day-editor" aria-label="Correction du jour">
             <p className="day-editor-title">{formatLongDate(selectedDay.date)}</p>
             <label className="config-field">

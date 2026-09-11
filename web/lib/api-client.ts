@@ -734,7 +734,7 @@ export interface SchoolDayCell {
 }
 
 export type SchoolDayPlanRow =
-  | { kind: "week"; number: number; weekKind: "A" | "B"; monday: string; days: SchoolDayCell[] }
+  | { kind: "week"; number: number; weekKind: "A" | "B" | null; monday: string; days: SchoolDayCell[] }
   | { kind: "break"; fromMonday: string; weekCount: number; afterWeekNumber: number };
 
 export interface ActiveSchoolPlan {
@@ -746,11 +746,17 @@ export interface ActiveSchoolPlan {
   holidays: SchoolDayCell[];
 }
 
-export async function fetchActiveSchoolPlan(): Promise<ActiveSchoolPlan> {
-  const response = await fetch("/api/admin/school-year/active-plan", { credentials: "include" });
-  const payload = await parseJson<{ ok: boolean; reason?: string } & Partial<ActiveSchoolPlan>>(response);
-  if (!response.ok || !payload.ok || !payload.year || !payload.rows || !payload.weeks) {
-    throw new Error(payload.reason ?? "Impossible de charger le plan de l'année active.");
+function schoolYearPlanQuery(schoolYearId?: string): string {
+  const trimmed = schoolYearId?.trim();
+  return trimmed ? `?schoolYearId=${encodeURIComponent(trimmed)}` : "";
+}
+
+function parseSchoolYearPlanPayload(
+  payload: { ok: boolean; reason?: string } & Partial<ActiveSchoolPlan>,
+  fallback: string,
+): ActiveSchoolPlan {
+  if (!payload.ok || !payload.year || !payload.rows || !payload.weeks) {
+    throw new Error(payload.reason ?? fallback);
   }
   return {
     year: payload.year,
@@ -762,28 +768,44 @@ export async function fetchActiveSchoolPlan(): Promise<ActiveSchoolPlan> {
   };
 }
 
-export async function saveActiveSchoolWeeks(weeks: SchoolCalendarWeek[]): Promise<ActiveSchoolPlan> {
+export async function fetchSchoolYearPlan(schoolYearId?: string): Promise<ActiveSchoolPlan> {
+  const response = await fetch(`/api/admin/school-year/active-plan${schoolYearPlanQuery(schoolYearId)}`, {
+    credentials: "include",
+  });
+  const payload = await parseJson<{ ok: boolean; reason?: string } & Partial<ActiveSchoolPlan>>(response);
+  if (!response.ok) {
+    throw new Error(payload.reason ?? "Impossible de charger le plan de l'année.");
+  }
+  return parseSchoolYearPlanPayload(payload, "Impossible de charger le plan de l'année.");
+}
+
+export async function fetchActiveSchoolPlan(): Promise<ActiveSchoolPlan> {
+  return fetchSchoolYearPlan();
+}
+
+export async function saveSchoolYearWeeks(
+  weeks: SchoolCalendarWeek[],
+  schoolYearId?: string,
+): Promise<ActiveSchoolPlan> {
   const response = await fetch("/api/admin/school-year/active-plan", {
     method: "PATCH",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ weeks }),
+    body: JSON.stringify({ weeks, schoolYearId }),
   });
   const payload = await parseJson<{ ok: boolean; reason?: string } & Partial<ActiveSchoolPlan>>(response);
-  if (!response.ok || !payload.ok || !payload.year || !payload.rows || !payload.weeks) {
+  if (!response.ok) {
     throw new Error(payload.reason ?? "Enregistrement du plan impossible.");
   }
-  return {
-    year: payload.year,
-    weeks: payload.weeks,
-    rows: payload.rows,
-    warnings: payload.warnings ?? [],
-    classDayCount: payload.classDayCount ?? 0,
-    holidays: payload.holidays ?? [],
-  };
+  return parseSchoolYearPlanPayload(payload, "Enregistrement du plan impossible.");
 }
 
-export async function saveActiveSchoolDay(input: {
+export async function saveActiveSchoolWeeks(weeks: SchoolCalendarWeek[]): Promise<ActiveSchoolPlan> {
+  return saveSchoolYearWeeks(weeks);
+}
+
+export async function saveSchoolYearDay(input: {
+  schoolYearId?: string;
   date: string;
   state: "class" | "holiday" | null;
   label?: string | null;
@@ -809,6 +831,14 @@ export async function saveActiveSchoolDay(input: {
     classDayCount: payload.classDayCount ?? 0,
     holidays: payload.holidays ?? [],
   };
+}
+
+export async function saveActiveSchoolDay(input: {
+  date: string;
+  state: "class" | "holiday" | null;
+  label?: string | null;
+}): Promise<{ rows: SchoolDayPlanRow[]; classDayCount: number; holidays: SchoolDayCell[] }> {
+  return saveSchoolYearDay(input);
 }
 
 export async function parseSchoolYearPdf(file: File): Promise<{

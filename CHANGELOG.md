@@ -2,6 +2,30 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.51.0] — Plan complet et jours de classe pour une année en préparation
+
+L’administrateur peut préparer le **calendrier complet** d’une année DRAFT (ex. 2028–2029) avec la même architecture que l’année ACTIVE : plan des semaines A/B et jours de classe / sans cours. 2026–2027 reste l’unique année ACTIVE.
+
+### Ajouté
+
+- Règle officielle A/B : première semaine de cours = A, puis impair = A / pair = B selon le **numéro pédagogique**, pas le numéro ISO.
+- Les semaines civiles entièrement fermées (vacances) n’ont pas de numéro et n’avancent pas l’alternance. Une semaine partiellement ouverte reste numérotée.
+- Initialisation automatique des `kind` nuls. Les A/B déjà enregistrés (2026–2027 et corrections manuelles) ne sont pas écrasés.
+- Réimport du PDF officiel d’un DRAFT : conservation des types A/B si le lundi de référence est inchangé.
+- Blocs « plan complet » et « jours de classe » sur l’année de travail (ACTIVE ou DRAFT). ARCHIVED : lecture seule côté serveur.
+
+### Conservé
+
+2026–2027 ACTIVE et ses A/B. Import PDF officiel et génération des 38 semaines (PR #87). Isolation par `schoolYearId`. Pas d’affectation professeur, d’horaire, de CourseSession ni de basculement d’année.
+
+### Migration
+
+Aucune. `school_weeks.week_kind` et `school_day_exceptions` suffisent déjà.
+
+### Non inclus
+
+Affectations professeurs, horaires, CourseSessions, activation / archivage automatique.
+
 ## [2.50.0] — Préparation des classes et cours d’une année future
 
 L’administrateur peut préparer les **classes** et les **cours annuels** de 2028–2029 pendant que 2026–2027 reste l’unique année ACTIVE. L’année de travail Administration filtre ces écrans sans jamais changer `SchoolYear.status`.

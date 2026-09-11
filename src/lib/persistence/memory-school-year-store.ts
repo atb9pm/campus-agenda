@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { SCHOOL_WEEK_MONDAYS } from "../../features/calendar/school-week-dates.ts";
 import { setActiveSchoolWeekEntries } from "../../features/calendar/active-calendar.ts";
 import type { SchoolDayException } from "../../features/school-days/types.ts";
+import { ARCHIVED_YEAR_MUTATION_REASON } from "../../features/school-catalog/school-year-attachment.ts";
 import {
   expandOfficialEventsToExceptions,
   normalizeSchoolYearLabel,
@@ -13,6 +14,7 @@ import {
   assertGeneratedWeeksMatchOfficialTotal,
   generateOfficialCourseWeeks,
 } from "../../features/school-year/official-course-weeks.ts";
+import { preserveExistingPedagogicalWeekKinds } from "../../features/school-year/pedagogical-week-kinds.ts";
 import type {
   OfficialPlanImportOptions,
   OfficialPlanImportResult,
@@ -73,6 +75,8 @@ export class MemorySchoolYearStore implements SchoolYearStore {
       if (!options.replaceDraft || existing.status !== "draft") {
         throw new Error(schoolYearAlreadyExistsMessage(label));
       }
+      const current = await this.getSchoolYearById(existing.id);
+      const weeks = preserveExistingPedagogicalWeekKinds(generated.weeks, current?.weeks ?? []);
       memorySchoolYears = memorySchoolYears.map((year) =>
         year.id === existing.id
           ? {
@@ -81,7 +85,7 @@ export class MemorySchoolYearStore implements SchoolYearStore {
               endsOn: preview.endsOn,
               sourceFilename: sourceFilename ?? year.sourceFilename,
               importedAt: now,
-              weeks: generated.weeks.map((week) => ({ ...week })),
+              weeks: weeks.map((week) => ({ ...week })),
             }
           : year,
       );
@@ -163,6 +167,9 @@ export class MemorySchoolYearStore implements SchoolYearStore {
   async replaceSchoolYearWeeks(id: string, weeks: SchoolWeekEntry[]): Promise<SchoolYearWithWeeks> {
     const target = memorySchoolYears.find((year) => year.id === id);
     if (!target) throw new Error("Année scolaire introuvable.");
+    if (target.status === "archived") {
+      throw new Error(ARCHIVED_YEAR_MUTATION_REASON);
+    }
 
     const sorted = [...weeks].sort((left, right) => left.number - right.number);
     memorySchoolYears = memorySchoolYears.map((year) =>
@@ -187,6 +194,11 @@ export class MemorySchoolYearStore implements SchoolYearStore {
     date: string,
     exception: { state: SchoolDayException["state"]; label: string | null } | null,
   ): Promise<SchoolDayException[]> {
+    const year = memorySchoolYears.find((entry) => entry.id === schoolYearId);
+    if (!year) throw new Error("Année scolaire introuvable.");
+    if (year.status === "archived") {
+      throw new Error(ARCHIVED_YEAR_MUTATION_REASON);
+    }
     const current = memoryDayExceptions.get(schoolYearId) ?? [];
     const withoutDate = current.filter((entry) => entry.date !== date);
     memoryDayExceptions.set(

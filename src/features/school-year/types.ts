@@ -4,7 +4,7 @@ export type SchoolYearStatus = "draft" | "active" | "archived";
 
 export interface SchoolWeekEntry {
   number: number;
-  /** `null` : semaine de cours sans alternance A/B (plan de scolarité officiel). */
+  /** `A` / `B` selon le numéro pédagogique, ou `null` tant que le type n’est pas initialisé. */
   kind: SchoolWeekKind | null;
   monday: string;
 }
