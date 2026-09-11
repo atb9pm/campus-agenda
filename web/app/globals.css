@@ -327,6 +327,16 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .school-year-week-table th, .school-year-week-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; }
 .school-year-week-table th { position: sticky; top: 0; color: #64748b; background: #f8fafc; font-size: 8px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .school-year-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.school-year-status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.school-year-status-grid p { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.school-year-working-select { margin-top: 8px; min-width: 220px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); background: #fff; font-size: 12px; }
+.school-year-month-groups { display: grid; gap: 14px; margin-top: 12px; }
+.school-year-month-group h4 { margin: 0 0 6px; color: var(--navy); font-size: 12px; }
+.school-year-month-group ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: #52627f; font-size: 11px; }
+.school-year-month-group li { display: grid; gap: 2px; }
+.school-year-month-group strong { color: var(--navy); }
+.school-year-ab-details summary { cursor: pointer; display: grid; gap: 4px; }
+.school-year-ab-details[open] summary { margin-bottom: 10px; }
 .active-plan { display: grid; gap: 18px; }
 .active-plan .school-year-week-table-wrap { max-height: 460px; }
 .active-plan .school-year-week-table td { padding: 5px 10px; }
@@ -1701,6 +1711,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   .week-toolbar, .schedule-grid { min-width: 760px; }.week-calendar { max-height: 620px; }.prototype-label { margin-right: 16px; }
   .modal-row { grid-template-columns: 1fr; }
   .school-year-admin { padding-right: 16px; padding-left: 16px; }
+  .school-year-status-grid { grid-template-columns: 1fr; }
   .config-classes-editor, .config-week-plan, .ma-semaine-week-banner, .ma-semaine-days, .ma-semaine-empty, .ma-semaine-plan-hint, .class-notebook-toolbar, .class-notebook-week-controls, .class-notebook-grid, .class-notebook-warning, .class-notebook-clipboard-hint, .control-planning { margin-right: 16px; margin-left: 16px; }
   .admin-workspace .admin-tabs, .admin-panel-block, .admin-error, .admin-loading, .admin-placeholder { margin-right: 16px; margin-left: 16px; }
   .admin-catalog-list li, .admin-catalog-list.admin-class-list li, .admin-teacher-list li, .admin-teacher-access-list .admin-teacher-card { grid-template-columns: 1fr; }

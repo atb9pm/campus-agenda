@@ -5,7 +5,29 @@ export type {
   SchoolYearStatus,
   SchoolYearWithWeeks,
 } from "./types.ts";
+export type {
+  ExistingSchoolYearRef,
+  OfficialCalendarEvent,
+  OfficialCalendarEventKind,
+  OfficialPlanImportOptions,
+  OfficialPlanImportResult,
+  OfficialPlanParseResult,
+  OfficialPlanWarning,
+  OfficialSchoolPlanPreview,
+} from "./official-plan-types.ts";
 export { parseWeekPlanPdf, isReceivableWeekPlan } from "./parse-week-plan-pdf.ts";
+export { parseOfficialPlanPdf, extractOfficialPlanLines } from "./parse-official-plan-pdf.ts";
+export { detectAndParseSchoolYearPdf } from "./detect-school-year-pdf.ts";
+export type { DetectedSchoolYearPdf } from "./detect-school-year-pdf.ts";
+export {
+  ADMIN_WORKING_YEAR_STORAGE_KEY,
+  formatAdminWorkingYearOption,
+  readAdminWorkingYearId,
+  resolveAdminWorkingYearId,
+  schoolYearStatusesAfterAdminWorkingYearChange,
+  writeAdminWorkingYearId,
+} from "./admin-working-year.ts";
+export type { AdminWorkingYearRef } from "./admin-working-year.ts";
 export {
   SCHOOL_WEEKS_EXPECTED,
   buildWeekPlanFromGrid,
@@ -15,3 +37,22 @@ export {
   schoolYearBoundsFromLabel,
   weekKindForNumber,
 } from "./week-plan-logic.ts";
+export {
+  INCOHERENT_BOUNDS_REASON,
+  MISSING_END_REASON,
+  MISSING_START_REASON,
+  MISSING_YEAR_REASON,
+  classifyOfficialEvent,
+  eachIsoDateInclusive,
+  expandOfficialEventsToExceptions,
+  extractOfficialYearLabel,
+  formatOfficialDateFr,
+  formatSchoolYearLabelFr,
+  groupOfficialEventsByMonth,
+  looksLikeOfficialPlanText,
+  normalizeSchoolYearLabel,
+  officialEventsFromExceptions,
+  parseOfficialPlanFromLines,
+  schoolYearAlreadyExistsMessage,
+  validateOfficialPlanPreview,
+} from "./official-plan-logic.ts";

@@ -173,7 +173,7 @@ function slotFor(courseId: string, patch: Partial<CourseScheduleSlot> & { id: st
 }
 
 test("version 2.38.0 — classes Contrôles = Mes cours, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.47.0");
+  assert.equal(APP_VERSION, "2.48.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0027_teacher_author_nullable.sql");
   const [classroomsSrc, serviceSrc, panel] = await Promise.all([
     readFile(new URL("../src/features/control-planning/classrooms.ts", import.meta.url), "utf8"),
