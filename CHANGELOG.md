@@ -9,6 +9,7 @@ L’année scolaire se crée à partir du **plan de scolarité** officiel de l�
 ### Ajouté
 
 - Parseur du PDF officiel (début / fin / vacances / fêtes / interruptions explicitement indiqués).
+- Chargement PDF côté serveur via le worker pdf.js du paquet (import vinext).
 - Aperçu administrateur par mois, puis **Créer l’année en brouillon**.
 - Import DRAFT 2028–2029 sans activer, sans archiver 2026–2027, sans inventer de semaines A/B.
 - Année de travail administrateur (préférence locale) distincte de l’année ACTIVE.

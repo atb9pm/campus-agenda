@@ -4,13 +4,15 @@ import { useCallback, useEffect, useId, useState } from "react";
 
 import {
   formatAdminWorkingYearOption,
-  formatOfficialDateFr,
-  formatSchoolYearLabelFr,
-  groupOfficialEventsByMonth,
   readAdminWorkingYearId,
   resolveAdminWorkingYearId,
   writeAdminWorkingYearId,
-} from "@campus/features/school-year";
+} from "@campus/features/school-year/admin-working-year.ts";
+import {
+  formatOfficialDateFr,
+  formatSchoolYearLabelFr,
+  groupOfficialEventsByMonth,
+} from "@campus/features/school-year/official-plan-logic.ts";
 import { SCHOOL_YEAR_UNCONFIGURED_MESSAGE } from "@campus/features/teacher-workspace";
 import {
   fetchOfficialSchoolCalendar,

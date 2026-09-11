@@ -1,4 +1,4 @@
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { openPdfDocument } from "../../lib/pdf/open-pdf-document.ts";
 
 import { looksLikeOfficialPlanText, parseOfficialPlanFromLines } from "./official-plan-logic.ts";
 import type { OfficialPlanParseResult } from "./official-plan-types.ts";
@@ -36,7 +36,7 @@ function clusterLines(items: TextItem[]): string[] {
 export async function extractOfficialPlanLines(
   pdfBytes: Uint8Array,
 ): Promise<{ pageCount: number; lines: string[] }> {
-  const document = await getDocument({ data: pdfBytes, useSystemFonts: true }).promise;
+  const document = await openPdfDocument(pdfBytes);
   const lines: string[] = [];
 
   for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
