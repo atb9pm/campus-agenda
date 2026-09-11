@@ -10,6 +10,7 @@ import {
   controlPlanningClassroomIdsCoveredInWeek,
   listAssignedStructuredPlanningClassrooms,
 } from "./classrooms.ts";
+import { listControlPlanningFilterSubjects } from "./filter-subjects.ts";
 import { parseControlPlanningLayout, parseControlPlanningPeriodId } from "./period-types.ts";
 import { resolveControlPlanningPeriodId } from "./periods.ts";
 import { listControlPlacementOptions } from "./placements.ts";
@@ -136,10 +137,12 @@ export async function getControlPlanning(
 
   const classroomByClassId = new Map<string, { id: string; name: string }>();
   const selectedSchoolClassIds: string[] = [];
+  const seenSelectedClassIds = new Set<string>();
   for (const entry of selectedClassrooms) {
     const runtime = classrooms.find((classroom) => classroom.id === entry.id);
-    const schoolClassId = runtime?.schoolClassId?.trim() || null;
-    if (!schoolClassId) continue;
+    const schoolClassId = entry.schoolClassId?.trim() || runtime?.schoolClassId?.trim() || null;
+    if (!schoolClassId || seenSelectedClassIds.has(schoolClassId)) continue;
+    seenSelectedClassIds.add(schoolClassId);
     selectedSchoolClassIds.push(schoolClassId);
     classroomByClassId.set(schoolClassId, { id: entry.id, name: entry.name });
   }
@@ -162,6 +165,17 @@ export async function getControlPlanning(
     schoolWeekNumber: targetWeek,
   });
 
+  const branchIdByAnnualCourseId = new Map<string, string>();
+  const branchByCourseId = new Map<string, string>();
+  for (const course of courses) {
+    const info = contextBranchForCourse({ course, contexts, branches });
+    if (!info) continue;
+    branchIdByAnnualCourseId.set(course.id, info.branch.id);
+    if (selectedSchoolClassIds.includes(course.classId)) {
+      branchByCourseId.set(course.id, info.branch.label);
+    }
+  }
+
   let placementOptions: ControlPlacementOption[] = [];
   let canCreate = false;
   let guidedPlanningReason: string | null = null;
@@ -174,12 +188,6 @@ export async function getControlPlanning(
   } else if (year.status === "active" && structuredSelected && deps.schedules) {
     canCreate = true;
     const sessions = yearSessions.filter((session) => selectedSchoolClassIds.includes(session.classId));
-    const branchByCourseId = new Map<string, string>();
-    for (const course of courses) {
-      if (!selectedSchoolClassIds.includes(course.classId)) continue;
-      const info = contextBranchForCourse({ course, contexts, branches });
-      if (info) branchByCourseId.set(course.id, info.branch.label);
-    }
     placementOptions = listControlPlacementOptions({
       sessions,
       assignments,
@@ -194,7 +202,17 @@ export async function getControlPlanning(
       schoolClasses: classes,
       planningSchoolYearId: year.id,
     });
+    for (const option of placementOptions) {
+      option.branchId = branchIdByAnnualCourseId.get(option.annualCourseId) ?? null;
+    }
   }
+
+  const filterSubjects = listControlPlanningFilterSubjects({
+    schoolClassIds: selectedSchoolClassIds,
+    courses,
+    contexts,
+    branches,
+  });
 
   const view = buildControlPlanningView({
     teacherId,
@@ -230,6 +248,8 @@ export async function getControlPlanning(
     selectedSchoolClassIds,
     layout,
     periodId,
+    filterSubjects,
+    branchIdByAnnualCourseId,
   });
 
   return { ok: true, view };

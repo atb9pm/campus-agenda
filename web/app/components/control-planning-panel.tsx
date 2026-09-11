@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
 
 import {
   canManageOwnStructuredControlCard,
   classDayControlsForPlacementOption,
   confirmationRequiredForPlacementOption,
+  controlMatchesSubjectFilter,
   formatControlPlanningYearLabel,
   isMovableStructuredControlCard,
+  resolveControlPlanningSubjectFilter,
   toggleControlPlanningClassroomSelection,
   type ControlPlacementOption,
   type ControlPlanningCard,
@@ -33,6 +35,7 @@ import {
 } from "../../lib/api-client.ts";
 
 const CONTROL_DRAG_MIME = "application/x-campus-control";
+const EMPTY_FILTER_SUBJECTS: ControlPlanningView["filterSubjects"] = [];
 
 function compactWeekLabel(week: { number: number; kind: "A" | "B" | null }): string {
   return formatPedagogicalWeekLabel(week).replace(/^Semaine /, "S");
@@ -816,33 +819,19 @@ export function ControlPlanningPanel({
     return () => controller.abort();
   }, [schoolYearId, classroomIds, mode, week, layout, period, reloadToken, displayMode]);
 
-  const availableSubjectLabels = useMemo(() => {
-    const labels = new Set<string>();
-    function collectFromControlDay(days: readonly { controls: ControlPlanningCard[]; placementOptions: ControlPlacementOption[]; classDayControls?: ControlPlanningCard[] }[]) {
-      for (const day of days) {
-        for (const card of day.controls) if (card.branchLabel) labels.add(card.branchLabel);
-        for (const opt of day.placementOptions) if (opt.branchLabel) labels.add(opt.branchLabel);
-        for (const card of day.classDayControls ?? []) if (card.branchLabel) labels.add(card.branchLabel);
-      }
-    }
-    function collectFromView(next: ControlPlanningView | null) {
-      if (!next) return;
-      if (next.week) {
-        collectFromControlDay(next.week.days.map((d) => ({ controls: d.controls, placementOptions: d.placementOptions })));
-      }
-      if (next.semester) {
-        const days = next.semester.weeks.flatMap((w) => w.days);
-        collectFromControlDay(days.map((d) => ({ controls: d.controls, placementOptions: d.placementOptions, classDayControls: d.classDayControls })));
-      }
-    }
+  const filterSubjects = view?.filterSubjects ?? EMPTY_FILTER_SUBJECTS;
+  const resolvedSubjectFilter = resolveControlPlanningSubjectFilter(subjectFilter, filterSubjects);
+  if (resolvedSubjectFilter !== subjectFilter) {
+    setSubjectFilter(resolvedSubjectFilter);
+  }
 
-    collectFromView(view);
-    if (displayMode === "year" || displayMode === "month") {
-      collectFromView(yearSemester2View);
-    }
-
-    return [...labels].sort((a, b) => a.localeCompare(b, "fr"));
-  }, [view, yearSemester2View, displayMode]);
+  function matchesSubject(entry: {
+    branchId?: string | null;
+    annualCourseId?: string | null;
+    branchLabel?: string | null;
+  }): boolean {
+    return controlMatchesSubjectFilter(entry, resolvedSubjectFilter, filterSubjects);
+  }
 
   function selectYear(nextId: string) {
     setSchoolYearId(nextId);
@@ -1336,17 +1325,16 @@ export function ControlPlanningPanel({
           <span>Matières</span>
           <select
             data-control-subject=""
-            value={subjectFilter ?? ""}
+            value={resolvedSubjectFilter ?? ""}
             onChange={(event) => {
               const value = event.target.value;
               setSubjectFilter(value ? value : null);
             }}
-            disabled={!availableSubjectLabels.length}
           >
             <option value="">Toutes les matières</option>
-            {availableSubjectLabels.map((label) => (
-              <option key={label} value={label}>
-                {label}
+            {filterSubjects.map((subject) => (
+              <option key={subject.id} value={subject.id}>
+                {subject.label}
               </option>
             ))}
           </select>
@@ -1431,7 +1419,7 @@ export function ControlPlanningPanel({
                       ...semester2.weeks.flatMap((w) => w.days.map(toPlanningDay)),
                     ];
                     const first = allDays.find((d) => {
-                      const placement = subjectFilter ? d.placementOptions.filter((o) => o.branchLabel === subjectFilter) : d.placementOptions;
+                      const placement = d.placementOptions.filter((o) => matchesSubject(o));
                       return d.canPlan && placement.length > 0;
                     });
                     if (first) openPlan(first);
@@ -1516,9 +1504,7 @@ export function ControlPlanningPanel({
                                 };
                                 const planningDay = toPlanningDay(semesterDay);
 
-                                const filteredControls = subjectFilter
-                                  ? planningDay.controls.filter((c) => c.branchLabel === subjectFilter)
-                                  : planningDay.controls;
+                                const filteredControls = planningDay.controls.filter((c) => matchesSubject(c));
                                 const visibleControls = showPassedEvaluations
                                   ? filteredControls
                                   : filteredControls.filter((c) => {
@@ -1526,13 +1512,13 @@ export function ControlPlanningPanel({
                                       return !iso || iso >= todayIso;
                                     });
 
-                                const filteredPlacementOptions = subjectFilter
-                                  ? planningDay.placementOptions.filter((o) => o.branchLabel === subjectFilter)
-                                  : planningDay.placementOptions;
+                                const filteredPlacementOptions = planningDay.placementOptions.filter((o) =>
+                                  matchesSubject(o),
+                                );
 
-                                const filteredClassDayControls = subjectFilter
-                                  ? planningDay.classDayControls.filter((c) => c.branchLabel === subjectFilter)
-                                  : planningDay.classDayControls;
+                                const filteredClassDayControls = planningDay.classDayControls.filter((c) =>
+                                  matchesSubject(c),
+                                );
 
                                 const cellCanPlan = planningDay.canPlan && filteredPlacementOptions.length > 0;
                                 const cellHasCourse = visibleControls.length > 0 || filteredPlacementOptions.length > 0;

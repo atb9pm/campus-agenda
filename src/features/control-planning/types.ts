@@ -16,6 +16,13 @@ export type ControlPlanningMode = (typeof CONTROL_PLANNING_MODES)[number];
 export interface ControlPlanningClass {
   id: string;
   name: string;
+  schoolClassId?: string;
+}
+
+/** Option du filtre Matières : identifiant pédagogique stable = SchoolBranch.id. */
+export interface ControlPlanningFilterSubject {
+  id: string;
+  label: string;
 }
 
 export interface ControlPlanningCard {
@@ -35,6 +42,7 @@ export interface ControlPlanningCard {
   annualCourseId: string | null;
   courseSessionKey: string | null;
   courseSessionDate: string | null;
+  branchId?: string | null;
 }
 
 export interface ControlPlacementOption {
@@ -47,6 +55,7 @@ export interface ControlPlacementOption {
   sessionLabel?: string;
   classroomId: string;
   classroomName: string;
+  branchId?: string | null;
 }
 
 export interface ControlPlanningDay {
@@ -90,6 +99,7 @@ export interface ControlPlanningView {
   layout: ControlPlanningLayout;
   periodId: ControlPlanningPeriodId;
   classes: ControlPlanningClass[];
+  filterSubjects: ControlPlanningFilterSubject[];
   years: ControlPlanningYearOption[];
   summary: {
     controlCount: number;
@@ -143,4 +153,7 @@ export interface BuildControlPlanningInput {
   selectedSchoolClassIds?: readonly string[] | null;
   layout?: ControlPlanningLayout;
   periodId?: ControlPlanningPeriodId;
+  /** Matières des classes sélectionnées (AnnualCourse → SchoolBranch.id). */
+  filterSubjects?: ControlPlanningFilterSubject[];
+  branchIdByAnnualCourseId?: ReadonlyMap<string, string>;
 }

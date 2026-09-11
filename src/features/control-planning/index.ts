@@ -5,6 +5,7 @@ export type {
   ControlPlanningCard,
   ControlPlanningClass,
   ControlPlanningDay,
+  ControlPlanningFilterSubject,
   ControlPlanningMode,
   ControlPlanningView,
   ControlPlanningWeekView,
@@ -50,6 +51,11 @@ export {
   teacherHasControlPlanningClassAccess,
 } from "./classrooms.ts";
 export { listControlPlacementOptions } from "./placements.ts";
+export {
+  controlMatchesSubjectFilter,
+  listControlPlanningFilterSubjects,
+  resolveControlPlanningSubjectFilter,
+} from "./filter-subjects.ts";
 export {
   emptyControlPlanningWeekMessage,
   listVisibleControlPlanningDayIndexes,

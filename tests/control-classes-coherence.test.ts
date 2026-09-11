@@ -173,7 +173,7 @@ function slotFor(courseId: string, patch: Partial<CourseScheduleSlot> & { id: st
 }
 
 test("version 2.38.0 — classes Contrôles = Mes cours, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.51.0");
+  assert.equal(APP_VERSION, "2.51.1");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0028_school_week_kind_nullable.sql");
   const [classroomsSrc, serviceSrc, panel] = await Promise.all([
     readFile(new URL("../src/features/control-planning/classrooms.ts", import.meta.url), "utf8"),
@@ -188,6 +188,8 @@ test("version 2.38.0 — classes Contrôles = Mes cours, pas de migration", asyn
   assert.match(serviceSrc, /at: assignmentAt/);
   assert.match(panel, /Toutes mes classes/);
   assert.match(panel, /view\.classes/);
+  assert.match(panel, /view\?\.filterSubjects/);
+  assert.match(classroomsSrc, /runtimeClassroomIdForSchoolClass/);
 });
 
 test("3 AnnualCourse / 2 classes — Mes cours et Contrôles alignés", async () => {
