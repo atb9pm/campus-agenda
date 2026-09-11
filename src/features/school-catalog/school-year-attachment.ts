@@ -1,5 +1,11 @@
 import type { PedagogyMutationResult } from "./profession-types.ts";
 
+export const ARCHIVED_YEAR_MUTATION_REASON =
+  "Cette année scolaire est archivée. Les créations et modifications sont refusées.";
+
+export const CLASS_YEAR_MOVE_REASON =
+  "Impossible de déplacer une classe vers une autre année scolaire.";
+
 /** Sous-ensemble minimal d'une année scolaire pour la résolution classe ↔ année. */
 export interface SchoolYearRef {
   id: string;
@@ -45,6 +51,30 @@ export function resolveClassSchoolYearAttachment(options: {
       schoolYearLabel: year.label,
     },
   };
+}
+
+export function assertSchoolYearWritable(
+  year: SchoolYearRef | null | undefined,
+): PedagogyMutationResult<true> {
+  if (!year) {
+    return { ok: false, reason: "Année scolaire introuvable." };
+  }
+  if (year.status === "archived") {
+    return { ok: false, reason: ARCHIVED_YEAR_MUTATION_REASON };
+  }
+  return { ok: true, value: true };
+}
+
+export function assertClassStaysInSchoolYear(options: {
+  currentSchoolYearId: string | null | undefined;
+  nextSchoolYearId: string | null | undefined;
+}): PedagogyMutationResult<true> {
+  const current = options.currentSchoolYearId?.trim() || null;
+  const next = options.nextSchoolYearId?.trim() || null;
+  if (current && next && current !== next) {
+    return { ok: false, reason: CLASS_YEAR_MOVE_REASON };
+  }
+  return { ok: true, value: true };
 }
 
 /**

@@ -158,7 +158,7 @@ function testItem(input: {
 }
 
 test("version 2.38.0 — semestre visuel, pas de migration", () => {
-  assert.equal(APP_VERSION, "2.49.0");
+  assert.equal(APP_VERSION, "2.50.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0028_school_week_kind_nullable.sql");
 });
 

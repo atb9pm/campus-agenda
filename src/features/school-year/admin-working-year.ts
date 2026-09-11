@@ -1,8 +1,15 @@
+import { formatSchoolYearLabelFr } from "./official-plan-logic.ts";
 import type { SchoolYearRecord } from "./types.ts";
 
 export const ADMIN_WORKING_YEAR_STORAGE_KEY = "campus.adminWorkingSchoolYearId";
 
 export type AdminWorkingYearRef = Pick<SchoolYearRecord, "id" | "label" | "status">;
+
+export const ADMIN_WORKING_YEAR_BADGE_LABELS: Record<AdminWorkingYearRef["status"], string> = {
+  active: "Active",
+  draft: "Préparation",
+  archived: "Archivée",
+};
 
 /**
  * Préférence d’affichage Administration uniquement.
@@ -19,9 +26,27 @@ export function resolveAdminWorkingYearId(
 }
 
 export function formatAdminWorkingYearOption(year: AdminWorkingYearRef): string {
-  if (year.status === "draft") return `${year.label} — Préparation`;
-  if (year.status === "archived") return `${year.label} — Archivée`;
-  return year.label;
+  const label = formatSchoolYearLabelFr(year.label);
+  if (year.status === "draft") return `${label} — Préparation`;
+  if (year.status === "archived") return `${label} — Archivée`;
+  return label;
+}
+
+export function formatAdminWorkingSectionTitle(
+  section: "classes" | "courses",
+  year: AdminWorkingYearRef,
+): string {
+  const label = formatSchoolYearLabelFr(year.label);
+  return section === "classes" ? `Classes — ${label}` : `Cours — ${label}`;
+}
+
+export function filterBySchoolYearId<T extends { schoolYearId?: string | null }>(
+  items: readonly T[],
+  schoolYearId: string | null | undefined,
+): T[] {
+  const yearId = schoolYearId?.trim() || null;
+  if (!yearId) return [];
+  return items.filter((item) => (item.schoolYearId?.trim() || null) === yearId);
 }
 
 export function readAdminWorkingYearId(

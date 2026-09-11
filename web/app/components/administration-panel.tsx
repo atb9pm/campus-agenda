@@ -25,6 +25,11 @@ import {
   type SchoolCalendarWeek,
   type SchoolYearSummary,
 } from "../../lib/api-client.ts";
+import {
+  readAdminWorkingYearId,
+  resolveAdminWorkingYearId,
+  writeAdminWorkingYearId,
+} from "@campus/features/school-year/admin-working-year.ts";
 
 type AdminTab =
   | "classes"
@@ -124,6 +129,7 @@ export function AdministrationPanel({
   const [professions, setProfessions] = useState<SchoolProfessionRecord[]>([]);
   const [contexts, setContexts] = useState<PedagogicalContextRecord[]>([]);
   const [schoolYears, setSchoolYears] = useState<SchoolYearSummary[]>([]);
+  const [workingYearId, setWorkingYearId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const catalogReadyRef = useRef(false);
   const [sectionError, setSectionError] = useState<{ tab: AdminTab; message: string } | null>(null);
@@ -147,6 +153,8 @@ export function AdministrationPanel({
       setProfessions(catalog.professions);
       setContexts(catalog.contexts);
       setSchoolYears(years);
+      const stored = typeof window === "undefined" ? null : readAdminWorkingYearId(window.localStorage);
+      setWorkingYearId((current) => resolveAdminWorkingYearId(years, current ?? stored));
     } catch (loadError) {
       setSectionError({
         tab,
@@ -163,6 +171,15 @@ export function AdministrationPanel({
       void refresh();
     });
   }, [refresh]);
+
+  function handleWorkingYearChange(nextId: string) {
+    setWorkingYearId(nextId);
+    if (typeof window !== "undefined") {
+      writeAdminWorkingYearId(window.localStorage, nextId);
+    }
+  }
+
+  const workingYear = schoolYears.find((year) => year.id === workingYearId) ?? null;
 
   const archivedBranchCount = useMemo(
     () => branches.filter((entry) => entry.isArchived).length,
@@ -329,6 +346,10 @@ export function AdministrationPanel({
             onClick={() => {
               setTab(entry);
               setSectionError(null);
+              if (typeof window !== "undefined" && schoolYears.length > 0) {
+                const stored = readAdminWorkingYearId(window.localStorage);
+                setWorkingYearId(resolveAdminWorkingYearId(schoolYears, stored));
+              }
             }}
           >
             {TAB_LABELS[entry]}
@@ -350,6 +371,9 @@ export function AdministrationPanel({
           professions={professions}
           contexts={contexts}
           schoolYears={schoolYears}
+          workingYear={workingYear}
+          workingYearId={workingYearId}
+          onWorkingYearChange={handleWorkingYearChange}
           error={visibleError}
           onNotice={onNotice}
           onError={fail}
@@ -548,7 +572,13 @@ export function AdministrationPanel({
       ) : null}
 
       {tab === "assignments" ? (
-        <AnnualCoursesAdminPanel onNotice={onNotice} />
+        <AnnualCoursesAdminPanel
+          onNotice={onNotice}
+          workingYear={workingYear}
+          workingYearId={workingYearId}
+          schoolYears={schoolYears}
+          onWorkingYearChange={handleWorkingYearChange}
+        />
       ) : null}
 
       {tab === "schedules" ? (

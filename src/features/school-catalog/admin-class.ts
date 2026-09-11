@@ -1,7 +1,10 @@
 import type { PedagogyMutationResult, SchoolProfessionRecord } from "./profession-types.ts";
 import { validateClassProfessionAttachment } from "./profession-rules.ts";
 import type { SchoolYearRef } from "./school-year-attachment.ts";
-import { resolveClassSchoolYearAttachment } from "./school-year-attachment.ts";
+import {
+  assertSchoolYearWritable,
+  resolveClassSchoolYearAttachment,
+} from "./school-year-attachment.ts";
 
 /**
  * Création administrative d'une nouvelle classe structurée.
@@ -29,6 +32,9 @@ export function validateAdminClassCreate(options: {
   if (!year.value.schoolYearId) {
     return { ok: false, reason: "L'année scolaire est obligatoire pour une nouvelle classe." };
   }
+  const yearRef = options.years.find((entry) => entry.id === year.value.schoolYearId) ?? null;
+  const writable = assertSchoolYearWritable(yearRef);
+  if (!writable.ok) return writable;
 
   if (!options.professionId || options.trainingYear === null || options.trainingYear === undefined) {
     return {

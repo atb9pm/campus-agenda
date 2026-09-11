@@ -5,6 +5,7 @@ import type { TeacherAccountStore } from "../../lib/persistence/teacher-account-
 import type { AnnualCourseStore } from "../../lib/persistence/annual-course-types.ts";
 import type { CourseScheduleStore } from "../../lib/persistence/course-schedule-types.ts";
 import type { AgendaStore } from "../../lib/persistence/types.ts";
+import { assertSchoolYearWritable } from "../school-catalog/school-year-attachment.ts";
 import { teacherCanAccessAnnualCourse } from "./access.ts";
 import {
   evaluateTeachingTypeGuard,
@@ -27,7 +28,11 @@ import type {
   TeacherCourseAssignmentInput,
   TypeMismatchWarning,
 } from "./types.ts";
-import { validateAnnualCourseInput, validateAttributionReferential } from "./validation.ts";
+import {
+  DRAFT_YEAR_ASSIGNMENT_REASON,
+  validateAnnualCourseInput,
+  validateAttributionReferential,
+} from "./validation.ts";
 
 export interface AnnualCourseServiceDeps {
   courses: AnnualCourseStore;
@@ -110,13 +115,18 @@ async function assertCourseAssignable(
     return { ok: false, reason: "Ce cours annuel est archivé.", status: 409 };
   }
   const ref = await loadCourseReferential(deps, course);
-  return validateAttributionReferential({
+  const referential = validateAttributionReferential({
     year: ref.year,
     schoolClass: ref.schoolClass,
     profession: ref.profession,
     context: ref.context,
     branch: ref.branch,
   });
+  if (!referential.ok) return referential;
+  if (ref.year?.status !== "active") {
+    return { ok: false, reason: DRAFT_YEAR_ASSIGNMENT_REASON, status: 400 };
+  }
+  return { ok: true, value: true };
 }
 
 async function applyTypeGuard(
@@ -201,10 +211,24 @@ export async function ensureAnnualCourse(
   return createAnnualCourse(deps, input);
 }
 
+async function assertCourseYearWritable(
+  deps: AnnualCourseServiceDeps,
+  course: AnnualCourse,
+): Promise<CourseMutationResult<true>> {
+  const year = (await deps.years.listSchoolYears()).find((entry) => entry.id === course.schoolYearId) ?? null;
+  const writable = assertSchoolYearWritable(year);
+  if (!writable.ok) return { ok: false, reason: writable.reason, status: 400 };
+  return { ok: true, value: true };
+}
+
 export async function archiveAnnualCourse(
   deps: AnnualCourseServiceDeps,
   courseId: string,
 ): Promise<CourseMutationResult<AnnualCourse>> {
+  const course = await deps.courses.getCourse(courseId);
+  if (!course) return { ok: false, reason: "Cours annuel introuvable.", status: 404 };
+  const writable = await assertCourseYearWritable(deps, course);
+  if (!writable.ok) return writable;
   const archived = await deps.courses.archiveCourse(courseId);
   if (!archived) return { ok: false, reason: "Cours annuel introuvable.", status: 404 };
   return { ok: true, value: archived };
@@ -216,6 +240,8 @@ export async function deleteAnnualCourse(
 ): Promise<CourseMutationResult<{ id: string }>> {
   const course = await deps.courses.getCourse(courseId);
   if (!course) return { ok: false, reason: "Cours annuel introuvable.", status: 404 };
+  const writable = await assertCourseYearWritable(deps, course);
+  if (!writable.ok) return writable;
   const assignments = await deps.courses.listAssignments(courseId);
   const notes = await deps.notes.listNotes({
     schoolYearId: course.schoolYearId,

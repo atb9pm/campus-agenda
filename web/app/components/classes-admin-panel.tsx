@@ -19,12 +19,13 @@ import {
   formatTrainingYearLabel,
   groupSchoolClasses,
   listPlannedBranchesForClass,
-  listSelectableSchoolYearsForClassEdit,
   trainingYearsForDuration,
   type ClassGroupBy,
   type ClassStatusFilter,
 } from "@campus/features/school-catalog";
+import { filterBySchoolYearId } from "@campus/features/school-year/admin-working-year.ts";
 import { ClassCreationWizard } from "./class-creation-wizard.tsx";
+import { AdminWorkingYearBanner } from "./admin-working-year-banner.tsx";
 import type { SchoolYearSummary } from "../../lib/api-client.ts";
 import type { StudentAccessMetadata } from "@campus/types/student-access";
 import type { CatalogDeletePreview } from "@campus/features/admin-catalog-delete/index.ts";
@@ -85,6 +86,9 @@ interface ClassesAdminPanelProps {
   professions: SchoolProfessionRecord[];
   contexts: PedagogicalContextRecord[];
   schoolYears: SchoolYearSummary[];
+  workingYear: SchoolYearSummary | null;
+  workingYearId: string | null;
+  onWorkingYearChange: (schoolYearId: string) => void;
   error: string | null;
   onNotice: (message: string) => void;
   onError: (message: string) => void;
@@ -106,6 +110,9 @@ export function ClassesAdminPanel({
   professions,
   contexts,
   schoolYears,
+  workingYear,
+  workingYearId,
+  onWorkingYearChange,
   error,
   onNotice,
   onError,
@@ -127,10 +134,15 @@ export function ClassesAdminPanel({
   const [deletePreviewLoading, setDeletePreviewLoading] = useState(false);
   const accessMutationLock = useRef(false);
 
-  const counts = useMemo(() => countClassesByStatus(classes), [classes]);
+  const yearClasses = useMemo(
+    () => filterBySchoolYearId(classes, workingYearId),
+    [classes, workingYearId],
+  );
+  const yearReadOnly = workingYear?.status === "archived";
+  const counts = useMemo(() => countClassesByStatus(yearClasses), [yearClasses]);
   const visibleClasses = useMemo(
-    () => filterClassesByStatus(classes, statusFilter),
-    [classes, statusFilter],
+    () => filterClassesByStatus(yearClasses, statusFilter),
+    [yearClasses, statusFilter],
   );
   const groups = useMemo(
     () => groupSchoolClasses({ classes: visibleClasses, professions, groupBy }),
@@ -448,29 +460,38 @@ export function ClassesAdminPanel({
 
   const emptyLabel =
     statusFilter === "archived"
-      ? "Aucune classe archivée."
+      ? "Aucune classe archivée pour cette année de travail."
       : statusFilter === "inactive"
-        ? "Aucune classe désactivée."
-        : "Aucune classe active.";
+        ? "Aucune classe désactivée pour cette année de travail."
+        : "Aucune classe pour cette année de travail.";
   const confirmCopy = confirmAction ? classConfirmCopy(confirmAction) : null;
 
   return (
     <div className="admin-panel-block">
+      <AdminWorkingYearBanner
+        years={schoolYears}
+        workingYearId={workingYearId}
+        section="classes"
+        onChange={onWorkingYearChange}
+      />
       <header className="config-section-header">
         <div>
           <h3>Classes</h3>
           <p>
             La création de classes est l’étape finale : elle exploite le référentiel déjà configuré.
-            Les branches prévues viennent du plan de formation (CTX).
+            Les branches prévues viennent du plan de formation (CTX). Les classes sont filtrées par
+            l’année de travail, sans copier automatiquement l’année active.
           </p>
         </div>
       </header>
       {error ? <p className="admin-error">{error}</p> : null}
       <ClassCreationWizard
-        classes={classes}
+        classes={yearClasses}
         professions={professions}
         contexts={contexts}
         schoolYears={schoolYears}
+        lockedSchoolYearId={workingYearId}
+        yearReadOnly={yearReadOnly}
         onNotice={onNotice}
         onCreated={onCreated}
         onError={onError}
@@ -562,25 +583,14 @@ export function ClassesAdminPanel({
                         >
                           <label>
                             Année scolaire
-                            <select
-                              value={classDraft.schoolYearId}
-                              onChange={(event) =>
-                                setClassDraft({ ...classDraft, schoolYearId: event.target.value })
+                            <input
+                              value={
+                                schoolYears.find((year) => year.id === classDraft.schoolYearId)?.label
+                                ?? entry.schoolYearLabel
+                                ?? "Non renseignée"
                               }
-                            >
-                              <option value="">Non renseignée (legacy)</option>
-                              {listSelectableSchoolYearsForClassEdit(
-                                schoolYears,
-                                entry.schoolYearId,
-                              ).map((year) => (
-                                <option key={year.id} value={year.id}>
-                                  {year.label}
-                                  {year.status === "archived" ? " (archivée)" : ""}
-                                  {year.status === "active" ? " (active)" : ""}
-                                  {year.status === "draft" ? " (brouillon)" : ""}
-                                </option>
-                              ))}
-                            </select>
+                              readOnly
+                            />
                           </label>
                           <label>
                             Profession
@@ -709,7 +719,9 @@ export function ClassesAdminPanel({
                       </span>
                     </div>
                     <div className="admin-teacher-actions">
-                      {status === "archived" ? (
+                      {yearReadOnly ? (
+                        <p className="school-year-hint">Lecture seule</p>
+                      ) : status === "archived" ? (
                         <>
                           <button
                             type="button"

@@ -1,10 +1,26 @@
 import { getSchoolCatalogStore, getSchoolYearStore } from "@campus/lib/persistence/store-factory.ts";
 import { deleteCatalogItemPermanently } from "@campus/features/admin-catalog-delete/index.ts";
 import { loadCatalogDeleteDeps } from "@campus/features/admin-catalog-delete/deps.ts";
-import { validateAdminClassCreate } from "@campus/features/school-catalog/index.ts";
+import {
+  assertClassStaysInSchoolYear,
+  assertSchoolYearWritable,
+  validateAdminClassCreate,
+} from "@campus/features/school-catalog/index.ts";
 import { logOperationalEvent } from "@campus/lib/observability/index.ts";
 import { jsonResponse, requireAdminSession } from "../../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../../lib/server/observability.ts";
+
+async function loadClassWithYear(classId: string) {
+  const [catalog, years] = await Promise.all([
+    getSchoolCatalogStore(),
+    getSchoolYearStore().then((store) => store.listSchoolYears()),
+  ]);
+  const current = (await catalog.listClasses()).find((entry) => entry.id === classId) ?? null;
+  const year = current?.schoolYearId
+    ? years.find((entry) => entry.id === current.schoolYearId) ?? null
+    : null;
+  return { catalog, years, current, year };
+}
 
 async function handlePatch(request: Request, context?: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminSession(request);
@@ -51,20 +67,34 @@ async function handlePatch(request: Request, context?: { params: Promise<{ id: s
       return jsonResponse({ ok: false, reason: "isActive doit être un booléen." }, { status: 400 });
     }
     try {
+      const loaded = await loadClassWithYear(id);
+      if (!loaded.current) return jsonResponse({ ok: false, reason: "Classe introuvable." }, { status: 404 });
+      if (loaded.current.schoolYearId) {
+        const writable = assertSchoolYearWritable(loaded.year);
+        if (!writable.ok) {
+          return jsonResponse({ ok: false, reason: writable.reason }, { status: 400 });
+        }
+      }
+      if (body.schoolYearId !== undefined) {
+        const stays = assertClassStaysInSchoolYear({
+          currentSchoolYearId: loaded.current.schoolYearId,
+          nextSchoolYearId: body.schoolYearId,
+        });
+        if (!stays.ok) {
+          return jsonResponse({ ok: false, reason: stays.reason }, { status: 400 });
+        }
+      }
       const pedagogyTouched =
         body.schoolYearId !== undefined ||
         body.professionId !== undefined ||
         body.trainingYear !== undefined;
       if (pedagogyTouched) {
-        const [years, professions] = await Promise.all([
-          getSchoolYearStore().then((store) => store.listSchoolYears()),
-          catalog.listProfessions(),
-        ]);
+        const professions = await catalog.listProfessions();
         const structured = validateAdminClassCreate({
-          schoolYearId: body.schoolYearId,
+          schoolYearId: body.schoolYearId ?? loaded.current.schoolYearId,
           professionId: body.professionId,
           trainingYear: body.trainingYear,
-          years,
+          years: loaded.years,
           professions,
         });
         if (!structured.ok) {
@@ -143,6 +173,17 @@ async function handleDelete(request: Request, context?: { params: Promise<{ id: 
   if (contentType.includes("application/json")) {
     const body = (await request.json().catch(() => null)) as { confirmationText?: string } | null;
     confirmationText = typeof body?.confirmationText === "string" ? body.confirmationText : null;
+  }
+
+  if (kind === "class") {
+    const loaded = await loadClassWithYear(id);
+    if (!loaded.current) return jsonResponse({ ok: false, reason: "Classe introuvable." }, { status: 404 });
+    if (loaded.current.schoolYearId) {
+      const writable = assertSchoolYearWritable(loaded.year);
+      if (!writable.ok) {
+        return jsonResponse({ ok: false, reason: writable.reason }, { status: 400 });
+      }
+    }
   }
 
   const deps = await loadCatalogDeleteDeps();

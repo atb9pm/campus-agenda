@@ -9,6 +9,7 @@ import {
   isAssignmentRole,
   replaceTeacherDefinitively,
 } from "@campus/features/annual-courses/index.ts";
+import { filterBySchoolYearId } from "@campus/features/school-year/index.ts";
 import {
   getAnnualCourseServiceDeps,
   jsonResponse,
@@ -20,8 +21,10 @@ async function handleGet(request: Request) {
   const auth = await requireAdminSession(request);
   if ("error" in auth && auth.error) return auth.error;
 
+  const url = new URL(request.url);
+  const requestedYearId = url.searchParams.get("schoolYearId")?.trim() || null;
   const deps = await getAnnualCourseServiceDeps();
-  const [courses, assignments, events, classes, branches, professions, contexts, teachers, schoolYears] =
+  const [allCourses, allAssignments, events, allClasses, branches, professions, contexts, teachers, schoolYears] =
     await Promise.all([
       deps.courses.listCourses(),
       deps.courses.listAssignments(),
@@ -33,6 +36,13 @@ async function handleGet(request: Request) {
       deps.teachers.listAccounts(),
       deps.years.listSchoolYears(),
     ]);
+
+  const courses = requestedYearId ? filterBySchoolYearId(allCourses, requestedYearId) : allCourses;
+  const classes = requestedYearId ? filterBySchoolYearId(allClasses, requestedYearId) : allClasses;
+  const courseIds = new Set(courses.map((course) => course.id));
+  const assignments = requestedYearId
+    ? allAssignments.filter((entry) => courseIds.has(entry.annualCourseId))
+    : allAssignments;
 
   return jsonResponse({
     ok: true,
