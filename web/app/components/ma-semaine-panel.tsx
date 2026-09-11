@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 
 import type { SchoolWeek } from "@campus/features/calendar";
+import { formatPedagogicalWeekLabel } from "@campus/features/school-year/official-course-weeks.ts";
 import {
   formatWeekdayLabel,
   groupClassesByWeekday,
@@ -20,7 +21,7 @@ interface MaSemainePanelProps {
 
 function formatSchoolWeekHeading(week: SchoolWeek): string {
   const monday = new Intl.DateTimeFormat("fr-CH", { day: "numeric", month: "long" }).format(week.monday);
-  return `Semaine ${String(week.number).padStart(2, "0")}-${week.kind} · lundi ${monday.replace(".", "")}`;
+  return `${formatPedagogicalWeekLabel(week)} · lundi ${monday.replace(".", "")}`;
 }
 
 export function MaSemainePanel({
@@ -56,7 +57,9 @@ export function MaSemainePanel({
             <p>
               {selectedWeek.kind === "A"
                 ? "Semaine A — jour de cours : lundi"
-                : "Semaine B — jours de cours : lundi et jeudi"}
+                : selectedWeek.kind === "B"
+                  ? "Semaine B — jours de cours : lundi et jeudi"
+                  : "Semaine de cours"}
             </p>
           </div>
           <label className="ma-semaine-week-picker">
@@ -67,7 +70,7 @@ export function MaSemainePanel({
             >
               {schoolWeeks.map((week) => (
                 <option key={week.number} value={week.number}>
-                  {String(week.number).padStart(2, "0")}-{week.kind}
+                  {formatPedagogicalWeekLabel(week).replace(/^Semaine /, "")}
                 </option>
               ))}
             </select>

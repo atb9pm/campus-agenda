@@ -58,7 +58,11 @@ export function usedWeekdays(slots: CourseScheduleSlot[]): CourseWeekday[] {
   return ([1, 2, 3, 4, 5] as const).filter((day) => days.has(day));
 }
 
-export function slotAppliesToWeekView(slot: CourseScheduleSlot, view: CourseWeekKind | "all"): boolean {
+export function slotAppliesToWeekView(
+  slot: CourseScheduleSlot,
+  view: CourseWeekKind | "all" | null,
+): boolean {
+  if (view == null) return false;
   if (view === "all") return true;
   return slot.weekKind === "all" || slot.weekKind === view;
 }

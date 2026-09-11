@@ -35,6 +35,8 @@ export {
 } from "./attendance-course-days.ts";
 export {
   DEFAULT_TMA_SCHEDULE,
+  isSchoolWeekKind,
+  parseSchoolWeekKind,
   type CourseDaySlot,
   type SchoolWeek,
   type SchoolWeekKind,

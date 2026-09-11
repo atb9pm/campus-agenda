@@ -5,6 +5,7 @@ import { FormEvent, useMemo, useState } from "react";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items";
 import type { SchoolWeek } from "@campus/features/calendar";
 import { getCourseDayOptionsForSchoolWeek } from "@campus/features/calendar";
+import { formatPedagogicalWeekLabel } from "@campus/features/school-year/official-course-weeks.ts";
 
 interface ControlsModalProps {
   open: boolean;
@@ -102,7 +103,7 @@ export function ControlsModal({
               >
                 {schoolWeeks.map((week) => (
                   <option key={week.number} value={week.number}>
-                    {String(week.number).padStart(2, "0")}-{week.kind}
+                    {formatPedagogicalWeekLabel(week).replace(/^Semaine /, "")}
                   </option>
                 ))}
               </select>
@@ -146,7 +147,7 @@ export function ControlsModal({
                 return (
                   <li key={item.id}>
                     <span>
-                      {week ? `${String(week.number).padStart(2, "0")}-${week.kind}` : `Sem ${item.schoolWeekNumber}`}
+                      {week ? formatPedagogicalWeekLabel(week).replace(/^Semaine /, "") : `Sem ${item.schoolWeekNumber}`}
                       {" · "}
                       {week ? formatControlDay(week, item.day) : item.day === 3 ? "Jeudi" : "Lundi"}
                     </span>

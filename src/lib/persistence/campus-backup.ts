@@ -34,6 +34,7 @@ import { MemoryCourseScheduleStore } from "./memory-course-schedule-store.ts";
 import { MemoryPedagogicalPathStore, MemoryAnnualCourseNotesStore } from "./memory-pedagogical-path-store.ts";
 import { replaceMemorySchoolYears } from "./memory-school-year-store.ts";
 import type { SchoolYearWithWeeks } from "../../features/school-year/types.ts";
+import { parseSchoolWeekKind } from "../../features/calendar/types.ts";
 import type { SchoolDayException } from "../../features/school-days/types.ts";
 import type { CourseScheduleSlot, ClassAttendanceDay, CourseWeekKind, CourseWeekday, AttendanceRole } from "../../features/course-schedule/types.ts";
 import type { AnnualCourse, TeacherCourseAssignment, TeacherCourseAssignmentEvent, AssignmentRole, AssignmentEventKind } from "../../features/annual-courses/types.ts";
@@ -629,7 +630,7 @@ async function restoreMemoryTables(deps: CampusBackupDeps, dump: CampusTableDump
         .filter((week) => asString(week.school_year_id) === id)
         .map((week) => ({
           number: asNumber(week.week_number ?? week.number),
-          kind: asString(week.week_kind ?? week.kind) as "A" | "B",
+          kind: parseSchoolWeekKind(week.week_kind ?? week.kind),
           monday: asString(week.monday),
         })),
     };

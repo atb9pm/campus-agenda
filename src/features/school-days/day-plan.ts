@@ -161,7 +161,7 @@ export function checkWeekPlanConsistency(weeks: SchoolWeekEntry[]): string[] {
     if (current.monday <= previous.monday) {
       warnings.push(`Semaine ${current.number} : date antérieure à la semaine ${previous.number}.`);
     }
-    if (current.kind === previous.kind) {
+    if (current.kind && previous.kind && current.kind === previous.kind) {
       warnings.push(`Alternance A/B rompue entre les semaines ${previous.number} et ${current.number}.`);
     }
   }

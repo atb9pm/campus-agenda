@@ -12,7 +12,7 @@ export type ControlPlanningPeriodId = (typeof CONTROL_PLANNING_PERIOD_IDS)[numbe
 export interface ControlPlanningPeriod {
   id: ControlPlanningPeriodId;
   label: string;
-  weeks: Array<{ number: number; kind: "A" | "B"; monday: string }>;
+  weeks: Array<{ number: number; kind: "A" | "B" | null; monday: string }>;
 }
 
 export interface ControlPlanningSemesterDay {
@@ -29,7 +29,7 @@ export interface ControlPlanningSemesterDay {
 
 export interface ControlPlanningSemesterWeek {
   number: number;
-  kind: "A" | "B";
+  kind: "A" | "B" | null;
   monday: string;
   hasCourse: boolean;
   days: ControlPlanningSemesterDay[];

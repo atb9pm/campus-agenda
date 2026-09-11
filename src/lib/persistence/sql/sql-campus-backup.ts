@@ -184,6 +184,10 @@ export function validateCampusTables(tables: unknown): { ok: true; tables: Campu
     if (!isDateOnly(week.monday)) {
       return { ok: false, reason: "Date de lundi de semaine invalide." };
     }
+    const kind = week.week_kind;
+    if (kind !== undefined && kind !== null && kind !== "" && kind !== "A" && kind !== "B") {
+      return { ok: false, reason: "Type de semaine scolaire invalide." };
+    }
   }
 
   for (const year of dump.school_years ?? []) {

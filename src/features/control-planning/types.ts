@@ -63,7 +63,7 @@ export interface ControlPlanningDay {
 
 export interface ControlPlanningWeekView {
   number: number;
-  kind: "A" | "B";
+  kind: "A" | "B" | null;
   monday: string;
   days: ControlPlanningDay[];
 }
@@ -98,7 +98,7 @@ export interface ControlPlanningView {
   semesterSummary: ControlPlanningSemesterSummary | null;
   semester: ControlPlanningPeriodView | null;
   week: ControlPlanningWeekView | null;
-  weeks: Array<{ number: number; kind: "A" | "B" }>;
+  weeks: Array<{ number: number; kind: "A" | "B" | null }>;
   alerts: ControlPlanningAlert[];
   teacherLoadThisWeek: number;
   teacherWeekControls: ControlPlanningCard[];

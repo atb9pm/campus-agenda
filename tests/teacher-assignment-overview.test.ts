@@ -201,8 +201,8 @@ function line(row: ReturnType<typeof rowsFor>[number]) {
 }
 
 test("version 2.38.0 — vue enseignant opérationnelle, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.48.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0027_teacher_author_nullable.sql");
+  assert.equal(APP_VERSION, "2.49.0");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0028_school_week_kind_nullable.sql");
   const [panel, css, helper, workspace, classrooms] = await Promise.all([
     readFile(new URL("../web/app/components/annual-courses-admin-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/globals.css", import.meta.url), "utf8"),

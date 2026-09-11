@@ -51,7 +51,7 @@ export function countConfiguredClasses(config: TeacherSetupConfig): number {
 
 export interface SchoolWeekPlanRow {
   number: number;
-  kind: "A" | "B";
+  kind: "A" | "B" | null;
   mondayLabel: string;
   courseDaysLabel: string;
 }
@@ -66,7 +66,8 @@ export function buildSchoolWeekPlanRows(weeks: SchoolWeek[]): SchoolWeekPlanRow[
       .format(week.monday)
       .replace(".", "");
 
-    const courseDaysLabel = week.kind === "A" ? "Lundi" : "Lundi + Jeudi";
+    const courseDaysLabel =
+      week.kind === "A" ? "Lundi" : week.kind === "B" ? "Lundi + Jeudi" : "Jours de cours";
 
     return {
       number: week.number,

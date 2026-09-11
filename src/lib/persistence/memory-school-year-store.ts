@@ -9,6 +9,10 @@ import {
   schoolYearAlreadyExistsMessage,
   validateOfficialPlanPreview,
 } from "../../features/school-year/official-plan-logic.ts";
+import {
+  assertGeneratedWeeksMatchOfficialTotal,
+  generateOfficialCourseWeeks,
+} from "../../features/school-year/official-course-weeks.ts";
 import type {
   OfficialPlanImportOptions,
   OfficialPlanImportResult,
@@ -58,6 +62,12 @@ export class MemorySchoolYearStore implements SchoolYearStore {
     const existing = await this.findSchoolYearByLabel(label);
     const now = new Date().toISOString();
     const exceptions = expandOfficialEventsToExceptions(preview.events);
+    const generated = generateOfficialCourseWeeks({
+      startsOn: preview.startsOn,
+      endsOn: preview.endsOn,
+      exceptions,
+    });
+    assertGeneratedWeeksMatchOfficialTotal(generated.weeks.length, preview.totalCourseWeeks);
 
     if (existing) {
       if (!options.replaceDraft || existing.status !== "draft") {
@@ -71,6 +81,7 @@ export class MemorySchoolYearStore implements SchoolYearStore {
               endsOn: preview.endsOn,
               sourceFilename: sourceFilename ?? year.sourceFilename,
               importedAt: now,
+              weeks: generated.weeks.map((week) => ({ ...week })),
             }
           : year,
       );
@@ -94,7 +105,7 @@ export class MemorySchoolYearStore implements SchoolYearStore {
       importedAt: now,
       activatedAt: null,
       createdAt: now,
-      weeks: [],
+      weeks: generated.weeks.map((week) => ({ ...week })),
     };
     memorySchoolYears = [record, ...memorySchoolYears];
     memoryDayExceptions.set(record.id, exceptions);

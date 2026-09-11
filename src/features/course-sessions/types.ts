@@ -41,7 +41,7 @@ export interface CourseSession {
   contextId: string;
   date: string;
   schoolWeekNumber: number;
-  weekKind: SchoolWeekKind;
+  weekKind: SchoolWeekKind | null;
   dayOfWeek: CourseWeekday;
   sequenceNumber: number;
   segments: CourseSessionSegment[];

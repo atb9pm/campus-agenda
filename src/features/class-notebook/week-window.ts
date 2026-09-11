@@ -27,9 +27,15 @@ export function visibleSchoolWeeks(
 }
 
 export function formatWeekColumnLabel(week: SchoolWeek): string {
-  return `Sem ${String(week.number).padStart(2, "0")}-${week.kind}`;
+  const padded = String(week.number).padStart(2, "0");
+  if (week.kind === "A" || week.kind === "B") {
+    return `Sem ${padded}-${week.kind}`;
+  }
+  return `Sem ${padded}`;
 }
 
 export function formatWeekColumnSubtitle(week: SchoolWeek): string {
-  return week.kind === "A" ? "lun" : "lun + jeu";
+  if (week.kind === "A") return "lun";
+  if (week.kind === "B") return "lun + jeu";
+  return "cours";
 }

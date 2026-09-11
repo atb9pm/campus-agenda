@@ -13,6 +13,7 @@ import {
   formatSchoolYearLabelFr,
   groupOfficialEventsByMonth,
 } from "@campus/features/school-year/official-plan-logic.ts";
+import { formatPedagogicalWeekLabel } from "@campus/features/school-year/official-course-weeks.ts";
 import { SCHOOL_YEAR_UNCONFIGURED_MESSAGE } from "@campus/features/teacher-workspace";
 import {
   fetchOfficialSchoolCalendar,
@@ -228,8 +229,8 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
         <h2 id="school-year-admin-title">Année scolaire</h2>
         <p>
           Le <strong>plan de scolarité</strong> de l’État du Valais est la source officielle des dates
-          (début, fin, vacances, fêtes, interruptions). L’import crée une année en brouillon, sans
-          activer, sans archiver, et sans inventer de semaines A/B.
+          (début, fin, vacances, fêtes, interruptions). L’import crée une année en brouillon et génère
+          les semaines de cours, sans activer, sans archiver, et sans inventer d’alternance A/B.
         </p>
       </div>
 
@@ -304,6 +305,12 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
           </header>
           <p className="school-year-meta">
             {formatOfficialDateFr(workingYear.startsOn)} → {formatOfficialDateFr(workingYear.endsOn)}
+            {workingWeeks.length > 0 && (
+              <>
+                <br />
+                {workingWeeks.length} semaine{workingWeeks.length > 1 ? "s" : ""} de cours
+              </>
+            )}
           </p>
           {workingEvents.length > 0 ? (
             <OfficialEventsByMonth events={workingEvents} startYear={workingStartYear} />
@@ -311,10 +318,24 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
             <p className="school-year-hint">Aucun événement officiel enregistré pour cette année.</p>
           )}
           {workingWeeks.length > 0 && (
-            <p className="school-year-hint">
-              Un plan A/B complémentaire est présent ({workingWeeks.length} semaines). Il n’est pas
-              généré depuis le plan de scolarité.
-            </p>
+            <div className="school-year-week-table-wrap">
+              <table className="school-year-week-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Semaine</th>
+                    <th scope="col">Lundi de référence</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {workingWeeks.map((week) => (
+                    <tr key={`${week.number}-${week.monday}`}>
+                      <td>{formatPedagogicalWeekLabel(week)}</td>
+                      <td>{formatOfficialDateFr(week.monday)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </article>
       )}
@@ -329,9 +350,9 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
           <h3>Importer le PDF officiel</h3>
         </header>
         <p className="school-year-hint">
-          Document de référence : Plan de scolarité — État du Valais. L’import crée uniquement une
-          année en brouillon, sans activer, sans archiver l’année en cours, et sans inventer de
-          semaines A/B.
+          Document de référence : Plan de scolarité — État du Valais. L’import crée une année en
+          brouillon et ses semaines de cours, sans activer, sans archiver l’année en cours, et sans
+          inventer d’alternance A/B.
         </p>
 
         <div className="school-year-upload">
@@ -438,7 +459,7 @@ function OfficialPlanPreviewCard({
         {preview.totalCourseWeeks != null && (
           <>
             <br />
-            Semaines de cours (contrôle) : {preview.totalCourseWeeks} — aucune semaine A/B n’est créée.
+            Semaines de cours (contrôle) : {preview.totalCourseWeeks} — aucune alternance A/B n’est inventée.
           </>
         )}
       </p>

@@ -180,7 +180,7 @@ export function ActiveYearPlanPanel({ onCalendarUpdated, onNotice }: ActiveYearP
                   <td>
                     <select
                       aria-label={`Type de la semaine ${week.number}`}
-                      value={week.kind}
+                      value={week.kind ?? "A"}
                       disabled={working}
                       onChange={(event) =>
                         patchWeek(week.number, { kind: event.target.value as "A" | "B" })

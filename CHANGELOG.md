@@ -2,6 +2,30 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.49.0] — Semaines de cours depuis le calendrier officiel
+
+L’import du plan de scolarité génère les **vraies semaines de cours** d’une année DRAFT. L’alternance A/B n’est plus obligatoire : `kind` peut être `null`. 2026–2027 conserve ses semaines A/B.
+
+### Ajouté
+
+- Génération des semaines lundi→dimanche à partir de `startsOn`, `endsOn` et `school_day_exceptions`.
+- Une semaine est retenue dès qu’un jour lundi–vendredi de l’année n’est pas holiday. Les semaines entièrement fermées (vacances) sont exclues.
+- Numérotation pédagogique 1→38, distincte du numéro ISO. Contrôle contre `totalCourseWeeks` du PDF (refus explicite en cas d’écart).
+- Import DRAFT transactionnel : année + exceptions + semaines, ou rien.
+- Liste « Semaine 01 » (sans A/B) dans Administration > Année scolaire pour 2028–2029.
+
+### Conservé
+
+2026–2027 ACTIVE et son plan A/B. Parseur A/B interne. Route `/activate` inutilisée par ce flux. Backup v4 : `school_weeks.week_kind` accepte `null`, les dumps A/B restent valides.
+
+### Migration
+
+`0028_school_week_kind_nullable.sql` : `school_weeks.week_kind` devient nullable (`A` / `B` / `NULL`). Reconstruction non destructive.
+
+### Non inclus
+
+Pas d’activation 2028–2029, pas d’archivage 2026–2027, pas de copie des classes / cours / horaires / publications, pas d’alternance A/B inventée.
+
 ## [2.48.0] — Année future DRAFT et import du plan de scolarité
 
 L’année scolaire se crée à partir du **plan de scolarité** officiel de l’État du Valais. Le PDF « Semaines A/B » n’est plus la source de création. Une année DRAFT peut exister sans plan A/B. L’année active utilisateurs n’est pas basculée.
