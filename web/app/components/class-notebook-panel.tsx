@@ -13,19 +13,28 @@ import type { SchoolWeek } from "@campus/features/calendar";
 import {
   appendWeekNote,
   clampWeekDisplayCount,
+  composeWeekNotesDoc,
+  composeWeekPublicationDoc,
+  emptyRichDoc,
   formatWeekColumnLabel,
   formatWeekColumnSubtitle,
+  isPublicationLine,
   listWeekNotes,
   moveWeekNote,
-  removeWeekNote,
+  previousSchoolWeekNumber,
+  setWeekRichNote,
+  type CampusRichDoc,
   type ClassNotesDocument,
   type NotebookClipboard,
   type WeekDisplayCount,
   weekNotesKey,
   visibleSchoolWeeks,
 } from "@campus/features/class-notebook";
+import { isStructuredAgendaPublication as isStructuredPublication } from "@campus/features/agenda/publications";
 import type { TeacherClassSetup } from "@campus/features/teacher-setup";
 import { ControlsModal } from "./controls-modal.tsx";
+import { RichDocEditor } from "./rich-doc-editor.tsx";
+import { RichDocView } from "./rich-doc-view.tsx";
 
 interface ClassNotebookPanelProps {
   classSetup: TeacherClassSetup;
@@ -43,8 +52,9 @@ interface ClassNotebookPanelProps {
   onCenterWeekChange: (weekNumber: number) => void;
   onNotesChange: (document: ClassNotesDocument) => void;
   onCreatePublication: (schoolWeekNumber: number, text: string) => Promise<void>;
+  onSaveWeekPublication: (schoolWeekNumber: number, doc: CampusRichDoc) => Promise<void>;
+  onCopyPreviousPublication: (schoolWeekNumber: number) => Promise<void>;
   onMovePublication: (itemId: number, schoolWeekNumber: number) => Promise<void>;
-  onDeletePublication: (itemId: number) => Promise<void>;
   onSaveControl: (input: { schoolWeekNumber: number; day: number; title: string }) => Promise<void>;
   onDeleteControl: (itemId: number) => Promise<void>;
   onPreviewStudent?: () => void;
@@ -54,9 +64,7 @@ type LineSelection =
   | { kind: "publication"; itemId: number; weekNumber: number }
   | { kind: "note"; noteId: string; weekNumber: number };
 
-function isPublicationLine(item: PrototypeAgendaItem): boolean {
-  return item.type === "HOMEWORK" || item.type === "INFORMATION";
-}
+type EditorKind = "publication" | "notes";
 
 export function ClassNotebookPanel({
   classSetup,
@@ -74,8 +82,9 @@ export function ClassNotebookPanel({
   onCenterWeekChange,
   onNotesChange,
   onCreatePublication,
+  onSaveWeekPublication,
+  onCopyPreviousPublication,
   onMovePublication,
-  onDeletePublication,
   onSaveControl,
   onDeleteControl,
   onPreviewStudent,
@@ -85,8 +94,9 @@ export function ClassNotebookPanel({
   const [clipboard, setClipboard] = useState<NotebookClipboard | null>(null);
   const [selection, setSelection] = useState<LineSelection | null>(null);
   const [dragPublicationId, setDragPublicationId] = useState<number | null>(null);
-  const [dragNoteId, setDragNoteId] = useState<string | null>(null);
-  const [drafts, setDrafts] = useState<Record<number, { publication: string; note: string }>>({});
+  const [editor, setEditor] = useState<{ kind: EditorKind; weekNumber: number } | null>(null);
+  const [editorDoc, setEditorDoc] = useState<CampusRichDoc>(emptyRichDoc());
+  const [studentPreviewOpen, setStudentPreviewOpen] = useState(false);
 
   const visibleWeeks = useMemo(
     () => visibleSchoolWeeks(schoolWeeks, centerWeekNumber, weekDisplayCount),
@@ -193,39 +203,33 @@ export function ClassNotebookPanel({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [classSetup.id, handlePaste, notesDocument, selection]);
 
-  function getDraft(weekNumber: number) {
-    return drafts[weekNumber] ?? { publication: "", note: "" };
+  function openEditor(kind: EditorKind, weekNumber: number) {
+    const weekItems = items.filter((item) => item.schoolWeekNumber === weekNumber);
+    const weekKey = weekNotesKey(classSetup.id, weekNumber);
+    const doc =
+      kind === "publication"
+        ? composeWeekPublicationDoc(weekItems)
+        : composeWeekNotesDoc(listWeekNotes(notesDocument, weekKey));
+    setEditorDoc(doc);
+    setStudentPreviewOpen(false);
+    setEditor({ kind, weekNumber });
   }
 
-  function setDraft(weekNumber: number, patch: Partial<{ publication: string; note: string }>) {
-    setDrafts((current) => ({
-      ...current,
-      [weekNumber]: { ...getDraft(weekNumber), ...patch },
-    }));
-  }
-
-  async function submitPublicationLine(weekNumber: number) {
-    const text = getDraft(weekNumber).publication.trim();
-    if (!text || !canPublish) return;
-    await onCreatePublication(weekNumber, text);
-    setDraft(weekNumber, { publication: "" });
-  }
-
-  function submitNoteLine(weekNumber: number) {
-    const text = getDraft(weekNumber).note.trim();
-    if (!text) return;
-    const key = weekNotesKey(classSetup.id, weekNumber);
-    onNotesChange(appendWeekNote(notesDocument, key, text));
-    setDraft(weekNumber, { note: "" });
+  async function saveEditor() {
+    if (!editor) return;
+    if (editor.kind === "publication") {
+      if (!canPublish) return;
+      await onSaveWeekPublication(editor.weekNumber, editorDoc);
+    } else {
+      const key = weekNotesKey(classSetup.id, editor.weekNumber);
+      onNotesChange(setWeekRichNote(notesDocument, key, editorDoc));
+    }
+    setEditor(null);
+    setStudentPreviewOpen(false);
   }
 
   function handlePublicationDragStart(event: DragEvent<HTMLLIElement>, itemId: number) {
     setDragPublicationId(itemId);
-    event.dataTransfer.effectAllowed = "move";
-  }
-
-  function handleNoteDragStart(event: DragEvent<HTMLLIElement>, noteId: string) {
-    setDragNoteId(noteId);
     event.dataTransfer.effectAllowed = "move";
   }
 
@@ -234,19 +238,6 @@ export function ClassNotebookPanel({
     if (dragPublicationId !== null) {
       await onMovePublication(dragPublicationId, weekNumber);
       setDragPublicationId(null);
-      return;
-    }
-    if (dragNoteId) {
-      const sourceWeek = visibleWeeks.find((week) => {
-        const key = weekNotesKey(classSetup.id, week.number);
-        return listWeekNotes(notesDocument, key).some((note) => note.id === dragNoteId);
-      });
-      if (sourceWeek && sourceWeek.number !== weekNumber) {
-        const fromKey = weekNotesKey(classSetup.id, sourceWeek.number);
-        const toKey = weekNotesKey(classSetup.id, weekNumber);
-        onNotesChange(moveWeekNote(notesDocument, fromKey, toKey, dragNoteId));
-      }
-      setDragNoteId(null);
     }
   }
 
@@ -317,7 +308,6 @@ export function ClassNotebookPanel({
           const weekPublications = items.filter(
             (item) => item.schoolWeekNumber === week.number && isPublicationLine(item),
           );
-          const draft = getDraft(week.number);
           const isActive = week.number === centerWeekNumber;
 
           return (
@@ -375,89 +365,53 @@ export function ClassNotebookPanel({
 
               <section className="class-notebook-zone class-notebook-zone-publication" aria-label="Publication élèves">
                 <h3>Publication élèves</h3>
-                <ul>
-                  {weekPublications.map((item) => (
-                    <li
-                      key={item.id}
-                      draggable={canPublish}
-                      onDragStart={(event) => handlePublicationDragStart(event, item.id)}
-                      className={selection?.kind === "publication" && selection.itemId === item.id ? "selected" : ""}
-                    >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setSelection({ kind: "publication", itemId: item.id, weekNumber: week.number })
-                        }
-                      >
-                        <span>{item.title}</span>
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Supprimer ${item.title}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void onDeletePublication(item.id);
-                        }}
-                      >
-                        ×
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                <input
-                  value={draft.publication}
-                  disabled={!canPublish}
-                  placeholder="Taper + Entrée…"
-                  onChange={(event) => setDraft(week.number, { publication: event.target.value })}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void submitPublicationLine(week.number);
-                    }
-                  }}
+                <RichDocView
+                  doc={composeWeekPublicationDoc(weekPublications)}
+                  compact
+                  emptyLabel="Aucune publication pour cette semaine."
                 />
+                {weekPublications.filter((item) => isStructuredPublication(item)).map((item) => (
+                  <p key={item.id} className="class-notebook-structured-line">
+                    {item.title}
+                  </p>
+                ))}
+                <div className="class-notebook-zone-actions">
+                  <button
+                    type="button"
+                    className="workspace-action secondary"
+                    disabled={!canPublish}
+                    onClick={() => openEditor("publication", week.number)}
+                  >
+                    Modifier
+                  </button>
+                  {canPublish && previousSchoolWeekNumber(schoolWeeks, week.number) != null ? (
+                    <button
+                      type="button"
+                      className="workspace-action secondary"
+                      onClick={() => void onCopyPreviousPublication(week.number)}
+                    >
+                      Copier depuis la semaine précédente
+                    </button>
+                  ) : null}
+                </div>
               </section>
 
               <section className="class-notebook-zone class-notebook-zone-notes" aria-label="Notes prof">
                 <h3>Notes prof</h3>
-                <ul>
-                  {weekNotes.map((note) => (
-                    <li
-                      key={note.id}
-                      draggable
-                      onDragStart={(event) => handleNoteDragStart(event, note.id)}
-                      className={selection?.kind === "note" && selection.noteId === note.id ? "selected" : ""}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setSelection({ kind: "note", noteId: note.id, weekNumber: week.number })}
-                      >
-                        <span>{note.text}</span>
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Supprimer la note ${note.text}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onNotesChange(removeWeekNote(notesDocument, weekKey, note.id));
-                        }}
-                      >
-                        ×
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                <input
-                  value={draft.note}
-                  placeholder="Note privée…"
-                  onChange={(event) => setDraft(week.number, { note: event.target.value })}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      submitNoteLine(week.number);
-                    }
-                  }}
+                <RichDocView
+                  doc={composeWeekNotesDoc(weekNotes)}
+                  compact
+                  emptyLabel="Aucune note privée."
                 />
+                <div className="class-notebook-zone-actions">
+                  <button
+                    type="button"
+                    className="workspace-action secondary"
+                    onClick={() => openEditor("notes", week.number)}
+                  >
+                    Modifier
+                  </button>
+                </div>
               </section>
             </article>
           );
@@ -468,6 +422,57 @@ export function ClassNotebookPanel({
         <p className="class-notebook-clipboard-hint" role="status">
           Élément en mémoire — sélectionnez une semaine et appuyez sur Ctrl+V, ou glissez-déposez.
         </p>
+      ) : null}
+
+      {editor ? (
+        <div className="rich-doc-overlay" role="dialog" aria-modal="true" aria-label={editor.kind === "publication" ? "Publication élèves" : "Notes prof"}>
+          <div className="rich-doc-overlay-card">
+            <header>
+              <p className="eyebrow">{editor.kind === "publication" ? "Publication élèves" : "Notes prof"}</p>
+              <h2>
+                {editor.kind === "publication"
+                  ? "Rédiger la publication de la semaine"
+                  : "Notes privées de la semaine"}
+              </h2>
+            </header>
+            {studentPreviewOpen && editor.kind === "publication" ? (
+              <div className="rich-doc-student-preview" data-student-preview="">
+                <p className="eyebrow">Aperçu élève</p>
+                <RichDocView doc={editorDoc} emptyLabel="Rien n’est encore publié." />
+              </div>
+            ) : (
+              <RichDocEditor
+                value={editorDoc}
+                variant={editor.kind === "publication" ? "publication" : "notes"}
+                onChange={setEditorDoc}
+              />
+            )}
+            <footer className="rich-doc-overlay-actions">
+              <button type="button" className="workspace-action" onClick={() => void saveEditor()}>
+                Enregistrer
+              </button>
+              <button
+                type="button"
+                className="workspace-action secondary"
+                onClick={() => {
+                  setEditor(null);
+                  setStudentPreviewOpen(false);
+                }}
+              >
+                Annuler
+              </button>
+              {editor.kind === "publication" ? (
+                <button
+                  type="button"
+                  className="workspace-action secondary"
+                  onClick={() => setStudentPreviewOpen((current) => !current)}
+                >
+                  {studentPreviewOpen ? "Retour à l’édition" : "Aperçu élève"}
+                </button>
+              ) : null}
+            </footer>
+          </div>
+        </div>
       ) : null}
 
       <ControlsModal

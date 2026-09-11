@@ -1681,6 +1681,44 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .class-notebook-zone li button { padding: 0 4px; border: 0; background: transparent; color: #8b3a3a; cursor: pointer; }
 .class-notebook-zone input { width: 100%; padding: 9px 10px; border: 1px dashed var(--line-strong); border-radius: 8px; background: #fff; font-size: 11px; }
 .class-notebook-plan-link { justify-self: start; padding: 0; border: 0; background: transparent; color: var(--blue); font-size: 10px; font-weight: 700; cursor: pointer; }
+.class-notebook-zone-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.class-notebook-zone-notes { color: #5b6b82; }
+.class-notebook-structured-line { margin: 0; color: #516582; font-size: 10px; }
+.rich-doc-view { display: grid; gap: 6px; color: var(--navy); font-size: 12px; line-height: 1.45; }
+.rich-doc-view.is-compact { max-height: 9.5em; overflow: hidden; }
+.rich-doc-view h4 { margin: 0; font-size: 13px; }
+.rich-doc-view p, .rich-doc-view ul, .rich-doc-view ol { margin: 0; padding: 0; }
+.rich-doc-view ul, .rich-doc-view ol { padding-left: 1.1em; }
+.rich-doc-view a { color: var(--blue); }
+.rich-doc-empty, .rich-doc-more { margin: 0; color: #8793a9; font-size: 11px; font-style: italic; }
+.rich-doc-checklist { list-style: none; padding-left: 0; display: grid; gap: 4px; }
+.rich-doc-checklist li { display: flex; align-items: flex-start; gap: 8px; }
+.rich-doc-callout { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #f8fbff; }
+.rich-doc-callout strong { display: block; margin-bottom: 4px; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: #30558f; }
+.rich-doc-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 18px; background: rgba(15, 32, 67, .28); }
+.rich-doc-overlay-card { width: min(760px, 100%); max-height: min(90vh, 820px); overflow: auto; display: grid; gap: 14px; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: var(--shadow); }
+.rich-doc-overlay-card h2 { margin: 4px 0 0; color: var(--navy); font-size: 18px; }
+.rich-doc-overlay-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.rich-doc-student-preview { padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #fbfcfe; }
+.rich-doc-editor { display: grid; gap: 10px; }
+.rich-doc-toolbar, .rich-doc-quick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.rich-doc-toolbar button, .rich-doc-quick button { min-height: 36px; padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: #fff; color: var(--navy); font-size: 11px; cursor: pointer; }
+.rich-doc-quick span, .rich-doc-color span { color: #8793a9; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.rich-doc-color { display: flex; align-items: center; gap: 6px; }
+.rich-doc-color select { min-height: 36px; border: 1px solid var(--line-strong); border-radius: 8px; }
+.rich-doc-canvas { min-height: 220px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; display: grid; gap: 10px; }
+.rich-doc-text-input, .rich-doc-heading-input { min-height: 28px; outline: none; }
+.rich-doc-heading-input { font-weight: 800; color: var(--navy); }
+.rich-doc-edit-list, .rich-doc-edit-check { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+.rich-doc-edit-check { list-style: none; padding-left: 0; }
+.rich-doc-edit-check li { display: flex; align-items: flex-start; gap: 8px; }
+.rich-doc-editor.is-notes .rich-doc-canvas { background: #fafafa; }
+
+@media (max-width: 760px) {
+  .rich-doc-overlay { padding: 8px; align-items: stretch; }
+  .rich-doc-overlay-card { width: 100%; max-height: 100%; border-radius: 10px; }
+  .rich-doc-toolbar button, .rich-doc-quick button { min-width: 44px; }
+}
 .class-notebook-clipboard-hint { margin: 0 38px 20px; color: #516582; font-size: 10px; font-style: italic; }
 .controls-modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .controls-modal-header h2 { margin: 6px 0 0; color: var(--navy); font-size: 18px; }
