@@ -2,6 +2,24 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.52.1] — Correction des affectations et matières dans Contrôles
+
+L’écran enseignant **Contrôles** évalue les affectations à l’instant courant et n’affiche que les matières réellement attribuées au professeur connecté.
+
+### Corrigé
+
+- Une attribution créée le jour même après 12:00 UTC n’est plus invisible : plus de midi UTC artificiel pour les classes attribuées.
+- Le menu **Matières** ne liste que les `SchoolBranch` des TCA actives du professeur dans les classes sélectionnées, pas toutes les AnnualCourse de la classe.
+- **Toutes mes classes** : union dédupliquée (par `SchoolBranch.id`) des matières du professeur. Une matière devenue invalide après changement de classe revient à **Toutes les matières**.
+
+### Conservé
+
+**Mes contrôles** / **Tous les contrôles de la classe** inchangés. Avec **Toutes les matières**, le mode classe continue d’afficher les contrôles des autres professeurs. Année ACTIVE uniquement. Aucune migration SQL. Données d’attribution, AnnualCourse, classes, calendrier, CourseSession, Carnet et 2028–2029 inchangés.
+
+### Migration
+
+Aucune.
+
 ## [2.52.0] — Éditeur enrichi des publications élèves et notes prof
 
 Le Carnet permet une rédaction plus riche pour **Publication élèves** et **Notes prof**, sans toucher aux Contrôles.

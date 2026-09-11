@@ -46,6 +46,8 @@ export interface ControlPlanningQuery {
   layout?: string | null;
   period?: string | null;
   todayIso?: string;
+  /** Instant d’évaluation des TCA. Absent = maintenant (jamais un midi UTC artificiel). */
+  at?: string | null;
 }
 
 export type ControlPlanningResult =
@@ -55,6 +57,16 @@ export type ControlPlanningResult =
 function todayIsoDate(value?: string): string {
   if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   return new Date().toISOString().slice(0, 10);
+}
+
+/** Instant des affectations : `at` injecté (tests) ou horloge réelle. Jamais `${jour}T12:00:00.000Z`. */
+export function resolveControlPlanningAssignmentAt(at?: string | null): string {
+  const raw = at?.trim();
+  if (raw) {
+    const ms = Date.parse(raw);
+    if (!Number.isNaN(ms)) return new Date(ms).toISOString();
+  }
+  return new Date().toISOString();
 }
 
 export async function getControlPlanning(
@@ -101,7 +113,7 @@ export async function getControlPlanning(
 
   const consultableYears = listConsultablePlanningYears(yearList);
   const todayIso = todayIsoDate(query.todayIso);
-  const assignmentAt = `${todayIso}T12:00:00.000Z`;
+  const assignmentAt = resolveControlPlanningAssignmentAt(query.at);
   const yearSessions = await loadControlPlanningYearSessions(deps, year.id);
   const assigned = listAssignedStructuredPlanningClassrooms({
     teacherId,
@@ -208,10 +220,13 @@ export async function getControlPlanning(
   }
 
   const filterSubjects = listControlPlanningFilterSubjects({
+    teacherId,
     schoolClassIds: selectedSchoolClassIds,
     courses,
+    assignments,
     contexts,
     branches,
+    at: assignmentAt,
   });
 
   const view = buildControlPlanningView({

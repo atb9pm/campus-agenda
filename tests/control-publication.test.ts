@@ -261,7 +261,7 @@ async function firstSession(world: World, annualCourseId: string) {
 }
 
 test("version 2.32.0 — publication manuelle TEST, migration 0024", async () => {
-  assert.equal(APP_VERSION, "2.52.0");
+  assert.equal(APP_VERSION, "2.52.1");
   assert.equal(TEST_ALERT_THRESHOLD, 3);
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0028_school_week_kind_nullable.sql");
   const parsed = manualControlIdsFromBody({

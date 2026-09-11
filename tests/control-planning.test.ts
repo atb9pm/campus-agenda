@@ -147,7 +147,7 @@ function planningDeps(items: PrototypeAgendaItem[] = DEMO_PROTOTYPE_ITEMS): Cont
 }
 
 test("version 2.38.0 — planning semestriel, sans table dédiée", () => {
-  assert.equal(APP_VERSION, "2.52.0");
+  assert.equal(APP_VERSION, "2.52.1");
   assert.equal(TEACHER_NAV_LABELS.controles, "Contrôles");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",
@@ -432,6 +432,8 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
   );
   assert.match(service, /listAssignedStructuredPlanningClassrooms/);
   assert.match(service, /at: assignmentAt/);
+  assert.match(service, /resolveControlPlanningAssignmentAt/);
+  assert.doesNotMatch(service, /\$\{todayIso\}T12:00:00\.000Z/);
   assert.doesNotMatch(service, /sessions: yearSessions,\s*schoolYearId: year\.id/);
   assert.doesNotMatch(service, /listAccessibleRuntimeClassroomsForTeacher/);
   assert.doesNotMatch(service, /listAccessibleControlPlanningClassrooms/);
@@ -1235,6 +1237,7 @@ test("service — getControlPlanning : liste = Mes cours, placements toujours ca
   const selectable = await getControlPlanning(deps, {
     teacherId: REPLACEMENT_ID,
     todayIso: TODAY,
+    at: `${TODAY}T12:00:00.000Z`,
     week: 11,
   });
   assert.equal(selectable.ok, true);
@@ -1246,6 +1249,7 @@ test("service — getControlPlanning : liste = Mes cours, placements toujours ca
     teacherId: REPLACEMENT_ID,
     classroomId: roomMa2a.id,
     todayIso: TODAY,
+    at: `${TODAY}T12:00:00.000Z`,
     week: 11,
   });
   assert.equal(forgedFuture.ok, false);
@@ -1255,6 +1259,7 @@ test("service — getControlPlanning : liste = Mes cours, placements toujours ca
   const novemberList = await getControlPlanning(deps, {
     teacherId: REPLACEMENT_ID,
     todayIso: novemberAt,
+    at: `${novemberAt}T12:00:00.000Z`,
     week: 11,
   });
   assert.equal(novemberList.ok, true);
@@ -1266,6 +1271,7 @@ test("service — getControlPlanning : liste = Mes cours, placements toujours ca
     teacherId: REPLACEMENT_ID,
     classroomId: roomMa2a.id,
     todayIso: novemberAt,
+    at: `${novemberAt}T12:00:00.000Z`,
     week: 8,
   });
   assert.equal(october.ok, true);
@@ -1284,6 +1290,7 @@ test("service — getControlPlanning : liste = Mes cours, placements toujours ca
     classroomId: roomMa2a.id,
     mode: "mine",
     todayIso: novemberAt,
+    at: `${novemberAt}T12:00:00.000Z`,
     week: 11,
   });
   assert.equal(november.ok, true);
@@ -1307,6 +1314,7 @@ test("service — getControlPlanning : liste = Mes cours, placements toujours ca
     classroomId: roomMa2a.id,
     mode: "class-all",
     todayIso: novemberAt,
+    at: `${novemberAt}T12:00:00.000Z`,
     week: 11,
   });
   assert.equal(classAll.ok, true);
@@ -1319,6 +1327,7 @@ test("service — getControlPlanning : liste = Mes cours, placements toujours ca
     teacherId: REPLACEMENT_ID,
     classroomId: roomMa2a.id,
     todayIso: novemberAt,
+    at: `${novemberAt}T12:00:00.000Z`,
     week: 14,
   });
   assert.equal(december.ok, true);
@@ -1331,6 +1340,7 @@ test("service — getControlPlanning : liste = Mes cours, placements toujours ca
     teacherId: "admin-sans-tca",
     classroomId: roomMa2b.id,
     todayIso: TODAY,
+    at: `${TODAY}T12:00:00.000Z`,
     week: 11,
   });
   assert.equal(admin.ok, false);
@@ -1352,6 +1362,7 @@ test("service — getControlPlanning : liste = Mes cours, placements toujours ca
       schoolYearId: archivedYear.id,
       classroomId: roomMa2b.id,
       todayIso: TODAY,
+      at: `${TODAY}T12:00:00.000Z`,
       week: 11,
     },
   );
