@@ -1,3 +1,4 @@
+import { runtimeClassroomIdForSchoolClass } from "../agenda-bridge/ids.ts";
 import type { ClassroomCatalog } from "../classes/queries.ts";
 import {
   getClassroomById,
@@ -78,6 +79,11 @@ export function resolveNotebookClassroomId(
   if (key) {
     const byName = runtimeClassrooms.find((entry) => compactClassCodeKey(entry.name) === key);
     if (byName) return byName.id;
+  }
+
+  const schoolClassKey = schoolClassId?.trim() || "";
+  if (schoolClassKey) {
+    return runtimeClassroomIdForSchoolClass(schoolClassKey);
   }
 
   return resolveCatalogClassroomId(classSetup as TeacherClassSetup, catalog);

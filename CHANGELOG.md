@@ -2,6 +2,26 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.52.2] — Lien AnnualCourse → Carnet pour les publications élèves
+
+Le Carnet autorise la publication élèves dès qu’un **AnnualCourse attribué** est ouvert. Un Subject/runtime n’est plus une condition fonctionnelle : c’est seulement un adaptateur technique déterministe.
+
+### Corrigé
+
+- MECAUTO3A / MECAUTO3B · CP Léger Injection, dépollution : **Publication élèves → Modifier** n’est plus bloqué faute de matière runtime.
+- Le droit de publier vient de Teacher → TCA active → AnnualCourse → SchoolClass (année ACTIVE, cours non archivé, classe opérationnelle).
+- Plus de message « Aucune branche enseignée trouvée pour publier. » lorsqu’un vrai cours annuel est ouvert.
+- `POST /api/teacher/notebook-publications` vérifie la session, l’attribution, l’année et la cohérence de classe. Un `annualCourseId` forgé est refusé.
+- Les nouvelles publications Carnet portent `annualCourseId` + `schoolYearId`, sans `courseSessionKey` (restent `isCarnetOwnedPublication`).
+
+### Conservé
+
+Contrôles, Notes prof, éditeur riche PR #91, publications structurées CourseSession, anciennes publications `subjectId` seules, aucune migration SQL.
+
+### Migration
+
+Aucune.
+
 ## [2.52.1] — Correction des affectations et matières dans Contrôles
 
 L’écran enseignant **Contrôles** évalue les affectations à l’instant courant et n’affiche que les matières réellement attribuées au professeur connecté.

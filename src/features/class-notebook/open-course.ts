@@ -45,15 +45,16 @@ export function filterNotebookItemsForSubject(
     classroomId: string;
     teacherId: string;
     subjectId: string | null;
+    annualCourseId?: string | null;
     restrictToSubject: boolean;
   },
 ): PrototypeAgendaItem[] {
   return items.filter((item) => {
     if (item.classroomId !== options.classroomId) return false;
     if (item.authorTeacherId !== options.teacherId) return false;
-    if (options.restrictToSubject) {
-      return Boolean(options.subjectId) && item.subjectId === options.subjectId;
-    }
-    return true;
+    if (!options.restrictToSubject) return true;
+    const annual = options.annualCourseId?.trim() || "";
+    if (annual && item.annualCourseId === annual) return true;
+    return Boolean(options.subjectId) && item.subjectId === options.subjectId;
   });
 }

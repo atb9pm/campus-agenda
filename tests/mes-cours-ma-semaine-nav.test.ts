@@ -172,7 +172,7 @@ function subjectFor(course: TeacherCourseWorkspaceEntry): string {
 }
 
 test("PR80 — version 2.44.1 sans nouvelle migration SQL", () => {
-  assert.equal(APP_VERSION, "2.52.1");
+  assert.equal(APP_VERSION, "2.52.2");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0028_school_week_kind_nullable.sql");
 });
 
@@ -424,7 +424,8 @@ test("sources — page.tsx ouvre le carnet avec le cours, plus le déroulement",
   assert.match(page, /onOpenCourse=\{openCourseInWeek\}/);
   assert.match(page, /resolveNotebookSubjectId/);
   assert.match(page, /strict: Boolean\(openNotebookCourse\)/);
-  assert.match(page, /notebookUnlinkedCourseReason/);
+  assert.match(page, /createNotebookPublicationApi/);
+  assert.match(page, /workspaceAllowsNotebookPublish/);
   assert.match(page, /filterNotebookItemsForSubject/);
   assert.match(page, /restrictToSubject: Boolean\(openNotebookCourse\)/);
   assert.match(page, /onOpenClass=\{openClassNotebook\}/);

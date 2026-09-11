@@ -1,10 +1,12 @@
 import { isStructuredAgendaPublication, structuredAgendaPatchGuard } from "@campus/features/agenda/index.ts";
+import { authorizeNotebookOwnedItemMutation } from "@campus/features/class-notebook";
 import {
   assertAgendaItemMutable,
   assertAgendaClassMutableForItem,
   assertAgendaPublicationBranchAllowed,
   assertValidAgendaScheduleTarget,
   forbiddenResponse,
+  getNotebookPublicationDeps,
   jsonResponse,
   requireTeacherSession,
   authorizeTeacherAgendaPublish,
@@ -43,6 +45,29 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (archivedBlock) return archivedBlock;
   const classBlock = await assertAgendaClassMutableForItem(existing);
   if (classBlock) return classBlock;
+
+  if (existing) {
+    const notebookOwned = await authorizeNotebookOwnedItemMutation(await getNotebookPublicationDeps(), {
+      teacherId: auth.session!.teacherId,
+      item: existing,
+    });
+    if (notebookOwned) {
+      if (!notebookOwned.ok) {
+        return jsonResponse({ ok: false, reason: notebookOwned.reason }, { status: notebookOwned.status });
+      }
+      const result = await auth.store!.updateAgendaItem(itemId, auth.session!.teacherId, {
+        title: body.title,
+        detail: body.detail,
+        schoolWeekNumber: body.schoolWeekNumber,
+        day: body.day,
+        hour: body.hour,
+      });
+      if (!result.ok) {
+        return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
+      }
+      return jsonResponse({ ok: true, item: result.item });
+    }
+  }
 
   if (existing && isStructuredAgendaPublication(existing)) {
     const guard = structuredAgendaPatchGuard(existing, body as Record<string, unknown>);

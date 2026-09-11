@@ -47,6 +47,8 @@ import type { AgendaItemType } from "@campus/types/agenda";
 import {
   changeTeacherPasswordApi,
   createAgendaItemApi,
+  createNotebookPublicationApi,
+  ensureNotebookRuntimeApi,
   ControlCoordinationRequiredError,
   deleteAgendaItemApi,
   fetchAgendaItems,
@@ -90,13 +92,15 @@ import {
   clearNotesFromBrowser,
   createEmptyNotesDocument,
   filterNotebookItemsForSubject,
+  implicitNotebookPublishCourse,
   loadNotesFromBrowser,
   notebookContextFromCourse,
+  notebookPublishBlockedReason,
   openCourseInWeekTarget,
   peekNotesFromBrowser,
-  notebookUnlinkedCourseReason,
   resolveNotebookClassroomId,
   resolveNotebookSubjectId,
+  workspaceAllowsNotebookPublish,
   weekdayToCourseDayIndex,
   cloneRichDoc,
   composeWeekPublicationDoc,
@@ -288,6 +292,7 @@ export default function Home() {
   const [classNotesReady, setClassNotesReady] = useState(false);
   /** Évite d'écrire sur le serveur juste après un chargement / une migration. */
   const skipClassNotesSaveRef = useRef(false);
+  const loadedAgendaClassroomIdsRef = useRef<Set<string>>(new Set());
 
   async function applyTeacherSession(session: ApiTeacherSession) {
     // Mot de passe provisoire : rien d'autre n'est accessible avant le changement.
@@ -319,6 +324,7 @@ export default function Home() {
     }
     const loadedItems = await loadTeacherAgendaItems(classroomIds);
     setItems(loadedItems);
+    loadedAgendaClassroomIdsRef.current = new Set(classroomIds);
     if (classroomIds.length) {
       setSelectedClassroomId((current) => (classroomIds.includes(current) ? current : classroomIds[0]));
     }
@@ -656,25 +662,54 @@ export default function Home() {
       runtimeClassrooms,
     ],
   );
+  const implicitNotebookCourse = useMemo(
+    () => implicitNotebookPublishCourse(teacherCourses, openNotebookClass?.id),
+    [openNotebookClass, teacherCourses],
+  );
+  const notebookPublishAnnualCourseId =
+    openNotebookCourse?.annualCourseId ?? implicitNotebookCourse?.annualCourseId ?? null;
   const notebookItems = useMemo(() => {
     if (!notebookClassroomId) return [];
     return filterNotebookItemsForSubject(items, {
       classroomId: notebookClassroomId,
       teacherId: currentTeacherId,
       subjectId: notebookSubjectId,
+      annualCourseId: openNotebookCourse?.annualCourseId ?? null,
       restrictToSubject: Boolean(openNotebookCourse),
     });
   }, [currentTeacherId, items, notebookClassroomId, notebookSubjectId, openNotebookCourse]);
-  const notebookCanPublish = Boolean(notebookClassroomId && notebookSubjectId);
-  const notebookBlockedReason = !openNotebookClass
-    ? undefined
-    : !notebookClassroomId
-      ? "Cette classe n'est pas reliée au catalogue — publications élèves indisponibles."
-      : !notebookSubjectId
-        ? openNotebookCourse
-          ? notebookUnlinkedCourseReason(openNotebookCourse.branchLabel)
-          : "Aucune branche enseignée trouvée pour publier."
-        : undefined;
+  const notebookCanPublish = notebookPublishAnnualCourseId
+    ? workspaceAllowsNotebookPublish(teacherCourses, notebookPublishAnnualCourseId)
+    : Boolean(notebookClassroomId && notebookSubjectId);
+  const notebookBlockedReason = notebookPublishBlockedReason({
+    hasOpenClass: Boolean(openNotebookClass),
+    annualCourseId: notebookPublishAnnualCourseId,
+    assignedToCourse: notebookCanPublish,
+    classroomId: notebookClassroomId,
+    subjectId: notebookSubjectId,
+  });
+
+  useEffect(() => {
+    if (!teacherAuthenticated || !notebookClassroomId) return;
+    if (loadedAgendaClassroomIdsRef.current.has(notebookClassroomId)) return;
+    loadedAgendaClassroomIdsRef.current.add(notebookClassroomId);
+    let cancelled = false;
+    void fetchAgendaItems(notebookClassroomId)
+      .then((batch) => {
+        if (cancelled) return;
+        setItems((previous) => {
+          const merged = new Map(previous.map((item) => [item.id, item]));
+          for (const item of batch) merged.set(item.id, item);
+          return [...merged.values()].sort((left, right) => left.id - right.id);
+        });
+      })
+      .catch(() => {
+        loadedAgendaClassroomIdsRef.current.delete(notebookClassroomId);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [notebookClassroomId, teacherAuthenticated]);
 
   const studentAutoCourseDay = useMemo(() => {
     if (!schoolWeeksMemo.length) return null;
@@ -1007,24 +1042,37 @@ export default function Home() {
   }
 
   async function notebookCreatePublication(schoolWeekNumber: number, text: string) {
-    if (!notebookClassroomId || !notebookSubjectId || !openNotebookClass) return;
-    const created = await createAgendaItemApi({
-      classroomId: notebookClassroomId,
-      subjectId: notebookSubjectId,
-      day: weekdayToCourseDayIndex(openNotebookClass.dayOfWeek),
-      hour: 8,
-      weekOffset: 0,
-      schoolWeekNumber,
-      type: "HOMEWORK",
-      title: text.trim(),
-      detail: "",
-    });
+    if (!openNotebookClass) return;
+    const created = notebookPublishAnnualCourseId
+      ? await createNotebookPublicationApi({
+          annualCourseId: notebookPublishAnnualCourseId,
+          schoolWeekNumber,
+          day: weekdayToCourseDayIndex(openNotebookClass.dayOfWeek),
+          type: "HOMEWORK",
+          title: text.trim(),
+          detail: "",
+        })
+      : notebookClassroomId && notebookSubjectId
+        ? await createAgendaItemApi({
+            classroomId: notebookClassroomId,
+            subjectId: notebookSubjectId,
+            day: weekdayToCourseDayIndex(openNotebookClass.dayOfWeek),
+            hour: 8,
+            weekOffset: 0,
+            schoolWeekNumber,
+            type: "HOMEWORK",
+            title: text.trim(),
+            detail: "",
+          })
+        : null;
+    if (!created) return;
     setItems((previous) => upsertAgendaItem(previous, created));
     showNotice("Publication ajoutée.");
   }
 
   async function notebookSaveWeekPublication(schoolWeekNumber: number, doc: CampusRichDoc) {
-    if (!notebookClassroomId || !notebookSubjectId || !openNotebookClass) return;
+    if (!openNotebookClass) return;
+    if (!notebookPublishAnnualCourseId && (!notebookClassroomId || !notebookSubjectId)) return;
     const weekItems = notebookItems.filter((item) => item.schoolWeekNumber === schoolWeekNumber);
     const plan = planCarnetWeekPublicationSave(weekItems, doc);
 
@@ -1044,7 +1092,17 @@ export default function Home() {
         await deleteAgendaItemApi(extraId);
         setItems((previous) => previous.filter((entry) => entry.id !== extraId));
       }
-    } else {
+    } else if (notebookPublishAnnualCourseId) {
+      const created = await createNotebookPublicationApi({
+        annualCourseId: notebookPublishAnnualCourseId,
+        schoolWeekNumber,
+        day: weekdayToCourseDayIndex(openNotebookClass.dayOfWeek),
+        type: "HOMEWORK",
+        title: plan.payload.title,
+        detail: plan.payload.detail,
+      });
+      setItems((previous) => upsertAgendaItem(previous, created));
+    } else if (notebookClassroomId && notebookSubjectId) {
       const created = await createAgendaItemApi({
         classroomId: notebookClassroomId,
         subjectId: notebookSubjectId,
@@ -1081,25 +1139,32 @@ export default function Home() {
   }
 
   async function notebookSaveControl(input: { schoolWeekNumber: number; day: number; title: string }) {
-    if (!notebookClassroomId || !notebookSubjectId) return;
-    const alert = evaluateThirdTestAlert(items, catalogFromRuntime(runtimeClassrooms), {
-      classroomId: notebookClassroomId,
-      type: "TEST",
-      courseDay: { schoolWeekNumber: input.schoolWeekNumber, dayIndex: input.day },
-    });
-    if (alert.triggered) {
-      setControlAlert(alert);
-      setPendingNotebookControl({
-        classroomId: notebookClassroomId,
-        subjectId: notebookSubjectId,
-        ...input,
-      });
-      return;
-    }
+    let classroomId = notebookClassroomId;
+    let subjectId = notebookSubjectId;
     try {
+      if (notebookPublishAnnualCourseId) {
+        const ensured = await ensureNotebookRuntimeApi(notebookPublishAnnualCourseId);
+        classroomId = ensured.classroomId;
+        subjectId = ensured.subjectId;
+      }
+      if (!classroomId || !subjectId) return;
+      const alert = evaluateThirdTestAlert(items, catalogFromRuntime(runtimeClassrooms), {
+        classroomId,
+        type: "TEST",
+        courseDay: { schoolWeekNumber: input.schoolWeekNumber, dayIndex: input.day },
+      });
+      if (alert.triggered) {
+        setControlAlert(alert);
+        setPendingNotebookControl({
+          classroomId,
+          subjectId,
+          ...input,
+        });
+        return;
+      }
       await performNotebookControl({
-        classroomId: notebookClassroomId,
-        subjectId: notebookSubjectId,
+        classroomId,
+        subjectId,
         ...input,
       });
     } catch (error) {
@@ -1114,11 +1179,13 @@ export default function Home() {
             teacherName: entry.teacherName,
           })),
         });
-        setPendingNotebookControl({
-          classroomId: notebookClassroomId,
-          subjectId: notebookSubjectId,
-          ...input,
-        });
+        if (classroomId && subjectId) {
+          setPendingNotebookControl({
+            classroomId,
+            subjectId,
+            ...input,
+          });
+        }
         return;
       }
       showNotice(error instanceof Error ? error.message : "Publication impossible.");

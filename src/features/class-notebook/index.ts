@@ -16,6 +16,35 @@ export {
   type NotebookCourseContext,
 } from "./open-course.ts";
 export {
+  NOTEBOOK_PUBLISH_ARCHIVED,
+  NOTEBOOK_PUBLISH_CLASS_UNAVAILABLE,
+  NOTEBOOK_PUBLISH_COURSE_MISSING,
+  NOTEBOOK_PUBLISH_ENDED,
+  NOTEBOOK_PUBLISH_FUTURE,
+  NOTEBOOK_PUBLISH_NOT_ASSIGNED,
+  NOTEBOOK_PUBLISH_YEAR_INACTIVE,
+  evaluateNotebookPublishAccess,
+  implicitNotebookPublishCourse,
+  notebookPublishBlockedReason,
+  workspaceAllowsNotebookPublish,
+  type NotebookPublishAccess,
+} from "./publish-access.ts";
+export {
+  NOTEBOOK_CONTEXT_MISSING_REASON,
+  NOTEBOOK_PUBLICATION_INVALID_REASON,
+  NOTEBOOK_PUBLICATION_TITLE_REQUIRED,
+  NOTEBOOK_PUBLICATION_TYPES,
+  authorizeNotebookOwnedItemMutation,
+  createNotebookPublication,
+  isNotebookPublicationType,
+  notebookPublicationFromBody,
+  resolveNotebookPublishContext,
+  type NotebookPublicationDeps,
+  type NotebookPublicationType,
+  type NotebookPublishResult,
+  type ResolvedNotebookPublishContext,
+} from "./notebook-publication-service.ts";
+export {
   appendWeekNote,
   classNotesStorageKey,
   clearNotesFromBrowser,

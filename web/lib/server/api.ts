@@ -16,6 +16,7 @@ import { validateAgendaScheduleTarget } from "@campus/features/agenda/schedule-t
 import type { AnnualCourseServiceDeps } from "@campus/features/annual-courses/index.ts";
 import type { CourseScheduleServiceDeps } from "@campus/features/course-schedule/index.ts";
 import type { CourseTimelineServiceDeps } from "@campus/features/course-timeline/index.ts";
+import type { NotebookPublicationDeps } from "@campus/features/class-notebook/index.ts";
 import type { StructuredPublishDeps } from "@campus/features/course-publications/index.ts";
 import {
   assignmentInstantForSessionDate,
@@ -133,6 +134,17 @@ export async function getAnnualCourseServiceDeps(): Promise<AnnualCourseServiceD
     getAgendaStore(),
   ]);
   return { courses, catalog, years, teachers, notes, schedules, agenda };
+}
+
+export async function getNotebookPublicationDeps(): Promise<NotebookPublicationDeps> {
+  const [courses, catalog, years, adapters, agenda] = await Promise.all([
+    getAnnualCourseStore(),
+    getSchoolCatalogStore(),
+    getSchoolYearStore(),
+    getRuntimeAgendaAdapterStore(),
+    getAgendaStore(),
+  ]);
+  return { courses, catalog, years, adapters, agenda };
 }
 
 export async function getStructuredPublishDeps(): Promise<StructuredPublishDeps> {

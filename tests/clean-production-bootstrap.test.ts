@@ -112,7 +112,7 @@ async function bootstrapEmptyProduction(db: SqlDatabase) {
 }
 
 test("version 2.48.0 — bootstrap production sans migration destructive", async () => {
-  assert.equal(APP_VERSION, "2.52.1");
+  assert.equal(APP_VERSION, "2.52.2");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0028_school_week_kind_nullable.sql");
   assert.equal(SQL_MIGRATION_FILES.includes("0027_delete_demo_data.sql" as (typeof SQL_MIGRATION_FILES)[number]), false);
 
