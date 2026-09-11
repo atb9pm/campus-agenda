@@ -345,6 +345,62 @@ test("phase 2.0 — E2E calendrier scolaire et liste admin", async () => {
   assert.ok(Array.isArray(years.years));
 });
 
+test("2.51.0 — E2E plan complet de l’année de travail", async () => {
+  const adminCookie = await loginAdmin();
+  const yearsResponse = await request("/api/admin/school-year", {
+    headers: { cookie: adminCookie },
+  });
+  assert.equal(yearsResponse.status, 200);
+  const years = await yearsResponse.json();
+  const active = (years.years ?? []).find((year) => year.status === "active");
+  assert.ok(active, "année active requise");
+
+  const planResponse = await request(`/api/admin/school-year/active-plan?schoolYearId=${active.id}`, {
+    headers: { cookie: adminCookie },
+  });
+  assert.equal(planResponse.status, 200);
+  const plan = await planResponse.json();
+  assert.equal(plan.ok, true);
+  assert.equal(plan.year.status, "active");
+  assert.equal(plan.weeks.length, 38);
+  assert.ok(typeof plan.classDayCount === "number");
+  assert.ok(Array.isArray(plan.holidays));
+
+  const originalKind = plan.weeks[11]?.kind;
+  const flipped = originalKind === "B" ? "A" : "B";
+  const patchedWeeks = plan.weeks.map((week) =>
+    week.number === 12 ? { ...week, kind: flipped } : week,
+  );
+  const saveResponse = await request("/api/admin/school-year/active-plan", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", cookie: adminCookie },
+    body: JSON.stringify({ schoolYearId: active.id, weeks: patchedWeeks }),
+  });
+  assert.equal(saveResponse.status, 200, await saveResponse.clone().text());
+  const saved = await saveResponse.json();
+  assert.equal(saved.weeks[11]?.kind, flipped);
+  assert.equal(saved.weeks[12]?.kind, plan.weeks[12]?.kind);
+
+  const reloadResponse = await request(`/api/admin/school-year/active-plan?schoolYearId=${active.id}`, {
+    headers: { cookie: adminCookie },
+  });
+  const reloaded = await reloadResponse.json();
+  assert.equal(reloaded.weeks[11]?.kind, flipped);
+  assert.equal(reloaded.weeks[12]?.kind, plan.weeks[12]?.kind);
+
+  const restoreResponse = await request("/api/admin/school-year/active-plan", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", cookie: adminCookie },
+    body: JSON.stringify({ schoolYearId: active.id, weeks: plan.weeks }),
+  });
+  assert.equal(restoreResponse.status, 200);
+
+  const missing = await request("/api/admin/school-year/active-plan?schoolYearId=year-absente", {
+    headers: { cookie: adminCookie },
+  });
+  assert.equal(missing.status, 404);
+});
+
 test("2.26.0 — matrice admin : anonyme 401, enseignant 403, admin 200", async () => {
   const adminCookie = await loginAdmin();
   const teacherCookie = await loginTeacher("teacher-demo-martin");

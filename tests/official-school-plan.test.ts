@@ -252,7 +252,7 @@ function normalizeEventLabel(label: string): string {
 }
 
 test("version 2.49.0 — semaines de cours, kind nullable", () => {
-  assert.equal(APP_VERSION, "2.50.0");
+  assert.equal(APP_VERSION, "2.51.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0028_school_week_kind_nullable.sql");
 });
 
@@ -325,7 +325,7 @@ test("bornes soir → matin : dates officielles conservées, jours limites exclu
   assertSoirMatinClosedDays(holidayDates(exceptions));
 });
 
-test("C/D/E — import DRAFT sans semaines A/B, 2026-2027 reste ACTIVE", async () => {
+test("C/D/E — import DRAFT avec A/B pédagogiques, 2026-2027 reste ACTIVE", async () => {
   const { db, store } = await sqliteStore();
   const active = await store.seedDefaultActiveYearIfEmpty();
   assert.ok(active);
@@ -343,7 +343,9 @@ test("C/D/E — import DRAFT sans semaines A/B, 2026-2027 reste ACTIVE", async (
   assert.equal(imported.year.startsOn, "2028-08-21");
   assert.equal(imported.year.endsOn, "2029-06-22");
   assert.equal(imported.year.weeks.length, 38);
-  assert.ok(imported.year.weeks.every((week) => week.kind === null));
+  assert.ok(imported.year.weeks.every((week) => week.kind === "A" || week.kind === "B"));
+  assert.equal(imported.year.weeks[0]?.kind, "A");
+  assert.equal(imported.year.weeks[37]?.kind, "B");
   assert.deepEqual(
     imported.year.weeks.map((week) => week.number),
     Array.from({ length: 38 }, (_, index) => index + 1),
@@ -441,7 +443,9 @@ test("I — année déjà existante : pas de doublon", async () => {
   assert.equal(replaced.replaced, true);
   assert.equal(replaced.year.status, "draft");
   assert.equal(replaced.year.weeks.length, 38);
-  assert.ok(replaced.year.weeks.every((week) => week.kind === null));
+  assert.ok(replaced.year.weeks.every((week) => week.kind === "A" || week.kind === "B"));
+  assert.equal(replaced.year.weeks[0]?.kind, "A");
+  assert.equal(replaced.year.weeks[37]?.kind, "B");
   assert.equal((await store.listSchoolYears()).filter((year) => year.label === "2028-2029").length, 1);
   db.close();
 });

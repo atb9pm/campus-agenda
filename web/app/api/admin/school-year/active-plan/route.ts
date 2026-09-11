@@ -1,43 +1,20 @@
 import {
-  buildSchoolDayPlan,
-  checkWeekPlanConsistency,
-  countClassDays,
-  listHolidayDays,
-  valaisHolidaysForSchoolYear,
-} from "@campus/features/school-days/index.ts";
+  assertCalendarYearWritable,
+  buildSchoolYearCalendarPlan,
+  resolveSchoolYearForPlan,
+} from "@campus/features/school-year/working-year-plan.ts";
 import type { SchoolWeekEntry } from "@campus/features/school-year/types.ts";
 import { getSchoolYearStore } from "@campus/lib/persistence/store-factory.ts";
 import { jsonResponse, requireAdminSession } from "../../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../../lib/server/observability.ts";
 
-async function buildPayload() {
-  const store = await getSchoolYearStore();
-  const active = await store.getActiveSchoolYear();
-  if (!active) return null;
-
-  const exceptions = await store.listDayExceptions(active.id);
-  const holidays = valaisHolidaysForSchoolYear(active.label);
-  const rows = buildSchoolDayPlan(active.weeks, holidays, exceptions);
-
-  return {
-    year: { id: active.id, label: active.label, status: active.status },
-    weeks: active.weeks,
-    rows,
-    warnings: checkWeekPlanConsistency(active.weeks),
-    classDayCount: countClassDays(rows),
-    holidays: listHolidayDays(rows),
-  };
-}
-
-async function handleGet(request: Request) {
-  const auth = await requireAdminSession(request);
-  if ("error" in auth && auth.error) return auth.error;
-
-  const payload = await buildPayload();
-  if (!payload) {
-    return jsonResponse({ ok: false, reason: "Aucune année scolaire active." }, { status: 404 });
+function requestedSchoolYearId(request: Request, body?: { schoolYearId?: unknown }): string | null {
+  if (typeof body?.schoolYearId === "string" && body.schoolYearId.trim()) {
+    return body.schoolYearId.trim();
   }
-  return jsonResponse({ ok: true, ...payload });
+  const url = new URL(request.url);
+  const fromQuery = url.searchParams.get("schoolYearId")?.trim();
+  return fromQuery || null;
 }
 
 function readWeeks(input: unknown): SchoolWeekEntry[] | null {
@@ -55,30 +32,53 @@ function readWeeks(input: unknown): SchoolWeekEntry[] | null {
   return weeks;
 }
 
+async function handleGet(request: Request) {
+  const auth = await requireAdminSession(request);
+  if ("error" in auth && auth.error) return auth.error;
+
+  const store = await getSchoolYearStore();
+  const year = await resolveSchoolYearForPlan(store, requestedSchoolYearId(request));
+  if (!year) {
+    return jsonResponse({ ok: false, reason: "Année scolaire introuvable." }, { status: 404 });
+  }
+
+  const payload = await buildSchoolYearCalendarPlan(store, year);
+  return jsonResponse({ ok: true, ...payload });
+}
+
 async function handlePatch(request: Request) {
   const auth = await requireAdminSession(request);
   if ("error" in auth && auth.error) return auth.error;
 
-  const body = (await request.json()) as { weeks?: unknown };
+  const body = (await request.json()) as { weeks?: unknown; schoolYearId?: unknown };
   const weeks = readWeeks(body.weeks);
   if (!weeks) {
     return jsonResponse({ ok: false, reason: "Plan des semaines invalide." }, { status: 400 });
   }
 
   const store = await getSchoolYearStore();
-  const active = await store.getActiveSchoolYear();
-  if (!active) {
-    return jsonResponse({ ok: false, reason: "Aucune année scolaire active." }, { status: 404 });
+  const year = await resolveSchoolYearForPlan(store, requestedSchoolYearId(request, body));
+  if (!year) {
+    return jsonResponse({ ok: false, reason: "Année scolaire introuvable." }, { status: 404 });
+  }
+
+  const writable = assertCalendarYearWritable(year);
+  if (!writable.ok) {
+    return jsonResponse({ ok: false, reason: writable.reason }, { status: 400 });
   }
 
   try {
-    await store.replaceSchoolYearWeeks(active.id, weeks);
+    await store.replaceSchoolYearWeeks(year.id, weeks);
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Enregistrement impossible.";
     return jsonResponse({ ok: false, reason }, { status: 400 });
   }
 
-  const payload = await buildPayload();
+  const updated = await store.getSchoolYearById(year.id);
+  if (!updated) {
+    return jsonResponse({ ok: false, reason: "Année scolaire introuvable." }, { status: 404 });
+  }
+  const payload = await buildSchoolYearCalendarPlan(store, updated);
   return jsonResponse({ ok: true, ...payload });
 }
 

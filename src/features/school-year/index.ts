@@ -72,3 +72,21 @@ export type {
   GenerateOfficialCourseWeeksInput,
   GenerateOfficialCourseWeeksResult,
 } from "./official-course-weeks.ts";
+export {
+  applyDefaultPedagogicalWeekKinds,
+  pedagogicalWeekKind,
+  preserveExistingPedagogicalWeekKinds,
+  schoolWeeksHaveLocalChanges,
+  weeksNeedKindInitialization,
+} from "./pedagogical-week-kinds.ts";
+export {
+  ARCHIVED_YEAR_MUTATION_REASON as ARCHIVED_YEAR_CALENDAR_MUTATION_REASON,
+  assertCalendarYearWritable,
+  buildSchoolYearCalendarPlan,
+  ensurePedagogicalWeekKinds,
+  resolveSchoolYearForPlan,
+} from "./working-year-plan.ts";
+export type {
+  SchoolYearCalendarPlanPayload,
+  SchoolYearPlanStore,
+} from "./working-year-plan.ts";

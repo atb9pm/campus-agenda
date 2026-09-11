@@ -1,5 +1,6 @@
 import type { SchoolDayException } from "../school-days/types.ts";
 import { addIsoDays } from "./official-plan-logic.ts";
+import { pedagogicalWeekKind } from "./pedagogical-week-kinds.ts";
 import type { SchoolWeekEntry } from "./types.ts";
 
 export function mondayOfContainingWeek(isoDate: string): string {
@@ -39,7 +40,8 @@ export interface GenerateOfficialCourseWeeksResult {
 /**
  * Semaines de cours lundi→dimanche : une semaine est retenue dès qu'un jour
  * lundi–vendredi compris dans l'année n'est pas holiday.
- * `kind` est toujours `null` (pas d'alternance A/B inventée).
+ * Les semaines entièrement fermées n'ont pas de numéro et n'avancent pas A/B.
+ * Type : numéro pédagogique impair = A, pair = B.
  */
 export function generateOfficialCourseWeeks(
   input: GenerateOfficialCourseWeeksInput,
@@ -70,9 +72,10 @@ export function generateOfficialCourseWeeks(
 
     const hasOpenDay = schoolDaysInYear.some((date) => !holidays.has(date));
     if (hasOpenDay) {
+      const number = weeks.length + 1;
       weeks.push({
-        number: weeks.length + 1,
-        kind: null,
+        number,
+        kind: pedagogicalWeekKind(number),
         monday: cursor,
       });
     } else {

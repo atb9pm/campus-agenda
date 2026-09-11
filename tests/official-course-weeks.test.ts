@@ -61,10 +61,10 @@ function weekHasOpenSchoolDay(
 }
 
 test("version 2.49.0", () => {
-  assert.equal(APP_VERSION, "2.50.0");
+  assert.equal(APP_VERSION, "2.51.0");
 });
 
-test("2028-2029 : exactement 38 semaines kind null, 1→38", async () => {
+test("2028-2029 : exactement 38 semaines A/B pédagogiques, 1→38", async () => {
   const { db, store } = await sqliteStore();
   const active = await store.seedDefaultActiveYearIfEmpty();
   const parsed = await parseOfficialPlanPdf(new Uint8Array(readFileSync(fixturePath)));
@@ -81,7 +81,9 @@ test("2028-2029 : exactement 38 semaines kind null, 1→38", async () => {
     imported.year.weeks.map((week) => week.number),
     Array.from({ length: 38 }, (_, index) => index + 1),
   );
-  assert.ok(imported.year.weeks.every((week) => week.kind === null));
+  assert.ok(imported.year.weeks.every((week) => week.kind === "A" || week.kind === "B"));
+  assert.equal(imported.year.weeks[0]?.kind, "A");
+  assert.equal(imported.year.weeks[37]?.kind, "B");
   assert.equal(imported.year.weeks[0]?.monday, "2028-08-21");
   assert.equal(imported.year.weeks[37]?.monday, "2029-06-18");
 
@@ -212,7 +214,7 @@ test("replaceDraft recalcule 38 semaines sans duplication", async () => {
   db.close();
 });
 
-test("multi-années : ACTIVE A/B isolée du DRAFT kind null", async () => {
+test("multi-années : ACTIVE A/B isolée du DRAFT A/B généré", async () => {
   const { db, store } = await sqliteStore();
   const active = await store.seedDefaultActiveYearIfEmpty();
   const parsed = await parseOfficialPlanPdf(new Uint8Array(readFileSync(fixturePath)));
@@ -228,7 +230,9 @@ test("multi-années : ACTIVE A/B isolée du DRAFT kind null", async () => {
   assert.equal(activeWeeks.length, 38);
   assert.equal(draftWeeks.length, 38);
   assert.ok(activeWeeks.every((week) => week.kind === "A" || week.kind === "B"));
-  assert.ok(draftWeeks.every((week) => week.kind === null));
+  assert.ok(draftWeeks.every((week) => week.kind === "A" || week.kind === "B"));
+  assert.equal(draftWeeks[0]?.kind, "A");
+  assert.equal(draftWeeks[37]?.kind, "B");
   assert.ok(activeWeeks.every((week) => week.monday.startsWith("2026") || week.monday.startsWith("2027")));
   assert.ok(draftWeeks.every((week) => week.monday.startsWith("2028") || week.monday.startsWith("2029")));
   db.close();
@@ -272,8 +276,8 @@ test("backup v4 : week_kind null round-trip et A/B historique", async () => {
   const dump = await dumpCampusTables(db);
   const nullKind = dump.school_weeks?.filter((row) => row.week_kind == null) ?? [];
   const abKind = dump.school_weeks?.filter((row) => row.week_kind === "A" || row.week_kind === "B") ?? [];
-  assert.equal(nullKind.length, 38);
-  assert.equal(abKind.length, 38);
+  assert.equal(nullKind.length, 0);
+  assert.equal(abKind.length, 76);
 
   dump.teachers = [
     {
@@ -294,15 +298,16 @@ test("backup v4 : week_kind null round-trip et A/B historique", async () => {
   const again = await dumpCampusTables(db2);
   const restoredNull = again.school_weeks?.filter((row) => row.week_kind == null) ?? [];
   const restoredAb = again.school_weeks?.filter((row) => row.week_kind === "A" || row.week_kind === "B") ?? [];
-  assert.equal(restoredNull.length, 38);
-  assert.equal(restoredAb.length, 38);
+  assert.equal(restoredNull.length, 0);
+  assert.equal(restoredAb.length, 76);
   assert.deepEqual(canonicalizeCampusDump(again).school_weeks, canonicalizeCampusDump(dump).school_weeks);
 
   const store2 = new SqlSchoolYearStore(db2);
   const years = await store2.listSchoolYears();
   const draft = years.find((year) => year.label === "2028-2029");
   const active = years.find((year) => year.label === "2026-2027");
-  assert.equal((await store2.getSchoolYearById(draft!.id))?.weeks.every((week) => week.kind === null), true);
+  assert.equal((await store2.getSchoolYearById(draft!.id))?.weeks[0]?.kind, "A");
+  assert.equal((await store2.getSchoolYearById(draft!.id))?.weeks[37]?.kind, "B");
   assert.equal((await store2.getSchoolYearById(active!.id))?.weeks[0]?.kind, "A");
   db.close();
   db2.close();

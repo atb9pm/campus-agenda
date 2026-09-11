@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { SCHOOL_WEEK_MONDAYS } from "../../../features/calendar/school-week-dates.ts";
 import { setActiveSchoolWeekEntries } from "../../../features/calendar/active-calendar.ts";
+import { ARCHIVED_YEAR_MUTATION_REASON } from "../../../features/school-catalog/school-year-attachment.ts";
 import type { SchoolDayException } from "../../../features/school-days/types.ts";
 import {
   expandOfficialEventsToExceptions,
@@ -13,6 +14,7 @@ import {
   assertGeneratedWeeksMatchOfficialTotal,
   generateOfficialCourseWeeks,
 } from "../../../features/school-year/official-course-weeks.ts";
+import { preserveExistingPedagogicalWeekKinds } from "../../../features/school-year/pedagogical-week-kinds.ts";
 import { parseSchoolWeekKind } from "../../../features/calendar/types.ts";
 import type {
   OfficialPlanImportOptions,
@@ -138,6 +140,8 @@ export class SqlSchoolYearStore implements SchoolYearStore {
       if (!options.replaceDraft || existing.status !== "draft") {
         throw new Error(schoolYearAlreadyExistsMessage(label));
       }
+      const current = await this.getSchoolYearById(existing.id);
+      const weeks = preserveExistingPedagogicalWeekKinds(generated.weeks, current?.weeks ?? []);
       const statements = [
         {
           sql: `UPDATE school_years
@@ -158,7 +162,7 @@ export class SqlSchoolYearStore implements SchoolYearStore {
          VALUES (?, ?, ?, ?, ?)`,
           values: [existing.id, exception.date, exception.state, exception.label, now],
         })),
-        ...generated.weeks.map((week) => ({
+        ...weeks.map((week) => ({
           sql: "INSERT INTO school_weeks (school_year_id, week_number, week_kind, monday) VALUES (?, ?, ?, ?)",
           values: [existing.id, week.number, week.kind, week.monday],
         })),
@@ -271,6 +275,9 @@ export class SqlSchoolYearStore implements SchoolYearStore {
     if (!target) {
       throw new Error("Année scolaire introuvable.");
     }
+    if (target.status === "archived") {
+      throw new Error(ARCHIVED_YEAR_MUTATION_REASON);
+    }
 
     await this.db.prepare("DELETE FROM school_weeks WHERE school_year_id = ?").bind(id).run();
     await this.insertWeeks(id, [...weeks].sort((left, right) => left.number - right.number));
@@ -302,6 +309,14 @@ export class SqlSchoolYearStore implements SchoolYearStore {
     date: string,
     exception: { state: SchoolDayException["state"]; label: string | null } | null,
   ): Promise<SchoolDayException[]> {
+    const year = await this.getSchoolYearById(schoolYearId);
+    if (!year) {
+      throw new Error("Année scolaire introuvable.");
+    }
+    if (year.status === "archived") {
+      throw new Error(ARCHIVED_YEAR_MUTATION_REASON);
+    }
+
     if (!exception) {
       await this.db
         .prepare("DELETE FROM school_day_exceptions WHERE school_year_id = ? AND day_date = ?")

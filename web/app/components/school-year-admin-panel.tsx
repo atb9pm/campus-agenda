@@ -17,7 +17,6 @@ import { formatPedagogicalWeekLabel } from "@campus/features/school-year/officia
 import { SCHOOL_YEAR_UNCONFIGURED_MESSAGE } from "@campus/features/teacher-workspace";
 import {
   fetchOfficialSchoolCalendar,
-  fetchSchoolCalendar,
   fetchSchoolYears,
   importSchoolYearPdf,
   isOfficialSchoolPlanPreview,
@@ -88,7 +87,6 @@ interface SchoolYearAdminPanelProps {
 export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYearAdminPanelProps) {
   const officialFileId = useId();
   const [years, setYears] = useState<SchoolYearSummary[]>([]);
-  const [activeCalendar, setActiveCalendar] = useState<{ label: string; weeks: SchoolCalendarWeek[] } | null>(null);
   const [workingYearId, setWorkingYearId] = useState<string | null>(null);
   const [workingEvents, setWorkingEvents] = useState<OfficialCalendarEvent[]>([]);
   const [workingWeeks, setWorkingWeeks] = useState<SchoolCalendarWeek[]>([]);
@@ -111,13 +109,8 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
     setLoading(true);
     setError("");
     try {
-      const [yearList, calendar] = await Promise.all([fetchSchoolYears(), fetchSchoolCalendar()]);
+      const yearList = await fetchSchoolYears();
       setYears(yearList);
-      if (calendar.configured && calendar.label) {
-        setActiveCalendar({ label: calendar.label, weeks: calendar.weeks });
-      } else {
-        setActiveCalendar(null);
-      }
       const stored = typeof window === "undefined" ? null : readAdminWorkingYearId(window.localStorage);
       const nextWorkingId = resolveAdminWorkingYearId(yearList, stored);
       setWorkingYearId(nextWorkingId);
@@ -230,7 +223,8 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
         <p>
           Le <strong>plan de scolarité</strong> de l’État du Valais est la source officielle des dates
           (début, fin, vacances, fêtes, interruptions). L’import crée une année en brouillon et génère
-          les semaines de cours, sans activer, sans archiver, et sans inventer d’alternance A/B.
+          les semaines de cours. La première semaine de cours est A, puis l’alternance suit le numéro
+          pédagogique (impair = A, pair = B), sans activer ni archiver l’année en cours.
         </p>
       </div>
 
@@ -340,8 +334,19 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
         </article>
       )}
 
-      {!loading && activeCalendar && workingYear?.status === "active" && workingWeeks.length > 0 && (
-        <ActiveYearPlanPanel onCalendarUpdated={onCalendarUpdated} onNotice={onNotice} />
+      {!loading && workingYear && workingWeeks.length > 0 && (
+        <ActiveYearPlanPanel
+          key={workingYear.id}
+          schoolYearId={workingYear.id}
+          yearStatus={workingYear.status}
+          onCalendarUpdated={(weeks) => {
+            setWorkingWeeks(weeks);
+            if (workingYear.status === "active") {
+              onCalendarUpdated(weeks);
+            }
+          }}
+          onNotice={onNotice}
+        />
       )}
 
       <article className="school-year-card">
@@ -351,8 +356,9 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
         </header>
         <p className="school-year-hint">
           Document de référence : Plan de scolarité — État du Valais. L’import crée une année en
-          brouillon et ses semaines de cours, sans activer, sans archiver l’année en cours, et sans
-          inventer d’alternance A/B.
+          brouillon et ses semaines de cours. L’alternance A/B suit le numéro pédagogique
+          (impair = A, pair = B). Une mise à jour du brouillon conserve les corrections A/B déjà
+          enregistrées sur les mêmes lundis.
         </p>
 
         <div className="school-year-upload">
@@ -459,7 +465,8 @@ function OfficialPlanPreviewCard({
         {preview.totalCourseWeeks != null && (
           <>
             <br />
-            Semaines de cours (contrôle) : {preview.totalCourseWeeks} — aucune alternance A/B n’est inventée.
+            Semaines de cours (contrôle) : {preview.totalCourseWeeks} — alternance A/B selon le
+            numéro pédagogique (impair = A, pair = B).
           </>
         )}
       </p>
