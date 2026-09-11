@@ -24,6 +24,9 @@ import {
 import type { PedagogicalContextRecord, SchoolProfessionRecord } from "@campus/features/school-catalog";
 import type { SchoolBranchRecord, SchoolClassRecord } from "@campus/features/school-catalog";
 import { formatPedagogicalContextLabel } from "@campus/features/school-catalog";
+import { filterBySchoolYearId } from "@campus/features/school-year/admin-working-year.ts";
+import { AdminWorkingYearBanner } from "./admin-working-year-banner.tsx";
+import type { SchoolYearSummary } from "../../lib/api-client.ts";
 import {
   BRANCH_TEACHING_TYPE_LABELS,
   TEACHER_TEACHING_TYPE_LABELS,
@@ -65,6 +68,10 @@ interface PendingAssign {
 
 interface AnnualCoursesAdminPanelProps {
   onNotice: (message: string) => void;
+  workingYear: SchoolYearSummary | null;
+  workingYearId: string | null;
+  schoolYears: SchoolYearSummary[];
+  onWorkingYearChange: (schoolYearId: string) => void;
 }
 
 function teacherLabel(teachers: TeacherSummary[], id: string): string {
@@ -81,7 +88,13 @@ function typeBadge(type: TeachingType | null, kind: "teacher" | "branch"): strin
   return kind === "teacher" ? TEACHER_TEACHING_TYPE_LABELS[type] : BRANCH_TEACHING_TYPE_LABELS[type];
 }
 
-export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelProps) {
+export function AnnualCoursesAdminPanel({
+  onNotice,
+  workingYear,
+  workingYearId,
+  schoolYears,
+  onWorkingYearChange,
+}: AnnualCoursesAdminPanelProps) {
   const [data, setData] = useState<OverviewPayload | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -97,13 +110,14 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
   const [effectiveAt, setEffectiveAt] = useState("");
 
   const refresh = useCallback(async () => {
-    const response = await fetch("/api/admin/annual-courses", { credentials: "include" });
+    const query = workingYearId ? `?schoolYearId=${encodeURIComponent(workingYearId)}` : "";
+    const response = await fetch(`/api/admin/annual-courses${query}`, { credentials: "include" });
     const payload = (await response.json()) as OverviewPayload;
     if (!response.ok || !payload.ok) {
       throw new Error(payload.reason ?? "Chargement des cours annuels impossible.");
     }
     setData(payload);
-  }, []);
+  }, [workingYearId]);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -115,10 +129,14 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
     });
   }, [refresh]);
 
+  const yearReadOnly = workingYear?.status === "archived";
+  const canAssignTeachers = workingYear?.status === "active";
+
   const structuredClasses = useMemo(() => {
     if (!data) return [];
-    return data.classes.filter((entry) => {
-      const year = (data.schoolYears ?? []).find((item) => item.id === entry.schoolYearId) ?? null;
+    const yearClasses = filterBySchoolYearId(data.classes, workingYearId);
+    return yearClasses.filter((entry) => {
+      const year = (data.schoolYears ?? schoolYears).find((item) => item.id === entry.schoolYearId) ?? null;
       const profession = data.professions.find((item) => item.id === entry.professionId) ?? null;
       return isClassEligibleForAssignment({
         isActive: entry.isActive,
@@ -131,7 +149,7 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
         professionArchived: profession?.isArchived,
       });
     });
-  }, [data]);
+  }, [data, schoolYears, workingYearId]);
 
   const currentClass = structuredClasses.find((entry) => entry.id === selectedClassId) ?? structuredClasses[0] ?? null;
 
@@ -183,7 +201,10 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
       contextId,
     });
     await refresh();
-    const latest = await fetch("/api/admin/annual-courses", { credentials: "include" }).then((res) => res.json()) as OverviewPayload;
+    const latest = await fetch(
+      `/api/admin/annual-courses${workingYearId ? `?schoolYearId=${encodeURIComponent(workingYearId)}` : ""}`,
+      { credentials: "include" },
+    ).then((res) => res.json()) as OverviewPayload;
     const created = latest.courses.find(
       (course) =>
         course.schoolYearId === schoolClass.schoolYearId &&
@@ -194,6 +215,22 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
       throw new Error("Ce cours annuel est archivé. Aucune nouvelle attribution n’est possible.");
     }
     return created;
+  }
+
+  async function createCourseForContext(schoolClass: SchoolClassRecord, contextId: string) {
+    setError("");
+    try {
+      await postAction({
+        action: "create",
+        schoolYearId: schoolClass.schoolYearId,
+        classId: schoolClass.id,
+        contextId,
+      });
+      onNotice("Cours annuel créé pour cette année de travail.");
+      await refresh();
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Création du cours impossible.");
+    }
   }
 
   function startAssign(
@@ -342,18 +379,26 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
 
   return (
     <div className="admin-panel-block annual-courses-admin">
+      <AdminWorkingYearBanner
+        years={schoolYears.length > 0 ? schoolYears : data.schoolYears}
+        workingYearId={workingYearId}
+        section="courses"
+        onChange={onWorkingYearChange}
+      />
       <header className="config-section-header">
         <div>
-          <h3>Attributions des cours</h3>
+          <h3>{canAssignTeachers ? "Attributions des cours" : "Cours annuels"}</h3>
           <p>
-            Le cours (année + classe + CTX) porte les données. Les enseignants reçoivent un droit,
-            jamais la propriété. Seul l’administrateur attribue.
+            {canAssignTeachers
+              ? "Le cours (année + classe + CTX) porte les données. Les enseignants reçoivent un droit, jamais la propriété. Seul l’administrateur attribue."
+              : "Préparez les cours annuels de cette année de travail. Les affectations professeurs et les horaires viendront plus tard."}
           </p>
         </div>
       </header>
 
       {error ? <p className="admin-error">{error}</p> : null}
 
+      {canAssignTeachers ? (
       <div className="admin-teacher-toolbar">
         <button type="button" className={view === "class" ? "is-selected" : undefined} onClick={() => setView("class")}>
           Vue par classe
@@ -372,8 +417,9 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
           </label>
         ) : null}
       </div>
+      ) : null}
 
-      {view === "class" ? (
+      {view === "class" || !canAssignTeachers ? (
         <>
           <label className="annual-course-class-select">
             Classe
@@ -397,7 +443,7 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
             </p>
           ) : (
             <p className="admin-loading">
-              Aucune classe structurée (année scolaire + profession + année de formation).
+              Aucune classe structurée pour cette année de travail.
             </p>
           )}
 
@@ -406,8 +452,9 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
               <thead>
                 <tr>
                   <th>Branche</th>
-                  <th>Enseignant(s)</th>
-                  <th>Attribuer</th>
+                  <th>Cours annuel</th>
+                  {canAssignTeachers ? <th>Enseignant(s)</th> : null}
+                  <th>{canAssignTeachers ? "Attribuer" : "Action"}</th>
                 </tr>
               </thead>
               <tbody>
@@ -444,6 +491,14 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
                         <div className="admin-teacher-login-meta">{typeBadge(branch.teachingType, "branch")}</div>
                       </td>
                       <td>
+                        {course ? (
+                          <span className="badge-status is-on">Cours créé</span>
+                        ) : (
+                          <span className="badge-status is-off">Aucun cours</span>
+                        )}
+                      </td>
+                      {canAssignTeachers ? (
+                      <td>
                         {assigned.length === 0 ? (
                           <span className="badge-status is-off">Aucun professeur</span>
                         ) : (
@@ -476,8 +531,10 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
                           </ul>
                         )}
                       </td>
+                      ) : null}
                       <td>
-                        {branchReady ? (
+                        {canAssignTeachers ? (
+                          branchReady ? (
                           candidates.length === 0 ? (
                             <p className="admin-loading">{NO_COMPATIBLE_TEACHER_MESSAGE}</p>
                           ) : (
@@ -501,6 +558,18 @@ export function AnnualCoursesAdminPanel({ onNotice }: AnnualCoursesAdminPanelPro
                           <p className="admin-error">
                             Configurez d’abord le type de cette branche dans le Catalogue des branches.
                           </p>
+                        )
+                        ) : course ? (
+                          <span className="admin-teacher-login-meta">Déjà rattaché à cette année</span>
+                        ) : yearReadOnly ? (
+                          <span className="school-year-hint">Lecture seule</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void createCourseForContext(currentClass, context.id)}
+                          >
+                            Créer le cours
+                          </button>
                         )}
                       </td>
                     </tr>

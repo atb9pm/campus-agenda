@@ -330,6 +330,12 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .school-year-status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
 .school-year-status-grid p { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .school-year-working-select { margin-top: 8px; min-width: 220px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); background: #fff; font-size: 12px; }
+.admin-working-year-banner { margin: 0 0 18px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: #f8fafc; }
+.admin-working-year-banner-grid { display: grid; grid-template-columns: 1fr minmax(220px, 280px); gap: 16px; align-items: start; }
+.admin-working-year-banner h3 { margin: 12px 0 0; color: var(--navy); font-size: 16px; letter-spacing: -.02em; }
+.admin-working-year-banner label { display: grid; gap: 4px; color: #64748b; font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.admin-working-year-banner .school-year-working-select { margin-top: 0; width: 100%; }
+.admin-working-year-banner p { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .school-year-month-groups { display: grid; gap: 14px; margin-top: 12px; }
 .school-year-month-group h4 { margin: 0 0 6px; color: var(--navy); font-size: 12px; }
 .school-year-month-group ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: #52627f; font-size: 11px; }
@@ -1712,6 +1718,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   .modal-row { grid-template-columns: 1fr; }
   .school-year-admin { padding-right: 16px; padding-left: 16px; }
   .school-year-status-grid { grid-template-columns: 1fr; }
+  .admin-working-year-banner-grid { grid-template-columns: 1fr; }
   .config-classes-editor, .config-week-plan, .ma-semaine-week-banner, .ma-semaine-days, .ma-semaine-empty, .ma-semaine-plan-hint, .class-notebook-toolbar, .class-notebook-week-controls, .class-notebook-grid, .class-notebook-warning, .class-notebook-clipboard-hint, .control-planning { margin-right: 16px; margin-left: 16px; }
   .admin-workspace .admin-tabs, .admin-panel-block, .admin-error, .admin-loading, .admin-placeholder { margin-right: 16px; margin-left: 16px; }
   .admin-catalog-list li, .admin-catalog-list.admin-class-list li, .admin-teacher-list li, .admin-teacher-access-list .admin-teacher-card { grid-template-columns: 1fr; }

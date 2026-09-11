@@ -22,7 +22,10 @@ export { detectAndParseSchoolYearPdf } from "./detect-school-year-pdf.ts";
 export type { DetectedSchoolYearPdf } from "./detect-school-year-pdf.ts";
 export {
   ADMIN_WORKING_YEAR_STORAGE_KEY,
+  ADMIN_WORKING_YEAR_BADGE_LABELS,
   formatAdminWorkingYearOption,
+  formatAdminWorkingSectionTitle,
+  filterBySchoolYearId,
   readAdminWorkingYearId,
   resolveAdminWorkingYearId,
   schoolYearStatusesAfterAdminWorkingYearChange,

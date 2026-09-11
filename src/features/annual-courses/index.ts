@@ -14,7 +14,12 @@ export {
   type TeacherCourseAssignmentInput,
   type TypeMismatchWarning,
 } from "./types.ts";
-export { validateAnnualCourseInput, validateAttributionReferential } from "./validation.ts";
+export {
+  validateAnnualCourseInput,
+  validateAttributionReferential,
+  COURSE_CLASS_YEAR_MISMATCH_REASON,
+  DRAFT_YEAR_ASSIGNMENT_REASON,
+} from "./validation.ts";
 export {
   assignmentsOverlap,
   endAssignment,

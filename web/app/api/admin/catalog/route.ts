@@ -10,6 +10,7 @@ import {
   listActiveSchoolClasses,
   listBranchesForClass,
 } from "@campus/features/school-catalog/index.ts";
+import { filterBySchoolYearId } from "@campus/features/school-year/index.ts";
 import { requireTeachingType } from "@campus/features/teaching-types/index.ts";
 import { jsonResponse, requireAdminSession, requireTeacherSession } from "../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../lib/server/observability.ts";
@@ -18,6 +19,7 @@ async function handleGet(request: Request) {
   const url = new URL(request.url);
   const activeOnly = url.searchParams.get("active") === "1";
   const classId = url.searchParams.get("classId")?.trim() || null;
+  const requestedYearId = url.searchParams.get("schoolYearId")?.trim() || null;
   // Exception architecturale : GET ?active=1 alimente la Configuration enseignant
   // (branches/classes actives). Toute mutation et la liste complète restent admin.
   const auth = activeOnly ? await requireTeacherSession(request) : await requireAdminSession(request);
@@ -25,14 +27,21 @@ async function handleGet(request: Request) {
 
   const catalog = await getSchoolCatalogStore();
   await catalog.ensureSeeded();
-  const [classes, branches, professions, contexts] = await Promise.all([
+  const [classes, branches, professions, contexts, years] = await Promise.all([
     catalog.listClasses(),
     catalog.listBranches(),
     catalog.listProfessions(),
     catalog.listContexts(),
+    getSchoolYearStore().then((store) => store.listSchoolYears()),
   ]);
 
-  const visibleClasses = activeOnly ? listActiveSchoolClasses(classes) : classes;
+  const activeYear = years.find((year) => year.status === "active") ?? null;
+  let visibleClasses = activeOnly ? listActiveSchoolClasses(classes) : classes;
+  if (activeOnly && activeYear) {
+    visibleClasses = filterBySchoolYearId(visibleClasses, activeYear.id);
+  } else if (!activeOnly && requestedYearId) {
+    visibleClasses = filterBySchoolYearId(visibleClasses, requestedYearId);
+  }
   let visibleBranches = activeOnly ? listActiveSchoolBranches(branches) : branches;
   if (classId) {
     const schoolClass = classes.find((entry) => entry.id === classId) ?? null;

@@ -2,6 +2,29 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.50.0] — Préparation des classes et cours d’une année future
+
+L’administrateur peut préparer les **classes** et les **cours annuels** de 2028–2029 pendant que 2026–2027 reste l’unique année ACTIVE. L’année de travail Administration filtre ces écrans sans jamais changer `SchoolYear.status`.
+
+### Ajouté
+
+- Contexte « Année de travail » sur les écrans Classes et Cours (badge Préparation / Active).
+- Création manuelle de classes rattachées à l’année de travail (ex. MA1 en 2028–2029 en plus de MA1 en 2026–2027, IDs distincts).
+- Cours annuels isolés par année scolaire : classe et cours doivent partager le même `schoolYearId`.
+- Garde-fous serveur : année ARCHIVED en lecture seule ; pas de déplacement de classe d’une année à l’autre ; pas d’affectation professeur sur une année DRAFT.
+
+### Conservé
+
+2026–2027 ACTIVE, ses classes et ses cours. Référentiels intemporels (profession, branche, CTX) non dupliqués. Pas d’affectation professeur, d’horaire, de CourseSession ni de basculement d’année.
+
+### Migration
+
+Aucune. `school_classes.school_year_id` et `annual_courses.school_year_id` existaient déjà.
+
+### Non inclus
+
+Affectations professeurs, horaires, CourseSessions, devoirs, contrôles, publications, projection pédagogique, activation / archivage automatique.
+
 ## [2.49.0] — Semaines de cours depuis le calendrier officiel
 
 L’import du plan de scolarité génère les **vraies semaines de cours** d’une année DRAFT. L’alternance A/B n’est plus obligatoire : `kind` peut être `null`. 2026–2027 conserve ses semaines A/B.

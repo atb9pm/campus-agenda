@@ -41,6 +41,10 @@ export {
   listSelectableSchoolYearsForClassEdit,
   listSelectableSchoolYearsForNewClass,
   resolveClassSchoolYearAttachment,
+  assertSchoolYearWritable,
+  assertClassStaysInSchoolYear,
+  ARCHIVED_YEAR_MUTATION_REASON,
+  CLASS_YEAR_MOVE_REASON,
   type SchoolYearRef,
 } from "./school-year-attachment.ts";
 export { validateAdminClassCreate } from "./admin-class.ts";

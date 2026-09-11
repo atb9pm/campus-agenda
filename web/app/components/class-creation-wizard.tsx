@@ -23,6 +23,8 @@ interface ClassCreationWizardProps {
   professions: SchoolProfessionRecord[];
   contexts: PedagogicalContextRecord[];
   schoolYears: SchoolYearSummary[];
+  lockedSchoolYearId?: string | null;
+  yearReadOnly?: boolean;
   onNotice: (message: string) => void;
   onCreated: () => Promise<void>;
   onError: (message: string) => void;
@@ -34,18 +36,22 @@ export function ClassCreationWizard({
   professions,
   contexts,
   schoolYears,
+  lockedSchoolYearId = null,
+  yearReadOnly = false,
   onNotice,
   onCreated,
   onError,
   onOpenPlans,
 }: ClassCreationWizardProps) {
-  const [schoolYearId, setSchoolYearId] = useState("");
+  const [schoolYearId, setSchoolYearId] = useState(lockedSchoolYearId ?? "");
   const [professionId, setProfessionId] = useState("");
   const [trainingYear, setTrainingYear] = useState("");
   const [organization, setOrganization] = useState<"unique" | "parallel">("unique");
   const [parallelCount, setParallelCount] = useState("3");
   const [parallelCodes, setParallelCodes] = useState<string[]>(defaultParallelCodes(3));
   const [busy, setBusy] = useState(false);
+
+  const effectiveYearId = lockedSchoolYearId || schoolYearId;
 
   const selectableYears = useMemo(
     () => listSelectableSchoolYearsForNewClass(schoolYears),
@@ -95,7 +101,11 @@ export function ClassCreationWizard({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!schoolYearId || !professionId || !trainingYear) {
+    if (yearReadOnly) {
+      onError("Cette année scolaire est archivée. Les créations et modifications sont refusées.");
+      return;
+    }
+    if (!effectiveYearId || !professionId || !trainingYear) {
       onError("Année scolaire, profession et année de formation sont obligatoires.");
       return;
     }
@@ -116,7 +126,7 @@ export function ClassCreationWizard({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         kind: "structured-classes",
-        schoolYearId,
+        schoolYearId: effectiveYearId,
         professionId,
         trainingYear: Number.parseInt(trainingYear, 10),
         organization,
@@ -136,7 +146,7 @@ export function ClassCreationWizard({
         ? `${created.length} classes créées (${created.map((entry) => entry.code).join(", ")}).`
         : `Classe ${created[0]?.code ?? ""} créée.`,
     );
-    setSchoolYearId("");
+    setSchoolYearId(lockedSchoolYearId ?? "");
     setProfessionId("");
     setTrainingYear("");
     setOrganization("unique");
@@ -158,19 +168,29 @@ export function ClassCreationWizard({
         <div className="class-wizard-grid">
           <label>
             Année scolaire
-            <select
-              value={schoolYearId}
-              onChange={(event) => setSchoolYearId(event.target.value)}
-              required
-            >
-              <option value="">Choisir…</option>
-              {selectableYears.map((year) => (
-                <option key={year.id} value={year.id}>
-                  {year.label}
-                  {year.status === "active" ? " (active)" : year.status === "draft" ? " (brouillon)" : ""}
-                </option>
-              ))}
-            </select>
+            {lockedSchoolYearId ? (
+              <input
+                value={
+                  schoolYears.find((year) => year.id === lockedSchoolYearId)?.label
+                  ?? "Année de travail"
+                }
+                readOnly
+              />
+            ) : (
+              <select
+                value={schoolYearId}
+                onChange={(event) => setSchoolYearId(event.target.value)}
+                required
+              >
+                <option value="">Choisir…</option>
+                {selectableYears.map((year) => (
+                  <option key={year.id} value={year.id}>
+                    {year.label}
+                    {year.status === "active" ? " (active)" : year.status === "draft" ? " (brouillon)" : ""}
+                  </option>
+                ))}
+              </select>
+            )}
           </label>
           <label>
             Profession
@@ -316,6 +336,7 @@ export function ClassCreationWizard({
           type="submit"
           className="workspace-action"
           disabled={
+            yearReadOnly ||
             busy ||
             drafts.length === 0 ||
             !selectedProfession?.classCodePrefix ||

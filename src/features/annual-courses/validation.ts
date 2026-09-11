@@ -1,7 +1,16 @@
 import type { PedagogicalContextRecord, SchoolProfessionRecord } from "../school-catalog/profession-types.ts";
-import type { SchoolYearRef } from "../school-catalog/school-year-attachment.ts";
+import {
+  ARCHIVED_YEAR_MUTATION_REASON,
+  assertSchoolYearWritable,
+  type SchoolYearRef,
+} from "../school-catalog/school-year-attachment.ts";
 import type { SchoolBranchRecord, SchoolClassRecord } from "../school-catalog/types.ts";
 import type { AnnualCourseInput, CourseMutationResult } from "./types.ts";
+
+export const COURSE_CLASS_YEAR_MISMATCH_REASON =
+  "La classe n'appartient pas à cette année scolaire.";
+export const DRAFT_YEAR_ASSIGNMENT_REASON =
+  "Les affectations professeurs ne sont pas disponibles pour une année en préparation.";
 
 export function validateAnnualCourseInput(options: {
   input: AnnualCourseInput;
@@ -20,12 +29,17 @@ export function validateAnnualCourseInput(options: {
   }
 
   const year = years.find((entry) => entry.id === schoolYearId) ?? null;
+  const writable = assertSchoolYearWritable(year);
+  if (!writable.ok) {
+    return { ok: false, reason: writable.reason, status: 400 };
+  }
   const referential = validateAttributionReferential({
     year,
     schoolClass,
     profession: options.profession,
     context,
     branch: options.branch,
+    requireBranchTeachingType: false,
   });
   if (!referential.ok) return referential;
 
@@ -39,7 +53,7 @@ export function validateAnnualCourseInput(options: {
   if (schoolClass!.schoolYearId !== schoolYearId) {
     return {
       ok: false,
-      reason: "La classe n'appartient pas à cette année scolaire.",
+      reason: COURSE_CLASS_YEAR_MISMATCH_REASON,
       status: 400,
     };
   }
@@ -76,12 +90,14 @@ export function validateAttributionReferential(options: {
   profession?: SchoolProfessionRecord | null | undefined;
   context: PedagogicalContextRecord | null | undefined;
   branch?: SchoolBranchRecord | null | undefined;
+  requireBranchTeachingType?: boolean;
 }): CourseMutationResult<true> {
   if (!options.year) {
     return { ok: false, reason: "Année scolaire introuvable.", status: 400 };
   }
-  if (options.year.status === "archived") {
-    return { ok: false, reason: "Cette année scolaire est archivée. Aucune nouvelle attribution n'est possible.", status: 400 };
+  const writable = assertSchoolYearWritable(options.year);
+  if (!writable.ok) {
+    return { ok: false, reason: ARCHIVED_YEAR_MUTATION_REASON, status: 400 };
   }
 
   if (!options.schoolClass) {
@@ -117,7 +133,7 @@ export function validateAttributionReferential(options: {
     if (options.branch.isArchived || !options.branch.isActive) {
       return { ok: false, reason: "Cette branche est archivée ou inactive.", status: 400 };
     }
-    if (!options.branch.teachingType) {
+    if (options.requireBranchTeachingType !== false && !options.branch.teachingType) {
       return {
         ok: false,
         reason: "Configurez d'abord le type de cette branche dans le Catalogue des branches.",

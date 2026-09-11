@@ -1317,4 +1317,74 @@ test("2.35.0 — E2E PATCH et DELETE d’un contrôle structuré", async () => {
   assert.equal(missing.response.status, 404);
 });
 
+test("année de travail — catalogue filtré et cours refusé hors année", async () => {
+  const adminCookie = await loginAdmin();
+  const years = await jsonRequest("/api/admin/school-year", { headers: { cookie: adminCookie } });
+  assert.equal(years.response.status, 200, years.payload.reason);
+  const active = (years.payload.years ?? []).find((year) => year.status === "active");
+  assert.ok(active, "année ACTIVE requise");
+
+  const filtered = await jsonRequest(
+    `/api/admin/catalog?schoolYearId=${encodeURIComponent(active.id)}`,
+    { headers: { cookie: adminCookie } },
+  );
+  assert.equal(filtered.response.status, 200, filtered.payload.reason);
+  assert.ok(
+    (filtered.payload.classes ?? []).every((entry) => entry.schoolYearId === active.id),
+    "les classes admin de l’année active ne mélangent pas une autre année",
+  );
+  assert.ok(
+    (filtered.payload.classes ?? []).some((entry) => entry.code === "MA1"),
+    "2026-2027 ACTIVE contient MA1",
+  );
+
+  const unknownYear = await jsonRequest("/api/admin/catalog", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: adminCookie },
+    body: JSON.stringify({
+      kind: "class",
+      code: "ZZ9",
+      label: "ZZ9",
+      schoolYearId: "year-does-not-exist",
+      professionId: "missing",
+      trainingYear: 1,
+    }),
+  });
+  assert.ok(unknownYear.response.status >= 400);
+  assert.equal(unknownYear.payload.ok, false);
+
+  const catalog = await jsonRequest("/api/admin/catalog", { headers: { cookie: adminCookie } });
+  const schoolClass = (catalog.payload.classes ?? []).find(
+    (entry) => entry.schoolYearId === active.id && entry.professionId && entry.trainingYear !== null,
+  );
+  const context = (catalog.payload.contexts ?? []).find(
+    (entry) =>
+      schoolClass &&
+      entry.professionId === schoolClass.professionId &&
+      entry.trainingYear === schoolClass.trainingYear,
+  );
+  if (schoolClass && context) {
+    const refused = await jsonRequest("/api/admin/annual-courses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: adminCookie },
+      body: JSON.stringify({
+        action: "create",
+        schoolYearId: "year-other",
+        classId: schoolClass.id,
+        contextId: context.id,
+      }),
+    });
+    assert.ok(refused.response.status >= 400);
+    assert.equal(refused.payload.ok, false);
+  }
+
+  const courses = await jsonRequest(
+    `/api/admin/annual-courses?schoolYearId=${encodeURIComponent(active.id)}`,
+    { headers: { cookie: adminCookie } },
+  );
+  assert.equal(courses.response.status, 200, courses.payload.reason);
+  assert.ok((courses.payload.courses ?? []).every((course) => course.schoolYearId === active.id));
+  assert.ok((courses.payload.classes ?? []).every((entry) => entry.schoolYearId === active.id));
+});
+
 
