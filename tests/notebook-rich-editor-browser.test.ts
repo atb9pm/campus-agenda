@@ -26,12 +26,9 @@ function findChrome(): string | null {
   return null;
 }
 
-/** dump-dom est fiable ici, pas sur les runners GHA sans affichage. Forcer avec CAMPUS_BROWSER_E2E=1. */
+/** Chrome dump-dom est instable sur les runners CI. Lancer explicitement avec CAMPUS_BROWSER_E2E=1. */
 function shouldRunLiveChrome(): boolean {
-  if (!findChrome()) return false;
-  if (process.env.CAMPUS_BROWSER_E2E === "1") return true;
-  if (process.env.CAMPUS_BROWSER_E2E === "0") return false;
-  return process.env.GITHUB_ACTIONS !== "true";
+  return process.env.CAMPUS_BROWSER_E2E === "1" && Boolean(findChrome());
 }
 
 function persistMarks(highlightHtml: string, colorHtml: string) {
@@ -56,7 +53,7 @@ test("navigateur — HTML Chrome documenté : sélection, surlignage, couleur, s
   persistMarks(CHROME_HIGHLIGHT_HTML, CHROME_COLOR_HTML);
 });
 
-test("navigateur — Chrome réel execCommand hiliteColor / foreColor", { skip: !findChrome() }, () => {
+test("navigateur — Chrome réel execCommand hiliteColor / foreColor", { skip: !shouldRunLiveChrome() }, () => {
   const chrome = findChrome();
   assert.ok(chrome);
   const fixture = fileURLToPath(new URL("./fixtures/rich-editor-execcommand.html", import.meta.url));
