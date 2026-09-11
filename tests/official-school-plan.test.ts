@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -14,6 +14,7 @@ import {
   groupOfficialEventsByMonth,
   parseOfficialPlanFromLines,
   parseOfficialPlanPdf,
+  detectAndParseSchoolYearPdf,
   resolveAdminWorkingYearId,
   schoolYearAlreadyExistsMessage,
   schoolYearStatusesAfterAdminWorkingYearChange,
@@ -24,6 +25,7 @@ import { SQL_MIGRATION_FILES, applyMigrations } from "../src/lib/persistence/sql
 import { SqlSchoolYearStore } from "../src/lib/persistence/sql/sql-school-year-store.ts";
 import { resetStoreFactory } from "../src/lib/persistence/store-factory.ts";
 import { resetActiveSchoolWeekEntries } from "../src/features/calendar/index.ts";
+import { resolvePdfWorkerPath } from "../src/lib/pdf/open-pdf-document.ts";
 
 const fixturePath = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -351,4 +353,21 @@ test("L — élève : année DRAFT inaccessible", async () => {
 
 test("libellé français 2028–2029", () => {
   assert.equal(formatSchoolYearLabelFr("2028-2029"), "2028–2029");
+});
+
+test("worker pdf.js résolu hors du bundle vinext", () => {
+  const workerPath = resolvePdfWorkerPath();
+  assert.ok(workerPath, "pdf.worker.mjs doit être trouvable");
+  assert.equal(existsSync(workerPath), true);
+  assert.match(workerPath, /pdf\.worker\.mjs$/);
+});
+
+test("PDF officiel détecté comme plan de scolarité, sans semaines A/B", async () => {
+  const detected = await detectAndParseSchoolYearPdf(new Uint8Array(readFileSync(fixturePath)));
+  assert.equal(detected.sourceKind, "official-plan");
+  if (detected.sourceKind !== "official-plan") return;
+  assert.equal(detected.official.ok, true);
+  if (!detected.official.ok) return;
+  assert.equal(detected.official.preview.label, "2028-2029");
+  assert.equal(detected.official.preview.events.length, EXPECTED_EVENTS.length);
 });

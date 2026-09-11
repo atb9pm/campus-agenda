@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
 
-function resolvePdfWorkerPath(): string | null {
+export function resolvePdfWorkerPath(): string | null {
   const candidates: string[] = [];
   try {
     candidates.push(createRequire(import.meta.url).resolve("pdfjs-dist/legacy/build/pdf.worker.mjs"));
