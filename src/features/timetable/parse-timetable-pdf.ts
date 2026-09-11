@@ -1,4 +1,4 @@
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { openPdfDocument } from "../../lib/pdf/open-pdf-document.ts";
 
 import { parseTimetableCell, summarizeTimetableSlots } from "./slot-logic.ts";
 import type { ParsedTimetable, TimetableDayOfWeek, TimetableSlot } from "./types.ts";
@@ -166,7 +166,7 @@ function extractHeaderMetadata(items: TextItem[]): { schoolYearLabel: string; so
 }
 
 export async function parseTimetablePdf(bytes: Uint8Array): Promise<ParsedTimetable> {
-  const doc = await getDocument({ data: bytes, useSystemFonts: true }).promise;
+  const doc = await openPdfDocument(bytes);
   const page = await doc.getPage(1);
   const content = await page.getTextContent();
   const items: TextItem[] = content.items.flatMap((item) => {

@@ -1,4 +1,4 @@
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { openPdfDocument } from "../../lib/pdf/open-pdf-document.ts";
 
 import type { ParsedWeekPlan } from "./types.ts";
 import {
@@ -112,7 +112,7 @@ function buildGridRows(
 }
 
 export async function parseWeekPlanPdf(pdfBytes: Uint8Array): Promise<ParsedWeekPlan> {
-  const document = await getDocument({ data: pdfBytes, useSystemFonts: true }).promise;
+  const document = await openPdfDocument(pdfBytes);
   const page = await document.getPage(1);
   const content = await page.getTextContent();
 

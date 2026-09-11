@@ -3,6 +3,17 @@ import { randomUUID } from "node:crypto";
 import { SCHOOL_WEEK_MONDAYS } from "../../../features/calendar/school-week-dates.ts";
 import { setActiveSchoolWeekEntries } from "../../../features/calendar/active-calendar.ts";
 import type { SchoolDayException } from "../../../features/school-days/types.ts";
+import {
+  expandOfficialEventsToExceptions,
+  normalizeSchoolYearLabel,
+  schoolYearAlreadyExistsMessage,
+  validateOfficialPlanPreview,
+} from "../../../features/school-year/official-plan-logic.ts";
+import type {
+  OfficialPlanImportOptions,
+  OfficialPlanImportResult,
+  OfficialSchoolPlanPreview,
+} from "../../../features/school-year/official-plan-types.ts";
 import type { ParsedWeekPlan, SchoolWeekEntry, SchoolYearRecord, SchoolYearWithWeeks } from "../../../features/school-year/types.ts";
 import { schoolYearBoundsFromLabel } from "../../../features/school-year/week-plan-logic.ts";
 import type { SchoolYearStore } from "../school-year-types.ts";
@@ -88,6 +99,69 @@ export class SqlSchoolYearStore implements SchoolYearStore {
     if (!row) return null;
     const weeks = await this.loadWeeks(row.id);
     return { ...rowToRecord(row), weeks };
+  }
+
+  async findSchoolYearByLabel(label: string): Promise<SchoolYearRecord | null> {
+    const normalized = normalizeSchoolYearLabel(label);
+    if (!normalized) return null;
+    const years = await this.listSchoolYears();
+    return years.find((year) => normalizeSchoolYearLabel(year.label) === normalized) ?? null;
+  }
+
+  async importOfficialCalendarDraft(
+    preview: OfficialSchoolPlanPreview,
+    sourceFilename?: string,
+    options: OfficialPlanImportOptions = {},
+  ): Promise<OfficialPlanImportResult> {
+    const errors = validateOfficialPlanPreview(preview);
+    if (errors.length > 0) {
+      throw new Error(errors[0]);
+    }
+
+    const label = normalizeSchoolYearLabel(preview.label) ?? preview.label;
+    const existing = await this.findSchoolYearByLabel(label);
+    const now = new Date().toISOString();
+    const exceptions = expandOfficialEventsToExceptions(preview.events);
+
+    if (existing) {
+      if (!options.replaceDraft || existing.status !== "draft") {
+        throw new Error(schoolYearAlreadyExistsMessage(label));
+      }
+      await this.db
+        .prepare(
+          `UPDATE school_years
+           SET starts_on = ?, ends_on = ?, source_filename = ?, imported_at = ?
+           WHERE id = ?`,
+        )
+        .bind(preview.startsOn, preview.endsOn, sourceFilename ?? existing.sourceFilename, now, existing.id)
+        .run();
+      await this.replaceOfficialExceptions(existing.id, exceptions);
+      const year = (await this.getSchoolYearById(existing.id))!;
+      return {
+        year,
+        eventCount: preview.events.length,
+        exceptionDayCount: exceptions.length,
+        replaced: true,
+      };
+    }
+
+    const id = randomUUID();
+    await this.db
+      .prepare(
+        `INSERT INTO school_years
+          (id, label, status, starts_on, ends_on, source_filename, imported_at, created_at)
+         VALUES (?, ?, 'draft', ?, ?, ?, ?, ?)`,
+      )
+      .bind(id, label, preview.startsOn, preview.endsOn, sourceFilename ?? null, now, now)
+      .run();
+    await this.replaceOfficialExceptions(id, exceptions);
+    const year = (await this.getSchoolYearById(id))!;
+    return {
+      year,
+      eventCount: preview.events.length,
+      exceptionDayCount: exceptions.length,
+      replaced: false,
+    };
   }
 
   async importDraftFromPlan(plan: ParsedWeekPlan, sourceFilename?: string): Promise<SchoolYearWithWeeks> {
@@ -228,6 +302,23 @@ export class SqlSchoolYearStore implements SchoolYearStore {
           "INSERT INTO school_weeks (school_year_id, week_number, week_kind, monday) VALUES (?, ?, ?, ?)",
         )
         .bind(schoolYearId, week.number, week.kind, week.monday)
+        .run();
+    }
+  }
+
+  private async replaceOfficialExceptions(
+    schoolYearId: string,
+    exceptions: SchoolDayException[],
+  ): Promise<void> {
+    await this.db.prepare("DELETE FROM school_day_exceptions WHERE school_year_id = ?").bind(schoolYearId).run();
+    const now = new Date().toISOString();
+    for (const exception of exceptions) {
+      await this.db
+        .prepare(
+          `INSERT INTO school_day_exceptions (school_year_id, day_date, day_state, label, updated_at)
+           VALUES (?, ?, ?, ?, ?)`,
+        )
+        .bind(schoolYearId, exception.date, exception.state, exception.label, now)
         .run();
     }
   }

@@ -3,6 +3,17 @@ import { randomUUID } from "node:crypto";
 import { SCHOOL_WEEK_MONDAYS } from "../../features/calendar/school-week-dates.ts";
 import { setActiveSchoolWeekEntries } from "../../features/calendar/active-calendar.ts";
 import type { SchoolDayException } from "../../features/school-days/types.ts";
+import {
+  expandOfficialEventsToExceptions,
+  normalizeSchoolYearLabel,
+  schoolYearAlreadyExistsMessage,
+  validateOfficialPlanPreview,
+} from "../../features/school-year/official-plan-logic.ts";
+import type {
+  OfficialPlanImportOptions,
+  OfficialPlanImportResult,
+  OfficialSchoolPlanPreview,
+} from "../../features/school-year/official-plan-types.ts";
 import type { ParsedWeekPlan, SchoolWeekEntry, SchoolYearRecord, SchoolYearWithWeeks } from "../../features/school-year/types.ts";
 import type { SchoolYearStore } from "./school-year-types.ts";
 import { schoolYearBoundsFromLabel } from "../../features/school-year/week-plan-logic.ts";
@@ -22,6 +33,77 @@ export class MemorySchoolYearStore implements SchoolYearStore {
 
   async getSchoolYearById(id: string): Promise<SchoolYearWithWeeks | null> {
     return memorySchoolYears.find((year) => year.id === id) ?? null;
+  }
+
+  async findSchoolYearByLabel(label: string): Promise<SchoolYearRecord | null> {
+    const normalized = normalizeSchoolYearLabel(label);
+    if (!normalized) return null;
+    const found = memorySchoolYears.find((year) => normalizeSchoolYearLabel(year.label) === normalized);
+    if (!found) return null;
+    const { weeks: _weeks, ...record } = found;
+    return record;
+  }
+
+  async importOfficialCalendarDraft(
+    preview: OfficialSchoolPlanPreview,
+    sourceFilename?: string,
+    options: OfficialPlanImportOptions = {},
+  ): Promise<OfficialPlanImportResult> {
+    const errors = validateOfficialPlanPreview(preview);
+    if (errors.length > 0) {
+      throw new Error(errors[0]);
+    }
+
+    const label = normalizeSchoolYearLabel(preview.label) ?? preview.label;
+    const existing = await this.findSchoolYearByLabel(label);
+    const now = new Date().toISOString();
+    const exceptions = expandOfficialEventsToExceptions(preview.events);
+
+    if (existing) {
+      if (!options.replaceDraft || existing.status !== "draft") {
+        throw new Error(schoolYearAlreadyExistsMessage(label));
+      }
+      memorySchoolYears = memorySchoolYears.map((year) =>
+        year.id === existing.id
+          ? {
+              ...year,
+              startsOn: preview.startsOn,
+              endsOn: preview.endsOn,
+              sourceFilename: sourceFilename ?? year.sourceFilename,
+              importedAt: now,
+            }
+          : year,
+      );
+      memoryDayExceptions.set(existing.id, exceptions);
+      const year = (await this.getSchoolYearById(existing.id))!;
+      return {
+        year,
+        eventCount: preview.events.length,
+        exceptionDayCount: exceptions.length,
+        replaced: true,
+      };
+    }
+
+    const record: SchoolYearWithWeeks = {
+      id: randomUUID(),
+      label,
+      status: "draft",
+      startsOn: preview.startsOn,
+      endsOn: preview.endsOn,
+      sourceFilename: sourceFilename ?? null,
+      importedAt: now,
+      activatedAt: null,
+      createdAt: now,
+      weeks: [],
+    };
+    memorySchoolYears = [record, ...memorySchoolYears];
+    memoryDayExceptions.set(record.id, exceptions);
+    return {
+      year: record,
+      eventCount: preview.events.length,
+      exceptionDayCount: exceptions.length,
+      replaced: false,
+    };
   }
 
   async importDraftFromPlan(plan: ParsedWeekPlan, sourceFilename?: string): Promise<SchoolYearWithWeeks> {

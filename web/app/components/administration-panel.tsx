@@ -57,7 +57,7 @@ const TAB_LABELS: Record<AdminTab, string> = {
   teachers: "Enseignants",
   assignments: "Attributions des cours",
   schedules: "Horaire des classes",
-  weeks: "Plan des semaines A/B",
+  weeks: "Année scolaire",
   backup: "Sauvegarde des données",
   restore: "Restaurer une sauvegarde",
 };
@@ -575,8 +575,8 @@ export function AdministrationPanel({
         <div className="admin-panel-block">
           <header className="config-section-header">
             <div>
-              <h3>Plan des semaines A/B</h3>
-              <p>Génération et modification du calendrier scolaire par année.</p>
+              <h3>Année scolaire</h3>
+              <p>Plan de scolarité officiel, année de travail administrateur et calendrier.</p>
             </div>
           </header>
           <SchoolYearAdminPanel onCalendarUpdated={onCalendarUpdated} onNotice={onNotice} />

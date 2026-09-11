@@ -2,6 +2,28 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.48.0] — Année future DRAFT et import du plan de scolarité
+
+L’année scolaire se crée à partir du **plan de scolarité** officiel de l’État du Valais. Le PDF « Semaines A/B » n’est plus la source de création. Une année DRAFT peut exister sans plan A/B. L’année active utilisateurs n’est pas basculée.
+
+### Ajouté
+
+- Parseur du PDF officiel (début / fin / vacances / fêtes / interruptions explicitement indiqués).
+- Chargement PDF côté serveur via le worker pdf.js du paquet (import vinext).
+- Aperçu administrateur par mois, puis **Créer l’année en brouillon**.
+- Import DRAFT 2028–2029 sans activer, sans archiver 2026–2027, sans inventer de semaines A/B.
+- Année de travail administrateur (préférence locale) distincte de l’année ACTIVE.
+- Badge **Préparation** pour les années DRAFT.
+- Refus clair si l’année existe déjà ; mise à jour du calendrier possible uniquement pour un DRAFT existant.
+
+### Conservé
+
+Parseur A/B historique comme complément séparé. Route `/activate` inchangée et non utilisée par ce flux. Schéma existant : événements officiels dans `school_day_exceptions`. Backup v4 inchangé.
+
+### Non inclus
+
+Pas d’activation 2028–2029, pas d’archivage 2026–2027, pas de copie des classes / cours / horaires / publications, pas de génération A/B.
+
 ## [2.47.0] — Suppression définitive sécurisée des professeurs
 
 L’administrateur peut supprimer définitivement un compte professeur. Le travail pédagogique déjà créé (devoirs, contrôles, informations, historique de classe) est conservé.

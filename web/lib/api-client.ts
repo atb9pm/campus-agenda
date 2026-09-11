@@ -673,11 +673,47 @@ export interface SchoolYearSummary {
   createdAt: string;
 }
 
-export interface SchoolYearPreview {
+export interface SchoolYearWeekPreview {
+  sourceKind?: "week-plan";
   label: string;
   weekCount: number;
   warnings: string[];
   weeks: SchoolCalendarWeek[];
+}
+
+export interface OfficialCalendarEvent {
+  label: string;
+  startsOn: string;
+  endsOn: string;
+  startMarker: "matin" | "soir" | null;
+  endMarker: "matin" | "soir" | null;
+  kind: "VACATION" | "PUBLIC_HOLIDAY" | "SCHOOL_CLOSED" | "OTHER";
+  sourceText: string;
+}
+
+export interface OfficialPlanWarning {
+  sourceText: string;
+  message: string;
+}
+
+export interface OfficialSchoolPlanPreview {
+  sourceKind: "official-plan";
+  label: string;
+  startsOn: string;
+  endsOn: string;
+  events: OfficialCalendarEvent[];
+  warnings: OfficialPlanWarning[];
+  totalCourseDays: number | null;
+  totalCourseWeeks: number | null;
+  pageCount: number;
+}
+
+export type SchoolYearPreview = SchoolYearWeekPreview | OfficialSchoolPlanPreview;
+
+export function isOfficialSchoolPlanPreview(
+  preview: SchoolYearPreview,
+): preview is OfficialSchoolPlanPreview {
+  return preview.sourceKind === "official-plan";
 }
 
 export async function fetchSchoolYears(): Promise<SchoolYearSummary[]> {
@@ -775,7 +811,12 @@ export async function saveActiveSchoolDay(input: {
   };
 }
 
-export async function parseSchoolYearPdf(file: File): Promise<{ receivable: boolean; preview: SchoolYearPreview }> {
+export async function parseSchoolYearPdf(file: File): Promise<{
+  receivable: boolean;
+  sourceKind: "official-plan" | "week-plan";
+  preview: SchoolYearPreview;
+  existingYear: { id: string; label: string; status: "draft" | "active" | "archived" } | null;
+}> {
   const formData = new FormData();
   formData.append("file", file);
   const response = await fetch("/api/admin/school-year/parse", {
@@ -786,22 +827,34 @@ export async function parseSchoolYearPdf(file: File): Promise<{ receivable: bool
   const payload = await parseJson<{
     ok: boolean;
     receivable?: boolean;
+    sourceKind?: "official-plan" | "week-plan";
     preview?: SchoolYearPreview;
+    existingYear?: { id: string; label: string; status: "draft" | "active" | "archived" } | null;
     reason?: string;
   }>(response);
   if (!response.ok || !payload.ok || !payload.preview) {
     throw new Error(payload.reason ?? "Analyse du PDF impossible.");
   }
-  return { receivable: payload.receivable ?? false, preview: payload.preview };
+  return {
+    receivable: payload.receivable ?? false,
+    sourceKind: payload.sourceKind ?? (payload.preview.sourceKind === "official-plan" ? "official-plan" : "week-plan"),
+    preview: payload.preview,
+    existingYear: payload.existingYear ?? null,
+  };
 }
 
-export async function importSchoolYearPdf(file: File): Promise<{
+export async function importSchoolYearPdf(
+  file: File,
+  options: { replaceDraft?: boolean } = {},
+): Promise<{
   receivable: boolean;
+  sourceKind: "official-plan" | "week-plan";
   preview: SchoolYearPreview;
   draft: { id: string; label: string; status: string };
 }> {
   const formData = new FormData();
   formData.append("file", file);
+  if (options.replaceDraft) formData.append("replaceDraft", "true");
   const response = await fetch("/api/admin/school-year/import", {
     method: "POST",
     credentials: "include",
@@ -810,6 +863,7 @@ export async function importSchoolYearPdf(file: File): Promise<{
   const payload = await parseJson<{
     ok: boolean;
     receivable?: boolean;
+    sourceKind?: "official-plan" | "week-plan";
     preview?: SchoolYearPreview;
     draft?: { id: string; label: string; status: string };
     reason?: string;
@@ -819,8 +873,37 @@ export async function importSchoolYearPdf(file: File): Promise<{
   }
   return {
     receivable: payload.receivable ?? false,
+    sourceKind: payload.sourceKind ?? (payload.preview.sourceKind === "official-plan" ? "official-plan" : "week-plan"),
     preview: payload.preview,
     draft: payload.draft,
+  };
+}
+
+export async function fetchOfficialSchoolCalendar(schoolYearId: string): Promise<{
+  year: { id: string; label: string; status: string; startsOn: string; endsOn: string };
+  weeks: SchoolCalendarWeek[];
+  events: OfficialCalendarEvent[];
+  eventCount: number;
+}> {
+  const response = await fetch(`/api/admin/school-year/${schoolYearId}/official-calendar`, {
+    credentials: "include",
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    year?: { id: string; label: string; status: string; startsOn: string; endsOn: string };
+    weeks?: SchoolCalendarWeek[];
+    events?: OfficialCalendarEvent[];
+    eventCount?: number;
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.year || !payload.events) {
+    throw new Error(payload.reason ?? "Impossible de charger le calendrier officiel.");
+  }
+  return {
+    year: payload.year,
+    weeks: payload.weeks ?? [],
+    events: payload.events,
+    eventCount: payload.eventCount ?? payload.events.length,
   };
 }
 
