@@ -685,6 +685,8 @@ export interface OfficialCalendarEvent {
   label: string;
   startsOn: string;
   endsOn: string;
+  startMarker: "matin" | "soir" | null;
+  endMarker: "matin" | "soir" | null;
   kind: "VACATION" | "PUBLIC_HOLIDAY" | "SCHOOL_CLOSED" | "OTHER";
   sourceText: string;
 }

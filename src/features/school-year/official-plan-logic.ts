@@ -2,6 +2,7 @@ import type { SchoolDayException } from "../school-days/types.ts";
 import type {
   OfficialCalendarEvent,
   OfficialCalendarEventKind,
+  OfficialDayMarker,
   OfficialPlanWarning,
   OfficialSchoolPlanPreview,
 } from "./official-plan-types.ts";
@@ -78,17 +79,66 @@ export function swissDateToIso(day: string, month: string, year: string): string
   return isIsoDate(iso) ? iso : null;
 }
 
-export function extractSwissDates(text: string): { iso: string; raw: string }[] {
-  const dates: { iso: string; raw: string }[] = [];
-  const matcher = new RegExp(DATE_RE.source, "g");
+export interface OfficialDateCapture {
+  iso: string;
+  raw: string;
+  marker: OfficialDayMarker;
+}
+
+const DATE_WITH_MARKER_RE = /\b(\d{2})\.(\d{2})\.(\d{4})\b(?:\s+(matin|soir))?/gi;
+
+export function markerFromText(text: string): OfficialDayMarker {
+  const normalized = text.toLowerCase();
+  if (/\bsoir\b/.test(normalized)) return "soir";
+  if (/\bmatin\b/.test(normalized)) return "matin";
+  return null;
+}
+
+export function extractSwissDatesWithMarkers(text: string): OfficialDateCapture[] {
+  const dates: OfficialDateCapture[] = [];
+  const matcher = new RegExp(DATE_WITH_MARKER_RE.source, "gi");
   let match: RegExpExecArray | null;
   while ((match = matcher.exec(text)) !== null) {
     const iso = swissDateToIso(match[1], match[2], match[3]);
-    if (iso) {
-      dates.push({ iso, raw: match[0] });
-    }
+    if (!iso) continue;
+    const markerRaw = match[4]?.toLowerCase();
+    const marker: OfficialDayMarker = markerRaw === "matin" || markerRaw === "soir" ? markerRaw : null;
+    dates.push({ iso, raw: match[0], marker });
   }
   return dates;
+}
+
+export function extractSwissDates(text: string): { iso: string; raw: string }[] {
+  return extractSwissDatesWithMarkers(text).map(({ iso, raw }) => ({ iso, raw }));
+}
+
+export function addIsoDays(iso: string, days: number): string {
+  const cursor = new Date(`${iso}T12:00:00.000Z`);
+  cursor.setUTCDate(cursor.getUTCDate() + days);
+  return cursor.toISOString().slice(0, 10);
+}
+
+/**
+ * Days without class for an official event.
+ * Document dates stay on the event (`startsOn` / `endsOn`).
+ * A period « X soir → Y matin » excludes both bound dates:
+ * X is still a school day, Y is the return-to-class day.
+ * A single named feast (no period) stays inclusive.
+ */
+export function closedDaysFromOfficialEvent(event: OfficialCalendarEvent): string[] {
+  if (event.startsOn === event.endsOn) {
+    return eachIsoDateInclusive(event.startsOn, event.endsOn);
+  }
+  let start = event.startsOn;
+  let end = event.endsOn;
+  if (event.startMarker === "soir") {
+    start = addIsoDays(event.startsOn, 1);
+  }
+  if (event.endMarker === "matin") {
+    end = addIsoDays(event.endsOn, -1);
+  }
+  if (start > end) return [];
+  return eachIsoDateInclusive(start, end);
 }
 
 export function eachIsoDateInclusive(from: string, to: string): string[] {
@@ -224,14 +274,24 @@ export function parseOfficialPlanFromLines(
     if (!looksLikeOfficialEventTitle(line)) continue;
 
     const labelText = titleCandidate(line);
-    const collected = extractSwissDates(line);
+    const collected = extractSwissDatesWithMarkers(line);
     let cursor = index + 1;
     while (cursor < compactLines.length && collected.length < 2) {
       const next = compactLines[cursor] ?? "";
       if (looksLikeOfficialEventTitle(next) || isMetadataLine(next)) break;
-      const nextDates = extractSwissDates(next);
-      if (nextDates.length === 0 && titleCandidate(next) && !WEEKDAY_RE.test(next) && !TIME_HINT_RE.test(next)) {
-        break;
+      const nextDates = extractSwissDatesWithMarkers(next);
+      if (nextDates.length === 0) {
+        const danglingMarker = markerFromText(next);
+        if (danglingMarker && collected.length > 0 && collected[collected.length - 1]!.marker == null) {
+          collected[collected.length - 1]!.marker = danglingMarker;
+          cursor += 1;
+          continue;
+        }
+        if (titleCandidate(next) && !WEEKDAY_RE.test(next) && !TIME_HINT_RE.test(next)) {
+          break;
+        }
+        cursor += 1;
+        continue;
       }
       collected.push(...nextDates);
       cursor += 1;
@@ -267,6 +327,8 @@ export function parseOfficialPlanFromLines(
       label: labelText,
       startsOn: eventStart,
       endsOn: eventEnd,
+      startMarker: collected[0]!.marker,
+      endMarker: collected[1]?.marker ?? (collected[1] ? null : collected[0]!.marker),
       kind: classifyOfficialEvent(labelText, eventStart, eventEnd),
       sourceText,
     });
@@ -342,6 +404,8 @@ export function officialEventsFromExceptions(exceptions: SchoolDayException[]): 
       label,
       startsOn: exception.date,
       endsOn: exception.date,
+      startMarker: null,
+      endMarker: null,
       kind: classifyOfficialEvent(label, exception.date, exception.date),
       sourceText: label,
     });
@@ -352,7 +416,7 @@ export function officialEventsFromExceptions(exceptions: SchoolDayException[]): 
 export function expandOfficialEventsToExceptions(events: OfficialCalendarEvent[]): SchoolDayException[] {
   const byDate = new Map<string, SchoolDayException>();
   for (const event of events) {
-    for (const date of eachIsoDateInclusive(event.startsOn, event.endsOn)) {
+    for (const date of closedDaysFromOfficialEvent(event)) {
       const existing = byDate.get(date);
       if (existing && existing.label && existing.label !== event.label) {
         byDate.set(date, {

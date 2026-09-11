@@ -2,10 +2,17 @@ import type { SchoolYearRecord, SchoolYearWithWeeks } from "./types.ts";
 
 export type OfficialCalendarEventKind = "VACATION" | "PUBLIC_HOLIDAY" | "SCHOOL_CLOSED" | "OTHER";
 
+/** Bound marker from the official plan: morning / evening of that calendar day. */
+export type OfficialDayMarker = "matin" | "soir" | null;
+
 export interface OfficialCalendarEvent {
   label: string;
+  /** Inclusive document date (may still be a class day when marked « soir »). */
   startsOn: string;
+  /** Inclusive document date (may still be a class day when marked « matin »). */
   endsOn: string;
+  startMarker: OfficialDayMarker;
+  endMarker: OfficialDayMarker;
   kind: OfficialCalendarEventKind;
   sourceText: string;
 }

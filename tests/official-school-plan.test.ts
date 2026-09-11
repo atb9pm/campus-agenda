@@ -10,6 +10,9 @@ import {
   ADMIN_WORKING_YEAR_STORAGE_KEY,
   MISSING_END_REASON,
   MISSING_START_REASON,
+  closedDaysFromOfficialEvent,
+  eachIsoDateInclusive,
+  expandOfficialEventsToExceptions,
   formatSchoolYearLabelFr,
   groupOfficialEventsByMonth,
   parseOfficialPlanFromLines,
@@ -33,17 +36,134 @@ const fixturePath = path.resolve(
 );
 
 const EXPECTED_EVENTS = [
-  { label: "VACANCES D’AUTOMNE", startsOn: "2028-10-13", endsOn: "2028-10-30", kind: "VACATION" },
-  { label: "LA TOUSSAINT", startsOn: "2028-11-01", endsOn: "2028-11-01", kind: "PUBLIC_HOLIDAY" },
-  { label: "IMMACULEE CONCEPTION", startsOn: "2028-12-08", endsOn: "2028-12-08", kind: "PUBLIC_HOLIDAY" },
-  { label: "VACANCES DE NOËL", startsOn: "2028-12-22", endsOn: "2029-01-08", kind: "VACATION" },
-  { label: "VACANCES D’HIVER", startsOn: "2029-02-09", endsOn: "2029-02-19", kind: "VACATION" },
-  { label: "SAINT-JOSEPH", startsOn: "2029-03-19", endsOn: "2029-03-19", kind: "PUBLIC_HOLIDAY" },
-  { label: "VACANCES DE PÂQUES", startsOn: "2029-03-29", endsOn: "2029-04-09", kind: "VACATION" },
-  { label: "ASCENSION", startsOn: "2029-05-09", endsOn: "2029-05-14", kind: "SCHOOL_CLOSED" },
-  { label: "PENTECOTE", startsOn: "2029-05-21", endsOn: "2029-05-21", kind: "PUBLIC_HOLIDAY" },
-  { label: "FÊTE-DIEU", startsOn: "2029-05-31", endsOn: "2029-05-31", kind: "PUBLIC_HOLIDAY" },
+  {
+    label: "VACANCES D’AUTOMNE",
+    startsOn: "2028-10-13",
+    endsOn: "2028-10-30",
+    startMarker: "soir",
+    endMarker: "matin",
+    kind: "VACATION",
+  },
+  {
+    label: "LA TOUSSAINT",
+    startsOn: "2028-11-01",
+    endsOn: "2028-11-01",
+    startMarker: null,
+    endMarker: null,
+    kind: "PUBLIC_HOLIDAY",
+  },
+  {
+    label: "IMMACULEE CONCEPTION",
+    startsOn: "2028-12-08",
+    endsOn: "2028-12-08",
+    startMarker: null,
+    endMarker: null,
+    kind: "PUBLIC_HOLIDAY",
+  },
+  {
+    label: "VACANCES DE NOËL",
+    startsOn: "2028-12-22",
+    endsOn: "2029-01-08",
+    startMarker: "soir",
+    endMarker: "matin",
+    kind: "VACATION",
+  },
+  {
+    label: "VACANCES D’HIVER",
+    startsOn: "2029-02-09",
+    endsOn: "2029-02-19",
+    startMarker: "soir",
+    endMarker: "matin",
+    kind: "VACATION",
+  },
+  {
+    label: "SAINT-JOSEPH",
+    startsOn: "2029-03-19",
+    endsOn: "2029-03-19",
+    startMarker: null,
+    endMarker: null,
+    kind: "PUBLIC_HOLIDAY",
+  },
+  {
+    label: "VACANCES DE PÂQUES",
+    startsOn: "2029-03-29",
+    endsOn: "2029-04-09",
+    startMarker: "soir",
+    endMarker: "matin",
+    kind: "VACATION",
+  },
+  {
+    label: "ASCENSION",
+    startsOn: "2029-05-09",
+    endsOn: "2029-05-14",
+    startMarker: "soir",
+    endMarker: "matin",
+    kind: "SCHOOL_CLOSED",
+  },
+  {
+    label: "PENTECOTE",
+    startsOn: "2029-05-21",
+    endsOn: "2029-05-21",
+    startMarker: null,
+    endMarker: null,
+    kind: "PUBLIC_HOLIDAY",
+  },
+  {
+    label: "FÊTE-DIEU",
+    startsOn: "2029-05-31",
+    endsOn: "2029-05-31",
+    startMarker: null,
+    endMarker: null,
+    kind: "PUBLIC_HOLIDAY",
+  },
 ] as const;
+
+/** Closed-day ranges for « X soir → Y matin » (both document bounds excluded). */
+const SOIR_MATIN_CLOSED_RANGES = [
+  { label: /AUTOMNE/i, documentStart: "2028-10-13", documentEnd: "2028-10-30", closedFrom: "2028-10-14", closedTo: "2028-10-29" },
+  { label: /NOEL|NOËL/i, documentStart: "2028-12-22", documentEnd: "2029-01-08", closedFrom: "2028-12-23", closedTo: "2029-01-07" },
+  { label: /HIVER/i, documentStart: "2029-02-09", documentEnd: "2029-02-19", closedFrom: "2029-02-10", closedTo: "2029-02-18" },
+  { label: /PAQUES|PÂQUES/i, documentStart: "2029-03-29", documentEnd: "2029-04-09", closedFrom: "2029-03-30", closedTo: "2029-04-08" },
+  { label: /ASCENSION/i, documentStart: "2029-05-09", documentEnd: "2029-05-14", closedFrom: "2029-05-10", closedTo: "2029-05-13" },
+] as const;
+
+const SINGLE_DAY_HOLIDAYS = ["2028-11-01", "2028-12-08", "2029-03-19", "2029-05-21", "2029-05-31"] as const;
+
+function holidayDates(exceptions: { date: string }[]): Set<string> {
+  return new Set(exceptions.map((entry) => entry.date));
+}
+
+function expectedClosedDayCount(): number {
+  return (
+    eachIsoDateInclusive("2028-10-14", "2028-10-29").length +
+    eachIsoDateInclusive("2028-12-23", "2029-01-07").length +
+    eachIsoDateInclusive("2029-02-10", "2029-02-18").length +
+    eachIsoDateInclusive("2029-03-30", "2029-04-08").length +
+    eachIsoDateInclusive("2029-05-10", "2029-05-13").length +
+    SINGLE_DAY_HOLIDAYS.length
+  );
+}
+
+function assertSoirMatinClosedDays(holidays: Set<string>): void {
+  for (const period of SOIR_MATIN_CLOSED_RANGES) {
+    assert.equal(
+      holidays.has(period.documentStart),
+      false,
+      `${period.documentStart} n’est pas holiday (${period.label})`,
+    );
+    assert.equal(
+      holidays.has(period.documentEnd),
+      false,
+      `${period.documentEnd} n’est pas holiday (${period.label})`,
+    );
+    for (const date of eachIsoDateInclusive(period.closedFrom, period.closedTo)) {
+      assert.ok(holidays.has(date), `${date} doit être holiday (${period.label})`);
+    }
+  }
+  for (const date of SINGLE_DAY_HOLIDAYS) {
+    assert.ok(holidays.has(date), `${date} (fête simple) doit rester holiday`);
+  }
+}
 
 function escapePdfText(text: string): string {
   return text.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
@@ -161,6 +281,8 @@ test("B — événements explicites extraits avec les bonnes dates", async () =>
     );
     assert.ok(found, `Événement manquant : ${expected.label}`);
     assert.equal(found?.kind, expected.kind, expected.label);
+    assert.equal(found?.startMarker, expected.startMarker, `${expected.label} startMarker`);
+    assert.equal(found?.endMarker, expected.endMarker, `${expected.label} endMarker`);
   }
 
   const october = groupOfficialEventsByMonth(parsed.preview.events, 2028).find((group) =>
@@ -169,6 +291,38 @@ test("B — événements explicites extraits avec les bonnes dates", async () =>
   assert.ok(october);
   assert.equal(october?.events.length, 1);
   assert.match(october?.events[0]?.label ?? "", /AUTOMNE/i);
+});
+
+test("bornes soir → matin : dates officielles conservées, jours limites exclus", () => {
+  const parsed = parseOfficialPlanFromLines(OFFICIAL_LINES_2028);
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) return;
+
+  const autumn = parsed.preview.events.find((event) => /AUTOMNE/i.test(event.label));
+  assert.equal(autumn?.startsOn, "2028-10-13");
+  assert.equal(autumn?.endsOn, "2028-10-30");
+  assert.equal(autumn?.startMarker, "soir");
+  assert.equal(autumn?.endMarker, "matin");
+  const autumnClosed = closedDaysFromOfficialEvent(autumn!);
+  assert.equal(autumnClosed.includes("2028-10-13"), false);
+  assert.equal(autumnClosed[0], "2028-10-14");
+  assert.equal(autumnClosed.at(-1), "2028-10-29");
+  assert.equal(autumnClosed.includes("2028-10-30"), false);
+
+  const ascension = parsed.preview.events.find((event) => /ASCENSION/i.test(event.label));
+  assert.equal(ascension?.startsOn, "2029-05-09");
+  assert.equal(ascension?.endsOn, "2029-05-14");
+  const ascensionClosed = closedDaysFromOfficialEvent(ascension!);
+  assert.equal(ascensionClosed.includes("2029-05-09"), false);
+  assert.deepEqual(ascensionClosed, ["2029-05-10", "2029-05-11", "2029-05-12", "2029-05-13"]);
+  assert.equal(ascensionClosed.includes("2029-05-14"), false);
+
+  const toussaint = parsed.preview.events.find((event) => /TOUSSAINT/i.test(event.label));
+  assert.deepEqual(closedDaysFromOfficialEvent(toussaint!), ["2028-11-01"]);
+
+  const exceptions = expandOfficialEventsToExceptions(parsed.preview.events);
+  assert.equal(exceptions.length, expectedClosedDayCount());
+  assertSoirMatinClosedDays(holidayDates(exceptions));
 });
 
 test("C/D/E — import DRAFT sans semaines A/B, 2026-2027 reste ACTIVE", async () => {
@@ -203,11 +357,22 @@ test("C/D/E — import DRAFT sans semaines A/B, 2026-2027 reste ACTIVE", async (
   assert.equal(years.filter((year) => year.status === "draft").length, 1);
 
   const exceptions = await store.listDayExceptions(imported.year.id);
-  assert.ok(exceptions.length > 0);
+  const holidays = holidayDates(exceptions);
+  const expectedCount = expectedClosedDayCount();
+  assert.equal(exceptions.length, expectedCount);
+  assert.equal(imported.exceptionDayCount, expectedCount);
   assert.ok(exceptions.every((entry) => entry.state === "holiday"));
-  assert.ok(exceptions.some((entry) => entry.date === "2028-10-13"));
-  assert.ok(exceptions.some((entry) => entry.date === "2028-10-30"));
-  assert.ok(exceptions.some((entry) => entry.date === "2029-01-08"));
+  assertSoirMatinClosedDays(holidays);
+  assert.equal(holidays.has("2028-10-13"), false, "13.10.2028 n’est pas holiday");
+  assert.ok(holidays.has("2028-10-14"));
+  assert.ok(holidays.has("2028-10-29"));
+  assert.equal(holidays.has("2028-10-30"), false, "30.10.2028 n’est pas holiday");
+  assert.equal(holidays.has("2029-05-09"), false, "09.05.2029 n’est pas holiday");
+  assert.equal(holidays.has("2029-05-14"), false, "14.05.2029 n’est pas holiday");
+  assert.equal(
+    expandOfficialEventsToExceptions(parsed.preview.events).length,
+    expectedCount,
+  );
 
   db.close();
 });
@@ -370,4 +535,15 @@ test("PDF officiel détecté comme plan de scolarité, sans semaines A/B", async
   if (!detected.official.ok) return;
   assert.equal(detected.official.preview.label, "2028-2029");
   assert.equal(detected.official.preview.events.length, EXPECTED_EVENTS.length);
+});
+
+test("interface 2.48.0 : aucun import A/B exposé", () => {
+  const panel = readFileSync(
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../web/app/components/school-year-admin-panel.tsx"),
+    "utf8",
+  );
+  assert.equal(panel.includes("PLAN A/B"), false);
+  assert.equal(panel.includes("WeekPlanComplement"), false);
+  assert.equal(panel.includes("Choisir le PDF des semaines A/B"), false);
+  assert.equal(panel.includes("Enregistrer le plan A/B en brouillon"), false);
 });

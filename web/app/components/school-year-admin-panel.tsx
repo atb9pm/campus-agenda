@@ -36,23 +36,17 @@ const STATUS_LABELS: Record<SchoolYearSummary["status"], string> = {
   archived: "Archivée",
 };
 
-function formatMondayLabel(isoDate: string): string {
-  const [year, month, day] = isoDate.split("-").map(Number);
-  const date = new Date(year, month - 1, day, 12);
-  const weekday = new Intl.DateTimeFormat("fr-CH", { weekday: "short" }).format(date);
-  const datePart = new Intl.DateTimeFormat("fr-CH", { day: "numeric", month: "long", year: "numeric" }).format(date);
-  return `${weekday}. ${datePart.replace(".", "")}`;
-}
-
-function formatWeekLabel(week: SchoolCalendarWeek): string {
-  return `Semaine ${String(week.number).padStart(2, "0")}-${week.kind}`;
+function formatDayMarker(marker: OfficialCalendarEvent["startMarker"]): string {
+  if (marker === "matin" || marker === "soir") return ` ${marker}`;
+  return "";
 }
 
 function formatEventRange(event: OfficialCalendarEvent): string {
+  const start = `${formatOfficialDateFr(event.startsOn)}${formatDayMarker(event.startMarker)}`;
   if (event.startsOn === event.endsOn) {
-    return formatOfficialDateFr(event.startsOn);
+    return start;
   }
-  return `${formatOfficialDateFr(event.startsOn)} → ${formatOfficialDateFr(event.endsOn)}`;
+  return `${start} → ${formatOfficialDateFr(event.endsOn)}${formatDayMarker(event.endMarker)}`;
 }
 
 function OfficialEventsByMonth({
@@ -92,7 +86,6 @@ interface SchoolYearAdminPanelProps {
 
 export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYearAdminPanelProps) {
   const officialFileId = useId();
-  const weekFileId = useId();
   const [years, setYears] = useState<SchoolYearSummary[]>([]);
   const [activeCalendar, setActiveCalendar] = useState<{ label: string; weeks: SchoolCalendarWeek[] } | null>(null);
   const [workingYearId, setWorkingYearId] = useState<string | null>(null);
@@ -235,8 +228,8 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
         <h2 id="school-year-admin-title">Année scolaire</h2>
         <p>
           Le <strong>plan de scolarité</strong> de l’État du Valais est la source officielle des dates
-          (début, fin, vacances, fêtes, interruptions). Le plan A/B reste un complément éventuel,
-          indépendant, et n’est jamais déduit du document officiel.
+          (début, fin, vacances, fêtes, interruptions). L’import crée une année en brouillon, sans
+          activer, sans archiver, et sans inventer de semaines A/B.
         </p>
       </div>
 
@@ -371,36 +364,10 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
 
         {weekPreview && (
           <p className="school-year-hint">
-            Ce fichier ressemble à un plan A/B. Utilisez la section complémentaire ci-dessous.
+            Ce fichier n’est pas un plan de scolarité officiel de l’État du Valais.
           </p>
         )}
       </article>
-
-      <details className="school-year-card school-year-ab-details">
-        <summary>
-          <span className="eyebrow">PLAN A/B</span>
-          <strong>Complément éventuel (document Semaines A/B)</strong>
-        </summary>
-        <p className="school-year-hint">
-          Ancien document spécifique. Il ne crée plus l’année scolaire à partir du calendrier
-          officiel. S’il est importé, il reste un complément pédagogique séparé.
-        </p>
-        <WeekPlanComplement
-          fileInputId={weekFileId}
-          working={working}
-          onParsed={(nextPreview, nextReceivable) => {
-            setPreview(nextPreview);
-            setReceivable(nextReceivable);
-            setExistingYear(null);
-          }}
-          onImported={async (file) => {
-            setSelectedFile(file);
-            await handleImport(false, file);
-          }}
-          weekPreview={weekPreview}
-          receivable={receivable}
-        />
-      </details>
 
       {years.length > 0 && (
         <article className="school-year-card">
@@ -500,99 +467,6 @@ function OfficialPlanPreviewCard({
           </button>
         )}
       </div>
-    </div>
-  );
-}
-
-function WeekPlanComplement({
-  fileInputId,
-  working,
-  onParsed,
-  onImported,
-  weekPreview,
-  receivable,
-}: {
-  fileInputId: string;
-  working: boolean;
-  onParsed: (preview: SchoolYearPreview, receivable: boolean) => void;
-  onImported: (file: File) => Promise<void>;
-  weekPreview: SchoolYearWeekPreview | null;
-  receivable: boolean | null;
-}) {
-  const [file, setFile] = useState<File | null>(null);
-  const [error, setError] = useState("");
-
-  async function handleFile(next: File | null) {
-    setFile(next);
-    setError("");
-    if (!next) return;
-    try {
-      const result = await parseSchoolYearPdf(next);
-      onParsed(result.preview, result.receivable);
-    } catch (parseError) {
-      setError(parseError instanceof Error ? parseError.message : "Analyse impossible.");
-    }
-  }
-
-  return (
-    <div>
-      <div className="school-year-upload">
-        <input
-          id={fileInputId}
-          type="file"
-          accept="application/pdf,.pdf"
-          disabled={working}
-          onChange={(event) => void handleFile(event.target.files?.[0] ?? null)}
-        />
-        <label htmlFor={fileInputId} className="school-year-file-label">
-          {file ? file.name : "Choisir le PDF des semaines A/B"}
-        </label>
-      </div>
-      {error && (
-        <p className="school-year-error" role="alert">
-          {error}
-        </p>
-      )}
-      {weekPreview && (
-        <div className="school-year-preview">
-          <p className="school-year-meta">
-            {weekPreview.label} — {weekPreview.weekCount} semaine{weekPreview.weekCount > 1 ? "s" : ""}{" "}
-            A/B détectée{weekPreview.weekCount > 1 ? "s" : ""}.
-          </p>
-          {weekPreview.weeks.length > 0 && (
-            <div className="school-year-week-table-wrap">
-              <table className="school-year-week-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Semaine</th>
-                    <th scope="col">Lundi de référence</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {weekPreview.weeks.map((week) => (
-                    <tr key={week.number}>
-                      <td>{formatWeekLabel(week)}</td>
-                      <td>{formatMondayLabel(week.monday)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <div className="school-year-actions">
-            <button
-              type="button"
-              className="workspace-action secondary"
-              disabled={working || !file || !receivable}
-              onClick={() => {
-                if (file) void onImported(file);
-              }}
-            >
-              Enregistrer le plan A/B en brouillon
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
