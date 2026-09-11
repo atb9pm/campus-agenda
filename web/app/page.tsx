@@ -98,12 +98,12 @@ import {
   resolveNotebookClassroomId,
   resolveNotebookSubjectId,
   weekdayToCourseDayIndex,
-  buildPublicationPayload,
   cloneRichDoc,
   composeWeekPublicationDoc,
   decodeRichDetail,
+  isCarnetOwnedPublication,
   isPlaceholderDetail,
-  listFoldableCarnetPublications,
+  planCarnetWeekPublicationSave,
   previousSchoolWeekNumber,
   type CampusRichDoc,
   type ClassNotesDocument,
@@ -1026,25 +1026,23 @@ export default function Home() {
   async function notebookSaveWeekPublication(schoolWeekNumber: number, doc: CampusRichDoc) {
     if (!notebookClassroomId || !notebookSubjectId || !openNotebookClass) return;
     const weekItems = notebookItems.filter((item) => item.schoolWeekNumber === schoolWeekNumber);
-    const payload = buildPublicationPayload(doc);
-    const foldable = listFoldableCarnetPublications(weekItems);
-    const existing = foldable.find((item) => decodeRichDetail(item.detail)) ?? foldable[0];
+    const plan = planCarnetWeekPublicationSave(weekItems, doc);
 
-    if (!payload) {
-      for (const item of foldable) {
-        await deleteAgendaItemApi(item.id);
-        setItems((previous) => previous.filter((entry) => entry.id !== item.id));
+    if (plan.action === "clear") {
+      for (const itemId of plan.deleteIds) {
+        await deleteAgendaItemApi(itemId);
+        setItems((previous) => previous.filter((entry) => entry.id !== itemId));
       }
       showNotice("Publication retirée.");
       return;
     }
 
-    if (existing) {
-      const updated = await updateAgendaItemApi(existing.id, payload);
-      setItems((previous) => previous.map((item) => (item.id === existing.id ? updated : item)));
-      for (const extra of foldable.filter((item) => item.id !== existing.id)) {
-        await deleteAgendaItemApi(extra.id);
-        setItems((previous) => previous.filter((entry) => entry.id !== extra.id));
+    if (plan.action === "update") {
+      const updated = await updateAgendaItemApi(plan.updateId, plan.payload);
+      setItems((previous) => previous.map((item) => (item.id === plan.updateId ? updated : item)));
+      for (const extraId of plan.deleteIds) {
+        await deleteAgendaItemApi(extraId);
+        setItems((previous) => previous.filter((entry) => entry.id !== extraId));
       }
     } else {
       const created = await createAgendaItemApi({
@@ -1055,8 +1053,8 @@ export default function Home() {
         weekOffset: 0,
         schoolWeekNumber,
         type: "HOMEWORK",
-        title: payload.title,
-        detail: payload.detail,
+        title: plan.payload.title,
+        detail: plan.payload.detail,
       });
       setItems((previous) => upsertAgendaItem(previous, created));
     }
@@ -1067,7 +1065,7 @@ export default function Home() {
     const previous = previousSchoolWeekNumber(schoolWeeksMemo, schoolWeekNumber);
     if (previous == null) return;
     const source = composeWeekPublicationDoc(
-      notebookItems.filter((item) => item.schoolWeekNumber === previous && item.type !== "TEST"),
+      notebookItems.filter((item) => item.schoolWeekNumber === previous && isCarnetOwnedPublication(item)),
     );
     await notebookSaveWeekPublication(schoolWeekNumber, cloneRichDoc(source));
   }

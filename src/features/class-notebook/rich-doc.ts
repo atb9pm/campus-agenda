@@ -253,11 +253,180 @@ export function rejectDangerousRichPayload(value: unknown): boolean {
 }
 
 export function htmlToSafeInlines(html: string): RichInline[] {
-  const stripped = html
+  return parseInlinesFromHtml(html);
+}
+
+const HIGHLIGHT_RGB = { r: 254, g: 240, b: 138 };
+
+export function parseCssColorToRgb(value: string): { r: number; g: number; b: number } | null {
+  const raw = value.trim().toLowerCase();
+  if (!raw) return null;
+  if (raw === "yellow" || raw === "highlight") return { ...HIGHLIGHT_RGB };
+  const hex = raw.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hex) {
+    const digits = hex[1]!;
+    const full = digits.length === 3 ? digits.split("").map((d) => d + d).join("") : digits;
+    return {
+      r: Number.parseInt(full.slice(0, 2), 16),
+      g: Number.parseInt(full.slice(2, 4), 16),
+      b: Number.parseInt(full.slice(4, 6), 16),
+    };
+  }
+  const rgb = raw.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  if (rgb) {
+    return { r: Number(rgb[1]), g: Number(rgb[2]), b: Number(rgb[3]) };
+  }
+  return null;
+}
+
+function rgbClose(left: { r: number; g: number; b: number }, right: { r: number; g: number; b: number }, delta = 12) {
+  return Math.abs(left.r - right.r) <= delta && Math.abs(left.g - right.g) <= delta && Math.abs(left.b - right.b) <= delta;
+}
+
+export function colorIdFromCss(value: string): RichTextColorId | undefined {
+  const rgb = parseCssColorToRgb(value);
+  if (!rgb) return undefined;
+  for (const id of RICH_TEXT_COLOR_IDS) {
+    const hex = RICH_TEXT_COLOR_HEX[id];
+    const target = parseCssColorToRgb(hex);
+    if (target && rgbClose(rgb, target)) return id;
+  }
+  return undefined;
+}
+
+export function isHighlightCss(value: string): boolean {
+  const rgb = parseCssColorToRgb(value);
+  if (!rgb) return /yellow|highlight|#ff0\b|#ffff00|fef08a/i.test(value);
+  return rgbClose(rgb, HIGHLIGHT_RGB, 20) || rgbClose(rgb, { r: 255, g: 255, b: 0 }, 10);
+}
+
+export function marksFromCssText(style: string): RichMarks {
+  const marks: RichMarks = {};
+  const decls = style.split(";").map((part) => part.trim()).filter(Boolean);
+  for (const decl of decls) {
+    const sep = decl.indexOf(":");
+    if (sep < 0) continue;
+    const prop = decl.slice(0, sep).trim().toLowerCase();
+    const value = decl.slice(sep + 1).trim();
+    if (prop === "color") {
+      const color = colorIdFromCss(value);
+      if (color) marks.color = color;
+    }
+    if (prop === "background" || prop === "background-color") {
+      if (isHighlightCss(value)) marks.highlight = true;
+    }
+    if (prop === "font-weight" && /bold|[6-9]00/.test(value)) marks.bold = true;
+    if (prop === "font-style" && value.includes("italic")) marks.italic = true;
+    if (prop === "text-decoration" && value.includes("underline")) marks.underline = true;
+  }
+  return marks;
+}
+
+export function mergeRichMarks(base: RichMarks, extra: RichMarks): RichMarks {
+  return { ...base, ...extra };
+}
+
+/** Interprète le HTML produit par execCommand (Chrome/Firefox : span/font, pas seulement <mark>). */
+export function parseInlinesFromHtml(html: string): RichInline[] {
+  const cleaned = html
     .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
     .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, "")
     .replace(/<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi, "");
-  return [{ text: clippedText(stripped.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()) }].filter(
-    (entry) => entry.text,
-  );
+  const inlines: RichInline[] = [];
+  const stack: RichMarks[] = [{}];
+  const token = /<\/?([a-zA-Z0-9]+)([^>]*)>|([^<]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = token.exec(cleaned))) {
+    if (match[3] != null) {
+      const text = decodeHtmlEntities(match[3]);
+      if (!text) continue;
+      const marks = stack[stack.length - 1] ?? {};
+      inlines.push(Object.keys(marks).length ? { text, marks: { ...marks } } : { text });
+      continue;
+    }
+    const tag = match[1]!.toLowerCase();
+    const attrs = match[2] ?? "";
+    const closing = match[0]!.startsWith("</");
+    if (tag === "br") {
+      inlines.push({ text: " " });
+      continue;
+    }
+    if (tag === "script" || tag === "iframe" || tag === "object" || tag === "embed") continue;
+    if (closing) {
+      if (stack.length > 1) stack.pop();
+      continue;
+    }
+    const current = stack[stack.length - 1] ?? {};
+    stack.push(mergeRichMarks(current, marksFromHtmlTag(tag, attrs)));
+  }
+  return inlines.filter((entry) => entry.text.length > 0);
+}
+
+function marksFromHtmlTag(tag: string, rawAttrs: string): RichMarks {
+  const marks: RichMarks = {};
+  if (tag === "strong" || tag === "b") marks.bold = true;
+  if (tag === "em" || tag === "i") marks.italic = true;
+  if (tag === "u") marks.underline = true;
+  if (tag === "mark") marks.highlight = true;
+  const attrs = parseHtmlAttributes(rawAttrs);
+  if (tag === "a") {
+    const href = sanitizeHref(attrs.href);
+    if (href) marks.href = href;
+  }
+  if (attrs["data-color"] && (RICH_TEXT_COLOR_IDS as readonly string[]).includes(attrs["data-color"])) {
+    marks.color = attrs["data-color"] as RichTextColorId;
+  }
+  if (attrs.color) {
+    const color = colorIdFromCss(attrs.color);
+    if (color) marks.color = color;
+  }
+  Object.assign(marks, marksFromCssText(attrs.style ?? ""));
+  return marks;
+}
+
+function parseHtmlAttributes(raw: string): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  const token = /([:A-Za-z_][:A-Za-z0-9_-]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/g;
+  let match: RegExpExecArray | null;
+  while ((match = token.exec(raw))) {
+    attrs[match[1]!.toLowerCase()] = match[3] ?? match[4] ?? match[5] ?? "";
+  }
+  return attrs;
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"');
+}
+
+export function addStructuredListItem(block: RichBlock, afterIndex?: number): RichBlock {
+  if (block.type === "bulletList" || block.type === "orderedList") {
+    const items = [...block.items];
+    const at = afterIndex == null ? items.length : afterIndex + 1;
+    items.splice(at, 0, []);
+    return { ...block, items: items.slice(0, MAX_LIST_ITEMS) };
+  }
+  if (block.type === "checklist") {
+    const items = [...block.items];
+    const at = afterIndex == null ? items.length : afterIndex + 1;
+    items.splice(at, 0, { checked: false, inlines: [] });
+    return { ...block, items: items.slice(0, MAX_LIST_ITEMS) };
+  }
+  return block;
+}
+
+export function removeStructuredListItem(block: RichBlock, index: number): RichBlock {
+  if (block.type === "bulletList" || block.type === "orderedList") {
+    const items = block.items.filter((_, current) => current !== index);
+    return { ...block, items: items.length ? items : [[]] };
+  }
+  if (block.type === "checklist") {
+    const items = block.items.filter((_, current) => current !== index);
+    return { ...block, items: items.length ? items : [{ checked: false, inlines: [] }] };
+  }
+  return block;
 }

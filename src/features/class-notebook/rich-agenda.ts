@@ -23,7 +23,7 @@ export function isCarnetOwnedPublication(item: PrototypeAgendaItem): boolean {
 }
 
 export function composeWeekPublicationDoc(items: readonly PrototypeAgendaItem[]): CampusRichDoc {
-  const publications = items.filter(isPublicationLine);
+  const publications = items.filter(isCarnetOwnedPublication);
   const rich = publications
     .map((item) => decodeRichDetail(item.detail))
     .find((doc) => doc && !isEmptyRichDoc(doc));
@@ -67,6 +67,39 @@ export function buildPublicationPayload(doc: CampusRichDoc): { title: string; de
     title: publicationTitleForDoc(clean),
     detail: encodeRichDetail(clean),
   };
+}
+
+export type CarnetPublicationSavePlan =
+  | { action: "clear"; deleteIds: number[] }
+  | { action: "update"; updateId: number; payload: { title: string; detail: string }; deleteIds: number[] }
+  | { action: "create"; payload: { title: string; detail: string } };
+
+/** Plan de sauvegarde du document riche : ne touche jamais une publication structurée. */
+export function planCarnetWeekPublicationSave(
+  weekItems: readonly PrototypeAgendaItem[],
+  doc: CampusRichDoc,
+): CarnetPublicationSavePlan {
+  const foldable = listFoldableCarnetPublications(weekItems);
+  const payload = buildPublicationPayload(doc);
+  if (!payload) {
+    return { action: "clear", deleteIds: foldable.map((item) => item.id) };
+  }
+  const existing = foldable.find((item) => decodeRichDetail(item.detail)) ?? foldable[0];
+  if (existing) {
+    return {
+      action: "update",
+      updateId: existing.id,
+      payload,
+      deleteIds: foldable.filter((item) => item.id !== existing.id).map((item) => item.id),
+    };
+  }
+  return { action: "create", payload };
+}
+
+export function savePlanTouchesItem(plan: CarnetPublicationSavePlan, itemId: number): boolean {
+  if (plan.action === "create") return false;
+  if (plan.action === "update" && plan.updateId === itemId) return true;
+  return plan.deleteIds.includes(itemId);
 }
 
 export function cloneRichDoc(doc: CampusRichDoc): CampusRichDoc {

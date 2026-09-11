@@ -14,6 +14,12 @@ Le Carnet permet une rédaction plus riche pour **Publication élèves** et **No
 - **Copier depuis la semaine précédente** pour la publication uniquement (copie indépendante).
 - Notes prof : éditeur plus simple (gras, listes, cases à cocher), toujours privées.
 
+### Corrigé
+
+- L’éditeur du Carnet ne compose, n’ouvre, ne copie et ne sauvegarde que les publications `isCarnetOwnedPublication`. Les publications structurées AnnualCourse/CourseSession restent séparées.
+- Le parseur restaure le surlignage et la couleur depuis le HTML réel de `execCommand` (`span`/`font` + `background-color`/`color`, pas seulement `<mark>`).
+- Listes et checklists : plusieurs éléments via Entrée, « Ajouter un élément » et suppression.
+
 ### Conservé
 
 Contrôles, CourseSession, AnnualCourse, calendrier, A/B, années scolaires. Les textes bruts existants restent lisibles. Aucune migration SQL. Backup v4 inchangé (`notes_json` et `agenda_items.detail` restent des textes).

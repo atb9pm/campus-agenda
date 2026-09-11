@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>execCommand highlight / color</title>
+  </head>
+  <body>
+    <div id="highlight" contenteditable="true">question 30</div>
+    <div id="color" contenteditable="true">4.7.06-5</div>
+    <pre id="out"></pre>
+    <script>
+      function selectAll(el) {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+
+      const highlight = document.getElementById("highlight");
+      highlight.focus();
+      selectAll(highlight);
+      document.execCommand("styleWithCSS", false, "true");
+      document.execCommand("hiliteColor", false, "#fef08a");
+
+      const color = document.getElementById("color");
+      color.focus();
+      selectAll(color);
+      document.execCommand("styleWithCSS", false, "true");
+      document.execCommand("foreColor", false, "#1d4ed8");
+
+      const payload = {
+        highlightHtml: highlight.innerHTML,
+        colorHtml: color.innerHTML,
+      };
+      document.getElementById("out").textContent = JSON.stringify(payload);
+      document.title = JSON.stringify(payload);
+    </script>
+  </body>
+</html>

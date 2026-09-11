@@ -18,6 +18,7 @@ import {
   emptyRichDoc,
   formatWeekColumnLabel,
   formatWeekColumnSubtitle,
+  isCarnetOwnedPublication,
   isPublicationLine,
   listWeekNotes,
   moveWeekNote,
@@ -305,8 +306,14 @@ export function ClassNotebookPanel({
           const weekKey = weekNotesKey(classSetup.id, week.number);
           const weekNotes = listWeekNotes(notesDocument, weekKey);
           const weekControls = classControls.filter((item) => item.schoolWeekNumber === week.number);
-          const weekPublications = items.filter(
-            (item) => item.schoolWeekNumber === week.number && isPublicationLine(item),
+          const weekCarnetPublications = items.filter(
+            (item) => item.schoolWeekNumber === week.number && isCarnetOwnedPublication(item),
+          );
+          const weekStructuredPublications = items.filter(
+            (item) =>
+              item.schoolWeekNumber === week.number &&
+              isPublicationLine(item) &&
+              isStructuredPublication(item),
           );
           const isActive = week.number === centerWeekNumber;
 
@@ -366,11 +373,11 @@ export function ClassNotebookPanel({
               <section className="class-notebook-zone class-notebook-zone-publication" aria-label="Publication élèves">
                 <h3>Publication élèves</h3>
                 <RichDocView
-                  doc={composeWeekPublicationDoc(weekPublications)}
+                  doc={composeWeekPublicationDoc(weekCarnetPublications)}
                   compact
                   emptyLabel="Aucune publication pour cette semaine."
                 />
-                {weekPublications.filter((item) => isStructuredPublication(item)).map((item) => (
+                {weekStructuredPublications.map((item) => (
                   <p key={item.id} className="class-notebook-structured-line">
                     {item.title}
                   </p>

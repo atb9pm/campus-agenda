@@ -1711,6 +1711,22 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .rich-doc-heading-input { font-weight: 800; color: var(--navy); }
 .rich-doc-edit-list, .rich-doc-edit-check { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
 .rich-doc-edit-check { list-style: none; padding-left: 0; }
+.rich-doc-list-wrap { display: grid; gap: 6px; }
+.rich-doc-list-item { display: flex; align-items: flex-start; gap: 8px; }
+.rich-doc-list-item .rich-doc-text-input { flex: 1; min-width: 0; }
+.rich-doc-list-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.rich-doc-list-actions button,
+.rich-doc-list-remove {
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--navy);
+  font-size: 11px;
+  cursor: pointer;
+}
+.rich-doc-list-remove { min-width: 32px; color: #8793a9; }
 .rich-doc-edit-check li { display: flex; align-items: flex-start; gap: 8px; }
 .rich-doc-editor.is-notes .rich-doc-canvas { background: #fafafa; }
 

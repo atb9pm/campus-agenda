@@ -4,6 +4,7 @@ import test from "node:test";
 
 import type { PrototypeAgendaItem } from "../src/features/agenda/demo-items.ts";
 import {
+  addStructuredListItem,
   buildPublicationPayload,
   cloneRichDoc,
   composeWeekNotesDoc,
@@ -14,15 +15,20 @@ import {
   excerptRichDoc,
   fromPlainText,
   insertQuickBlock,
+  isCarnetOwnedPublication,
   isClassNotesPayload,
   isEmptyRichDoc,
   isPublicationLine,
   listFoldableCarnetPublications,
   normalizeClassNotes,
+  parseInlinesFromHtml,
+  planCarnetWeekPublicationSave,
   previousSchoolWeekNumber,
   rejectDangerousRichPayload,
+  removeStructuredListItem,
   sanitizeHref,
   sanitizeRichDoc,
+  savePlanTouchesItem,
   setWeekRichNote,
   CAMPUS_RICH_DETAIL_PREFIX,
   type CampusRichDoc,
@@ -87,11 +93,24 @@ test("version 2.52.0 — éditeur enrichi Carnet, sans migration", async () => {
   assert.match(panel, /Notes prof/);
   assert.match(panel, /Copier depuis la semaine précédente/);
   assert.match(panel, /Aperçu élève/);
+  assert.match(panel, /isCarnetOwnedPublication/);
+  assert.match(panel, /weekCarnetPublications/);
+  assert.match(panel, /weekStructuredPublications/);
   assert.doesNotMatch(panel, /À faire[\s\S]*Contrôle/);
   assert.doesNotMatch(panel, /insertQuickBlock\([^\)]*control/);
   assert.match(notesApi, /requireTeacherSession/);
   assert.match(studentPage, /RichDocView/);
   assert.match(studentPage, /isPlaceholderDetail/);
+  assert.match(studentPage, /isCarnetOwnedPublication/);
+  assert.match(studentPage, /planCarnetWeekPublicationSave/);
+  const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
+  assert.match(editor, /parseInlinesFromHtml/);
+  assert.match(editor, /hiliteColor/);
+  assert.match(editor, /serializeFromDom/);
+  assert.match(editor, /Ajouter un élément/);
+  assert.match(editor, /Supprimer l’élément/);
+  assert.match(editor, /onEnter/);
+  assert.match(editor, /addStructuredListItem/);
 });
 
 test("création / modification / persistance d’une publication riche", () => {
@@ -240,6 +259,145 @@ test("foldable — seuls les items Carnet, pas les publications structurées", (
     listFoldableCarnetPublications(items).map((entry) => entry.id),
     [1],
   );
+});
+
+test("semaine mixte — l’éditeur n’ouvre que la publication Carnet et la sauvegarde n’altère pas le structuré", () => {
+  const carnet = item({
+    id: 41,
+    type: "HOMEWORK",
+    title: "Révision Carnet injection",
+    detail: encodeRichDetail(fromPlainText("Révision Carnet injection")),
+  });
+  const structured = item({
+    id: 42,
+    type: "HOMEWORK",
+    title: "Publication structurée CourseSession",
+    detail: "Ne pas absorber",
+    annualCourseId: "ac-moteur",
+    courseSessionKey: "year|ac-moteur|2026-09-14",
+  });
+  const week = [carnet, structured];
+
+  assert.equal(isCarnetOwnedPublication(carnet), true);
+  assert.equal(isCarnetOwnedPublication(structured), false);
+
+  const opened = composeWeekPublicationDoc(week);
+  assert.match(excerptRichDoc(opened), /Révision Carnet injection/);
+  assert.doesNotMatch(excerptRichDoc(opened), /Publication structurée CourseSession/);
+  assert.doesNotMatch(JSON.stringify(opened), /Ne pas absorber/);
+  assert.deepEqual(
+    listFoldableCarnetPublications(week).map((entry) => entry.id),
+    [41],
+  );
+
+  const savedDoc = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [{ type: "paragraph", inlines: [{ text: "Texte Carnet modifié" }] }],
+  });
+  const plan = planCarnetWeekPublicationSave(week, savedDoc);
+  assert.equal(plan.action, "update");
+  if (plan.action === "update") {
+    assert.equal(plan.updateId, 41);
+    assert.deepEqual(plan.deleteIds, []);
+    assert.match(plan.payload.detail, /Texte Carnet modifié/);
+    assert.doesNotMatch(plan.payload.detail, /Publication structurée CourseSession/);
+  }
+  assert.equal(savePlanTouchesItem(plan, 42), false);
+  assert.equal(structured.title, "Publication structurée CourseSession");
+  assert.equal(structured.detail, "Ne pas absorber");
+  assert.equal(structured.annualCourseId, "ac-moteur");
+
+  const emptyPlan = planCarnetWeekPublicationSave(week, emptyRichDoc());
+  assert.equal(emptyPlan.action, "clear");
+  if (emptyPlan.action === "clear") {
+    assert.deepEqual(emptyPlan.deleteIds, [41]);
+  }
+  assert.equal(savePlanTouchesItem(emptyPlan, 42), false);
+
+  const onlyStructured = composeWeekPublicationDoc([structured]);
+  assert.equal(isEmptyRichDoc(onlyStructured), true);
+
+  const copied = composeWeekPublicationDoc([
+    structured,
+    item({
+      id: 43,
+      type: "HOMEWORK",
+      schoolWeekNumber: 3,
+      title: "Source Carnet",
+      detail: encodeRichDetail(fromPlainText("Source Carnet")),
+    }),
+  ]);
+  assert.match(excerptRichDoc(copied), /Source Carnet/);
+  assert.doesNotMatch(excerptRichDoc(copied), /Publication structurée CourseSession/);
+});
+
+test("parseur — HTML Chrome execCommand hiliteColor / foreColor, pas seulement <mark>", () => {
+  const chromeHighlight = parseInlinesFromHtml(
+    '<span style="background-color: rgb(254, 240, 138);">question 30</span>',
+  );
+  assert.equal(chromeHighlight[0]?.text, "question 30");
+  assert.equal(chromeHighlight[0]?.marks?.highlight, true);
+
+  const chromeColor = parseInlinesFromHtml('<span style="color: rgb(29, 78, 216);">4.7.06-5</span>');
+  assert.equal(chromeColor[0]?.text, "4.7.06-5");
+  assert.equal(chromeColor[0]?.marks?.color, "blue");
+
+  const fontColor = parseInlinesFromHtml('<font color="#b42318">alerte</font>');
+  assert.equal(fontColor[0]?.marks?.color, "red");
+
+  const yellow = parseInlinesFromHtml('<span style="background-color: yellow;">marqué</span>');
+  assert.equal(yellow[0]?.marks?.highlight, true);
+
+  const markTag = parseInlinesFromHtml("<mark>ancien</mark>");
+  assert.equal(markTag[0]?.marks?.highlight, true);
+
+  const persisted = decodeRichDetail(
+    encodeRichDetail({
+      format: "campus-rich-v1",
+      blocks: [
+        {
+          type: "paragraph",
+          inlines: [
+            ...chromeHighlight,
+            { text: " " },
+            ...chromeColor,
+          ],
+        },
+      ],
+    }),
+  );
+  const paragraph = persisted?.blocks[0];
+  assert.ok(paragraph && paragraph.type === "paragraph");
+  if (paragraph && paragraph.type === "paragraph") {
+    assert.equal(paragraph.inlines[0]?.marks?.highlight, true);
+    assert.equal(paragraph.inlines[2]?.marks?.color, "blue");
+  }
+});
+
+test("listes et checklists — plusieurs éléments, ajout et suppression", () => {
+  let bullets: CampusRichDoc["blocks"][number] = { type: "bulletList", items: [[{ text: "un" }]] };
+  bullets = addStructuredListItem(bullets);
+  bullets = addStructuredListItem(bullets);
+  assert.ok(bullets.type === "bulletList");
+  if (bullets.type === "bulletList") {
+    assert.equal(bullets.items.length, 3);
+    bullets = removeStructuredListItem(bullets, 1);
+    assert.ok(bullets.type === "bulletList");
+    if (bullets.type === "bulletList") assert.equal(bullets.items.length, 2);
+  }
+
+  let numbered: CampusRichDoc["blocks"][number] = { type: "orderedList", items: [[{ text: "a" }]] };
+  numbered = addStructuredListItem(numbered, 0);
+  numbered = addStructuredListItem(numbered, 1);
+  assert.ok(numbered.type === "orderedList" && numbered.items.length === 3);
+
+  let checks: CampusRichDoc["blocks"][number] = {
+    type: "checklist",
+    items: [{ checked: false, inlines: [{ text: "case 1" }] }],
+  };
+  checks = addStructuredListItem(checks);
+  checks = addStructuredListItem(checks);
+  assert.ok(checks.type === "checklist" && checks.items.length === 3);
 });
 
 test("notes prof — document riche + ancien texte, normalisation", () => {
