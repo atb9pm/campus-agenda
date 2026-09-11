@@ -257,7 +257,7 @@ function slot(
 test("version — jours de présence, 0023 puis 0024 puis 0025", () => {
   assert.match(APP_VERSION, /^\d+\.\d+\.\d+$/);
   assert.ok(SQL_MIGRATION_FILES.includes("0022_course_schedule_slots.sql"));
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0027_teacher_author_nullable.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0028_school_week_kind_nullable.sql");
   assert.ok(
     SQL_MIGRATION_FILES.indexOf("0022_course_schedule_slots.sql") <
       SQL_MIGRATION_FILES.indexOf("0023_class_attendance_days.sql"),

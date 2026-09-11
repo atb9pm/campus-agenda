@@ -21,6 +21,7 @@ import {
 } from "@campus/features/control-planning";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import { SCHOOL_WEEKDAY_LABELS, addDays } from "@campus/features/school-days";
+import { formatPedagogicalWeekLabel } from "@campus/features/school-year/official-course-weeks.ts";
 import type { ControlCoordinationSummary } from "@campus/features/evaluations";
 import {
   ControlCoordinationRequiredError,
@@ -32,6 +33,10 @@ import {
 } from "../../lib/api-client.ts";
 
 const CONTROL_DRAG_MIME = "application/x-campus-control";
+
+function compactWeekLabel(week: { number: number; kind: "A" | "B" | null }): string {
+  return formatPedagogicalWeekLabel(week).replace(/^Semaine /, "S");
+}
 
 type BranchPalette = { fond: string; bordure: string; texte: string };
 
@@ -1488,7 +1493,7 @@ export function ControlPlanningPanel({
                                     setLayout("week");
                                   }}
                                 >
-                                  S{String(semesterWeek.number).padStart(2, "0")}-{semesterWeek.kind}
+                                  {compactWeekLabel(semesterWeek)}
                                 </button>
                                 <span>
                                   {formatCompactDay(semesterWeek.monday)} ·{" "}
@@ -1632,7 +1637,7 @@ export function ControlPlanningPanel({
               <div>
                 <span className="eyebrow">SEMAINE SCOLAIRE</span>
                 <strong>
-                  Semaine {String(view.week.number).padStart(2, "0")}-{view.week.kind}
+                  {formatPedagogicalWeekLabel(view.week)}
                   {view.week.monday ? ` · lundi ${formatIsoDay(view.week.monday)}` : ""}
                 </strong>
               </div>
@@ -1778,7 +1783,7 @@ export function ControlPlanningPanel({
                         selectLayout("week");
                       }}
                     >
-                      S{String(semesterWeek.number).padStart(2, "0")}-{semesterWeek.kind}
+                      {compactWeekLabel(semesterWeek)}
                     </button>
                     <span>{formatCompactDay(semesterWeek.monday)}</span>
                   </th>

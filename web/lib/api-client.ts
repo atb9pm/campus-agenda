@@ -47,7 +47,7 @@ export type ApiSession = ApiTeacherSession | ApiStudentSession | null;
 
 export interface SchoolCalendarWeek {
   number: number;
-  kind: "A" | "B";
+  kind: "A" | "B" | null;
   monday: string;
 }
 

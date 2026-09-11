@@ -58,3 +58,14 @@ export {
   schoolYearAlreadyExistsMessage,
   validateOfficialPlanPreview,
 } from "./official-plan-logic.ts";
+export {
+  assertGeneratedWeeksMatchOfficialTotal,
+  formatPedagogicalWeekLabel,
+  generateOfficialCourseWeeks,
+  mondayOfContainingWeek,
+  officialCourseWeekCountMismatchMessage,
+} from "./official-course-weeks.ts";
+export type {
+  GenerateOfficialCourseWeeksInput,
+  GenerateOfficialCourseWeeksResult,
+} from "./official-course-weeks.ts";

@@ -40,6 +40,9 @@ export function getCourseDaysForAttendanceWeek(
     updatedAt: "",
   })) as ClassAttendanceDay[];
   const monday = startOfDay(week.monday);
+  if (week.kind !== "A" && week.kind !== "B") {
+    return [];
+  }
   return attendanceDaysForWeek(asDays, week.kind).map((day) => {
     const date = new Date(monday);
     date.setDate(date.getDate() + (day.dayOfWeek - 1));

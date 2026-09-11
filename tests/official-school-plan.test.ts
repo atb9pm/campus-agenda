@@ -251,9 +251,9 @@ function normalizeEventLabel(label: string): string {
     .toUpperCase();
 }
 
-test("version 2.48.0 — plan de scolarité, aucune migration", () => {
-  assert.equal(APP_VERSION, "2.48.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0027_teacher_author_nullable.sql");
+test("version 2.49.0 — semaines de cours, kind nullable", () => {
+  assert.equal(APP_VERSION, "2.49.0");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0028_school_week_kind_nullable.sql");
 });
 
 test("A — PDF officiel 2028-2029 : année, début, fin", async () => {
@@ -342,7 +342,12 @@ test("C/D/E — import DRAFT sans semaines A/B, 2026-2027 reste ACTIVE", async (
   assert.equal(imported.year.status, "draft");
   assert.equal(imported.year.startsOn, "2028-08-21");
   assert.equal(imported.year.endsOn, "2029-06-22");
-  assert.equal(imported.year.weeks.length, 0);
+  assert.equal(imported.year.weeks.length, 38);
+  assert.ok(imported.year.weeks.every((week) => week.kind === null));
+  assert.deepEqual(
+    imported.year.weeks.map((week) => week.number),
+    Array.from({ length: 38 }, (_, index) => index + 1),
+  );
   assert.equal(imported.eventCount, EXPECTED_EVENTS.length);
 
   const stillActive = await store.getActiveSchoolYear();
@@ -435,6 +440,8 @@ test("I — année déjà existante : pas de doublon", async () => {
   });
   assert.equal(replaced.replaced, true);
   assert.equal(replaced.year.status, "draft");
+  assert.equal(replaced.year.weeks.length, 38);
+  assert.ok(replaced.year.weeks.every((week) => week.kind === null));
   assert.equal((await store.listSchoolYears()).filter((year) => year.label === "2028-2029").length, 1);
   db.close();
 });

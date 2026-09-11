@@ -48,6 +48,12 @@ export function validateAgendaScheduleTarget(options: {
 
   const hasAttendance = Boolean(options.attendanceDays && options.attendanceDays.length > 0);
   const slots = options.slots ?? [];
+  if (week.kind !== "A" && week.kind !== "B") {
+    if (options.resolvedStructuredCourse || hasAttendance || slots.length > 0) {
+      return { ok: false, reason: "Cette semaine n'a pas d'alternance A/B." };
+    }
+    return { ok: false, reason: "Jour de cours invalide." };
+  }
   const hasCompatibleSlot = scheduleSlotAllowsAgendaDay(slots, week.kind, options.dayIndex);
 
   if (options.resolvedStructuredCourse) {

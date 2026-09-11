@@ -124,7 +124,15 @@ export function listPreviousCourseDays(
 }
 
 export function formatSchoolWeekLabel(slot: CourseDaySlot): string {
-  return `Semaine ${String(slot.schoolWeekNumber).padStart(2, "0")}-${slot.weekKind}`;
+  return formatSchoolWeekOptionLabel({ number: slot.schoolWeekNumber, kind: slot.weekKind });
+}
+
+export function formatSchoolWeekOptionLabel(week: { number: number; kind: SchoolWeek["kind"] }): string {
+  const padded = String(week.number).padStart(2, "0");
+  if (week.kind === "A" || week.kind === "B") {
+    return `Semaine ${padded}-${week.kind}`;
+  }
+  return `Semaine ${padded}`;
 }
 
 export function formatCourseDayHeading(slot: CourseDaySlot): string {
@@ -136,10 +144,6 @@ export function formatCourseDayHeading(slot: CourseDaySlot): string {
 
 export function findSchoolWeekByNumber(number: number, weeks = buildSchoolWeeks()): SchoolWeek {
   return weeks.find((week) => week.number === number) ?? weeks[0];
-}
-
-export function formatSchoolWeekOptionLabel(week: SchoolWeek): string {
-  return `Semaine ${String(week.number).padStart(2, "0")}-${week.kind}`;
 }
 
 export interface CourseDayOption {

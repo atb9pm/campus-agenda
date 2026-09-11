@@ -93,7 +93,7 @@ export const CAMPUS_BACKUP_COLUMNS: Record<CampusBackupTableName, BackupColumnSp
   school_weeks: cols(
     { name: "school_year_id", type: "text", required: true },
     { name: "week_number", type: "integer", required: true },
-    { name: "week_kind", type: "text", required: true },
+    { name: "week_kind", type: "text" },
     { name: "monday", type: "text", required: true },
   ),
   school_day_exceptions: cols(

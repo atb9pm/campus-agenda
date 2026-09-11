@@ -17,7 +17,7 @@ export function resetActiveSchoolWeekEntries(): void {
   activeWeekEntries = null;
 }
 
-export function getSchoolWeekEntries(): ReadonlyArray<{ number: number; kind: "A" | "B"; monday: string }> {
+export function getSchoolWeekEntries(): ReadonlyArray<SchoolWeekEntry> {
   if (activeWeekEntries !== null) {
     return activeWeekEntries;
   }
@@ -25,7 +25,7 @@ export function getSchoolWeekEntries(): ReadonlyArray<{ number: number; kind: "A
 }
 
 export function buildSchoolWeeksFromEntries(
-  entries: ReadonlyArray<{ number: number; kind: "A" | "B"; monday: string }>,
+  entries: ReadonlyArray<SchoolWeekEntry>,
 ): SchoolWeek[] {
   return entries.map((entry) => ({
     number: entry.number,

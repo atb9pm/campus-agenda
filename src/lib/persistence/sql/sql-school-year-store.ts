@@ -9,6 +9,11 @@ import {
   schoolYearAlreadyExistsMessage,
   validateOfficialPlanPreview,
 } from "../../../features/school-year/official-plan-logic.ts";
+import {
+  assertGeneratedWeeksMatchOfficialTotal,
+  generateOfficialCourseWeeks,
+} from "../../../features/school-year/official-course-weeks.ts";
+import { parseSchoolWeekKind } from "../../../features/calendar/types.ts";
 import type {
   OfficialPlanImportOptions,
   OfficialPlanImportResult,
@@ -35,7 +40,7 @@ export interface SchoolYearRow {
 export interface SchoolWeekRow {
   school_year_id: string;
   week_number: number;
-  week_kind: string;
+  week_kind: string | null;
   monday: string;
 }
 
@@ -56,7 +61,7 @@ function rowToRecord(row: SchoolYearRow): SchoolYearRecord {
 function rowToWeekEntry(row: SchoolWeekRow): SchoolWeekEntry {
   return {
     number: row.week_number,
-    kind: row.week_kind as SchoolWeekEntry["kind"],
+    kind: parseSchoolWeekKind(row.week_kind),
     monday: row.monday,
   };
 }
@@ -122,20 +127,43 @@ export class SqlSchoolYearStore implements SchoolYearStore {
     const existing = await this.findSchoolYearByLabel(label);
     const now = new Date().toISOString();
     const exceptions = expandOfficialEventsToExceptions(preview.events);
+    const generated = generateOfficialCourseWeeks({
+      startsOn: preview.startsOn,
+      endsOn: preview.endsOn,
+      exceptions,
+    });
+    assertGeneratedWeeksMatchOfficialTotal(generated.weeks.length, preview.totalCourseWeeks);
 
     if (existing) {
       if (!options.replaceDraft || existing.status !== "draft") {
         throw new Error(schoolYearAlreadyExistsMessage(label));
       }
-      await this.db
-        .prepare(
-          `UPDATE school_years
+      const statements = [
+        {
+          sql: `UPDATE school_years
            SET starts_on = ?, ends_on = ?, source_filename = ?, imported_at = ?
            WHERE id = ?`,
-        )
-        .bind(preview.startsOn, preview.endsOn, sourceFilename ?? existing.sourceFilename, now, existing.id)
-        .run();
-      await this.replaceOfficialExceptions(existing.id, exceptions);
+          values: [preview.startsOn, preview.endsOn, sourceFilename ?? existing.sourceFilename, now, existing.id],
+        },
+        {
+          sql: "DELETE FROM school_day_exceptions WHERE school_year_id = ?",
+          values: [existing.id],
+        },
+        {
+          sql: "DELETE FROM school_weeks WHERE school_year_id = ?",
+          values: [existing.id],
+        },
+        ...exceptions.map((exception) => ({
+          sql: `INSERT INTO school_day_exceptions (school_year_id, day_date, day_state, label, updated_at)
+         VALUES (?, ?, ?, ?, ?)`,
+          values: [existing.id, exception.date, exception.state, exception.label, now],
+        })),
+        ...generated.weeks.map((week) => ({
+          sql: "INSERT INTO school_weeks (school_year_id, week_number, week_kind, monday) VALUES (?, ?, ?, ?)",
+          values: [existing.id, week.number, week.kind, week.monday],
+        })),
+      ];
+      await this.db.batch(statements);
       const year = (await this.getSchoolYearById(existing.id))!;
       return {
         year,
@@ -146,15 +174,24 @@ export class SqlSchoolYearStore implements SchoolYearStore {
     }
 
     const id = randomUUID();
-    await this.db
-      .prepare(
-        `INSERT INTO school_years
+    const statements = [
+      {
+        sql: `INSERT INTO school_years
           (id, label, status, starts_on, ends_on, source_filename, imported_at, created_at)
          VALUES (?, ?, 'draft', ?, ?, ?, ?, ?)`,
-      )
-      .bind(id, label, preview.startsOn, preview.endsOn, sourceFilename ?? null, now, now)
-      .run();
-    await this.replaceOfficialExceptions(id, exceptions);
+        values: [id, label, preview.startsOn, preview.endsOn, sourceFilename ?? null, now, now],
+      },
+      ...exceptions.map((exception) => ({
+        sql: `INSERT INTO school_day_exceptions (school_year_id, day_date, day_state, label, updated_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        values: [id, exception.date, exception.state, exception.label, now],
+      })),
+      ...generated.weeks.map((week) => ({
+        sql: "INSERT INTO school_weeks (school_year_id, week_number, week_kind, monday) VALUES (?, ?, ?, ?)",
+        values: [id, week.number, week.kind, week.monday],
+      })),
+    ];
+    await this.db.batch(statements);
     const year = (await this.getSchoolYearById(id))!;
     return {
       year,
@@ -302,23 +339,6 @@ export class SqlSchoolYearStore implements SchoolYearStore {
           "INSERT INTO school_weeks (school_year_id, week_number, week_kind, monday) VALUES (?, ?, ?, ?)",
         )
         .bind(schoolYearId, week.number, week.kind, week.monday)
-        .run();
-    }
-  }
-
-  private async replaceOfficialExceptions(
-    schoolYearId: string,
-    exceptions: SchoolDayException[],
-  ): Promise<void> {
-    await this.db.prepare("DELETE FROM school_day_exceptions WHERE school_year_id = ?").bind(schoolYearId).run();
-    const now = new Date().toISOString();
-    for (const exception of exceptions) {
-      await this.db
-        .prepare(
-          `INSERT INTO school_day_exceptions (school_year_id, day_date, day_state, label, updated_at)
-           VALUES (?, ?, ?, ?, ?)`,
-        )
-        .bind(schoolYearId, exception.date, exception.state, exception.label, now)
         .run();
     }
   }

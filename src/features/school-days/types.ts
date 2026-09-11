@@ -26,7 +26,7 @@ export interface SchoolDayCell {
 export interface SchoolDayWeekRow {
   kind: "week";
   number: number;
-  weekKind: "A" | "B";
+  weekKind: "A" | "B" | null;
   monday: string;
   days: SchoolDayCell[];
 }
