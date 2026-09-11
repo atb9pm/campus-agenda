@@ -1449,4 +1449,90 @@ test("année de travail — catalogue filtré et cours refusé hors année", asy
   assert.ok((courses.payload.classes ?? []).every((entry) => entry.schoolYearId === active.id));
 });
 
+test("2.52.0 — E2E surlignage, couleur et listes persistés après enregistrement + rechargement", async () => {
+  const teacherCookie = await loginTeacher("teacher-demo-current");
+  const richDetail = `CAMPUS_RICH_V1:${JSON.stringify({
+    format: "campus-rich-v1",
+    blocks: [
+      {
+        type: "paragraph",
+        inlines: [
+          { text: "question 30", marks: { highlight: true, color: "red" } },
+          { text: " " },
+          { text: "4.7.06-5", marks: { color: "blue" } },
+        ],
+      },
+      {
+        type: "bulletList",
+        items: [[{ text: "puce un" }], [{ text: "puce deux" }], [{ text: "puce trois" }]],
+      },
+      {
+        type: "orderedList",
+        items: [[{ text: "numéro un" }], [{ text: "numéro deux" }]],
+      },
+      {
+        type: "checklist",
+        items: [
+          { checked: false, inlines: [{ text: "case un" }] },
+          { checked: true, inlines: [{ text: "case deux" }] },
+          { checked: false, inlines: [{ text: "case trois" }] },
+        ],
+      },
+    ],
+  })}`;
+
+  const created = await jsonRequest("/api/agenda", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      classroomId: "classe-demo-tma-2a",
+      subjectId: "subject-demo-moteur-2a",
+      day: 3,
+      hour: 10,
+      weekOffset: 0,
+      schoolWeekNumber: 18,
+      type: "HOMEWORK",
+      title: "question 30 4.7.06-5",
+      detail: richDetail,
+    }),
+  });
+  assert.equal(created.response.status, 201, created.payload.reason ?? "création publication riche");
+  const itemId = created.payload.item.id;
+
+  const firstLoad = await jsonRequest("/api/agenda?classroomId=classe-demo-tma-2a", {
+    headers: { cookie: teacherCookie },
+  });
+  assert.equal(firstLoad.response.status, 200);
+  const stored = (firstLoad.payload.items ?? []).find((entry) => entry.id === itemId);
+  assert.ok(stored, "publication riche rechargée");
+  assert.match(stored.detail, /"highlight":true/);
+  assert.match(stored.detail, /"color":"red"/);
+  assert.match(stored.detail, /"color":"blue"/);
+  assert.match(stored.detail, /puce trois/);
+  assert.match(stored.detail, /numéro deux/);
+  assert.match(stored.detail, /case trois/);
+
+  const patched = await jsonRequest(`/api/agenda/${itemId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      title: "question 30 4.7.06-5",
+      detail: richDetail,
+    }),
+  });
+  assert.equal(patched.response.status, 200, patched.payload.reason ?? "sauvegarde publication riche");
+
+  const reloaded = await jsonRequest("/api/agenda?classroomId=classe-demo-tma-2a", {
+    headers: { cookie: teacherCookie },
+  });
+  const afterSave = (reloaded.payload.items ?? []).find((entry) => entry.id === itemId);
+  assert.ok(afterSave);
+  assert.equal(afterSave.detail, stored.detail);
+  assert.match(afterSave.detail, /"highlight":true/);
+  assert.match(afterSave.detail, /"color":"blue"/);
+  assert.match(afterSave.detail, /puce un/);
+  assert.match(afterSave.detail, /puce deux/);
+  assert.match(afterSave.detail, /case un/);
+});
+
 

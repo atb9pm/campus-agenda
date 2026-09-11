@@ -98,10 +98,19 @@ import {
   resolveNotebookClassroomId,
   resolveNotebookSubjectId,
   weekdayToCourseDayIndex,
+  cloneRichDoc,
+  composeWeekPublicationDoc,
+  decodeRichDetail,
+  isCarnetOwnedPublication,
+  isPlaceholderDetail,
+  planCarnetWeekPublicationSave,
+  previousSchoolWeekNumber,
+  type CampusRichDoc,
   type ClassNotesDocument,
   type NotebookCourseContext,
   type NotebookRuntimeClassroom,
 } from "@campus/features/class-notebook";
+import { RichDocView } from "./components/rich-doc-view.tsx";
 import { ConfigurationPanel } from "./components/configuration-panel.tsx";
 import { AdministrationPanel } from "./components/administration-panel.tsx";
 import { LoginPanel } from "./components/login-panel.tsx";
@@ -1014,6 +1023,53 @@ export default function Home() {
     showNotice("Publication ajoutée.");
   }
 
+  async function notebookSaveWeekPublication(schoolWeekNumber: number, doc: CampusRichDoc) {
+    if (!notebookClassroomId || !notebookSubjectId || !openNotebookClass) return;
+    const weekItems = notebookItems.filter((item) => item.schoolWeekNumber === schoolWeekNumber);
+    const plan = planCarnetWeekPublicationSave(weekItems, doc);
+
+    if (plan.action === "clear") {
+      for (const itemId of plan.deleteIds) {
+        await deleteAgendaItemApi(itemId);
+        setItems((previous) => previous.filter((entry) => entry.id !== itemId));
+      }
+      showNotice("Publication retirée.");
+      return;
+    }
+
+    if (plan.action === "update") {
+      const updated = await updateAgendaItemApi(plan.updateId, plan.payload);
+      setItems((previous) => previous.map((item) => (item.id === plan.updateId ? updated : item)));
+      for (const extraId of plan.deleteIds) {
+        await deleteAgendaItemApi(extraId);
+        setItems((previous) => previous.filter((entry) => entry.id !== extraId));
+      }
+    } else {
+      const created = await createAgendaItemApi({
+        classroomId: notebookClassroomId,
+        subjectId: notebookSubjectId,
+        day: weekdayToCourseDayIndex(openNotebookClass.dayOfWeek),
+        hour: 8,
+        weekOffset: 0,
+        schoolWeekNumber,
+        type: "HOMEWORK",
+        title: plan.payload.title,
+        detail: plan.payload.detail,
+      });
+      setItems((previous) => upsertAgendaItem(previous, created));
+    }
+    showNotice("Publication enregistrée.");
+  }
+
+  async function notebookCopyPreviousPublication(schoolWeekNumber: number) {
+    const previous = previousSchoolWeekNumber(schoolWeeksMemo, schoolWeekNumber);
+    if (previous == null) return;
+    const source = composeWeekPublicationDoc(
+      notebookItems.filter((item) => item.schoolWeekNumber === previous && isCarnetOwnedPublication(item)),
+    );
+    await notebookSaveWeekPublication(schoolWeekNumber, cloneRichDoc(source));
+  }
+
   async function notebookMovePublication(itemId: number, schoolWeekNumber: number) {
     const updated = await updateAgendaItemApi(itemId, { schoolWeekNumber });
     setItems((previous) => previous.map((item) => (item.id === itemId ? updated : item)));
@@ -1179,8 +1235,14 @@ export default function Home() {
                           {group.items.map((item) => (
                             <li key={item.id} className={`student-branch-item ${item.type.toLowerCase()}`}>
                               <span className="student-item-type">{TYPE_LABELS[item.type]}</span>
-                              <strong>{item.title}</strong>
-                              <p>{item.detail}</p>
+                              {decodeRichDetail(item.detail) ? (
+                                <RichDocView doc={decodeRichDetail(item.detail)!} />
+                              ) : (
+                                <>
+                                  <strong>{item.title}</strong>
+                                  {!isPlaceholderDetail(item.detail) ? <p>{item.detail}</p> : null}
+                                </>
+                              )}
                             </li>
                           ))}
                         </ul>
@@ -1384,8 +1446,9 @@ export default function Home() {
             onCenterWeekChange={setNotebookCenterWeek}
             onNotesChange={setClassNotesDocument}
             onCreatePublication={notebookCreatePublication}
+            onSaveWeekPublication={notebookSaveWeekPublication}
+            onCopyPreviousPublication={notebookCopyPreviousPublication}
             onMovePublication={notebookMovePublication}
-            onDeletePublication={notebookDeletePublication}
             onSaveControl={notebookSaveControl}
             onDeleteControl={notebookDeletePublication}
             onPreviewStudent={enterTeacherPreview}

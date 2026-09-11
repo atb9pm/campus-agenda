@@ -258,7 +258,7 @@ function assignedForFrancois() {
 }
 
 test("version 2.51.1 — classes et matières Contrôles, sans migration", async () => {
-  assert.equal(APP_VERSION, "2.51.1");
+  assert.equal(APP_VERSION, "2.52.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0028_school_week_kind_nullable.sql");
   const [classroomsSrc, serviceSrc, panel, filterSrc] = await Promise.all([
     readFile(new URL("../src/features/control-planning/classrooms.ts", import.meta.url), "utf8"),

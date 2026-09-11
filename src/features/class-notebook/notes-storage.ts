@@ -1,3 +1,9 @@
+import {
+  excerptRichDoc,
+  isEmptyRichDoc,
+  sanitizeRichDoc,
+  type CampusRichDoc,
+} from "./rich-doc.ts";
 import type { ClassNotesDocument, TeacherWeekNote } from "./types.ts";
 
 export const CLASS_NOTES_STORAGE_PREFIX = "campus-agenda-class-notes";
@@ -74,15 +80,15 @@ export function normalizeClassNotes(document: ClassNotesDocument): ClassNotesDoc
   for (const [weekKey, notes] of Object.entries(document.weeks ?? {})) {
     if (!Array.isArray(notes)) continue;
     const cleaned = notes
-      .filter(
-        (note) =>
-          note &&
-          typeof note === "object" &&
-          typeof note.id === "string" &&
-          typeof note.text === "string" &&
-          note.text.trim().length > 0,
+      .filter((note) => note && typeof note === "object" && typeof note.id === "string")
+      .map((note) =>
+        normalizeWeekNote({
+          id: note.id,
+          text: typeof note.text === "string" ? note.text : "",
+          body: note.body,
+        }),
       )
-      .map((note) => ({ id: note.id, text: note.text.trim() }));
+      .filter((note): note is TeacherWeekNote => note !== null);
     if (cleaned.length) weeks[weekKey] = cleaned;
   }
   return { version: 1, weeks };
@@ -103,9 +109,58 @@ export function isClassNotesPayload(value: unknown): value is ClassNotesDocument
           note &&
           typeof note === "object" &&
           typeof note.id === "string" &&
-          typeof note.text === "string",
+          typeof note.text === "string" &&
+          (note.body === undefined || isNotesBodyShape(note.body)),
       ),
   );
+}
+
+function isNotesBodyShape(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as { format?: unknown; blocks?: unknown };
+  return candidate.format === "campus-rich-v1" && Array.isArray(candidate.blocks);
+}
+
+function normalizeWeekNote(note: TeacherWeekNote): TeacherWeekNote | null {
+  const body = note.body ? sanitizeRichDoc(note.body) : undefined;
+  const text = note.text.trim() || (body ? excerptRichDoc(body) : "");
+  if (!text && (!body || isEmptyRichDoc(body))) return null;
+  return body && !isEmptyRichDoc(body) ? { id: note.id, text, body } : { id: note.id, text };
+}
+
+export function composeWeekNotesDoc(notes: readonly TeacherWeekNote[]): CampusRichDoc {
+  const withBody = notes.find((note) => note.body && !isEmptyRichDoc(note.body));
+  if (withBody?.body) {
+    return sanitizeRichDoc(withBody.body);
+  }
+  return sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: notes
+      .filter((note) => note.text.trim())
+      .map((note) => ({ type: "paragraph" as const, inlines: [{ text: note.text.trim() }] })),
+  });
+}
+
+export function setWeekRichNote(
+  document: ClassNotesDocument,
+  weekKey: string,
+  body: CampusRichDoc,
+): ClassNotesDocument {
+  const clean = sanitizeRichDoc(body);
+  if (isEmptyRichDoc(clean)) {
+    const weeks = { ...document.weeks };
+    delete weeks[weekKey];
+    return { version: 1, weeks };
+  }
+  const current = listWeekNotes(document, weekKey);
+  const id = current[0]?.id ?? `note-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  return {
+    version: 1,
+    weeks: {
+      ...document.weeks,
+      [weekKey]: [{ id, text: excerptRichDoc(clean) || "Note", body: clean }],
+    },
+  };
 }
 
 export function listWeekNotes(
