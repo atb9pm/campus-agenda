@@ -19,6 +19,7 @@ import {
   schoolYearStatusesAfterAdminWorkingYearChange,
   writeAdminWorkingYearId,
 } from "../src/features/school-year/index.ts";
+import { createNodeSqliteDatabase } from "../src/lib/persistence/sql/adapters.ts";
 import { SQL_MIGRATION_FILES, applyMigrations } from "../src/lib/persistence/sql/migrate.ts";
 import { SqlSchoolYearStore } from "../src/lib/persistence/sql/sql-school-year-store.ts";
 import { resetStoreFactory } from "../src/lib/persistence/store-factory.ts";
