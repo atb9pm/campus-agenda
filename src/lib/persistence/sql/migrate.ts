@@ -56,6 +56,7 @@ export const SQL_MIGRATION_FILES = [
   "0024_structured_agenda_bridge.sql",
   "0025_structured_student_access.sql",
   "0026_student_access_ciphertext.sql",
+  "0027_teacher_author_nullable.sql",
 ] as const;
 
 const SCHEMA_MIGRATIONS_DDL = `CREATE TABLE IF NOT EXISTS schema_migrations (

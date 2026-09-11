@@ -26,7 +26,7 @@ export interface AgendaItemRow {
   id: number;
   classroom_id: string;
   subject_id: string;
-  author_teacher_id: string;
+  author_teacher_id: string | null;
   day: number;
   hour: number;
   week_offset: number;

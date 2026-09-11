@@ -27,6 +27,8 @@ export interface TeacherAccountStore {
   listAccounts(): Promise<TeacherAccountRecord[]>;
   findAccount(teacherId: string): Promise<TeacherAccountRecord | null>;
   findAccountByInitials(initials: string): Promise<TeacherAccountRecord | null>;
+  /** Suppression définitive du compte (après détachement pédagogique). */
+  deleteAccount(teacherId: string): Promise<boolean>;
   /** Création par un administrateur : renvoie le mot de passe provisoire à afficher. */
   createAccount(input: TeacherAccountInput): Promise<TeacherAccountSecretResult>;
   updateAccount(teacherId: string, patch: TeacherAccountPatch): Promise<TeacherAccountResult>;

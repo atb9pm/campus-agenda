@@ -1,6 +1,6 @@
 # Exploitation — Campus Agenda
 
-Guide opérationnel, **septembre 2026**. Version applicative : voir `APP_VERSION` (`2.46.0` et suivantes).
+Guide opérationnel, **septembre 2026**. Version applicative : voir `APP_VERSION` (`2.47.0` et suivantes).
 
 ## Production actuelle
 
@@ -192,6 +192,13 @@ Depuis **2.46.0**, un administrateur peut supprimer définitivement une classe, 
 - Cascade transactionnelle : tout est retiré, ou rien.
 - **Archiver** conserve l’historique. **Supprimer** est irréversible.
 - Le merge de cette version **ne supprime aucune donnée** existante. MA2 (ou toute autre classe) n’est retirée que si un administrateur le confirme dans l’interface.
+
+Depuis **2.47.0**, un administrateur peut supprimer définitivement un **compte professeur**.
+
+- Confirmation par initiales (validée côté serveur).
+- Supprimé : compte, accès, sessions, affectations, memberships, notes privées, configuration personnelle, modèles de bibliothèque.
+- **Conservé** : HOMEWORK, TEST, INFORMATION, historique de classe, AnnualCourse, branche, CTX.
+- Impossible de supprimer le dernier administrateur.
 
 ## Vérifications
 

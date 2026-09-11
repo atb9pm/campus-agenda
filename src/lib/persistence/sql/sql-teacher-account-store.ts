@@ -107,6 +107,11 @@ export class SqlTeacherAccountStore implements TeacherAccountStore {
     return row ? toRecord(row) : null;
   }
 
+  async deleteAccount(teacherId: string): Promise<boolean> {
+    const result = await this.db.prepare("DELETE FROM teachers WHERE id = ?").bind(teacherId).run();
+    return (result.meta?.changes ?? 0) > 0;
+  }
+
   async createAccount(input: TeacherAccountInput): Promise<TeacherAccountSecretResult> {
     const check = checkAccountInput(input.displayName, input.initials);
     if (!check.ok) return { ok: false, reason: check.reason, status: 400 };

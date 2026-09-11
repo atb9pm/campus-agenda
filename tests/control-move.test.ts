@@ -411,9 +411,9 @@ async function publishTest(
 }
 
 test("version 2.38.0 — déplacement structuré, pas de migration 0025", async () => {
-  assert.equal(APP_VERSION, "2.46.0");
+  assert.equal(APP_VERSION, "2.47.0");
   assert.equal(TEST_ALERT_THRESHOLD, 3);
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0026_student_access_ciphertext.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0027_teacher_author_nullable.sql");
 
   const parsed = structuredControlMoveIdsFromBody({
     annualCourseId: "ac-1",
