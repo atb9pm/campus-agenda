@@ -2,6 +2,21 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.53.1] — Correctifs 2FA administrateur (recovery, build, reset mot de passe)
+
+### Corrigé
+
+- Après enrôlement 2FA, « J’ai enregistré ces codes » quitte immédiatement l’écran des recovery codes (plus besoin de rafraîchir).
+- Le build Infomaniak installe les dépendances **racine** puis **web**, pour que `src/` (ex. `qrcode`) soit résolu.
+
+### Ajouté
+
+- Commande serveur `pnpm admin:reset-password` (confirmation `RESET-PASSWORD`) : mot de passe temporaire, changement obligatoire, **2FA inchangée**.
+
+### Conservé
+
+Carnet, Contrôles, Mes cours, Ma semaine, agenda élève, années, classes, AnnualCourse, attributions, CourseSession, calendrier, publications. Aucune migration SQL.
+
 ## [2.53.0] — Double authentification TOTP administrateur
 
 Les comptes administrateurs doivent valider un TOTP (ou un code de récupération) après le mot de passe. Les enseignants standards conservent la connexion actuelle.

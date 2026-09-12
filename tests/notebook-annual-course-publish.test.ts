@@ -262,7 +262,7 @@ async function assertNoRuntimeSubject(world: World, annualCourseId: string) {
 }
 
 test("version 2.52.2 — AnnualCourse attribué suffit pour publier, sans migration", async () => {
-  assert.equal(APP_VERSION, "2.53.0");
+  assert.equal(APP_VERSION, "2.53.1");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0029_admin_mfa.sql");
   const [page, resolveSource, notesApi, notesStorage, controlsPanel, agendaIdRoute] = await Promise.all([
     readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),

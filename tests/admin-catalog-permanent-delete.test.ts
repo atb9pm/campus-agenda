@@ -236,7 +236,7 @@ async function seedTeacher(db: SqlDatabase, id = "teacher-admin") {
 }
 
 test("version 2.48.0 — aucune migration destructive catalogue", () => {
-  assert.equal(APP_VERSION, "2.53.0");
+  assert.equal(APP_VERSION, "2.53.1");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0029_admin_mfa.sql");
   assert.equal(confirmationMatches("MA2", "MA2"), true);
   assert.equal(confirmationMatches("MA2", "ma2"), false);

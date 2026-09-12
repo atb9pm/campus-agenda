@@ -74,6 +74,10 @@ import {
 } from "../lib/api-client.ts";
 import { APP_VERSION } from "@campus/lib/app-version";
 import {
+  acknowledgeMfaRecoveryCodes,
+  shouldShowMfaEnrollmentScreen,
+} from "@campus/features/admin-mfa/recovery-continue.ts";
+import {
   LAST_TEACHER_INITIALS_KEY,
   authenticatedTeacherFromSession,
   profileDiscInitials,
@@ -976,11 +980,15 @@ export default function Home() {
 
   function continueAfterMfaRecovery() {
     if (!mfaGate) return;
+    const cleared = acknowledgeMfaRecoveryCodes();
+    setMfaRecoveryCodes(cleared.recoveryCodes);
+    setMfaQrDataUrl(cleared.qrDataUrl);
+    setMfaManualKey(cleared.manualKey);
     void applyTeacherSession({
       ...mfaGate,
-      mfaPending: false,
-      mfaSetupRequired: false,
-      mfaChallengeRequired: false,
+      mfaPending: cleared.mfaPending,
+      mfaSetupRequired: cleared.mfaSetupRequired,
+      mfaChallengeRequired: cleared.mfaChallengeRequired,
     });
   }
 
@@ -1309,7 +1317,10 @@ export default function Home() {
     );
   }
 
-  if (mfaGate?.mfaSetupRequired || mfaRecoveryCodes) {
+  if (shouldShowMfaEnrollmentScreen({
+    mfaSetupRequired: mfaGate?.mfaSetupRequired,
+    recoveryCodes: mfaRecoveryCodes,
+  })) {
     return (
       <>
         <MfaSetupPanel
