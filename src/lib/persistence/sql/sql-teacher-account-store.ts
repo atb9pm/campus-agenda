@@ -294,6 +294,14 @@ export class SqlTeacherAccountStore implements TeacherAccountStore {
     return { ok: true, teacherId: row.id, mustChangePassword: Boolean(row.must_change_password) };
   }
 
+  async verifyCredentials(teacherId: string, password: string): Promise<boolean> {
+    const row = await this.row(teacherId);
+    if (!row) return false;
+    if (row.archived_at !== null) return false;
+    if (row.is_active !== null && !row.is_active) return false;
+    return verifyPassword(password, row.password_hash);
+  }
+
   async mustChangePassword(teacherId: string): Promise<boolean> {
     const row = await this.row(teacherId);
     return Boolean(row?.must_change_password);

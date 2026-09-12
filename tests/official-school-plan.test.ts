@@ -252,7 +252,7 @@ function normalizeEventLabel(label: string): string {
 }
 
 test("version 2.49.0 — semaines de cours, kind nullable", () => {
-  assert.equal(APP_VERSION, "2.53.1");
+  assert.equal(APP_VERSION, "2.54.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0029_admin_mfa.sql");
 });
 

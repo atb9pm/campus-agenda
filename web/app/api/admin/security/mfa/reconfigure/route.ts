@@ -1,4 +1,7 @@
-import { startAdminMfaReconfigure } from "@campus/features/admin-mfa/index.ts";
+import {
+  startAdminMfaLostPhoneReconfigure,
+  startAdminMfaReconfigureWithPassword,
+} from "@campus/features/admin-mfa/index.ts";
 import { getAdminMfaStore } from "@campus/lib/persistence/store-factory.ts";
 
 import { jsonResponse, requireAdminSession } from "../../../../../../lib/server/api.ts";
@@ -12,22 +15,32 @@ export async function POST(request: Request) {
   const limited = await enforceAuthRateLimit(request, "teacher-mfa", auth.session!.teacherId);
   if (limited) return limited;
 
-  const body = await request.json() as { totp?: string; recoveryCode?: string };
-  const proof = String(body.totp ?? body.recoveryCode ?? "");
+  const body = await request.json() as {
+    password?: string;
+    totp?: string;
+    recoveryCode?: string;
+  };
+  const password = String(body.password ?? "");
+  const totp = String(body.totp ?? "").trim();
+  const recoveryCode = String(body.recoveryCode ?? "").trim();
+  if (totp && recoveryCode) {
+    return jsonResponse({ ok: false, reason: "Indiquez soit un code TOTP, soit un code de récupération." }, { status: 400 });
+  }
+
   const accounts = await getTeacherAccountsStore();
   const account = await accounts.findAccount(auth.session!.teacherId);
-  const result = await startAdminMfaReconfigure(
-    await getAdminMfaStore(),
-    auth.session!.teacherId,
-    account?.initials ?? account?.displayName ?? "admin",
-    proof,
-  );
+  const label = account?.initials ?? account?.displayName ?? "admin";
+  const store = await getAdminMfaStore();
+
+  const result = recoveryCode
+    ? await startAdminMfaLostPhoneReconfigure(store, accounts, auth.session!.teacherId, label, password, recoveryCode)
+    : await startAdminMfaReconfigureWithPassword(store, accounts, auth.session!.teacherId, label, password, totp);
+
   if (!result.ok) {
     return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
   }
   return jsonResponse({
     ok: true,
-    otpauthUri: result.otpauthUri,
     qrDataUrl: result.qrDataUrl,
     manualKey: result.manualKey,
   });

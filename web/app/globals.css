@@ -278,6 +278,16 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .mfa-continue { margin-top: 12px; padding: 11px 14px; border: 1px solid var(--navy); border-radius: 6px; color: #fff; background: var(--navy); font-size: 10px; font-weight: 800; cursor: pointer; }
 .admin-security-card { display: grid; gap: 8px; margin: 16px 0; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 .admin-security-card h4 { margin: 0; color: var(--navy); }
+.admin-security-action { display: grid; gap: 8px; margin: 0 0 16px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: #f7f8fb; }
+.admin-security-action h4, .admin-security-help h4 { margin: 0; color: var(--navy); }
+.admin-security-action p, .admin-security-help p { margin: 0; color: #5c6b82; font-size: 13px; line-height: 1.45; }
+.admin-security-action button { justify-self: start; }
+.admin-security-help { margin: 8px 0 0; padding: 14px 16px; border: 1px dashed var(--line-strong); border-radius: 8px; background: #fff; }
+.admin-security-warning { margin: 0 0 16px; padding: 12px 14px; border-radius: 8px; background: #fff6e8; color: #6a4b12; font-size: 13px; line-height: 1.45; }
+.admin-security-form { display: grid; gap: 14px; max-width: 420px; }
+.admin-security-form label { display: grid; gap: 4px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8793a9; }
+.admin-security-form input { padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); font-size: 13px; background: #fff; }
+.admin-security-form-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 
 .student-course-day-app { min-height: 100vh; background: var(--canvas); }
 .student-course-day-main { width: min(720px, 100%); margin: 0 auto; padding: 28px 20px 36px; }

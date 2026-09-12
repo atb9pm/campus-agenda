@@ -43,6 +43,8 @@ export interface TeacherAccountStore {
   /** Applique un mot de passe connu (amorçage administrateur uniquement). */
   setPassword(teacherId: string, password: string, mustChangePassword: boolean): Promise<boolean>;
   authenticate(initialsOrId: string, password: string): Promise<TeacherAuthOutcome>;
+  /** Vérifie le mot de passe sans ouvrir de session ni mettre à jour lastLoginAt. */
+  verifyCredentials(teacherId: string, password: string): Promise<boolean>;
   mustChangePassword(teacherId: string): Promise<boolean>;
   /** Tous les comptes avec empreintes (sauvegarde admin). */
   exportAllAccounts(): Promise<TeacherAccountBackupEntry[]>;

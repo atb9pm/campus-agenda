@@ -98,8 +98,8 @@ async function enrollAdmin(store = getMemoryAdminMfaStore(), teacherId = TEACHER
   return { secret, codes: confirm.recoveryCodes };
 }
 
-test("version 2.53.1 — 2FA administrateur TOTP", () => {
-  assert.equal(APP_VERSION, "2.53.1");
+test("version 2.54.0 — 2FA administrateur TOTP", () => {
+  assert.equal(APP_VERSION, "2.54.0");
   assert.ok(CAMPUS_BACKUP_INSERT_ORDER.includes("teacher_mfa"));
   assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 30);
   assert.equal(isReset2faConfirmToken("yes"), false);
@@ -445,6 +445,10 @@ test("UI sécurité et login exposent les écrans MFA", async () => {
   const admin = await readFile(new URL("../web/app/components/administration-panel.tsx", import.meta.url), "utf8");
   assert.match(admin, /security: "Sécurité"/);
   assert.match(admin, /AdminSecurityPanel/);
+  const security = await readFile(new URL("../web/app/components/admin-security-panel.tsx", import.meta.url), "utf8");
+  assert.match(security, /ADMIN_SECURITY_LOST_TITLE/);
+  assert.match(security, /ADMIN_SECURITY_REGEN_TITLE/);
+  assert.match(security, /ADMIN_SECURITY_HELP_TITLE/);
   const page = await readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /MfaChallengePanel/);
   assert.match(page, /MfaSetupPanel/);
