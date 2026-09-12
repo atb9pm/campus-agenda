@@ -592,6 +592,56 @@ export async function fetchAgendaView(classroomId: string): Promise<{
   return { items: payload.items, attendanceDays: payload.attendanceDays ?? [] };
 }
 
+export async function createNotebookPublicationApi(input: {
+  annualCourseId: string;
+  schoolWeekNumber: number;
+  day: number;
+  type: "HOMEWORK" | "INFORMATION";
+  title: string;
+  detail: string;
+}): Promise<PrototypeAgendaItem> {
+  const response = await fetch("/api/teacher/notebook-publications", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      annualCourseId: input.annualCourseId,
+      schoolWeekNumber: input.schoolWeekNumber,
+      day: input.day,
+      type: input.type,
+      title: input.title,
+      detail: input.detail,
+    }),
+  });
+  const payload = await parseJson<{ ok: boolean; item?: PrototypeAgendaItem; reason?: string }>(response);
+  if (!response.ok || !payload.ok || !payload.item) {
+    throw new Error(payload.reason ?? "Publication impossible.");
+  }
+  return payload.item;
+}
+
+export async function ensureNotebookRuntimeApi(annualCourseId: string): Promise<{
+  classroomId: string;
+  subjectId: string;
+}> {
+  const response = await fetch("/api/teacher/notebook-publications", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ annualCourseId, ensureOnly: true }),
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    classroomId?: string;
+    subjectId?: string;
+    reason?: string;
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.classroomId || !payload.subjectId) {
+    throw new Error(payload.reason ?? "Publication impossible.");
+  }
+  return { classroomId: payload.classroomId, subjectId: payload.subjectId };
+}
+
 export async function createAgendaItemApi(input: {
   classroomId: string;
   subjectId: string;

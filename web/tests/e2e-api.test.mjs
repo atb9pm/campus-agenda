@@ -648,6 +648,76 @@ test("2.29.0 — E2E déroulement de cours : session, id, teacherId ignoré, pas
   );
 });
 
+test("2.52.2 — publication Carnet AnnualCourse : session, refus forgé, création", async () => {
+  const anon = await request("/api/teacher/notebook-publications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      annualCourseId: "ac-1",
+      schoolWeekNumber: 4,
+      day: 0,
+      type: "HOMEWORK",
+      title: "Sans session",
+    }),
+  });
+  assert.equal(anon.status, 401);
+
+  const student = await loginGeneratedStudent();
+  const studentForbidden = await request("/api/teacher/notebook-publications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: student.cookie },
+    body: JSON.stringify({
+      annualCourseId: "ac-1",
+      schoolWeekNumber: 4,
+      day: 0,
+      type: "HOMEWORK",
+      title: "Élève",
+    }),
+  });
+  assert.equal(studentForbidden.status, 401);
+
+  const teacherCookie = await loginTeacher("teacher-demo-current");
+  const forged = await request("/api/teacher/notebook-publications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      annualCourseId: "annual-course-inexistant",
+      schoolWeekNumber: 4,
+      day: 0,
+      type: "HOMEWORK",
+      title: "Cours forgé",
+      teacherId: "teacher-demo-martin",
+    }),
+  });
+  assert.ok(forged.status === 403 || forged.status === 404, `cours forgé ${forged.status}`);
+
+  const coursesResponse = await request("/api/teacher/courses", {
+    headers: { cookie: teacherCookie },
+  });
+  const coursesPayload = await coursesResponse.json();
+  const course = (coursesPayload.courses ?? [])[0];
+  if (!course) return;
+
+  const created = await request("/api/teacher/notebook-publications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({
+      annualCourseId: course.annualCourseId,
+      schoolWeekNumber: 4,
+      day: 0,
+      type: "HOMEWORK",
+      title: "Publication Carnet E2E",
+      detail: "",
+    }),
+  });
+  const createdPayload = await created.json();
+  assert.equal(created.status, 201, createdPayload.reason ?? "création Carnet");
+  assert.equal(createdPayload.item.annualCourseId, course.annualCourseId);
+  assert.equal(createdPayload.item.courseSessionKey ?? null, null);
+  assert.equal(createdPayload.item.authorTeacherId, "teacher-demo-current");
+  assert.ok(createdPayload.item.schoolYearId);
+});
+
 test("PR59 — publication structurée sans session → 401", async () => {
   const response = await request("/api/teacher/course-publications", {
     method: "POST",

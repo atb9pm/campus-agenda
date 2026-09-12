@@ -66,7 +66,7 @@ function weekdayHolidays(monday: string, weekCount: number): Array<{ date: strin
 }
 
 test("version 2.51.0 — plan complet année en préparation, sans migration", () => {
-  assert.equal(APP_VERSION, "2.52.1");
+  assert.equal(APP_VERSION, "2.52.2");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0028_school_week_kind_nullable.sql");
 });
 
