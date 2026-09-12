@@ -230,7 +230,7 @@ async function publish(
 }
 
 test("version 2.48.0 — auteur nullable, confirmation exacte", () => {
-  assert.equal(APP_VERSION, "2.53.1");
+  assert.equal(APP_VERSION, "2.54.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0029_admin_mfa.sql");
   assert.equal(confirmationMatches("ChF", "ChF"), true);
   assert.equal(confirmationMatches("ChF", "chf"), false);

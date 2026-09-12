@@ -26,6 +26,7 @@ export {
 export {
   RECOVERY_CODE_COUNT,
   consumeRecoveryCode,
+  recoveryCodeIsValid,
   generateRecoveryCodes,
   hashRecoveryCodes,
   normalizeRecoveryCode,

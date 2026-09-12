@@ -46,7 +46,7 @@ const RAW_V3 = {
 };
 
 test("version 2.44.0 — restauration admin sécurisée", async () => {
-  assert.equal(APP_VERSION, "2.53.1");
+  assert.equal(APP_VERSION, "2.54.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0029_admin_mfa.sql");
   assert.deepEqual([...COMPATIBLE_BACKUP_VERSIONS], [1, 2, 3, 4]);
 

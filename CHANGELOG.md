@@ -2,6 +2,27 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.54.0] — Parcours Sécurité administrateur (reconfigurer, téléphone perdu, recovery)
+
+Administration → Sécurité présente trois actions distinctes. Aucune n’accepte le mot de passe seul. La 2FA n’est jamais désactivée durablement.
+
+### Ajouté
+
+- Reconfiguration volontaire : mot de passe + TOTP actuel → QR en attente → confirmation du nouveau TOTP → nouveaux recovery.
+- Téléphone perdu : mot de passe + recovery (vérifié sans consommation) → même flux pending, sans demander l’ancien TOTP. Si la session porte une preuve recovery récente (connexion), le mot de passe suffit.
+- Régénération recovery : mot de passe + TOTP, un seul écran.
+- Encadré d’aide serveur (`admin:reset-2fa`) sans bouton web de désactivation.
+
+### Corrigé
+
+- Connexion avec un recovery : la session signée porte `mfaRecoveryVerifiedAt` (10 min). Sécurité → téléphone perdu ne redemande pas un second recovery.
+- Le recovery n’est plus consommé au démarrage de la reconfiguration : il reste valable jusqu’à confirmation du nouveau TOTP.
+- Régénération recovery : un seul écran (mot de passe + TOTP), sans étape intermédiaire qui ferait expirer le code.
+
+### Conservé
+
+Connexion admin mot de passe + TOTP, recovery à la connexion, enseignants sans 2FA, `admin:reset-2fa`, `admin:reset-password`, backup MFA. Aucune migration SQL.
+
 ## [2.53.1] — Correctifs 2FA administrateur (recovery, build, reset mot de passe)
 
 ### Corrigé

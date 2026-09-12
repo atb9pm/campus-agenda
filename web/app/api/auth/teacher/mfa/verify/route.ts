@@ -26,7 +26,13 @@ export async function POST(request: Request) {
     return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
   }
 
-  const session = { kind: "teacher" as const, teacherId: auth.session!.teacherId, issuedAt: Date.now() };
+  const now = Date.now();
+  const session = {
+    kind: "teacher" as const,
+    teacherId: auth.session!.teacherId,
+    issuedAt: now,
+    ...(result.usedRecovery ? { mfaRecoveryVerifiedAt: now } : {}),
+  };
   return jsonWithSession(
     session,
     {

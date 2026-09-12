@@ -83,6 +83,9 @@ export async function parseSessionToken(token: string | null | undefined): Promi
         teacherId: decoded.teacherId,
         issuedAt: decoded.issuedAt,
         ...(decoded.mfaPending === true ? { mfaPending: true } : {}),
+        ...(isFiniteIssuedAt(decoded.mfaRecoveryVerifiedAt)
+          ? { mfaRecoveryVerifiedAt: decoded.mfaRecoveryVerifiedAt }
+          : {}),
       };
     }
 

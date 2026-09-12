@@ -33,6 +33,15 @@ export async function hashRecoveryCodes(codes: string[]): Promise<string[]> {
   return Promise.all(codes.map((code) => hashRecoveryCode(normalizeRecoveryCode(code))));
 }
 
+export async function recoveryCodeIsValid(input: string, hashes: string[]): Promise<boolean> {
+  const normalized = normalizeRecoveryCode(input);
+  if (!normalized) return false;
+  for (const hash of hashes) {
+    if (await recoveryCodeMatches(normalized, hash)) return true;
+  }
+  return false;
+}
+
 export async function consumeRecoveryCode(
   input: string,
   hashes: string[],

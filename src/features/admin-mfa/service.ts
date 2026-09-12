@@ -10,10 +10,11 @@ import {
   generateRecoveryCodes,
   hashRecoveryCodes,
   parseRecoveryInput,
+  recoveryCodeIsValid,
   recoveryHashesLookSafe,
 } from "../../lib/auth/recovery-codes.ts";
 import { otpauthQrDataUrl } from "../../lib/auth/mfa-qr.ts";
-import { generateTotpSecret, totpOtpauthUri, verifyTotpCode } from "../../lib/auth/totp.ts";
+import { generateTotpSecret, normalizeTotpInput, totpOtpauthUri, verifyTotpCode } from "../../lib/auth/totp.ts";
 import { logOperationalEvent } from "../../lib/observability/index.ts";
 import type { AdminMfaClientFlags, AdminMfaStore, TeacherMfaRecord } from "./types.ts";
 import { MFA_INVALID_CODE_REASON, MFA_UNAVAILABLE_REASON } from "./types.ts";
@@ -79,6 +80,25 @@ export async function loadAdminMfa(store: AdminMfaStore, teacherId: string): Pro
 
 async function persist(store: AdminMfaStore, record: TeacherMfaRecord): Promise<void> {
   await store.upsert({ ...record, updatedAt: nowIso() });
+}
+
+async function beginPendingReconfigure(
+  store: AdminMfaStore,
+  existing: TeacherMfaRecord,
+  accountLabel: string,
+): Promise<EnrollmentStart> {
+  const secret = generateTotpSecret();
+  await persist(store, {
+    ...existing,
+    pendingSecretEncrypted: await encryptTotpSecret(secret),
+  });
+  const otpauthUri = totpOtpauthUri(secret, accountLabel);
+  return {
+    ok: true,
+    otpauthUri,
+    qrDataUrl: await otpauthQrDataUrl(otpauthUri),
+    manualKey: secret,
+  };
 }
 
 export interface EnrollmentStart {
@@ -196,22 +216,52 @@ export async function startAdminMfaReconfigure(
   if (!existing || existing.status !== "enabled" || !existing.secretEncrypted) {
     return { ok: false, reason: "La double authentification n'est pas activée.", status: 400 };
   }
-  const verified = await verifyAdminMfaChallenge(store, teacherId, proof);
-  if (!verified.ok) return verified;
+  if (!normalizeTotpInput(proof)) return invalidCode();
   try {
-    const secret = generateTotpSecret();
+    const currentSecret = await decryptTotpSecret(existing.secretEncrypted);
+    if (!verifyTotpCode(currentSecret, proof)) return invalidCode();
     const latest = (await store.get(teacherId)) ?? existing;
-    await persist(store, {
-      ...latest,
-      pendingSecretEncrypted: await encryptTotpSecret(secret),
-    });
-    const otpauthUri = totpOtpauthUri(secret, accountLabel);
-    return {
-      ok: true,
-      otpauthUri,
-      qrDataUrl: await otpauthQrDataUrl(otpauthUri),
-      manualKey: secret,
-    };
+    return await beginPendingReconfigure(store, latest, accountLabel);
+  } catch (error) {
+    if (error instanceof MfaKeyUnavailableError) return unavailable();
+    throw error;
+  }
+}
+
+export async function startAdminMfaPendingReconfigure(
+  store: AdminMfaStore,
+  teacherId: string,
+  accountLabel: string,
+): Promise<EnrollmentStart | MfaFailure> {
+  if (!isMfaEncryptionReady()) return unavailable();
+  const existing = await store.get(teacherId);
+  if (!existing || existing.status !== "enabled" || !existing.secretEncrypted) {
+    return { ok: false, reason: "La double authentification n'est pas activée.", status: 400 };
+  }
+  try {
+    return await beginPendingReconfigure(store, existing, accountLabel);
+  } catch (error) {
+    if (error instanceof MfaKeyUnavailableError) return unavailable();
+    throw error;
+  }
+}
+
+export async function startAdminMfaReconfigureWithRecovery(
+  store: AdminMfaStore,
+  teacherId: string,
+  accountLabel: string,
+  recoveryCode: string,
+): Promise<EnrollmentStart | MfaFailure> {
+  if (!isMfaEncryptionReady()) return unavailable();
+  const existing = await store.get(teacherId);
+  if (!existing || existing.status !== "enabled" || !existing.secretEncrypted) {
+    return { ok: false, reason: "La double authentification n'est pas activée.", status: 400 };
+  }
+  const recovery = parseRecoveryInput(recoveryCode);
+  if (!recovery) return invalidCode();
+  try {
+    if (!(await recoveryCodeIsValid(recovery, existing.recoveryHashes))) return invalidCode();
+    return await beginPendingReconfigure(store, existing, accountLabel);
   } catch (error) {
     if (error instanceof MfaKeyUnavailableError) return unavailable();
     throw error;

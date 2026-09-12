@@ -1,6 +1,6 @@
 # Exploitation — Campus Agenda
 
-Guide opérationnel, **septembre 2026**. Version applicative : voir `APP_VERSION` (`2.53.1` et suivantes).
+Guide opérationnel, **septembre 2026**. Version applicative : voir `APP_VERSION` (`2.54.0` et suivantes).
 
 ## Production actuelle
 
@@ -236,13 +236,21 @@ Après ajout ou rotation de la clé : **Build** si besoin, puis **Redémarrer**.
 
 - Usage unique, stockés uniquement sous forme d’empreinte.
 - Administration → Sécurité affiche seulement le nombre restant.
-- « Régénérer » exige un TOTP actuel, invalide tous les anciens codes et affiche la nouvelle série une fois.
+- « Régénérer les codes de récupération » exige mot de passe + TOTP actuel, puis confirmation.
 
-### 7. Perte du téléphone
+### 7. Administration → Sécurité — trois parcours
 
-Sur l’écran TOTP : « Utiliser un code de récupération ». Une fois connecté : Administration → Sécurité → Reconfigurer (preuve TOTP ou recovery).
+L’écran principal n’affiche aucun formulaire. Trois actions :
 
-Il n’existe **aucun** bouton web « j’ai perdu mon téléphone → désactiver par e-mail ».
+1. **Changement volontaire de téléphone** — mot de passe + TOTP actuel. Un secret en attente est créé. L’ancienne configuration reste valable tant que le nouveau TOTP n’est pas confirmé. Après confirmation : nouveau secret, 8 nouveaux recovery, anciens recovery invalidés.
+
+2. **Téléphone perdu + recovery code** — si l’administrateur vient de se connecter avec un recovery, la session signée le mémorise 10 minutes : Sécurité → téléphone perdu ne redemande que le mot de passe (un seul recovery pour toute la récupération). Sinon : mot de passe + un recovery. Le recovery n’est invalidé qu’à la confirmation du nouveau TOTP ; fermer la page avant cela ne le détruit pas.
+
+3. **Perte totale (téléphone + recovery)** — aucun bouton web. Côté serveur : `pnpm admin:reset-2fa -- <id|initiales>` → état `reset_required` → nouvel enrôlement obligatoire à la connexion.
+
+Le mot de passe administrateur perdu reste une opération distincte : `pnpm admin:reset-password` (2FA inchangée).
+
+Il n’existe **aucun** bouton web « désactiver la 2FA » ni « mot de passe oublié ».
 
 ### 8. Commande `pnpm admin:reset-2fa`
 

@@ -50,8 +50,8 @@ async function enrollAdmin() {
   return { secretEncrypted: (await store.get(TEACHER_CHF_ID))!, codes: confirm.recoveryCodes };
 }
 
-test("version 2.53.1 — reset mot de passe admin serveur", () => {
-  assert.equal(APP_VERSION, "2.53.1");
+test("version 2.54.0 — reset mot de passe admin serveur", () => {
+  assert.equal(APP_VERSION, "2.54.0");
   assert.equal(isResetPasswordConfirmToken("reset-password"), false);
   assert.equal(isResetPasswordConfirmToken("RESET-PASSWORD "), true);
   assert.equal(isResetPasswordConfirmToken(RESET_PASSWORD_CONFIRM_TOKEN), true);
