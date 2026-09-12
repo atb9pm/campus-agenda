@@ -146,6 +146,16 @@ export async function DELETE(request: Request, context: RouteContext) {
   const classBlock = await assertAgendaClassMutableForItem(existing);
   if (classBlock) return classBlock;
 
+  if (existing) {
+    const notebookOwned = await authorizeNotebookOwnedItemMutation(await getNotebookPublicationDeps(), {
+      teacherId: auth.session!.teacherId,
+      item: existing,
+    });
+    if (notebookOwned && !notebookOwned.ok) {
+      return jsonResponse({ ok: false, reason: notebookOwned.reason }, { status: notebookOwned.status });
+    }
+  }
+
   const result = await auth.store!.deleteAgendaItem(itemId, auth.session!.teacherId);
   if (!result.ok) {
     return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });

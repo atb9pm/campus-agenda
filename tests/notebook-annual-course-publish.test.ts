@@ -18,6 +18,7 @@ import {
   NOTEBOOK_PUBLISH_FUTURE,
   NOTEBOOK_PUBLISH_NOT_ASSIGNED,
   NOTEBOOK_PUBLISH_YEAR_INACTIVE,
+  authorizeNotebookOwnedItemMutation,
   createNotebookPublication,
   evaluateNotebookPublishAccess,
   filterNotebookItemsForSubject,
@@ -263,12 +264,13 @@ async function assertNoRuntimeSubject(world: World, annualCourseId: string) {
 test("version 2.52.2 — AnnualCourse attribué suffit pour publier, sans migration", async () => {
   assert.equal(APP_VERSION, "2.52.2");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0028_school_week_kind_nullable.sql");
-  const [page, resolveSource, notesApi, notesStorage, controlsPanel] = await Promise.all([
+  const [page, resolveSource, notesApi, notesStorage, controlsPanel, agendaIdRoute] = await Promise.all([
     readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../src/features/class-notebook/resolve.ts", import.meta.url), "utf8"),
     readFile(new URL("../web/app/api/teacher/notes/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/features/class-notebook/notes-storage.ts", import.meta.url), "utf8"),
     readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/api/agenda/[id]/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(page, /createNotebookPublicationApi/);
   assert.match(page, /workspaceAllowsNotebookPublish/);
@@ -280,6 +282,10 @@ test("version 2.52.2 — AnnualCourse attribué suffit pour publier, sans migrat
   assert.doesNotMatch(notesStorage, /subjectId/);
   assert.match(controlsPanel, /Contrôles/);
   assert.match(controlsPanel, /onSaveControl/);
+  assert.match(agendaIdRoute, /export async function DELETE/);
+  assert.match(agendaIdRoute, /authorizeNotebookOwnedItemMutation/);
+  const deleteFn = agendaIdRoute.slice(agendaIdRoute.indexOf("export async function DELETE"));
+  assert.match(deleteFn, /authorizeNotebookOwnedItemMutation/);
 });
 
 test("droit de publication — AnnualCourse attribué, sans Subject runtime", () => {
@@ -812,6 +818,197 @@ test("cours archivé — publication interdite", async () => {
     assert.equal(denied.ok, false);
     if (denied.ok) throw new Error("archived");
     assert.equal(denied.reason, NOTEBOOK_PUBLISH_ARCHIVED);
+  } finally {
+    world.close();
+  }
+});
+
+/** Même porte que DELETE /api/agenda/[id] pour une publication Carnet. */
+async function deleteAgendaItemWithNotebookGate(
+  world: World,
+  teacherId: string,
+  item: PrototypeAgendaItem,
+  at = AT,
+): Promise<{ ok: true } | { ok: false; reason: string; status: number }> {
+  const notebookOwned = await authorizeNotebookOwnedItemMutation(world.publishDeps, {
+    teacherId,
+    item,
+    at,
+  });
+  if (notebookOwned && !notebookOwned.ok) {
+    return notebookOwned;
+  }
+  const result = await world.agenda.deleteAgendaItem(item.id, teacherId);
+  if (!result.ok) {
+    return { ok: false, reason: result.reason, status: result.status };
+  }
+  return { ok: true };
+}
+
+test("DELETE Carnet — affectation active autorise la suppression", async () => {
+  const world = await sqliteWorld();
+  try {
+    const seeded = await seedMecauto(world);
+    const created = await createNotebookPublication(world.publishDeps, {
+      teacherId: seeded.francois.id,
+      annualCourseId: seeded.courseA.id,
+      schoolWeekNumber: 8,
+      day: 0,
+      type: "HOMEWORK",
+      title: "À retirer",
+      detail: "",
+      at: AT,
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) throw new Error(created.reason);
+
+    const deleted = await deleteAgendaItemWithNotebookGate(world, seeded.francois.id, created.value);
+    assert.equal(deleted.ok, true);
+    assert.equal(await world.agenda.findAgendaItem(created.value.id), undefined);
+  } finally {
+    world.close();
+  }
+});
+
+test("DELETE Carnet — attribution terminée → 403", async () => {
+  const world = await sqliteWorld();
+  try {
+    const seeded = await seedMecauto(world);
+    const created = await createNotebookPublication(world.publishDeps, {
+      teacherId: seeded.francois.id,
+      annualCourseId: seeded.courseA.id,
+      schoolWeekNumber: 8,
+      day: 0,
+      type: "HOMEWORK",
+      title: "Après fin d’attribution",
+      detail: "",
+      at: AT,
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) throw new Error(created.reason);
+
+    const current = (await world.courses.listAssignments(seeded.courseA.id)).find(
+      (entry) => entry.teacherId === seeded.francois.id,
+    );
+    assert.ok(current);
+    await endTeacherAssignment(world.courseDeps, current!.id, seeded.admin.id, "2026-09-10T00:00:00.000Z");
+
+    const denied = await deleteAgendaItemWithNotebookGate(world, seeded.francois.id, created.value);
+    assert.equal(denied.ok, false);
+    if (denied.ok) throw new Error("devrait refuser");
+    assert.equal(denied.status, 403);
+    assert.equal(denied.reason, NOTEBOOK_PUBLISH_NOT_ASSIGNED);
+    assert.ok(await world.agenda.findAgendaItem(created.value.id));
+  } finally {
+    world.close();
+  }
+});
+
+test("DELETE Carnet — autre enseignant refusé", async () => {
+  const world = await sqliteWorld();
+  try {
+    const seeded = await seedMecauto(world);
+    const created = await createNotebookPublication(world.publishDeps, {
+      teacherId: seeded.francois.id,
+      annualCourseId: seeded.courseA.id,
+      schoolWeekNumber: 8,
+      day: 0,
+      type: "HOMEWORK",
+      title: "Pub François",
+      detail: "",
+      at: AT,
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) throw new Error(created.reason);
+
+    const denied = await deleteAgendaItemWithNotebookGate(world, seeded.patrick.id, created.value);
+    assert.equal(denied.ok, false);
+    if (denied.ok) throw new Error("devrait refuser");
+    assert.equal(denied.status, 403);
+    assert.equal(denied.reason, NOTEBOOK_PUBLISH_NOT_ASSIGNED);
+    assert.ok(await world.agenda.findAgendaItem(created.value.id));
+  } finally {
+    world.close();
+  }
+});
+
+test("DELETE Carnet — AnnualCourse archivé refusé", async () => {
+  const world = await sqliteWorld();
+  try {
+    const seeded = await seedMecauto(world);
+    const created = await createNotebookPublication(world.publishDeps, {
+      teacherId: seeded.francois.id,
+      annualCourseId: seeded.courseA.id,
+      schoolWeekNumber: 8,
+      day: 0,
+      type: "HOMEWORK",
+      title: "Avant archive",
+      detail: "",
+      at: AT,
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) throw new Error(created.reason);
+
+    const archived = await archiveAnnualCourse(world.courseDeps, seeded.courseA.id);
+    assert.equal(archived.ok, true);
+
+    const denied = await deleteAgendaItemWithNotebookGate(world, seeded.francois.id, created.value);
+    assert.equal(denied.ok, false);
+    if (denied.ok) throw new Error("devrait refuser");
+    assert.equal(denied.status, 403);
+    assert.equal(denied.reason, NOTEBOOK_PUBLISH_ARCHIVED);
+    assert.ok(await world.agenda.findAgendaItem(created.value.id));
+  } finally {
+    world.close();
+  }
+});
+
+test("DELETE legacy — publication sans annualCourseId conserve l’auteur", async () => {
+  const world = await sqliteWorld();
+  try {
+    const seeded = await seedMecauto(world);
+    await world.adapters.upsertClassroom({
+      id: "classroom-legacy",
+      name: "LEGACY",
+      programLabel: "",
+      accessCodeHint: "",
+    });
+    await world.adapters.upsertSubject({
+      id: "subject-legacy",
+      classroomId: "classroom-legacy",
+      name: "Matière legacy",
+    });
+    const legacy = await world.agenda.createAgendaItem({
+      classroomId: "classroom-legacy",
+      subjectId: "subject-legacy",
+      authorTeacherId: seeded.francois.id,
+      day: 0,
+      hour: 8,
+      weekOffset: 0,
+      schoolWeekNumber: 3,
+      type: "HOMEWORK",
+      title: "Ancienne publication",
+      detail: "",
+    });
+    assert.equal(legacy.annualCourseId ?? null, null);
+    assert.equal(isCarnetOwnedPublication(legacy), true);
+
+    const gate = await authorizeNotebookOwnedItemMutation(world.publishDeps, {
+      teacherId: seeded.francois.id,
+      item: legacy,
+      at: AT,
+    });
+    assert.equal(gate, null);
+
+    const stolen = await deleteAgendaItemWithNotebookGate(world, seeded.patrick.id, legacy);
+    assert.equal(stolen.ok, false);
+    if (stolen.ok) throw new Error("legacy autre auteur");
+    assert.equal(stolen.status, 403);
+    assert.ok(await world.agenda.findAgendaItem(legacy.id));
+
+    const own = await deleteAgendaItemWithNotebookGate(world, seeded.francois.id, legacy);
+    assert.equal(own.ok, true);
+    assert.equal(await world.agenda.findAgendaItem(legacy.id), undefined);
   } finally {
     world.close();
   }
