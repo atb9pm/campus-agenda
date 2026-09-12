@@ -51,8 +51,8 @@ async function totpNow(secret) {
   }).generate();
 }
 
-async function completeAdminMfaIfNeeded(loginResponse) {
-  const payload = await loginResponse.clone().json();
+async function completeAdminMfaIfNeeded(loginResponse, parsedPayload) {
+  const payload = parsedPayload ?? await loginResponse.json();
   let cookie = extractCookie(loginResponse);
   const session = payload.session;
   if (!session?.isAdmin || session.mustChangePassword) return cookie;
@@ -304,7 +304,7 @@ test("comptes enseignant — E2E création, mot de passe provisoire, première c
   assert.equal(adminLogin.status, 200);
   const adminPayload = await adminLogin.json();
   assert.equal(adminPayload.session.isAdmin, true);
-  const adminCookie = await completeAdminMfaIfNeeded(adminLogin);
+  const adminCookie = await completeAdminMfaIfNeeded(adminLogin, adminPayload);
 
   const initials = `Zz${(Date.now() % 1000).toString().padStart(3, "0")}`;
   const missingType = await request("/api/admin/teachers", {
