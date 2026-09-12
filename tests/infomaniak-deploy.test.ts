@@ -55,5 +55,9 @@ test("build Infomaniak installe racine puis web, puis build — git inchangé", 
 
   assert.match(build, /npm ci --no-audit --no-fund \|\| npm install --no-audit --no-fund/);
   assert.match(build, /writeFileSync\("build-info\.json"/);
+  assert.match(
+    build,
+    /cd web && AUTH_SECRET=votre-secret CAMPUS_MFA_ENCRYPTION_KEY=votre-cle-mfa CAMPUS_STORE=sqlite npm run start:infomaniak/,
+  );
   assert.doesNotMatch(build, /qrcode only|uniquement qrcode/);
 });

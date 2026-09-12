@@ -92,7 +92,7 @@ main() {
   echo "  Vérification : https://campusagenda.ch/api/health"
   echo ""
   echo "  Rappel — commande de lancement attendue :"
-  echo "  cd web && AUTH_SECRET=votre-secret CAMPUS_STORE=sqlite npm run start:infomaniak"
+  echo "  cd web && AUTH_SECRET=votre-secret CAMPUS_MFA_ENCRYPTION_KEY=votre-cle-mfa CAMPUS_STORE=sqlite npm run start:infomaniak"
 }
 
 main "$@"; exit 0
