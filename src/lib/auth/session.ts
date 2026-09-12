@@ -78,7 +78,12 @@ export async function parseSessionToken(token: string | null | undefined): Promi
       if (typeof decoded.teacherId !== "string" || !decoded.teacherId || !isFiniteIssuedAt(decoded.issuedAt)) {
         return null;
       }
-      return { kind: "teacher", teacherId: decoded.teacherId, issuedAt: decoded.issuedAt };
+      return {
+        kind: "teacher",
+        teacherId: decoded.teacherId,
+        issuedAt: decoded.issuedAt,
+        ...(decoded.mfaPending === true ? { mfaPending: true } : {}),
+      };
     }
 
     if (decoded.kind !== "student") return null;

@@ -25,7 +25,8 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    "**/*.mts",
+    "../src/types/qrcode.d.ts"
   ],
   "exclude": ["node_modules"]
 }

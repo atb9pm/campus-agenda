@@ -86,7 +86,7 @@ export async function hashPassword(password: string): Promise<string> {
   return `${PBKDF2_PREFIX}$${iterations}$${toBase64(salt)}$${toBase64(derived)}`;
 }
 
-function constantTimeEquals(left: string, right: string): boolean {
+export function constantTimeEquals(left: string, right: string): boolean {
   if (left.length !== right.length) return false;
   let diff = 0;
   for (let index = 0; index < left.length; index += 1) {

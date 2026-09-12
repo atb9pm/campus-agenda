@@ -8,6 +8,8 @@ export interface TeacherSession {
   kind: "teacher";
   teacherId: string;
   issuedAt: number;
+  /** Mot de passe vérifié, MFA administrateur non validée. Aucun accès admin. */
+  mfaPending?: boolean;
 }
 
 export interface StudentSession {

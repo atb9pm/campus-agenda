@@ -55,7 +55,7 @@ Infomaniak **n'a pas** d'écran « Variables d'environnement » pour Node.js.
 Le secret se met **dans la commande** :
 
 ```bash
-cd web && AUTH_SECRET=REMPLACEZ_PAR_VOTRE_SECRET CAMPUS_STORE=sqlite npm run start:infomaniak
+cd web && AUTH_SECRET=REMPLACEZ_PAR_VOTRE_SECRET CAMPUS_MFA_ENCRYPTION_KEY=REMPLACEZ_PAR_CLE_MFA CAMPUS_STORE=sqlite npm run start:infomaniak
 ```
 
 Générer un secret (PowerShell) :
@@ -67,7 +67,7 @@ Générer un secret (PowerShell) :
 Exemple (à personnaliser) :
 
 ```bash
-cd web && AUTH_SECRET=K7mP2xQ9vL4nR8wT6yU3zA1bC5dE0fGHjKlMnPqRsTuVwXyZ CAMPUS_STORE=sqlite npm run start:infomaniak
+cd web && AUTH_SECRET=K7mP2xQ9vL4nR8wT6yU3zA1bC5dE0fGHjKlMnPqRsTuVwXyZ CAMPUS_MFA_ENCRYPTION_KEY=REMPLACEZ_PAR_CLE_MFA CAMPUS_STORE=sqlite npm run start:infomaniak
 ```
 
 ### Premier mot de passe administrateur
@@ -79,7 +79,7 @@ compte ne peut s'en servir. Deux façons d'obtenir le premier accès administrat
 `CAMPUS_ADMIN_INITIALS`, `ChF` par défaut, et `CAMPUS_ADMIN_DISPLAY_NAME`) à la commande de lancement :
 
 ```bash
-cd web && AUTH_SECRET=… CAMPUS_STORE=sqlite CAMPUS_ADMIN_INITIALS=ChF CAMPUS_ADMIN_PASSWORD=Direction-2027 npm run start:infomaniak
+cd web && AUTH_SECRET=… CAMPUS_MFA_ENCRYPTION_KEY=… CAMPUS_STORE=sqlite CAMPUS_ADMIN_INITIALS=ChF CAMPUS_ADMIN_PASSWORD=Direction-2027 npm run start:infomaniak
 ```
 
 Sur une **base SQLite totalement vide**, `CAMPUS_ADMIN_PASSWORD` est **obligatoire**.
@@ -117,6 +117,7 @@ enseignants** (mot de passe provisoire affiché à l'écran, à transmettre de v
 | `CAMPUS_ADMIN_DISPLAY_NAME` | Nom affiché du premier admin (base vide) |
 | `CAMPUS_ADMIN_PASSWORD` | Mot de passe d'amorçage ; **obligatoire** si la table `teachers` est vide |
 | `CAMPUS_ALLOW_DEMO_PASSWORD` | **À ne pas définir en production** : rouvrirait `campus-demo` |
+| `CAMPUS_MFA_ENCRYPTION_KEY` | Clé AES-GCM 32 octets (hex 64) pour le secret TOTP admin — **obligatoire** |
 
 ## Déploiement manuel (première fois)
 

@@ -66,8 +66,8 @@ function weekdayHolidays(monday: string, weekCount: number): Array<{ date: strin
 }
 
 test("version 2.51.0 — plan complet année en préparation, sans migration", () => {
-  assert.equal(APP_VERSION, "2.52.2");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0028_school_week_kind_nullable.sql");
+  assert.equal(APP_VERSION, "2.53.0");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0029_admin_mfa.sql");
 });
 
 test("règle A/B : 38 semaines pédagogiques impair A / pair B", () => {

@@ -32,6 +32,8 @@ import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts"
 import { ARCHIVED_YEAR_READONLY_REASON, getArchivedYearIds, isArchivedYearItem } from "@campus/features/school-year/archived-readonly.ts";
 import { revalidateStructuredStudentSession } from "@campus/features/student-access/index.ts";
 import type { AppSession } from "@campus/lib/persistence/types.ts";
+import { evaluateAdminMfaAccess } from "@campus/features/admin-mfa/index.ts";
+import { getAdminMfaStore } from "@campus/lib/persistence/store-factory.ts";
 
 export async function getRequestSession(request: Request): Promise<AppSession | null> {
   const parsed = await parseSessionToken(readSessionTokenFromRequest(request));
@@ -579,6 +581,42 @@ export async function requireTeacherSessionAllowingPasswordChange(request: Reque
 export async function requireAdminSession(request: Request) {
   const auth = await requireTeacherSession(request);
   if ("error" in auth && auth.error) return auth;
+  const isAdmin = await auth.store!.teacherIsAdmin(auth.session!.teacherId);
+  const record = await (await getAdminMfaStore()).get(auth.session!.teacherId);
+  const gate = evaluateAdminMfaAccess({
+    isAdmin,
+    mfaPending: Boolean(auth.session!.mfaPending),
+    status: record?.status,
+  });
+  if (!gate.ok) {
+    return {
+      error: jsonResponse(
+        {
+          ok: false,
+          reason: gate.reason,
+          ...(gate.mfaPending ? { mfaPending: true } : {}),
+          ...(gate.mfaSetupRequired ? { mfaSetupRequired: true } : {}),
+        },
+        { status: gate.status },
+      ),
+    };
+  }
+  return auth;
+}
+
+/** Identité enseignant + admin, y compris session MFA_PENDING (enrôlement / défi). */
+export async function requireAdminMfaPendingSession(request: Request) {
+  const auth = await requireTeacherIdentity(request);
+  if ("error" in auth && auth.error) return auth;
+  const accounts = await getTeacherAccountsStore();
+  if (await accounts.mustChangePassword(auth.session!.teacherId)) {
+    return {
+      error: jsonResponse(
+        { ok: false, reason: PASSWORD_CHANGE_REQUIRED_REASON, passwordChangeRequired: true },
+        { status: 403 },
+      ),
+    };
+  }
   const isAdmin = await auth.store!.teacherIsAdmin(auth.session!.teacherId);
   if (!isAdmin) {
     return { error: forbiddenResponse("Accès administrateur requis.") };

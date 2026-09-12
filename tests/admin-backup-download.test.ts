@@ -15,8 +15,8 @@ import { backupDownloadFilename } from "../src/lib/persistence/backup.ts";
 import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 
 test("version 2.44.0 — sauvegarde admin manuelle", async () => {
-  assert.equal(APP_VERSION, "2.52.2");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0028_school_week_kind_nullable.sql");
+  assert.equal(APP_VERSION, "2.53.0");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0029_admin_mfa.sql");
 
   const panel = await readFile(new URL("../web/app/components/admin-backup-panel.tsx", import.meta.url), "utf8");
   const admin = await readFile(new URL("../web/app/components/administration-panel.tsx", import.meta.url), "utf8");

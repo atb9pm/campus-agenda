@@ -24,6 +24,19 @@ test("phase 1.0 — clé client et limite mémoire", () => {
   assert.equal(checkInMemoryRateLimit(key, 2), false);
 });
 
+test("2.53.0 — portée MFA limitée et configurable", () => {
+  resetInMemoryRateLimits();
+  assert.equal(buildAuthRateLimitKey("teacher-mfa", "203.0.113.10"), "auth:teacher-mfa:203.0.113.10");
+  const previous = process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA;
+  process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA = "3";
+  assert.equal(resolveAuthRateLimit("teacher-mfa"), 3);
+  if (previous === undefined) {
+    delete process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA;
+  } else {
+    process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA = previous;
+  }
+});
+
 test("phase 1.0 — limites configurables via variables d'environnement", () => {
   const previous = process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER;
   process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER = "5";

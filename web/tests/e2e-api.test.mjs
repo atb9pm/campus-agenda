@@ -9,6 +9,8 @@ process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
 // ferait échouer les scénarios ajoutés en fin de fichier.
 process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER ??= "50";
 process.env.CAMPUS_AUTH_RATE_LIMIT_STUDENT ??= "50";
+process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA ??= "80";
+process.env.CAMPUS_MFA_ENCRYPTION_KEY ??= "a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00";
 
 const env = {
   ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
@@ -37,6 +39,57 @@ function extractCookie(response) {
   return header.split(";")[0] ?? "";
 }
 
+const adminTotpSecrets = new Map();
+
+async function totpNow(secret) {
+  const { Secret, TOTP } = await import("otpauth");
+  return new TOTP({
+    secret: Secret.fromBase32(secret),
+    digits: 6,
+    period: 30,
+    algorithm: "SHA1",
+  }).generate();
+}
+
+async function completeAdminMfaIfNeeded(loginResponse) {
+  const payload = await loginResponse.clone().json();
+  let cookie = extractCookie(loginResponse);
+  const session = payload.session;
+  if (!session?.isAdmin || session.mustChangePassword) return cookie;
+  if (session.mfaSetupRequired) {
+    const setup = await request("/api/auth/teacher/mfa/setup", {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+    });
+    const setupBody = await setup.json();
+    assert.equal(setup.status, 200, setupBody.reason ?? "mfa setup");
+    const secret = new URL(setupBody.otpauthUri).searchParams.get("secret");
+    assert.ok(secret, "secret otpauth");
+    adminTotpSecrets.set(session.teacherId, secret);
+    const confirm = await request("/api/auth/teacher/mfa/confirm", {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ code: await totpNow(secret) }),
+    });
+    const confirmBody = await confirm.json();
+    assert.equal(confirm.status, 200, confirmBody.reason ?? "mfa confirm");
+    return extractCookie(confirm) || cookie;
+  }
+  if (session.mfaChallengeRequired) {
+    const secret = adminTotpSecrets.get(session.teacherId);
+    assert.ok(secret, "secret TOTP admin e2e manquant");
+    const verify = await request("/api/auth/teacher/mfa/verify", {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ code: await totpNow(secret) }),
+    });
+    const verifyBody = await verify.json();
+    assert.equal(verify.status, 200, verifyBody.reason ?? "mfa verify");
+    return extractCookie(verify) || cookie;
+  }
+  return cookie;
+}
+
 async function loginTeacher(teacherId) {
   const response = await request("/api/auth/teacher", {
     method: "POST",
@@ -44,7 +97,7 @@ async function loginTeacher(teacherId) {
     body: JSON.stringify({ teacherId, password: "campus-demo" }),
   });
   assert.equal(response.status, 200, `login ${teacherId}`);
-  return extractCookie(response);
+  return completeAdminMfaIfNeeded(response);
 }
 
 /** Administrateur réel du seed (ChF), pas l'enseignant démo historique. */
@@ -251,7 +304,7 @@ test("comptes enseignant — E2E création, mot de passe provisoire, première c
   assert.equal(adminLogin.status, 200);
   const adminPayload = await adminLogin.json();
   assert.equal(adminPayload.session.isAdmin, true);
-  const adminCookie = extractCookie(adminLogin);
+  const adminCookie = await completeAdminMfaIfNeeded(adminLogin);
 
   const initials = `Zz${(Date.now() % 1000).toString().padStart(3, "0")}`;
   const missingType = await request("/api/admin/teachers", {
@@ -399,6 +452,24 @@ test("2.51.0 — E2E plan complet de l’année de travail", async () => {
     headers: { cookie: adminCookie },
   });
   assert.equal(missing.status, 404);
+});
+
+test("2.53.0 — admin MFA_PENDING : API admin refusée après le seul mot de passe", async () => {
+  const login = await request("/api/auth/teacher", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ teacherId: "teacher-chf", password: "campus-demo" }),
+  });
+  assert.equal(login.status, 200);
+  const payload = await login.json();
+  assert.equal(payload.session.isAdmin, true);
+  assert.equal(payload.session.mfaPending, true);
+  const pendingCookie = extractCookie(login);
+  const blocked = await request("/api/admin/teachers", { headers: { cookie: pendingCookie } });
+  assert.equal(blocked.status, 403);
+  const blockedBody = await blocked.json();
+  assert.equal(blockedBody.ok, false);
+  assert.ok(blockedBody.mfaPending || blockedBody.mfaSetupRequired);
 });
 
 test("2.26.0 — matrice admin : anonyme 401, enseignant 403, admin 200", async () => {

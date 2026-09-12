@@ -26,6 +26,7 @@ const RATE_LIMIT_ROUTES: Record<AuthRateLimitScope, string> = {
   teacher: "/api/auth/teacher",
   student: "/api/auth/student",
   "teacher-password": "/api/auth/teacher/password",
+  "teacher-mfa": "/api/auth/teacher/mfa",
 };
 
 function rateLimitResponse(request: Request, scope: AuthRateLimitScope): Response {
@@ -51,12 +52,15 @@ function rateLimitResponse(request: Request, scope: AuthRateLimitScope): Respons
 export async function enforceAuthRateLimit(
   request: Request,
   scope: AuthRateLimitScope,
+  accountKey?: string,
 ): Promise<Response | null> {
   if (process.env.CAMPUS_DISABLE_RATE_LIMIT === "1") {
     return null;
   }
 
-  const clientKey = readClientKey(request);
+  const clientKey = accountKey
+    ? `${readClientKey(request)}:${accountKey}`
+    : readClientKey(request);
   const key = buildAuthRateLimitKey(scope, clientKey);
   const limit = resolveAuthRateLimit(scope);
   const binding = await getAuthRateLimiter();

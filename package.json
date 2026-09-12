@@ -3,6 +3,11 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "pdfjs-dist": "6.2.108"
+    "otpauth": "^9.5.2",
+    "pdfjs-dist": "6.2.108",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.6"
   }
 }
