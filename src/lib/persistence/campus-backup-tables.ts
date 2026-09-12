@@ -6,6 +6,7 @@
  */
 export const CAMPUS_BACKUP_INSERT_ORDER = [
   "teachers",
+  "teacher_mfa",
   "classrooms",
   "school_years",
   "school_weeks",
@@ -70,6 +71,15 @@ export const CAMPUS_BACKUP_COLUMNS: Record<CampusBackupTableName, BackupColumnSp
     { name: "archived_at", type: "text" },
     { name: "last_login_at", type: "text" },
     { name: "teaching_type", type: "text" },
+  ),
+  teacher_mfa: cols(
+    { name: "teacher_id", type: "text", required: true },
+    { name: "status", type: "text", required: true },
+    { name: "secret_encrypted", type: "text" },
+    { name: "pending_secret_encrypted", type: "text" },
+    { name: "recovery_hashes", type: "text" },
+    { name: "confirmed_at", type: "text" },
+    { name: "updated_at", type: "text" },
   ),
   classrooms: cols(
     { name: "id", type: "text", required: true },
@@ -384,4 +394,5 @@ export const CAMPUS_BACKUP_FOREIGN_KEYS: Array<{
   { table: "class_attendance_days", column: "class_id", parent: "school_classes", parentColumn: "id" },
   { table: "teacher_setups", column: "teacher_id", parent: "teachers", parentColumn: "id" },
   { table: "teacher_notes", column: "teacher_id", parent: "teachers", parentColumn: "id" },
+  { table: "teacher_mfa", column: "teacher_id", parent: "teachers", parentColumn: "id" },
 ];

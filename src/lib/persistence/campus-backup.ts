@@ -46,6 +46,8 @@ import type { PublicationTemplate } from "../../features/library/types.ts";
 import type { AdminCodeKind } from "../../features/school-catalog/admin-codes.ts";
 import type { TemplateStore } from "./types.ts";
 import type { TimetableStore } from "./timetable-types.ts";
+import { getMemoryAdminMfaStore } from "./memory-admin-mfa-store.ts";
+import type { AdminMfaStore } from "../../features/admin-mfa/types.ts";
 
 export const BACKUP_FORMAT_VERSION = BACKUP_FORMAT_VERSION_V4;
 
@@ -71,6 +73,8 @@ export interface CampusBackupDeps extends BackupStoreDeps {
   templates?: TemplateStore | null;
   /** Memory : dump/restore horaire. SQL : déjà dans dumpCampusTables. */
   timetable?: TimetableStore | null;
+  /** Memory : dump/restore MFA admin. SQL : déjà dans dumpCampusTables. */
+  adminMfa?: AdminMfaStore | null;
 }
 
 function asString(value: unknown, fallback = ""): string {
@@ -143,6 +147,8 @@ async function buildMemoryTables(deps: CampusBackupDeps): Promise<CampusTableDum
       teaching_type: live?.teachingType ?? null,
     };
   });
+  const mfaStore = deps.adminMfa ?? getMemoryAdminMfaStore();
+  dump.teacher_mfa = (await mfaStore.exportAll()) as unknown as Array<Record<string, unknown>>;
   dump.classrooms = legacy.classrooms.map((entry) => ({
     id: entry.id,
     name: entry.name,
@@ -527,6 +533,19 @@ async function restoreMemoryTables(deps: CampusBackupDeps, dump: CampusTableDump
       passwordUpdatedAt: asNullableString(row.password_updated_at ?? row.passwordUpdatedAt),
       archivedAt: asNullableString(row.archived_at ?? row.archivedAt),
       lastLoginAt: asNullableString(row.last_login_at ?? row.lastLoginAt),
+    })),
+  );
+
+  const mfaStore = deps.adminMfa ?? getMemoryAdminMfaStore();
+  await mfaStore.replaceAll(
+    (dump.teacher_mfa ?? []).map((row) => ({
+      teacher_id: asString(row.teacher_id ?? row.teacherId),
+      status: asString(row.status),
+      secret_encrypted: asNullableString(row.secret_encrypted ?? row.secretEncrypted),
+      pending_secret_encrypted: asNullableString(row.pending_secret_encrypted ?? row.pendingSecretEncrypted),
+      recovery_hashes: asNullableString(row.recovery_hashes ?? row.recoveryHashes),
+      confirmed_at: asNullableString(row.confirmed_at ?? row.confirmedAt),
+      updated_at: asNullableString(row.updated_at ?? row.updatedAt),
     })),
   );
 

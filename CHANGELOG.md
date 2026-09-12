@@ -2,6 +2,25 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.53.0] — Double authentification TOTP administrateur
+
+Les comptes administrateurs doivent valider un TOTP (ou un code de récupération) après le mot de passe. Les enseignants standards conservent la connexion actuelle.
+
+### Ajouté
+
+- Secret TOTP chiffré AES-256-GCM (`CAMPUS_MFA_ENCRYPTION_KEY`), codes de récupération hachés, session `mfaPending`.
+- Écran d’enrôlement (QR `otpauth://`) et défi 6 chiffres. Administration → Sécurité.
+- Commande serveur `pnpm admin:reset-2fa` (confirmation `RESET-2FA`) → état `reset_required`, jamais « 2FA désactivée ».
+- Table `teacher_mfa` (migration `0029_admin_mfa.sql`) intégrée au backup v4.
+
+### Conservé
+
+Carnet, Contrôles, Mes cours, Ma semaine, agenda élève, années, classes, AnnualCourse, attributions, CourseSession, calendrier, publications. Aucune 2FA enseignant.
+
+### Migration
+
+`0029_admin_mfa.sql`. Installer `CAMPUS_MFA_ENCRYPTION_KEY` sur Infomaniak puis redémarrer.
+
 ## [2.52.2] — Lien AnnualCourse → Carnet pour les publications élèves
 
 Le Carnet autorise la publication élèves dès qu’un **AnnualCourse attribué** est ouvert. Un Subject/runtime n’est plus une condition fonctionnelle : c’est seulement un adaptateur technique déterministe.

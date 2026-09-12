@@ -2,9 +2,10 @@ export const AUTH_RATE_LIMIT_WINDOW_MS = 60_000;
 export const AUTH_TEACHER_LIMIT = 10;
 export const AUTH_STUDENT_LIMIT = 20;
 export const AUTH_PASSWORD_CHANGE_LIMIT = 10;
+export const AUTH_MFA_LIMIT = 8;
 
-/** Portées limitées : connexion enseignant, connexion élève, changement de mot de passe. */
-export type AuthRateLimitScope = "teacher" | "student" | "teacher-password";
+/** Portées limitées : connexion enseignant, connexion élève, changement de mot de passe, MFA. */
+export type AuthRateLimitScope = "teacher" | "student" | "teacher-password" | "teacher-mfa";
 
 const memoryBuckets = new Map<string, { count: number; resetAt: number }>();
 
@@ -22,12 +23,14 @@ const RATE_LIMIT_ENV_KEYS: Record<AuthRateLimitScope, string> = {
   teacher: "CAMPUS_AUTH_RATE_LIMIT_TEACHER",
   student: "CAMPUS_AUTH_RATE_LIMIT_STUDENT",
   "teacher-password": "CAMPUS_AUTH_RATE_LIMIT_TEACHER_PASSWORD",
+  "teacher-mfa": "CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA",
 };
 
 const RATE_LIMIT_DEFAULTS: Record<AuthRateLimitScope, number> = {
   teacher: AUTH_TEACHER_LIMIT,
   student: AUTH_STUDENT_LIMIT,
   "teacher-password": AUTH_PASSWORD_CHANGE_LIMIT,
+  "teacher-mfa": AUTH_MFA_LIMIT,
 };
 
 export function resolveAuthRateLimit(scope: AuthRateLimitScope): number {

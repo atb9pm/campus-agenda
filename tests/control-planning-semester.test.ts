@@ -158,8 +158,8 @@ function testItem(input: {
 }
 
 test("version 2.38.0 — semestre visuel, pas de migration", () => {
-  assert.equal(APP_VERSION, "2.52.2");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0028_school_week_kind_nullable.sql");
+  assert.equal(APP_VERSION, "2.53.0");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0029_admin_mfa.sql");
 });
 
 test("semestres — tri par monday, coupe continue, aucune semaine inventée", () => {

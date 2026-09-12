@@ -7,6 +7,7 @@ import {
 import type { AnnualCourseNote } from "../pedagogical-path/index.ts";
 import type { TeacherDeletePlan } from "./types.ts";
 import type { TeacherDeleteSnapshotDeps } from "./snapshot.ts";
+import { getMemoryAdminMfaStore } from "../../lib/persistence/memory-admin-mfa-store.ts";
 
 interface AnnualNotesBulkStore {
   exportAllNotes(): AnnualCourseNote[];
@@ -67,6 +68,8 @@ export async function applyTeacherDeleteInMemory(
       row.teacher_id === teacherId ? { ...row, teacher_id: null } : row,
     ),
   });
+
+  await getMemoryAdminMfaStore().deleteForTeacher(teacherId);
 
   await deps.accounts.deleteAccount(teacherId);
 }

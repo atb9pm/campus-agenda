@@ -62,6 +62,9 @@ import {
   loginStudentApi,
   loginTeacherApi,
   logoutApiSession,
+  startAdminMfaSetupApi,
+  confirmAdminMfaSetupApi,
+  verifyAdminMfaApi,
   fetchAgendaView,
   saveTeacherNotesApi,
   saveTeacherSetupApi,
@@ -119,6 +122,8 @@ import { ConfigurationPanel } from "./components/configuration-panel.tsx";
 import { AdministrationPanel } from "./components/administration-panel.tsx";
 import { LoginPanel } from "./components/login-panel.tsx";
 import { PasswordChangePanel } from "./components/password-change-panel.tsx";
+import { MfaChallengePanel } from "./components/mfa-challenge-panel.tsx";
+import { MfaSetupPanel } from "./components/mfa-setup-panel.tsx";
 import { ClassNotebookPanel } from "./components/class-notebook-panel.tsx";
 import { MaSemainePanel } from "./components/ma-semaine-panel.tsx";
 import { MesCoursPanel } from "./components/mes-cours-panel.tsx";
@@ -261,6 +266,11 @@ export default function Home() {
   const [studentLoginError, setStudentLoginError] = useState("");
   const [passwordChange, setPasswordChange] = useState<ApiTeacherSession | null>(null);
   const [passwordChangeError, setPasswordChangeError] = useState("");
+  const [mfaGate, setMfaGate] = useState<ApiTeacherSession | null>(null);
+  const [mfaError, setMfaError] = useState("");
+  const [mfaQrDataUrl, setMfaQrDataUrl] = useState<string | null>(null);
+  const [mfaManualKey, setMfaManualKey] = useState<string | null>(null);
+  const [mfaRecoveryCodes, setMfaRecoveryCodes] = useState<string[] | null>(null);
   const [studentCourseDayKey, setStudentCourseDayKey] = useState<string | null>(null);
   const [studentHistoryOpen, setStudentHistoryOpen] = useState(false);
   /** Onglet mobile élève : cours du jour, contrôles, historique. */
@@ -299,9 +309,22 @@ export default function Home() {
     if (session.mustChangePassword) {
       setPasswordChange(session);
       setPasswordChangeError("");
+      setMfaGate(null);
+      return;
+    }
+    if (session.isAdmin && (session.mfaSetupRequired || session.mfaChallengeRequired)) {
+      setPasswordChange(null);
+      setMfaGate(session);
+      setMfaError("");
+      if (session.mfaChallengeRequired) {
+        setMfaQrDataUrl(null);
+        setMfaManualKey(null);
+        setMfaRecoveryCodes(null);
+      }
       return;
     }
     setPasswordChange(null);
+    setMfaGate(null);
     setAuthenticatedTeacher(authenticatedTeacherFromSession(session));
     setCurrentTeacherId(session.teacherId);
     setTeacherIsAdmin(Boolean(session.isAdmin));
@@ -890,7 +913,12 @@ export default function Home() {
       setPasswordChangeError("");
       try {
         await changeTeacherPasswordApi(currentPassword, nextPassword);
-        await applyTeacherSession({ ...pendingSession, mustChangePassword: false });
+        const nextSession = await fetchApiSession();
+        if (nextSession?.kind === "teacher") {
+          await applyTeacherSession(nextSession);
+        } else {
+          await applyTeacherSession({ ...pendingSession, mustChangePassword: false });
+        }
         showNotice("Mot de passe enregistré.");
       } catch (error) {
         setPasswordChangeError(
@@ -907,6 +935,78 @@ export default function Home() {
       await logoutApiSession();
       setPasswordChange(null);
       setPasswordChangeError("");
+      setMfaGate(null);
+      clearTeacherAuthIdentity();
+    })();
+  }
+
+  function startAdminMfaSetup() {
+    void (async () => {
+      setLoginPending(true);
+      setMfaError("");
+      try {
+        const setup = await startAdminMfaSetupApi();
+        setMfaQrDataUrl(setup.qrDataUrl);
+        setMfaManualKey(setup.manualKey);
+      } catch (error) {
+        setMfaError(error instanceof Error ? error.message : "Configuration 2FA impossible.");
+      } finally {
+        setLoginPending(false);
+      }
+    })();
+  }
+
+  function submitAdminMfaSetup(code: string) {
+    void (async () => {
+      setLoginPending(true);
+      setMfaError("");
+      try {
+        const result = await confirmAdminMfaSetupApi(code);
+        setMfaRecoveryCodes(result.recoveryCodes);
+        setMfaGate(result.session);
+        setMfaQrDataUrl(null);
+        setMfaManualKey(null);
+      } catch (error) {
+        setMfaError(error instanceof Error ? error.message : "Code incorrect.");
+      } finally {
+        setLoginPending(false);
+      }
+    })();
+  }
+
+  function continueAfterMfaRecovery() {
+    if (!mfaGate) return;
+    void applyTeacherSession({
+      ...mfaGate,
+      mfaPending: false,
+      mfaSetupRequired: false,
+      mfaChallengeRequired: false,
+    });
+  }
+
+  function submitAdminMfaChallenge(code: string) {
+    void (async () => {
+      setLoginPending(true);
+      setMfaError("");
+      try {
+        const session = await verifyAdminMfaApi(code);
+        await applyTeacherSession(session);
+      } catch (error) {
+        setMfaError(error instanceof Error ? error.message : "Code incorrect.");
+      } finally {
+        setLoginPending(false);
+      }
+    })();
+  }
+
+  function cancelMfaGate() {
+    void (async () => {
+      await logoutApiSession();
+      setMfaGate(null);
+      setMfaError("");
+      setMfaQrDataUrl(null);
+      setMfaManualKey(null);
+      setMfaRecoveryCodes(null);
       clearTeacherAuthIdentity();
     })();
   }
@@ -1203,6 +1303,45 @@ export default function Home() {
           error={passwordChangeError}
           onSubmit={submitPasswordChange}
           onCancel={cancelPasswordChange}
+        />
+        {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
+      </>
+    );
+  }
+
+  if (mfaGate?.mfaSetupRequired || mfaRecoveryCodes) {
+    return (
+      <>
+        <MfaSetupPanel
+          appVersion={APP_VERSION}
+          displayName={mfaGate?.displayName ?? ""}
+          initials={mfaGate?.initials ?? ""}
+          pending={loginPending}
+          error={mfaError}
+          qrDataUrl={mfaQrDataUrl}
+          manualKey={mfaManualKey}
+          recoveryCodes={mfaRecoveryCodes}
+          onStart={startAdminMfaSetup}
+          onConfirm={submitAdminMfaSetup}
+          onContinue={continueAfterMfaRecovery}
+          onCancel={cancelMfaGate}
+        />
+        {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
+      </>
+    );
+  }
+
+  if (mfaGate?.mfaChallengeRequired) {
+    return (
+      <>
+        <MfaChallengePanel
+          appVersion={APP_VERSION}
+          displayName={mfaGate.displayName}
+          initials={mfaGate.initials}
+          pending={loginPending}
+          error={mfaError}
+          onSubmit={submitAdminMfaChallenge}
+          onCancel={cancelMfaGate}
         />
         {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
       </>

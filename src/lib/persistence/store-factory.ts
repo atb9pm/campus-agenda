@@ -52,6 +52,9 @@ import { getMemoryCourseScheduleStore, MemoryCourseScheduleStore } from "./memor
 import { SqlCourseScheduleStore } from "./sql/sql-course-schedule-store.ts";
 
 import type { StudentAccessStore } from "./student-access-types.ts";
+import type { AdminMfaStore } from "../../features/admin-mfa/types.ts";
+import { getMemoryAdminMfaStore } from "./memory-admin-mfa-store.ts";
+import { SqlAdminMfaStore } from "./sql/sql-admin-mfa-store.ts";
 import { getMemoryStudentAccessStore } from "./memory-student-access-store.ts";
 import { SqlStudentAccessStore } from "./sql/sql-student-access-store.ts";
 import { setActiveSchoolWeekEntries } from "../../features/calendar/active-calendar.ts";
@@ -403,6 +406,12 @@ export async function getCourseScheduleStore(): Promise<CourseScheduleStore> {
 
 export async function getStudentAccessStore(): Promise<StudentAccessStore> {
   return (await resolveAgendaStore()).studentAccessStore;
+}
+
+export async function getAdminMfaStore(): Promise<AdminMfaStore> {
+  const resolved = await resolveAgendaStore();
+  if (resolved.sqlDb) return new SqlAdminMfaStore(resolved.sqlDb);
+  return getMemoryAdminMfaStore();
 }
 
 export async function getStoreKind(): Promise<StoreKind> {

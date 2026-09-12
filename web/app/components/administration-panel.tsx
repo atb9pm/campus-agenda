@@ -18,6 +18,7 @@ import { ClassesAdminPanel } from "./classes-admin-panel.tsx";
 import { ProfessionsAdminPanel } from "./professions-admin-panel.tsx";
 import { SchoolYearAdminPanel } from "./school-year-admin-panel.tsx";
 import { TeacherAccountsPanel } from "./teacher-accounts-panel.tsx";
+import { AdminSecurityPanel } from "./admin-security-panel.tsx";
 import { DestructiveConfirmDialog } from "./destructive-confirm-dialog.tsx";
 import { TrainingPlansAdminPanel } from "./training-plans-admin-panel.tsx";
 import {
@@ -41,7 +42,8 @@ type AdminTab =
   | "schedules"
   | "weeks"
   | "backup"
-  | "restore";
+  | "restore"
+  | "security";
 
 interface AdministrationPanelProps {
   currentTeacherId: string;
@@ -65,6 +67,7 @@ const TAB_LABELS: Record<AdminTab, string> = {
   weeks: "Année scolaire",
   backup: "Sauvegarde des données",
   restore: "Restaurer une sauvegarde",
+  security: "Sécurité",
 };
 
 function branchCardClass(entry: SchoolBranchRecord): string {
@@ -331,7 +334,8 @@ export function AdministrationPanel({
     && tab !== "teachers"
     && tab !== "schedules"
     && tab !== "backup"
-    && tab !== "restore";
+    && tab !== "restore"
+    && tab !== "security";
 
   return (
     <section className="teacher-workspace admin-workspace" aria-label="Administration">
@@ -363,6 +367,7 @@ export function AdministrationPanel({
 
       {tab === "backup" ? <AdminBackupPanel mode="download" /> : null}
       {tab === "restore" ? <AdminBackupPanel mode="restore" /> : null}
+      {tab === "security" ? <AdminSecurityPanel onNotice={onNotice} /> : null}
 
       {tab === "classes" && !loading ? (
         <ClassesAdminPanel

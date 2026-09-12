@@ -85,8 +85,8 @@ function visibleCodes(includeInactiveOrArchived: boolean, schoolYearId = YEAR_ID
 }
 
 test("version 2.39.0 — horaire : classes actives par défaut, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.52.2");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0028_school_week_kind_nullable.sql");
+  assert.equal(APP_VERSION, "2.53.0");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0029_admin_mfa.sql");
   const [panel, helper, lifecycle, service] = await Promise.all([
     readFile(new URL("../web/app/components/class-schedule-admin-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../src/features/course-schedule/class-filter.ts", import.meta.url), "utf8"),
@@ -329,7 +329,7 @@ test("19 — aucune donnée historique supprimée", async () => {
 });
 
 test("20 — aucune migration SQL", () => {
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0028_school_week_kind_nullable.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0029_admin_mfa.sql");
 });
 
 test("cas réel 2026-2027 — défaut vs historique", () => {

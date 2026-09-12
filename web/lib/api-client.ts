@@ -31,6 +31,10 @@ export interface ApiTeacherSession {
   isAdmin?: boolean;
   /** Mot de passe provisoire : l'enseignant doit en choisir un avant tout usage. */
   mustChangePassword?: boolean;
+  /** Mot de passe vérifié, MFA administrateur non validée. */
+  mfaPending?: boolean;
+  mfaSetupRequired?: boolean;
+  mfaChallengeRequired?: boolean;
 }
 
 export interface ApiStudentSession {
@@ -90,6 +94,69 @@ export async function loginTeacherApi(
   const payload = await parseJson<{ ok: boolean; reason?: string; session?: ApiTeacherSession }>(response);
   if (!response.ok || !payload.ok || !payload.session) {
     throw new Error(payload.reason ?? "Connexion enseignant impossible.");
+  }
+  return payload.session;
+}
+
+export async function startAdminMfaSetupApi(): Promise<{
+  otpauthUri: string;
+  qrDataUrl: string;
+  manualKey: string;
+}> {
+  const response = await fetch("/api/auth/teacher/mfa/setup", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    otpauthUri?: string;
+    qrDataUrl?: string;
+    manualKey?: string;
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.otpauthUri || !payload.qrDataUrl || !payload.manualKey) {
+    throw new Error(payload.reason ?? "Configuration 2FA impossible.");
+  }
+  return {
+    otpauthUri: payload.otpauthUri,
+    qrDataUrl: payload.qrDataUrl,
+    manualKey: payload.manualKey,
+  };
+}
+
+export async function confirmAdminMfaSetupApi(code: string): Promise<{
+  session: ApiTeacherSession;
+  recoveryCodes: string[];
+}> {
+  const response = await fetch("/api/auth/teacher/mfa/confirm", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    session?: ApiTeacherSession;
+    recoveryCodes?: string[];
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.session || !payload.recoveryCodes) {
+    throw new Error(payload.reason ?? "Validation 2FA impossible.");
+  }
+  return { session: payload.session, recoveryCodes: payload.recoveryCodes };
+}
+
+export async function verifyAdminMfaApi(code: string): Promise<ApiTeacherSession> {
+  const response = await fetch("/api/auth/teacher/mfa/verify", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  const payload = await parseJson<{ ok: boolean; reason?: string; session?: ApiTeacherSession }>(response);
+  if (!response.ok || !payload.ok || !payload.session) {
+    throw new Error(payload.reason ?? "Code incorrect.");
   }
   return payload.session;
 }

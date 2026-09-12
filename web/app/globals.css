@@ -267,6 +267,17 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .login-remember { display: flex !important; align-items: center; gap: 8px; color: #445a7c; font-size: 10px; font-weight: 700; letter-spacing: 0; text-transform: none; }
 .login-remember input[type="checkbox"] { width: auto; margin: 0; padding: 0; }
 .teacher-login-shell .prototype-label { margin: 0; text-align: center; }
+.teacher-login-card input.totp-code-input { font-size: 28px; letter-spacing: .28em; text-align: center; font-variant-numeric: tabular-nums; }
+.mfa-qr { display: grid; justify-items: center; gap: 10px; margin-bottom: 16px; }
+.mfa-qr img { width: 220px; height: 220px; border: 1px solid var(--line); border-radius: 8px; }
+.mfa-manual-key { margin: 0; word-break: break-all; }
+.mfa-manual-key code { font-size: 12px; letter-spacing: .06em; }
+.mfa-recovery-codes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0; margin: 0 0 16px; list-style: none; }
+.mfa-recovery-codes code { font-size: 13px; letter-spacing: .04em; }
+.mfa-recovery-actions, .admin-security-card { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.mfa-continue { margin-top: 12px; padding: 11px 14px; border: 1px solid var(--navy); border-radius: 6px; color: #fff; background: var(--navy); font-size: 10px; font-weight: 800; cursor: pointer; }
+.admin-security-card { display: grid; gap: 8px; margin: 16px 0; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.admin-security-card h4 { margin: 0; color: var(--navy); }
 
 .student-course-day-app { min-height: 100vh; background: var(--canvas); }
 .student-course-day-main { width: min(720px, 100%); margin: 0 auto; padding: 28px 20px 36px; }

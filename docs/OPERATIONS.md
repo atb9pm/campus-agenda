@@ -1,6 +1,6 @@
 # Exploitation — Campus Agenda
 
-Guide opérationnel, **septembre 2026**. Version applicative : voir `APP_VERSION` (`2.52.2` et suivantes).
+Guide opérationnel, **septembre 2026**. Version applicative : voir `APP_VERSION` (`2.53.0` et suivantes).
 
 ## Production actuelle
 
@@ -72,6 +72,8 @@ Journaux JSON sur la sortie standard, sans contenu scolaire :
 | `CAMPUS_DISABLE_RATE_LIMIT` | Désactive le rate limit (tests uniquement) |
 | `CAMPUS_AUTH_RATE_LIMIT_TEACHER` | Limite personnalisée connexion enseignant (défaut : 10/min) |
 | `CAMPUS_AUTH_RATE_LIMIT_STUDENT` | Limite personnalisée connexion élève (défaut : 20/min) |
+| `CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA` | Limite personnalisée codes TOTP / récupération (défaut : 8/min) |
+| `CAMPUS_MFA_ENCRYPTION_KEY` | Clé AES-256-GCM du secret TOTP administrateur (**obligatoire en production**) |
 
 ## Rate limiting
 
@@ -96,11 +98,11 @@ Content-Type: application/json
 
 Fonction **critique de sécurité**. Réservée aux **administrateurs** (`requireAdminSession` + UI Administration).
 
-Le format **v4** est le format courant **complet**. La liste des tables est la source de vérité `CAMPUS_BACKUP_INSERT_ORDER` (années, semaines, exceptions, classes, professions, branches, contextes, cours annuels, attributions, événements d’attribution, horaires, jours de présence, comptes, configurations, notes, memberships, agenda, modèles, parcours, notes annuelles, timetable, etc.).
+Le format **v4** est le format courant **complet**. La liste des tables est la source de vérité `CAMPUS_BACKUP_INSERT_ORDER` (années, semaines, exceptions, classes, professions, branches, contextes, cours annuels, attributions, événements d’attribution, horaires, jours de présence, comptes, configurations, notes, memberships, agenda, modèles, parcours, notes annuelles, timetable, `teacher_mfa`, etc.).
 
 Les formats **v1 / v2 / v3** restent restaurables pour compatibilité historique uniquement. Ils **ne** contiennent **pas** l’intégralité des données modernes.
 
-Le fichier JSON est **sensible** (empreintes / hashes de mots de passe, jamais le mot de passe en clair). Ne jamais l’envoyer sur GitHub. Le conserver dans un emplacement privé (ordinateur local, espace Infomaniak).
+Le fichier JSON est **sensible** (empreintes / hashes de mots de passe, secret TOTP **chiffré**, jamais le mot de passe ni le secret TOTP en clair). Ne jamais l’envoyer sur GitHub. Le conserver dans un emplacement privé (ordinateur local, espace Infomaniak). Une restauration MFA n’est utilisable qu’avec **la même** `CAMPUS_MFA_ENCRYPTION_KEY` que lors de la sauvegarde.
 
 > Ne jamais versionner les exports dans Git.
 
@@ -183,6 +185,87 @@ Ne jamais :
 - exécuter un `DELETE` métier sur la base actuelle ;
 - ajouter une migration du type `0027_delete_demo_data.sql` ;
 - laisser `CAMPUS_DEMO_SEED=true` en production (la variable est ignorée, mais elle n’a rien à y faire).
+
+## Double authentification administrateur
+
+La 2FA TOTP est **obligatoire** pour tout compte administrateur. Les enseignants standards ne sont pas concernés.
+
+### 1. Variable `CAMPUS_MFA_ENCRYPTION_KEY`
+
+Clé de 32 octets pour le chiffrement AES-256-GCM du secret TOTP. Format accepté : **64 caractères hexadécimaux** ou **base64 de 32 octets**.
+
+En production (`NODE_ENV=production`), l’absence ou l’invalidité de cette clé **ferme** l’accès administrateur (aucun contournement).
+
+### 2. Génération sécurisée
+
+Sur le serveur ou un poste de confiance :
+
+```bash
+openssl rand -hex 32
+```
+
+ou :
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Ne jamais committer cette valeur. Ne jamais l’écrire dans les journaux.
+
+### 3. Installation sur Infomaniak
+
+Infomaniak n’a pas d’écran de variables : la clé se place **dans la commande de lancement**, avec `AUTH_SECRET` :
+
+```bash
+cd web && AUTH_SECRET=… CAMPUS_MFA_ENCRYPTION_KEY=… CAMPUS_STORE=sqlite npm run start:infomaniak
+```
+
+### 4. Redémarrage
+
+Après ajout ou rotation de la clé : **Build** si besoin, puis **Redémarrer**. Une rotation sans ré-enrôlement rend l’ancien secret illisible : utiliser alors `pnpm admin:reset-2fa`.
+
+### 5. Activation initiale
+
+1. Connexion administrateur (mot de passe).
+2. L’accès admin n’est **pas** ouvert.
+3. QR `otpauth://` + saisie du premier code à 6 chiffres.
+4. 8 codes de récupération affichés **une seule fois**.
+5. Session administrateur complète.
+
+### 6. Codes de récupération
+
+- Usage unique, stockés uniquement sous forme d’empreinte.
+- Administration → Sécurité affiche seulement le nombre restant.
+- « Régénérer » exige un TOTP actuel, invalide tous les anciens codes et affiche la nouvelle série une fois.
+
+### 7. Perte du téléphone
+
+Sur l’écran TOTP : « Utiliser un code de récupération ». Une fois connecté : Administration → Sécurité → Reconfigurer (preuve TOTP ou recovery).
+
+Il n’existe **aucun** bouton web « j’ai perdu mon téléphone → désactiver par e-mail ».
+
+### 8. Commande `pnpm admin:reset-2fa`
+
+Depuis `web/`, base SQLite de production :
+
+```bash
+CAMPUS_STORE=sqlite CAMPUS_SQLITE_PATH=/chemin/campus-agenda.sqlite pnpm admin:reset-2fa -- ChF
+```
+
+La commande affiche le compte ciblé et n’agit que si l’opérateur tape exactement `RESET-2FA`.
+
+### 9. Après un reset serveur
+
+L’ancien secret et les anciens recovery sont invalidés. État : `reset_required`. Prochaine connexion : mot de passe → configuration TOTP obligatoire → nouveaux recovery → session admin. La 2FA n’est **jamais** durablement désactivée.
+
+### 10. Restauration d’un backup et clé MFA
+
+Le backup v4 conserve `teacher_mfa` (secret chiffré + empreintes de recovery). Restaurer ce backup sur un serveur dont `CAMPUS_MFA_ENCRYPTION_KEY` est différente rend les secrets illisibles (fail closed). Procédure :
+
+1. Installer **la même** clé que celle utilisée lors de la sauvegarde.
+2. Restaurer le fichier v4.
+3. Redémarrer.
+4. Si la clé est perdue : `pnpm admin:reset-2fa` puis nouvel enrôlement.
 
 ## Suppression définitive (Administration)
 

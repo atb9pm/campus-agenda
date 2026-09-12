@@ -61,6 +61,10 @@ export function buildTeacherDeleteStatements(teacherId: string): SqlBatchStateme
       values: [teacherId],
     },
     {
+      sql: "DELETE FROM teacher_mfa WHERE teacher_id = ?",
+      values: [teacherId],
+    },
+    {
       sql: "DELETE FROM teachers WHERE id = ?",
       values: [teacherId],
     },

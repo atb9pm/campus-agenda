@@ -1,5 +1,40 @@
 export { getAuthSecret } from "./config.ts";
 export {
+  MFA_KEY_ENV,
+  MFA_REQUIRE_KEY_ENV,
+  decryptTotpSecret,
+  encryptTotpSecret,
+  hasExplicitMfaEncryptionKey,
+  isMfaEncryptionReady,
+  isMfaKeyRequired,
+  looksLikeEncryptedTotpSecret,
+  parseMfaEncryptionKey,
+  resolveMfaEncryptionKey,
+  MfaKeyUnavailableError,
+} from "./mfa-crypto.ts";
+export {
+  TOTP_DIGITS,
+  TOTP_ISSUER,
+  TOTP_PERIOD_SECONDS,
+  TOTP_WINDOW,
+  generateTotpCode,
+  generateTotpSecret,
+  normalizeTotpInput,
+  totpOtpauthUri,
+  verifyTotpCode,
+} from "./totp.ts";
+export {
+  RECOVERY_CODE_COUNT,
+  consumeRecoveryCode,
+  generateRecoveryCodes,
+  hashRecoveryCodes,
+  normalizeRecoveryCode,
+  parseRecoveryHashes,
+  parseRecoveryInput,
+  serializeRecoveryHashes,
+} from "./recovery-codes.ts";
+export { constantTimeEquals } from "./password.ts";
+export {
   checkPasswordStrength,
   DEMO_TEACHER_PASSWORD,
   demoPasswordAllowed,

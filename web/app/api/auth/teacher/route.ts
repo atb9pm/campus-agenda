@@ -4,6 +4,7 @@ import {
   jsonWithSession,
 } from "../../../../lib/server/api.ts";
 import { getStore } from "../../../../lib/server/api.ts";
+import { buildTeacherClientSession } from "../../../../lib/server/teacher-session.ts";
 import { enforceAuthRateLimit } from "../../../../lib/server/rate-limit.ts";
 
 export async function POST(request: Request) {
@@ -30,28 +31,17 @@ export async function POST(request: Request) {
   }
 
   const teacherId = outcome.teacherId;
-  const account = await accounts.findAccount(teacherId);
-  const displayName = account?.displayName;
-  const initials = account?.initials;
-  if (!displayName || !initials) {
-    return jsonResponse({ ok: false, reason: "Enseignant introuvable." }, { status: 404 });
-  }
-
   const store = await getStore();
   const isAdmin = await store.teacherIsAdmin(teacherId);
+  const mfaPending = isAdmin;
+  const session = { kind: "teacher" as const, teacherId, issuedAt: Date.now(), ...(mfaPending ? { mfaPending: true } : {}) };
+  const client = await buildTeacherClientSession(teacherId, session);
 
   return jsonWithSession(
-    { kind: "teacher", teacherId, issuedAt: Date.now() },
+    session,
     {
       ok: true,
-      session: {
-        kind: "teacher",
-        teacherId,
-        displayName,
-        initials,
-        isAdmin,
-        mustChangePassword: Boolean(outcome.mustChangePassword),
-      },
+      session: client,
     },
     {},
     Boolean(body.remember),
