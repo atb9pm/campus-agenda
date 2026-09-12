@@ -9,14 +9,15 @@ import {
   ADMIN_SECURITY_HELP_TITLE,
   ADMIN_SECURITY_LOST_BUTTON,
   ADMIN_SECURITY_LOST_HINT,
+  ADMIN_SECURITY_LOST_RECENT_HINT,
   ADMIN_SECURITY_LOST_TITLE,
   ADMIN_SECURITY_LOST_WARNING,
   ADMIN_SECURITY_RECONFIGURE_BUTTON,
   ADMIN_SECURITY_RECONFIGURE_HINT,
   ADMIN_SECURITY_RECONFIGURE_TITLE,
   ADMIN_SECURITY_REGEN_BUTTON,
-  ADMIN_SECURITY_REGEN_CONFIRM,
   ADMIN_SECURITY_REGEN_HINT,
+  ADMIN_SECURITY_REGEN_WARNING,
   ADMIN_SECURITY_REGEN_TITLE,
   ADMIN_SECURITY_STATE_ENABLED,
   ADMIN_SECURITY_TITLE,
@@ -27,10 +28,11 @@ interface MfaStatusPayload {
   status?: string;
   enabled?: boolean;
   recoveryRemaining?: number;
+  recoveryRecentlyVerified?: boolean;
   reason?: string;
 }
 
-type SecurityMode = "idle" | "reconfigure" | "lost" | "regen" | "regenConfirm";
+type SecurityMode = "idle" | "reconfigure" | "lost" | "regen";
 
 export function AdminSecurityPanel({ onNotice }: { onNotice: (message: string) => void }) {
   const [status, setStatus] = useState<MfaStatusPayload | null>(null);
@@ -89,7 +91,9 @@ export function AdminSecurityPanel({ onNotice }: { onNotice: (message: string) =
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           kind === "recovery"
-            ? { password, recoveryCode: proof.trim() }
+            ? status?.recoveryRecentlyVerified
+              ? { password }
+              : { password, recoveryCode: proof.trim() }
             : { password, totp: proof.trim() },
         ),
       });
@@ -291,7 +295,7 @@ export function AdminSecurityPanel({ onNotice }: { onNotice: (message: string) =
         <header className="config-section-header">
           <div>
             <h3>{ADMIN_SECURITY_LOST_TITLE}</h3>
-            <p>{ADMIN_SECURITY_LOST_HINT}</p>
+            <p>{status?.recoveryRecentlyVerified ? ADMIN_SECURITY_LOST_RECENT_HINT : ADMIN_SECURITY_LOST_HINT}</p>
           </div>
         </header>
         <p className="admin-security-warning">{ADMIN_SECURITY_LOST_WARNING}</p>
@@ -306,16 +310,18 @@ export function AdminSecurityPanel({ onNotice }: { onNotice: (message: string) =
               required
             />
           </label>
-          <label>
-            Code de récupération
-            <input
-              autoComplete="off"
-              spellCheck={false}
-              value={proof}
-              onChange={(event) => setProof(event.target.value)}
-              required
-            />
-          </label>
+          {status?.recoveryRecentlyVerified ? null : (
+            <label>
+              Code de récupération
+              <input
+                autoComplete="off"
+                spellCheck={false}
+                value={proof}
+                onChange={(event) => setProof(event.target.value)}
+                required
+              />
+            </label>
+          )}
           {error ? <p className="admin-error" role="alert">{error}</p> : null}
           <div className="admin-security-form-actions">
             <button type="submit" disabled={pending}>{pending ? "Vérification…" : "Continuer"}</button>
@@ -326,7 +332,7 @@ export function AdminSecurityPanel({ onNotice }: { onNotice: (message: string) =
     );
   }
 
-  if (mode === "regen" || mode === "regenConfirm") {
+  if (mode === "regen") {
     return (
       <div className="admin-panel-block">
         <header className="config-section-header">
@@ -335,53 +341,36 @@ export function AdminSecurityPanel({ onNotice }: { onNotice: (message: string) =
             <p>{ADMIN_SECURITY_REGEN_HINT}</p>
           </div>
         </header>
-        {mode === "regen" ? (
-          <form
-            className="admin-security-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setError("");
-              setMode("regenConfirm");
-            }}
-          >
-            <label>
-              Mot de passe administrateur
-              <input
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Code TOTP actuel
-              <input
-                className="totp-code-input"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                value={proof}
-                onChange={(event) => setProof(event.target.value)}
-                required
-              />
-            </label>
-            {error ? <p className="admin-error" role="alert">{error}</p> : null}
-            <div className="admin-security-form-actions">
-              <button type="submit">Continuer</button>
-              <button type="button" onClick={backToMain}>{ADMIN_SECURITY_BACK}</button>
-            </div>
-          </form>
-        ) : (
-          <form className="admin-security-form" onSubmit={(event) => void regenerate(event)}>
-            <p className="admin-security-warning">{ADMIN_SECURITY_REGEN_CONFIRM}</p>
-            {error ? <p className="admin-error" role="alert">{error}</p> : null}
-            <div className="admin-security-form-actions">
-              <button type="submit" disabled={pending}>{pending ? "Régénération…" : "Confirmer"}</button>
-              <button type="button" onClick={backToMain}>{ADMIN_SECURITY_BACK}</button>
-            </div>
-          </form>
-        )}
+        <form className="admin-security-form" onSubmit={(event) => void regenerate(event)}>
+          <p className="admin-security-warning">{ADMIN_SECURITY_REGEN_WARNING}</p>
+          <label>
+            Mot de passe administrateur
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+            />
+          </label>
+          <label>
+            Code TOTP actuel
+            <input
+              className="totp-code-input"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={proof}
+              onChange={(event) => setProof(event.target.value)}
+              required
+            />
+          </label>
+          {error ? <p className="admin-error" role="alert">{error}</p> : null}
+          <div className="admin-security-form-actions">
+            <button type="submit" disabled={pending}>{pending ? "Régénération…" : "Régénérer les codes"}</button>
+            <button type="button" onClick={backToMain}>{ADMIN_SECURITY_BACK}</button>
+          </div>
+        </form>
       </div>
     );
   }

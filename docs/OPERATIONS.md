@@ -244,7 +244,7 @@ L’écran principal n’affiche aucun formulaire. Trois actions :
 
 1. **Changement volontaire de téléphone** — mot de passe + TOTP actuel. Un secret en attente est créé. L’ancienne configuration reste valable tant que le nouveau TOTP n’est pas confirmé. Après confirmation : nouveau secret, 8 nouveaux recovery, anciens recovery invalidés.
 
-2. **Téléphone perdu + recovery code** — mot de passe + un code de récupération encore valide (pas d’ancien TOTP). Même mécanisme de secret en attente. Le recovery utilisé est consommé. Si la page est fermée avant confirmation, l’ancien TOTP et les recovery restants fonctionnent encore.
+2. **Téléphone perdu + recovery code** — si l’administrateur vient de se connecter avec un recovery, la session signée le mémorise 10 minutes : Sécurité → téléphone perdu ne redemande que le mot de passe (un seul recovery pour toute la récupération). Sinon : mot de passe + un recovery. Le recovery n’est invalidé qu’à la confirmation du nouveau TOTP ; fermer la page avant cela ne le détruit pas.
 
 3. **Perte totale (téléphone + recovery)** — aucun bouton web. Côté serveur : `pnpm admin:reset-2fa -- <id|initiales>` → état `reset_required` → nouvel enrôlement obligatoire à la connexion.
 

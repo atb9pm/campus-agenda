@@ -38,10 +38,12 @@ export {
   loadAdminMfa,
   regenerateAdminRecoveryCodes,
   startAdminMfaEnrollment,
+  startAdminMfaPendingReconfigure,
   startAdminMfaReconfigure,
   startAdminMfaReconfigureWithRecovery,
   verifyAdminMfaChallenge,
 } from "./service.ts";
+export { hasRecentMfaRecoveryProof, MFA_RECOVERY_PROOF_TTL_MS } from "./session-proof.ts";
 export {
   regenerateAdminRecoveryCodesWithPassword,
   startAdminMfaLostPhoneReconfigure,
@@ -61,7 +63,8 @@ export {
   ADMIN_SECURITY_RECONFIGURE_HINT,
   ADMIN_SECURITY_RECONFIGURE_TITLE,
   ADMIN_SECURITY_REGEN_BUTTON,
-  ADMIN_SECURITY_REGEN_CONFIRM,
+  ADMIN_SECURITY_REGEN_WARNING,
+  ADMIN_SECURITY_LOST_RECENT_HINT,
   ADMIN_SECURITY_REGEN_HINT,
   ADMIN_SECURITY_REGEN_TITLE,
   ADMIN_SECURITY_STATE_ENABLED,

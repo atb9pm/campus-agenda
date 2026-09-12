@@ -1,4 +1,5 @@
 import {
+  hasRecentMfaRecoveryProof,
   startAdminMfaLostPhoneReconfigure,
   startAdminMfaReconfigureWithPassword,
 } from "@campus/features/admin-mfa/index.ts";
@@ -31,10 +32,19 @@ export async function POST(request: Request) {
   const account = await accounts.findAccount(auth.session!.teacherId);
   const label = account?.initials ?? account?.displayName ?? "admin";
   const store = await getAdminMfaStore();
+  const recoveryRecentlyVerified = hasRecentMfaRecoveryProof(auth.session!);
 
-  const result = recoveryCode
-    ? await startAdminMfaLostPhoneReconfigure(store, accounts, auth.session!.teacherId, label, password, recoveryCode)
-    : await startAdminMfaReconfigureWithPassword(store, accounts, auth.session!.teacherId, label, password, totp);
+  const result = totp
+    ? await startAdminMfaReconfigureWithPassword(store, accounts, auth.session!.teacherId, label, password, totp)
+    : await startAdminMfaLostPhoneReconfigure(
+      store,
+      accounts,
+      auth.session!.teacherId,
+      label,
+      password,
+      recoveryCode,
+      { recoveryRecentlyVerified },
+    );
 
   if (!result.ok) {
     return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });

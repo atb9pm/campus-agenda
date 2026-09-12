@@ -1,6 +1,7 @@
 import type { TeacherAccountStore } from "../../lib/persistence/teacher-account-types.ts";
 import {
   regenerateAdminRecoveryCodes,
+  startAdminMfaPendingReconfigure,
   startAdminMfaReconfigure,
   startAdminMfaReconfigureWithRecovery,
   type EnrollmentConfirm,
@@ -42,9 +43,13 @@ export async function startAdminMfaLostPhoneReconfigure(
   accountLabel: string,
   password: string,
   recoveryCode: string,
+  options: { recoveryRecentlyVerified?: boolean } = {},
 ): Promise<EnrollmentStart | SensitiveFailure> {
   const gate = await requirePassword(accounts, teacherId, password);
   if (!gate.ok) return gate;
+  if (options.recoveryRecentlyVerified) {
+    return startAdminMfaPendingReconfigure(store, teacherId, accountLabel);
+  }
   return startAdminMfaReconfigureWithRecovery(store, teacherId, accountLabel, recoveryCode);
 }
 

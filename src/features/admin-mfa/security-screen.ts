@@ -15,12 +15,14 @@ export const ADMIN_SECURITY_LOST_HINT =
 export const ADMIN_SECURITY_LOST_BUTTON = "Utiliser un code de récupération";
 export const ADMIN_SECURITY_LOST_WARNING =
   "Cette opération remplacera votre configuration actuelle de double authentification. Après confirmation du nouveau code, vos anciens codes de récupération seront invalidés.";
+export const ADMIN_SECURITY_LOST_RECENT_HINT =
+  "Vous avez récemment utilisé un code de récupération pour vous connecter. Confirmez votre mot de passe pour configurer une nouvelle application d’authentification.";
 
 export const ADMIN_SECURITY_REGEN_TITLE = "Régénérer les codes de récupération";
 export const ADMIN_SECURITY_REGEN_HINT = "Crée une nouvelle série de codes. Tous les anciens codes seront invalidés.";
 export const ADMIN_SECURITY_REGEN_BUTTON = "Régénérer";
-export const ADMIN_SECURITY_REGEN_CONFIRM =
-  "Les anciens codes de récupération seront invalidés. Continuer ?";
+export const ADMIN_SECURITY_REGEN_WARNING =
+  "Cette opération invalidera tous vos codes de récupération actuels.";
 
 export const ADMIN_SECURITY_HELP_TITLE = "Plus aucun moyen de récupération ?";
 export const ADMIN_SECURITY_HELP_TEXT =

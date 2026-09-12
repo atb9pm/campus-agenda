@@ -9,9 +9,15 @@ Administration → Sécurité présente trois actions distinctes. Aucune n’acc
 ### Ajouté
 
 - Reconfiguration volontaire : mot de passe + TOTP actuel → QR en attente → confirmation du nouveau TOTP → nouveaux recovery.
-- Téléphone perdu : mot de passe + recovery (usage unique) → même flux pending, sans demander l’ancien TOTP.
-- Régénération recovery : mot de passe + TOTP, puis confirmation.
+- Téléphone perdu : mot de passe + recovery (vérifié sans consommation) → même flux pending, sans demander l’ancien TOTP. Si la session porte une preuve recovery récente (connexion), le mot de passe suffit.
+- Régénération recovery : mot de passe + TOTP, un seul écran.
 - Encadré d’aide serveur (`admin:reset-2fa`) sans bouton web de désactivation.
+
+### Corrigé
+
+- Connexion avec un recovery : la session signée porte `mfaRecoveryVerifiedAt` (10 min). Sécurité → téléphone perdu ne redemande pas un second recovery.
+- Le recovery n’est plus consommé au démarrage de la reconfiguration : il reste valable jusqu’à confirmation du nouveau TOTP.
+- Régénération recovery : un seul écran (mot de passe + TOTP), sans étape intermédiaire qui ferait expirer le code.
 
 ### Conservé
 

@@ -1,4 +1,4 @@
-import { adminMfaStatusView, loadAdminMfa } from "@campus/features/admin-mfa/index.ts";
+import { adminMfaStatusView, hasRecentMfaRecoveryProof, loadAdminMfa } from "@campus/features/admin-mfa/index.ts";
 import { getAdminMfaStore } from "@campus/lib/persistence/store-factory.ts";
 
 import { jsonResponse, requireAdminSession } from "../../../../../lib/server/api.ts";
@@ -14,5 +14,6 @@ export async function GET(request: Request) {
     status: view.status,
     enabled: view.enabled,
     recoveryRemaining: view.recoveryRemaining,
+    recoveryRecentlyVerified: hasRecentMfaRecoveryProof(auth.session!),
   });
 }

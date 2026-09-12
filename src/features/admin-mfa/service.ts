@@ -10,6 +10,7 @@ import {
   generateRecoveryCodes,
   hashRecoveryCodes,
   parseRecoveryInput,
+  recoveryCodeIsValid,
   recoveryHashesLookSafe,
 } from "../../lib/auth/recovery-codes.ts";
 import { otpauthQrDataUrl } from "../../lib/auth/mfa-qr.ts";
@@ -79,6 +80,25 @@ export async function loadAdminMfa(store: AdminMfaStore, teacherId: string): Pro
 
 async function persist(store: AdminMfaStore, record: TeacherMfaRecord): Promise<void> {
   await store.upsert({ ...record, updatedAt: nowIso() });
+}
+
+async function beginPendingReconfigure(
+  store: AdminMfaStore,
+  existing: TeacherMfaRecord,
+  accountLabel: string,
+): Promise<EnrollmentStart> {
+  const secret = generateTotpSecret();
+  await persist(store, {
+    ...existing,
+    pendingSecretEncrypted: await encryptTotpSecret(secret),
+  });
+  const otpauthUri = totpOtpauthUri(secret, accountLabel);
+  return {
+    ok: true,
+    otpauthUri,
+    qrDataUrl: await otpauthQrDataUrl(otpauthUri),
+    manualKey: secret,
+  };
 }
 
 export interface EnrollmentStart {
@@ -200,19 +220,26 @@ export async function startAdminMfaReconfigure(
   try {
     const currentSecret = await decryptTotpSecret(existing.secretEncrypted);
     if (!verifyTotpCode(currentSecret, proof)) return invalidCode();
-    const secret = generateTotpSecret();
     const latest = (await store.get(teacherId)) ?? existing;
-    await persist(store, {
-      ...latest,
-      pendingSecretEncrypted: await encryptTotpSecret(secret),
-    });
-    const otpauthUri = totpOtpauthUri(secret, accountLabel);
-    return {
-      ok: true,
-      otpauthUri,
-      qrDataUrl: await otpauthQrDataUrl(otpauthUri),
-      manualKey: secret,
-    };
+    return await beginPendingReconfigure(store, latest, accountLabel);
+  } catch (error) {
+    if (error instanceof MfaKeyUnavailableError) return unavailable();
+    throw error;
+  }
+}
+
+export async function startAdminMfaPendingReconfigure(
+  store: AdminMfaStore,
+  teacherId: string,
+  accountLabel: string,
+): Promise<EnrollmentStart | MfaFailure> {
+  if (!isMfaEncryptionReady()) return unavailable();
+  const existing = await store.get(teacherId);
+  if (!existing || existing.status !== "enabled" || !existing.secretEncrypted) {
+    return { ok: false, reason: "La double authentification n'est pas activée.", status: 400 };
+  }
+  try {
+    return await beginPendingReconfigure(store, existing, accountLabel);
   } catch (error) {
     if (error instanceof MfaKeyUnavailableError) return unavailable();
     throw error;
@@ -233,22 +260,8 @@ export async function startAdminMfaReconfigureWithRecovery(
   const recovery = parseRecoveryInput(recoveryCode);
   if (!recovery) return invalidCode();
   try {
-    const consumed = await consumeRecoveryCode(recovery, existing.recoveryHashes);
-    if (!consumed.ok) return invalidCode();
-    const secret = generateTotpSecret();
-    await persist(store, {
-      ...existing,
-      pendingSecretEncrypted: await encryptTotpSecret(secret),
-      recoveryHashes: consumed.remaining,
-    });
-    logOperationalEvent("admin_mfa_recovery_used", { teacherId });
-    const otpauthUri = totpOtpauthUri(secret, accountLabel);
-    return {
-      ok: true,
-      otpauthUri,
-      qrDataUrl: await otpauthQrDataUrl(otpauthUri),
-      manualKey: secret,
-    };
+    if (!(await recoveryCodeIsValid(recovery, existing.recoveryHashes))) return invalidCode();
+    return await beginPendingReconfigure(store, existing, accountLabel);
   } catch (error) {
     if (error instanceof MfaKeyUnavailableError) return unavailable();
     throw error;
