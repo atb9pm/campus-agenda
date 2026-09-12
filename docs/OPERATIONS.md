@@ -1,6 +1,6 @@
 # Exploitation — Campus Agenda
 
-Guide opérationnel, **septembre 2026**. Version applicative : voir `APP_VERSION` (`2.53.0` et suivantes).
+Guide opérationnel, **septembre 2026**. Version applicative : voir `APP_VERSION` (`2.53.1` et suivantes).
 
 ## Production actuelle
 
@@ -258,7 +258,24 @@ La commande affiche le compte ciblé et n’agit que si l’opérateur tape exac
 
 L’ancien secret et les anciens recovery sont invalidés. État : `reset_required`. Prochaine connexion : mot de passe → configuration TOTP obligatoire → nouveaux recovery → session admin. La 2FA n’est **jamais** durablement désactivée.
 
-### 10. Restauration d’un backup et clé MFA
+### 10. Commande `pnpm admin:reset-password`
+
+Si l’administrateur a oublié son mot de passe (téléphone encore disponible) :
+
+```bash
+CAMPUS_STORE=sqlite CAMPUS_SQLITE_PATH=/chemin/campus-agenda.sqlite pnpm admin:reset-password -- ChF
+```
+
+La commande affiche le compte ciblé et n’agit que si l’opérateur tape exactement `RESET-PASSWORD`.
+
+- Un mot de passe temporaire cryptographique s’affiche **une seule fois** dans le terminal.
+- Le changement de mot de passe est obligatoire à la prochaine connexion.
+- La 2FA n’est **pas** touchée (secret TOTP et recovery codes inchangés).
+- La commande ne crée **jamais** de session administrateur.
+
+Les cookies de session déjà émis restent valides jusqu’à expiration (HMAC, pas de store de sessions serveur). Un reset mot de passe ne les révoque pas.
+
+### 11. Restauration d’un backup et clé MFA
 
 Le backup v4 conserve `teacher_mfa` (secret chiffré + empreintes de recovery). Restaurer ce backup sur un serveur dont `CAMPUS_MFA_ENCRYPTION_KEY` est différente rend les secrets illisibles (fail closed). Procédure :
 
@@ -266,6 +283,35 @@ Le backup v4 conserve `teacher_mfa` (secret chiffré + empreintes de recovery). 
 2. Restaurer le fichier v4.
 3. Redémarrer.
 4. Si la clé est perdue : `pnpm admin:reset-2fa` puis nouvel enrôlement.
+
+## Administrateur — accès perdu
+
+Le reset mot de passe et le reset 2FA sont **indépendants**. Aucune commande ne désactive toute la sécurité.
+
+1. **Téléphone perdu, mot de passe connu**  
+   Sur l’écran TOTP : « Utiliser un code de récupération ».  
+   Ou, côté serveur : `pnpm admin:reset-2fa` puis nouvel enrôlement TOTP.
+
+2. **Mot de passe oublié, téléphone disponible**  
+   `pnpm admin:reset-password` → mot de passe temporaire → changement obligatoire → TOTP actuel → accès admin.
+
+3. **Mot de passe + téléphone + recovery codes perdus**  
+   1. `pnpm admin:reset-password`  
+   2. `pnpm admin:reset-2fa`  
+   3. Connexion avec le mot de passe temporaire  
+   4. Changement du mot de passe  
+   5. Nouvel enrôlement MFA  
+   6. Nouveaux recovery codes
+
+## Build Infomaniak — dépendances
+
+`scripts/infomaniak-build.sh` installe automatiquement :
+
+1. les dépendances **racine** (`qrcode`, `otpauth`, `pdfjs-dist`, … utilisées depuis `src/`) ;
+2. les dépendances **web** ;
+3. puis lance `npm run build` dans `web/`.
+
+Plus besoin d’un `npm ci` manuel à la racine avant le bouton Build.
 
 ## Suppression définitive (Administration)
 

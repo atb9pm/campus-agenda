@@ -49,15 +49,23 @@ main() {
     CAMPUS_DEPLOY_STAGE=install exec bash "${root}/scripts/infomaniak-build.sh"
   fi
 
+  install_npm_deps() {
+    local dir="$1"
+    local label="$2"
+    echo "==> Dépendances ${label} (npm)"
+    cd "${dir}"
+    if [ -f package-lock.json ]; then
+      npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+    else
+      npm install --no-audit --no-fund
+    fi
+  }
+
+  # src/ importe des paquets déclarés à la racine (ex. qrcode, otpauth, pdfjs-dist).
+  install_npm_deps "${root}" "racine"
+  install_npm_deps "${root}/web" "web"
+
   cd "${root}/web"
-
-  echo "==> Dépendances (npm)"
-  if [ -f package-lock.json ]; then
-    npm ci --no-audit --no-fund || npm install --no-audit --no-fund
-  else
-    npm install --no-audit --no-fund
-  fi
-
   echo "==> Build"
   npm run build
 
@@ -84,7 +92,7 @@ main() {
   echo "  Vérification : https://campusagenda.ch/api/health"
   echo ""
   echo "  Rappel — commande de lancement attendue :"
-  echo "  cd web && AUTH_SECRET=votre-secret CAMPUS_STORE=sqlite npm run start:infomaniak"
+  echo "  cd web && AUTH_SECRET=votre-secret CAMPUS_MFA_ENCRYPTION_KEY=votre-cle-mfa CAMPUS_STORE=sqlite npm run start:infomaniak"
 }
 
 main "$@"; exit 0

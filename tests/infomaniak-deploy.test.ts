@@ -4,8 +4,8 @@ import test from "node:test";
 
 import { APP_VERSION } from "../src/lib/app-version.ts";
 
-test("version 2.43.1 — workflow Infomaniak : santé seulement, pas de SSH", async () => {
-  assert.equal(APP_VERSION, "2.53.0");
+test("version 2.53.1 — workflow Infomaniak : santé seulement, pas de SSH", async () => {
+  assert.equal(APP_VERSION, "2.53.1");
   const workflow = await readFile(new URL("../.github/workflows/deploy-infomaniak.yml", import.meta.url), "utf8");
   const guide = await readFile(new URL("../docs/infomaniak-deploy.md", import.meta.url), "utf8");
 
@@ -33,4 +33,31 @@ test("version 2.43.1 — workflow Infomaniak : santé seulement, pas de SSH", as
   assert.match(guide, /Infomaniak — vérifier production/);
   assert.doesNotMatch(guide, /Actions → Deploy Infomaniak/);
   assert.doesNotMatch(guide, /chaque merge d'une PR sur `main`\*\* déclenche/);
+  assert.match(guide, /dépendances \*\*racine\*\* puis \*\*web\*\*/);
+});
+
+test("build Infomaniak installe racine puis web, puis build — git inchangé", async () => {
+  const build = await readFile(new URL("../scripts/infomaniak-build.sh", import.meta.url), "utf8");
+
+  assert.match(build, /git fetch origin "\$\{branch\}"/);
+  assert.match(build, /git checkout -B "\$\{branch\}" "origin\/\$\{branch\}"/);
+  assert.match(build, /git reset --hard "origin\/\$\{branch\}"/);
+  assert.match(build, /CAMPUS_DEPLOY_STAGE=install exec bash/);
+
+  const installFn = build.indexOf("install_npm_deps()");
+  const rootInstall = build.indexOf('install_npm_deps "${root}" "racine"');
+  const webInstall = build.indexOf('install_npm_deps "${root}/web" "web"');
+  const webBuild = build.indexOf("npm run build");
+  assert.ok(installFn >= 0);
+  assert.ok(rootInstall > installFn);
+  assert.ok(webInstall > rootInstall);
+  assert.ok(webBuild > webInstall);
+
+  assert.match(build, /npm ci --no-audit --no-fund \|\| npm install --no-audit --no-fund/);
+  assert.match(build, /writeFileSync\("build-info\.json"/);
+  assert.match(
+    build,
+    /cd web && AUTH_SECRET=votre-secret CAMPUS_MFA_ENCRYPTION_KEY=votre-cle-mfa CAMPUS_STORE=sqlite npm run start:infomaniak/,
+  );
+  assert.doesNotMatch(build, /qrcode only|uniquement qrcode/);
 });

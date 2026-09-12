@@ -23,6 +23,8 @@ import {
   isReset2faConfirmToken,
   regenerateAdminRecoveryCodes,
   resetAdminMfa,
+  acknowledgeMfaRecoveryCodes,
+  shouldShowMfaEnrollmentScreen,
   startAdminMfaEnrollment,
   startAdminMfaReconfigure,
   verifyAdminMfaChallenge,
@@ -96,8 +98,8 @@ async function enrollAdmin(store = getMemoryAdminMfaStore(), teacherId = TEACHER
   return { secret, codes: confirm.recoveryCodes };
 }
 
-test("version 2.53.0 — 2FA administrateur TOTP", () => {
-  assert.equal(APP_VERSION, "2.53.0");
+test("version 2.53.1 — 2FA administrateur TOTP", () => {
+  assert.equal(APP_VERSION, "2.53.1");
   assert.ok(CAMPUS_BACKUP_INSERT_ORDER.includes("teacher_mfa"));
   assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 30);
   assert.equal(isReset2faConfirmToken("yes"), false);
@@ -446,9 +448,52 @@ test("UI sécurité et login exposent les écrans MFA", async () => {
   const page = await readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /MfaChallengePanel/);
   assert.match(page, /MfaSetupPanel/);
+  assert.match(page, /acknowledgeMfaRecoveryCodes/);
+  assert.match(page, /shouldShowMfaEnrollmentScreen/);
   const challenge = await readFile(new URL("../web/app/components/mfa-challenge-panel.tsx", import.meta.url), "utf8");
   assert.match(challenge, /Utiliser un code de récupération/);
   assert.match(challenge, /one-time-code/);
   const status = adminMfaStatusView(null);
   assert.equal(status.enabled, false);
+});
+
+test("bug recovery UI — session validée + codes affichés : l'écran MFA reste jusqu'à l'accusé", () => {
+  const afterEnroll = {
+    mfaSetupRequired: false,
+    recoveryCodes: ["K7DM-P4QX", "W9TR-6HNP"],
+  };
+  assert.equal(shouldShowMfaEnrollmentScreen(afterEnroll), true);
+
+  const buggyContinue = {
+    mfaSetupRequired: false,
+    recoveryCodes: afterEnroll.recoveryCodes,
+  };
+  assert.equal(
+    shouldShowMfaEnrollmentScreen(buggyContinue),
+    true,
+    "reproduit le bug : appliquer la session sans vider recoveryCodes laisse l'écran MFA",
+  );
+});
+
+test("J’ai enregistré ces codes — recoveryCodes vidé, écran MFA disparu, entrée directe", () => {
+  const afterEnroll = {
+    mfaSetupRequired: false,
+    recoveryCodes: ["K7DM-P4QX", "W9TR-6HNP", "AAAA-BBBB", "CCCC-DDDD"],
+  };
+  assert.equal(shouldShowMfaEnrollmentScreen(afterEnroll), true);
+
+  const cleared = acknowledgeMfaRecoveryCodes();
+  assert.equal(cleared.recoveryCodes, null);
+  assert.equal(cleared.qrDataUrl, null);
+  assert.equal(cleared.manualKey, null);
+  assert.equal(cleared.mfaPending, false);
+  assert.equal(cleared.mfaSetupRequired, false);
+  assert.equal(cleared.mfaChallengeRequired, false);
+  assert.equal(
+    shouldShowMfaEnrollmentScreen({
+      mfaSetupRequired: cleared.mfaSetupRequired,
+      recoveryCodes: cleared.recoveryCodes,
+    }),
+    false,
+  );
 });

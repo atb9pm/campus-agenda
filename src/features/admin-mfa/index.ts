@@ -16,6 +16,14 @@ export {
   isReset2faConfirmToken,
 } from "./types.ts";
 export { resetAdminMfa } from "./reset.ts";
+export {
+  acknowledgeMfaRecoveryCodes,
+  shouldShowMfaEnrollmentScreen,
+} from "./recovery-continue.ts";
+export type {
+  AcknowledgedMfaRecovery,
+  MfaEnrollmentScreenState,
+} from "./recovery-continue.ts";
 export { evaluateAdminMfaAccess, evaluateAdminMfaKeyGate } from "./guard.ts";
 export type { AdminMfaGateResult } from "./guard.ts";
 export {

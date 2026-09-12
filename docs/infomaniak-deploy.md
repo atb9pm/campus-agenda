@@ -40,7 +40,7 @@ Le script :
 
 1. se place à la racine du clone, refait `git fetch` + `git checkout -B main origin/main` + `git reset --hard` (sans effet si déjà à jour)
 2. se **relance** dans un nouveau processus, pour appliquer la logique du code fraîchement récupéré
-3. installe (`npm ci`, repli `npm install`) et construit dans `web/`
+3. installe les dépendances **racine** puis **web** (`npm ci`, repli `npm install`) et construit dans `web/`
 4. écrit `web/build-info.json` (commit, date) exposé par `/api/health`
 
 Cycle courant, sans SSH depuis GitHub :

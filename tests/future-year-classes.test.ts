@@ -131,7 +131,7 @@ async function memoryWorld() {
 }
 
 test("version 2.50.0 — préparation classes/cours année future, sans migration", () => {
-  assert.equal(APP_VERSION, "2.53.0");
+  assert.equal(APP_VERSION, "2.53.1");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0029_admin_mfa.sql");
 });
 

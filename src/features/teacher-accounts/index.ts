@@ -18,6 +18,13 @@ export {
   wouldRemoveLastAdmin,
 } from "./rules.ts";
 export type { AccountInputCheck } from "./rules.ts";
+export {
+  RESET_PASSWORD_CONFIRM_TOKEN,
+  isResetPasswordConfirmToken,
+  resetAdminPasswordWithConfirmation,
+  resolveAdminAccountForServerReset,
+} from "./reset-admin-password.ts";
+export type { ResolveAdminAccountResult } from "./reset-admin-password.ts";
 export type {
   TeacherAccountInput,
   TeacherAccountPatch,
