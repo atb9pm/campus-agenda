@@ -109,13 +109,10 @@ import {
   resolveNotebookSubjectId,
   workspaceAllowsNotebookPublish,
   weekdayToCourseDayIndex,
-  cloneRichDoc,
-  composeWeekPublicationDoc,
   decodeRichDetail,
   isCarnetOwnedPublication,
   isPlaceholderDetail,
   planCarnetWeekPublicationSave,
-  previousSchoolWeekNumber,
   type CampusRichDoc,
   type ClassNotesDocument,
   type NotebookCourseContext,
@@ -1178,7 +1175,11 @@ export default function Home() {
     showNotice("Publication ajoutée.");
   }
 
-  async function notebookSaveWeekPublication(schoolWeekNumber: number, doc: CampusRichDoc) {
+  async function notebookSaveWeekPublication(
+    schoolWeekNumber: number,
+    doc: CampusRichDoc,
+    options?: { studentVisible?: boolean },
+  ) {
     if (!openNotebookClass) return;
     if (!notebookPublishAnnualCourseId && (!notebookClassroomId || !notebookSubjectId)) return;
     const weekItems = notebookItems.filter((item) => item.schoolWeekNumber === schoolWeekNumber);
@@ -1194,7 +1195,11 @@ export default function Home() {
     }
 
     if (plan.action === "update") {
-      const updated = await updateAgendaItemApi(plan.updateId, plan.payload);
+      const payload =
+        options?.studentVisible === undefined
+          ? plan.payload
+          : { ...plan.payload, studentVisible: options.studentVisible };
+      const updated = await updateAgendaItemApi(plan.updateId, payload);
       setItems((previous) => previous.map((item) => (item.id === plan.updateId ? updated : item)));
       for (const extraId of plan.deleteIds) {
         await deleteAgendaItemApi(extraId);
@@ -1208,6 +1213,7 @@ export default function Home() {
         type: "HOMEWORK",
         title: plan.payload.title,
         detail: plan.payload.detail,
+        studentVisible: options?.studentVisible ?? false,
       });
       setItems((previous) => upsertAgendaItem(previous, created));
     } else if (notebookClassroomId && notebookSubjectId) {
@@ -1221,19 +1227,29 @@ export default function Home() {
         type: "HOMEWORK",
         title: plan.payload.title,
         detail: plan.payload.detail,
+        studentVisible: options?.studentVisible ?? false,
       });
       setItems((previous) => upsertAgendaItem(previous, created));
     }
-    showNotice("Publication enregistrée.");
+    showNotice(
+      options?.studentVisible === true
+        ? "Publication visible aux élèves."
+        : options?.studentVisible === false
+          ? "Brouillon enregistré."
+          : "Publication enregistrée.",
+    );
   }
 
-  async function notebookCopyPreviousPublication(schoolWeekNumber: number) {
-    const previous = previousSchoolWeekNumber(schoolWeeksMemo, schoolWeekNumber);
-    if (previous == null) return;
-    const source = composeWeekPublicationDoc(
-      notebookItems.filter((item) => item.schoolWeekNumber === previous && isCarnetOwnedPublication(item)),
+  async function notebookSetWeekPublicationVisibility(schoolWeekNumber: number, studentVisible: boolean) {
+    const weekItems = notebookItems.filter(
+      (item) => item.schoolWeekNumber === schoolWeekNumber && isCarnetOwnedPublication(item),
     );
-    await notebookSaveWeekPublication(schoolWeekNumber, cloneRichDoc(source));
+    for (const item of weekItems) {
+      if ((item.studentVisible !== false) === studentVisible) continue;
+      const updated = await updateAgendaItemApi(item.id, { studentVisible });
+      setItems((previous) => previous.map((entry) => (entry.id === item.id ? updated : entry)));
+    }
+    showNotice(studentVisible ? "Visible aux élèves." : "Repassé en brouillon.");
   }
 
   async function notebookMovePublication(itemId: number, schoolWeekNumber: number) {
@@ -1664,7 +1680,7 @@ export default function Home() {
             onNotesChange={setClassNotesDocument}
             onCreatePublication={notebookCreatePublication}
             onSaveWeekPublication={notebookSaveWeekPublication}
-            onCopyPreviousPublication={notebookCopyPreviousPublication}
+            onSetWeekPublicationVisibility={notebookSetWeekPublicationVisibility}
             onMovePublication={notebookMovePublication}
             onSaveControl={notebookSaveControl}
             onDeleteControl={notebookDeletePublication}

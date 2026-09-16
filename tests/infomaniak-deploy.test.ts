@@ -4,8 +4,8 @@ import test from "node:test";
 
 import { APP_VERSION } from "../src/lib/app-version.ts";
 
-test("version 2.54.0 — workflow Infomaniak : santé seulement, pas de SSH", async () => {
-  assert.equal(APP_VERSION, "2.54.0");
+test("version 2.54.1 — workflow Infomaniak : santé seulement, pas de SSH", async () => {
+  assert.equal(APP_VERSION, "2.55.0");
   const workflow = await readFile(new URL("../.github/workflows/deploy-infomaniak.yml", import.meta.url), "utf8");
   const guide = await readFile(new URL("../docs/infomaniak-deploy.md", import.meta.url), "utf8");
 

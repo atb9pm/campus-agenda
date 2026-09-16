@@ -203,6 +203,7 @@ async function buildMemoryTables(deps: CampusBackupDeps): Promise<CampusTableDum
     course_session_date: item.courseSessionDate ?? null,
     reference_session_id: item.referenceSessionId ?? null,
     reference_item_id: item.referenceItemId ?? null,
+    student_visible: flag01(item.studentVisible !== false),
   }));
 
   for (const year of years) {
@@ -569,6 +570,7 @@ async function restoreMemoryTables(deps: CampusBackupDeps, dump: CampusTableDump
       courseSessionDate: asNullableString(row.course_session_date ?? row.courseSessionDate),
       referenceSessionId: asNullableString(row.reference_session_id ?? row.referenceSessionId),
       referenceItemId: asNullableString(row.reference_item_id ?? row.referenceItemId),
+      studentVisible: asBool(row.student_visible ?? row.studentVisible, true),
     })),
   );
 

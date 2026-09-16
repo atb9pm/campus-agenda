@@ -49,6 +49,7 @@ async function handlePost(request: Request) {
     type: parsed.type,
     title: parsed.title,
     detail: parsed.detail,
+    studentVisible: parsed.studentVisible,
   });
 
   if (!result.ok) {

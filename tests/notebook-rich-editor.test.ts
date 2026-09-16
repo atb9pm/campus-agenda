@@ -9,6 +9,8 @@ import {
   cloneRichDoc,
   composeWeekNotesDoc,
   composeWeekPublicationDoc,
+  applyStructureToDoc,
+  convertBlock,
   decodeRichDetail,
   emptyRichDoc,
   encodeRichDetail,
@@ -81,9 +83,9 @@ function sampleDoc(): CampusRichDoc {
   });
 }
 
-test("version 2.52.0 — éditeur enrichi Carnet, sans migration", async () => {
-  assert.equal(APP_VERSION, "2.54.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0029_admin_mfa.sql");
+test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async () => {
+  assert.equal(APP_VERSION, "2.55.0");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
   const [panel, notesApi, studentPage] = await Promise.all([
     readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/api/teacher/notes/route.ts", import.meta.url), "utf8"),
@@ -91,7 +93,7 @@ test("version 2.52.0 — éditeur enrichi Carnet, sans migration", async () => {
   ]);
   assert.match(panel, /Publication élèves/);
   assert.match(panel, /Notes prof/);
-  assert.match(panel, /Copier depuis la semaine précédente/);
+  assert.match(panel, /Publier aux élèves/);
   assert.match(panel, /Aperçu élève/);
   assert.match(panel, /isCarnetOwnedPublication/);
   assert.match(panel, /weekCarnetPublications/);
@@ -103,6 +105,8 @@ test("version 2.52.0 — éditeur enrichi Carnet, sans migration", async () => {
   assert.match(studentPage, /isPlaceholderDetail/);
   assert.match(studentPage, /isCarnetOwnedPublication/);
   assert.match(studentPage, /planCarnetWeekPublicationSave/);
+  assert.doesNotMatch(panel, /onCopyPreviousPublication/);
+  assert.doesNotMatch(studentPage, /notebookCopyPreviousPublication/);
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.match(editor, /parseInlinesFromHtml/);
   assert.match(editor, /hiliteColor/);
@@ -111,6 +115,13 @@ test("version 2.52.0 — éditeur enrichi Carnet, sans migration", async () => {
   assert.match(editor, /Supprimer l’élément/);
   assert.match(editor, /onEnter/);
   assert.match(editor, /addStructuredListItem/);
+  assert.match(editor, /applyStructureToDoc/);
+  assert.match(editor, /data-color-swatch/);
+  assert.match(editor, /keepEditorFocus/);
+  assert.match(editor, /styleWithCSS/);
+  assert.match(editor, /Liste numérotée/);
+  assert.doesNotMatch(editor, /<select/);
+  assert.doesNotMatch(editor, /addBlock\(/);
 });
 
 test("création / modification / persistance d’une publication riche", () => {
@@ -201,7 +212,7 @@ test("notes prof privées — jamais dans une publication", () => {
   assert.equal(isClassNotesPayload(notes), true);
 });
 
-test("copie semaine précédente — indépendante, sans contrôle ni notes", () => {
+test("cloneRichDoc — copie indépendante, sans contrôle ni notes", () => {
   const sourceItems: PrototypeAgendaItem[] = [
     item({
       id: 10,
@@ -372,6 +383,30 @@ test("parseur — HTML Chrome execCommand hiliteColor / foreColor, pas seulement
     assert.equal(paragraph.inlines[0]?.marks?.highlight, true);
     assert.equal(paragraph.inlines[2]?.marks?.color, "blue");
   }
+});
+
+test("couleur et liste numérotée — conversion du bloc actif, pas d’append vide", () => {
+  const paragraph: CampusRichDoc = {
+    format: "campus-rich-v1",
+    blocks: [{ type: "paragraph", inlines: [{ text: "asfdfad acfd fasdfacfd" }] }],
+  };
+  const numbered = applyStructureToDoc(paragraph, 0, "orderedList");
+  assert.equal(numbered.blocks.length, 1);
+  assert.equal(numbered.blocks[0]?.type, "orderedList");
+  if (numbered.blocks[0]?.type === "orderedList") {
+    assert.equal(numbered.blocks[0].items[0]?.[0]?.text, "asfdfad acfd fasdfacfd");
+  }
+  const back = applyStructureToDoc(numbered, 0, "orderedList");
+  assert.equal(back.blocks[0]?.type, "paragraph");
+
+  const heading = applyStructureToDoc(paragraph, 0, "heading");
+  assert.equal(heading.blocks[0]?.type, "heading");
+  const bullets = convertBlock(
+    { type: "paragraph", inlines: [{ text: "un" }, { text: " deux" }] },
+    "bulletList",
+  );
+  assert.equal(bullets.type, "bulletList");
+  if (bullets.type === "bulletList") assert.equal(bullets.items[0]?.[0]?.text, "un");
 });
 
 test("listes et checklists — plusieurs éléments, ajout et suppression", () => {

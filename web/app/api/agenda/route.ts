@@ -1,4 +1,5 @@
 import { AGENDA_ITEM_TYPES } from "@campus/types/agenda.ts";
+import { isVisibleToStudent } from "@campus/features/agenda/index.ts";
 import { parseConfirmCoordination } from "@campus/features/course-publications/index.ts";
 import { evaluateLiveControlCoordination } from "@campus/features/control-planning/index.ts";
 import {
@@ -43,6 +44,9 @@ export async function GET(request: Request) {
   if (schoolYearId) {
     items = items.filter((item) => item.schoolYearId === schoolYearId);
   }
+  if (access.session?.kind === "student") {
+    items = items.filter(isVisibleToStudent);
+  }
 
   const archivedIds = await getArchivedSchoolYearIds();
   const readOnly = Boolean(schoolYearId && archivedIds.has(schoolYearId));
@@ -71,6 +75,7 @@ export async function POST(request: Request) {
     courseSessionDate?: string;
     referenceSessionId?: string;
     referenceItemId?: string;
+    studentVisible?: boolean;
   };
 
   if (
@@ -175,6 +180,7 @@ export async function POST(request: Request) {
     title: String(body.title ?? ""),
     detail: String(body.detail ?? ""),
     schoolYearId: activeSchoolYearId,
+    studentVisible: typeof body.studentVisible === "boolean" ? body.studentVisible : undefined,
   });
 
   return jsonResponse({ ok: true, item }, { status: 201 });

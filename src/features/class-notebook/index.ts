@@ -70,6 +70,7 @@ export {
   RICH_HIGHLIGHT_HEX,
   RICH_TEXT_COLOR_HEX,
   RICH_TEXT_COLOR_IDS,
+  RICH_TEXT_COLOR_LABELS,
   decodeRichDetail,
   emptyRichDoc,
   encodeRichDetail,
@@ -77,6 +78,8 @@ export {
   fromPlainLines,
   fromPlainText,
   addStructuredListItem,
+  applyStructureToDoc,
+  convertBlock,
   colorIdFromCss,
   htmlToSafeInlines,
   insertQuickBlock,
@@ -96,6 +99,7 @@ export {
   type RichBlock,
   type RichInline,
   type RichMarks,
+  type RichStructureType,
   type RichTextColorId,
 } from "./rich-doc.ts";
 export {
@@ -109,7 +113,9 @@ export {
   planCarnetWeekPublicationSave,
   previousSchoolWeekNumber,
   savePlanTouchesItem,
+  weekCarnetVisibility,
   type CarnetPublicationSavePlan,
+  type WeekPublicationVisibility,
 } from "./rich-agenda.ts";
 export {
   clampWeekDisplayCount,

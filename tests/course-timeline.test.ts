@@ -361,8 +361,8 @@ async function seedAssignedCourse(
 }
 
 test("version 2.32.0 — déroulement conservé, nav Contrôles, migration 0024", () => {
-  assert.equal(APP_VERSION, "2.54.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0029_admin_mfa.sql");
+  assert.equal(APP_VERSION, "2.55.0");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "mes-cours",
     "controles",

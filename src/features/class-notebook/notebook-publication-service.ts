@@ -66,6 +66,7 @@ export function notebookPublicationFromBody(body: unknown): {
   title: string;
   detail: string;
   ensureOnly: boolean;
+  studentVisible?: boolean;
 } {
   const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   const typeRaw = String(record.type ?? "HOMEWORK").trim();
@@ -77,6 +78,7 @@ export function notebookPublicationFromBody(body: unknown): {
     title: String(record.title ?? ""),
     detail: String(record.detail ?? ""),
     ensureOnly: record.ensureOnly === true,
+    studentVisible: typeof record.studentVisible === "boolean" ? record.studentVisible : undefined,
   };
 }
 
@@ -179,6 +181,7 @@ export async function createNotebookPublication(
     type: NotebookPublicationType;
     title: string;
     detail: string;
+    studentVisible?: boolean;
     at?: string;
   },
 ): Promise<NotebookPublishResult<PrototypeAgendaItem>> {
@@ -212,6 +215,7 @@ export async function createNotebookPublication(
     detail: input.detail,
     schoolYearId: resolved.value.course.schoolYearId,
     annualCourseId: resolved.value.course.id,
+    studentVisible: input.studentVisible ?? false,
   });
 
   return { ok: true, value: item };

@@ -243,6 +243,7 @@ export function duplicateItemsFromArchivedYear(
       detail: source.detail,
       templateId,
       schoolYearId: activeSchoolYearId,
+      studentVisible: source.type === "TEST",
     });
     const item = nextItems.find((entry) => entry.id === nextId);
     if (item) created.push(item);

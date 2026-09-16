@@ -58,6 +58,7 @@ export class MemoryAgendaStore implements AgendaStore {
       courseSessionDate: input.courseSessionDate ?? null,
       referenceSessionId: input.referenceSessionId ?? null,
       referenceItemId: input.referenceItemId ?? null,
+      studentVisible: input.studentVisible,
     });
     return (await this.findAgendaItem(id))!;
   }
@@ -65,7 +66,7 @@ export class MemoryAgendaStore implements AgendaStore {
   async updateAgendaItem(
     itemId: number,
     actorTeacherId: string,
-    patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber">>,
+    patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber" | "studentVisible">>,
   ): Promise<AgendaMutationResult> {
     const actorIsAdmin = await this.teacherIsAdmin(actorTeacherId);
     const result = updatePublication(this.items, itemId, actorTeacherId, patch, actorIsAdmin);

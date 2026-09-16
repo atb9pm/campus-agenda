@@ -23,6 +23,11 @@ export interface PrototypeAgendaItem {
   courseSessionDate?: string | null;
   referenceSessionId?: string | null;
   referenceItemId?: string | null;
+  /**
+   * Visible dans l’agenda élève.
+   * `undefined` = publié (lignes existantes). `false` = brouillon enseignant.
+   */
+  studentVisible?: boolean;
 }
 
 export const DEMO_PROTOTYPE_ITEMS: PrototypeAgendaItem[] = [

@@ -2,6 +2,45 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.55.0] — Carnet : brouillon / publié aux élèves
+
+Planifier une semaine n’affiche plus automatiquement le texte aux élèves. Chaque publication Carnet a un statut **Brouillon** ou **Visible aux élèves**.
+
+### Ajouté
+
+- Pastille et actions dans la colonne : **Publier aux élèves** / **Repasser en brouillon**.
+- Éditeur : **Enregistrer** (reste brouillon ou met à jour le texte déjà publié) et **Enregistrer et publier**.
+- Reprise d’année et nouvelle rédaction Carnet : devoirs et informations en **brouillon**. Les contrôles et les publications Mes cours (clic explicite) restent visibles.
+- Colonne `agenda_items.student_visible` (migration `0030_agenda_student_visible.sql`). Les lignes existantes restent visibles (`DEFAULT 1`).
+- L’agenda élève (API + aperçu enseignant) masque les brouillons. Les contrôles restent visibles.
+
+### Retiré
+
+- Bouton **Copier depuis la semaine précédente** / **Reprendre Sem XX** : pas de plus-value, le texte se reprend dans l’éditeur si besoin.
+
+### Conservé
+
+Contrôles, Mes cours « Publier dans l’Agenda », notes prof, éditeur riche 2.54.1. Backup v4 : colonne optionnelle `student_visible` (absente = publié). Glisser-déposer inchangé (suite prévue).
+
+### Migration
+
+`0030_agenda_student_visible.sql`.
+
+## [2.54.1] — Éditeur Carnet : couleur, listes, barre d’outils
+
+### Corrigé
+
+- Couleur du texte : pastilles qui conservent la sélection (plus de menu déroulant qui l’efface).
+- Liste numérotée, puces, titre et cases : convertissent le paragraphe en cours au lieu d’ajouter un bloc vide en bas.
+
+### Changé
+
+- Barre d’outils regroupée (caractère / paragraphe), pastilles de couleur, blocs de la semaine distingués visuellement.
+
+### Conservé
+
+Format `campus-rich-v1`, sauvegarde, aperçu élève, notes prof. Aucune migration SQL.
+
 ## [2.54.0] — Parcours Sécurité administrateur (reconfigurer, téléphone perdu, recovery)
 
 Administration → Sécurité présente trois actions distinctes. Aucune n’accepte le mot de passe seul. La 2FA n’est jamais désactivée durablement.

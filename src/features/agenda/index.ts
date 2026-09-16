@@ -1,5 +1,10 @@
 export { DEMO_PROTOTYPE_ITEMS, type PrototypeAgendaItem } from "./demo-items.ts";
 export {
+  defaultStudentVisibleForCreate,
+  isStudentVisible,
+  isVisibleToStudent,
+} from "./visibility.ts";
+export {
   canModifyPublication,
   createPublication,
   deletePublication,

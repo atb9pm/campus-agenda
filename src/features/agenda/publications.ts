@@ -1,5 +1,6 @@
 import { AGENDA_ITEM_TYPES, type AgendaItemType } from "../../types/agenda.ts";
 import type { PrototypeAgendaItem } from "./demo-items.ts";
+import { defaultStudentVisibleForCreate } from "./visibility.ts";
 
 export interface PublicationInput {
   classroomId: string;
@@ -19,10 +20,11 @@ export interface PublicationInput {
   courseSessionDate?: string | null;
   referenceSessionId?: string | null;
   referenceItemId?: string | null;
+  studentVisible?: boolean;
 }
 
 export type PublicationPatch = Partial<
-  Pick<PublicationInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber">
+  Pick<PublicationInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber" | "studentVisible">
 >;
 
 export function isAllowedPublicationType(type: string): type is AgendaItemType {
@@ -107,6 +109,7 @@ export function createPublication(
     courseSessionDate: input.courseSessionDate ?? null,
     referenceSessionId: input.referenceSessionId ?? null,
     referenceItemId: input.referenceItemId ?? null,
+    studentVisible: defaultStudentVisibleForCreate(input),
   };
 
   return [...items, publication];
@@ -142,6 +145,7 @@ export function updatePublication(
     schoolWeekNumber: patch.schoolWeekNumber ?? existing.schoolWeekNumber,
     templateId: existing.templateId ?? null,
     schoolYearId: existing.schoolYearId ?? null,
+    studentVisible: patch.studentVisible ?? existing.studentVisible,
   };
 
   return {

@@ -15,6 +15,17 @@ export const RICH_TEXT_COLOR_HEX: Record<RichTextColorId, string> = {
   gray: "#475467",
 };
 
+export const RICH_TEXT_COLOR_LABELS: Record<RichTextColorId, string> = {
+  navy: "Marine",
+  blue: "Bleu",
+  red: "Rouge",
+  green: "Vert",
+  orange: "Orange",
+  gray: "Gris",
+};
+
+export type RichStructureType = "heading" | "paragraph" | "bulletList" | "orderedList" | "checklist";
+
 export const RICH_HIGHLIGHT_HEX = "#fef08a";
 
 export const QUICK_BLOCK_KINDS = ["todo", "finish", "review", "info", "bring", "read"] as const;
@@ -429,4 +440,56 @@ export function removeStructuredListItem(block: RichBlock, index: number): RichB
     return { ...block, items: items.length ? items : [{ checked: false, inlines: [] }] };
   }
   return block;
+}
+
+function itemsFromBlock(block: RichBlock): RichInline[][] {
+  if (block.type === "bulletList" || block.type === "orderedList") {
+    return block.items.length ? block.items : [[]];
+  }
+  if (block.type === "checklist") {
+    return block.items.length ? block.items.map((item) => item.inlines) : [[]];
+  }
+  return [block.inlines];
+}
+
+function flattenBlockInlines(block: RichBlock): RichInline[] {
+  const items = itemsFromBlock(block);
+  const inlines: RichInline[] = [];
+  for (const item of items) {
+    if (inlines.length && item.length) inlines.push({ text: " " });
+    inlines.push(...item);
+  }
+  return inlines;
+}
+
+/** Convertit un bloc (titre, paragraphe, puces, numérotée, cases) sans perdre le texte. */
+export function convertBlock(block: RichBlock, type: RichStructureType): RichBlock {
+  if (type === "heading" || type === "paragraph") {
+    return { type, inlines: flattenBlockInlines(block) };
+  }
+  if (type === "bulletList" || type === "orderedList") {
+    return { type, items: itemsFromBlock(block) };
+  }
+  return {
+    type: "checklist",
+    items: itemsFromBlock(block).map((inlines) => ({ checked: false, inlines })),
+  };
+}
+
+/**
+ * Applique un type de paragraphe au bloc actif.
+ * Un second clic sur le même type (sauf paragraphe) revient au paragraphe.
+ */
+export function applyStructureToDoc(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  type: RichStructureType,
+): CampusRichDoc {
+  const blocks = doc.blocks.length ? [...doc.blocks] : [{ type: "paragraph" as const, inlines: [] }];
+  const index = Math.min(Math.max(0, blockIndex), blocks.length - 1);
+  const current = blocks[index] ?? { type: "paragraph" as const, inlines: [] };
+  blocks[index] = current.type === type && type !== "paragraph"
+    ? convertBlock(current, "paragraph")
+    : convertBlock(current, type);
+  return sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks });
 }
