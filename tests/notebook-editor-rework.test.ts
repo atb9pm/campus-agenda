@@ -295,6 +295,8 @@ test("vue compacte — résumé lisible, sans cases décalées ni cadres", async
   assert.match(panel, /encodeCarnetMove/);
   assert.match(panel, /Supprimer/);
   // Le glisser HTML5 ne suffit pas (tactile) : clic sur la ligne = copie, toucher une autre semaine = coller.
+  assert.match(panel, /canPasteCopiedLine/);
+  assert.match(panel, /Coller la ligne copiée dans cette semaine/);
   assert.match(panel, /class-notebook-move-menu/);
   assert.match(panel, /Déplacer vers/);
   assert.match(panel, /setData\("text\/plain"/);

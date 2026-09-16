@@ -158,6 +158,41 @@ export function ClassNotebookPanel({
 
   const branchLabel = selectedBranchLabel?.trim() || classSetup.branchNames[0] || "Branche";
 
+  const copyCarnetLine = useCallback(
+    async (
+      source: LineSource,
+      fromWeek: number,
+      toWeek: number,
+      blockIndex: number,
+      itemIndex: number | null,
+    ) => {
+      if (fromWeek === toWeek) return;
+      if (source === "publication") {
+        if (!canPublish) return;
+        const copied = copyLineToDoc(
+          composeWeekPublicationDoc(items.filter((item) => item.schoolWeekNumber === fromWeek)),
+          composeWeekPublicationDoc(items.filter((item) => item.schoolWeekNumber === toWeek)),
+          blockIndex,
+          itemIndex,
+        );
+        if (!copied) return;
+        await onSaveWeekPublication(toWeek, copied);
+        return;
+      }
+      const fromKey = weekNotesKey(classSetup.id, fromWeek);
+      const toKey = weekNotesKey(classSetup.id, toWeek);
+      const copied = copyLineToDoc(
+        composeWeekNotesDoc(listWeekNotes(notesDocument, fromKey)),
+        composeWeekNotesDoc(listWeekNotes(notesDocument, toKey)),
+        blockIndex,
+        itemIndex,
+      );
+      if (!copied) return;
+      onNotesChange(setWeekRichNote(notesDocument, toKey, copied));
+    },
+    [canPublish, classSetup.id, items, notesDocument, onNotesChange, onSaveWeekPublication],
+  );
+
   const handlePaste = useCallback(
     async (targetWeekNumber: number) => {
       if (!clipboard) return;
@@ -204,13 +239,12 @@ export function ClassNotebookPanel({
     [
       clipboard,
       classSetup.id,
+      copyCarnetLine,
       items,
       notesDocument,
-      canPublish,
       onCreatePublication,
       onMovePublication,
       onNotesChange,
-      onSaveWeekPublication,
     ],
   );
 
@@ -354,38 +388,6 @@ export function ClassNotebookPanel({
     );
   }
 
-  async function copyCarnetLine(
-    source: LineSource,
-    fromWeek: number,
-    toWeek: number,
-    blockIndex: number,
-    itemIndex: number | null,
-  ) {
-    if (fromWeek === toWeek) return;
-    if (source === "publication") {
-      if (!canPublish) return;
-      const copied = copyLineToDoc(
-        composeWeekPublicationDoc(items.filter((item) => item.schoolWeekNumber === fromWeek)),
-        composeWeekPublicationDoc(items.filter((item) => item.schoolWeekNumber === toWeek)),
-        blockIndex,
-        itemIndex,
-      );
-      if (!copied) return;
-      await onSaveWeekPublication(toWeek, copied);
-      return;
-    }
-    const fromKey = weekNotesKey(classSetup.id, fromWeek);
-    const toKey = weekNotesKey(classSetup.id, toWeek);
-    const copied = copyLineToDoc(
-      composeWeekNotesDoc(listWeekNotes(notesDocument, fromKey)),
-      composeWeekNotesDoc(listWeekNotes(notesDocument, toKey)),
-      blockIndex,
-      itemIndex,
-    );
-    if (!copied) return;
-    onNotesChange(setWeekRichNote(notesDocument, toKey, copied));
-  }
-
   async function handleDropOnWeek(event: DragEvent<HTMLElement>, weekNumber: number) {
     event.preventDefault();
     const payload = decodeCarnetMove(event.dataTransfer.getData("text/plain"), dragPayload);
@@ -445,6 +447,15 @@ export function ClassNotebookPanel({
       weekNumber,
       clipboard.blockIndex,
       clipboard.itemIndex ?? null,
+    );
+  }
+
+  function canPasteCopiedLine(weekNumber: number, source: LineSource): boolean {
+    return (
+      clipboard?.kind === "line" &&
+      clipboard.lineSource === source &&
+      clipboard.blockIndex != null &&
+      clipboard.sourceWeekNumber !== weekNumber
     );
   }
 
@@ -540,6 +551,8 @@ export function ClassNotebookPanel({
           );
           const isActive = week.number === centerWeekNumber;
           const visibility = weekCarnetVisibility(weekCarnetPublications);
+          const pastePublication = canPasteCopiedLine(week.number, "publication");
+          const pasteNotes = canPasteCopiedLine(week.number, "notes");
 
           return (
             <article
@@ -666,7 +679,19 @@ export function ClassNotebookPanel({
                 ) : null}
                 <div
                   className="class-notebook-lines"
-                  onClick={() => pasteCopiedLine(week.number, "publication")}
+                  role={pastePublication ? "button" : undefined}
+                  tabIndex={pastePublication ? 0 : undefined}
+                  aria-label={pastePublication ? "Coller la ligne copiée dans cette semaine" : undefined}
+                  onClick={pastePublication ? () => pasteCopiedLine(week.number, "publication") : undefined}
+                  onKeyDown={
+                    pastePublication
+                      ? (event) => {
+                          if (event.key !== "Enter" && event.key !== " ") return;
+                          event.preventDefault();
+                          pasteCopiedLine(week.number, "publication");
+                        }
+                      : undefined
+                  }
                 >
                   <RichDocView
                     doc={composeWeekPublicationDoc(weekCarnetPublications)}
@@ -740,7 +765,19 @@ export function ClassNotebookPanel({
                 <h3>Notes prof</h3>
                 <div
                   className="class-notebook-lines"
-                  onClick={() => pasteCopiedLine(week.number, "notes")}
+                  role={pasteNotes ? "button" : undefined}
+                  tabIndex={pasteNotes ? 0 : undefined}
+                  aria-label={pasteNotes ? "Coller la ligne copiée dans cette semaine" : undefined}
+                  onClick={pasteNotes ? () => pasteCopiedLine(week.number, "notes") : undefined}
+                  onKeyDown={
+                    pasteNotes
+                      ? (event) => {
+                          if (event.key !== "Enter" && event.key !== " ") return;
+                          event.preventDefault();
+                          pasteCopiedLine(week.number, "notes");
+                        }
+                      : undefined
+                  }
                 >
                   <RichDocView
                     doc={composeWeekNotesDoc(weekNotes)}
