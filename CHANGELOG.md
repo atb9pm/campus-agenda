@@ -2,6 +2,21 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.54.1] — Éditeur Carnet : couleur, listes, barre d’outils
+
+### Corrigé
+
+- Couleur du texte : pastilles qui conservent la sélection (plus de menu déroulant qui l’efface).
+- Liste numérotée, puces, titre et cases : convertissent le paragraphe en cours au lieu d’ajouter un bloc vide en bas.
+
+### Changé
+
+- Barre d’outils regroupée (caractère / paragraphe), pastilles de couleur, blocs de la semaine distingués visuellement.
+
+### Conservé
+
+Format `campus-rich-v1`, sauvegarde, aperçu élève, notes prof. Aucune migration SQL.
+
 ## [2.54.0] — Parcours Sécurité administrateur (reconfigurer, téléphone perdu, recovery)
 
 Administration → Sécurité présente trois actions distinctes. Aucune n’accepte le mot de passe seul. La 2FA n’est jamais désactivée durablement.

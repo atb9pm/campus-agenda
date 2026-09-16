@@ -9,6 +9,8 @@ import {
   cloneRichDoc,
   composeWeekNotesDoc,
   composeWeekPublicationDoc,
+  applyStructureToDoc,
+  convertBlock,
   decodeRichDetail,
   emptyRichDoc,
   encodeRichDetail,
@@ -82,7 +84,7 @@ function sampleDoc(): CampusRichDoc {
 }
 
 test("version 2.52.0 — éditeur enrichi Carnet, sans migration", async () => {
-  assert.equal(APP_VERSION, "2.54.0");
+  assert.equal(APP_VERSION, "2.54.1");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0029_admin_mfa.sql");
   const [panel, notesApi, studentPage] = await Promise.all([
     readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8"),
@@ -111,6 +113,13 @@ test("version 2.52.0 — éditeur enrichi Carnet, sans migration", async () => {
   assert.match(editor, /Supprimer l’élément/);
   assert.match(editor, /onEnter/);
   assert.match(editor, /addStructuredListItem/);
+  assert.match(editor, /applyStructureToDoc/);
+  assert.match(editor, /data-color-swatch/);
+  assert.match(editor, /keepEditorFocus/);
+  assert.match(editor, /styleWithCSS/);
+  assert.match(editor, /Liste numérotée/);
+  assert.doesNotMatch(editor, /<select/);
+  assert.doesNotMatch(editor, /addBlock\(/);
 });
 
 test("création / modification / persistance d’une publication riche", () => {
@@ -372,6 +381,30 @@ test("parseur — HTML Chrome execCommand hiliteColor / foreColor, pas seulement
     assert.equal(paragraph.inlines[0]?.marks?.highlight, true);
     assert.equal(paragraph.inlines[2]?.marks?.color, "blue");
   }
+});
+
+test("couleur et liste numérotée — conversion du bloc actif, pas d’append vide", () => {
+  const paragraph: CampusRichDoc = {
+    format: "campus-rich-v1",
+    blocks: [{ type: "paragraph", inlines: [{ text: "asfdfad acfd fasdfacfd" }] }],
+  };
+  const numbered = applyStructureToDoc(paragraph, 0, "orderedList");
+  assert.equal(numbered.blocks.length, 1);
+  assert.equal(numbered.blocks[0]?.type, "orderedList");
+  if (numbered.blocks[0]?.type === "orderedList") {
+    assert.equal(numbered.blocks[0].items[0]?.[0]?.text, "asfdfad acfd fasdfacfd");
+  }
+  const back = applyStructureToDoc(numbered, 0, "orderedList");
+  assert.equal(back.blocks[0]?.type, "paragraph");
+
+  const heading = applyStructureToDoc(paragraph, 0, "heading");
+  assert.equal(heading.blocks[0]?.type, "heading");
+  const bullets = convertBlock(
+    { type: "paragraph", inlines: [{ text: "un" }, { text: " deux" }] },
+    "bulletList",
+  );
+  assert.equal(bullets.type, "bulletList");
+  if (bullets.type === "bulletList") assert.equal(bullets.items[0]?.[0]?.text, "un");
 });
 
 test("listes et checklists — plusieurs éléments, ajout et suppression", () => {

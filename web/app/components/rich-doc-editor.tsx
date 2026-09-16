@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import {
   QUICK_BLOCK_KINDS,
@@ -8,7 +8,9 @@ import {
   RICH_HIGHLIGHT_HEX,
   RICH_TEXT_COLOR_HEX,
   RICH_TEXT_COLOR_IDS,
+  RICH_TEXT_COLOR_LABELS,
   addStructuredListItem,
+  applyStructureToDoc,
   emptyRichDoc,
   insertQuickBlock,
   parseInlinesFromHtml,
@@ -19,6 +21,7 @@ import {
   type QuickBlockKind,
   type RichBlock,
   type RichInline,
+  type RichStructureType,
   type RichTextColorId,
 } from "@campus/features/class-notebook";
 
@@ -56,8 +59,8 @@ function inlinesFromElement(root: HTMLElement): RichInline[] {
   return parseInlinesFromHtml(root.innerHTML);
 }
 
-function applyCommand(command: string, value?: string) {
-  document.execCommand(command, false, value);
+function keepEditorFocus(event: { preventDefault: () => void }) {
+  event.preventDefault();
 }
 
 function readDocFromDom(root: HTMLElement, fallback: CampusRichDoc): CampusRichDoc {
@@ -88,6 +91,10 @@ function readDocFromDom(root: HTMLElement, fallback: CampusRichDoc): CampusRichD
   return sanitizeRichDoc({ format: "campus-rich-v1", blocks: nextBlocks });
 }
 
+function rangeInside(root: HTMLElement, range: Range): boolean {
+  return root.contains(range.commonAncestorContainer);
+}
+
 export function RichDocEditor({
   value,
   variant,
@@ -98,7 +105,9 @@ export function RichDocEditor({
   onChange: (doc: CampusRichDoc) => void;
 }) {
   const [doc, setDoc] = useState<CampusRichDoc>(() => sanitizeRichDoc(value));
+  const [activeBlockIndex, setActiveBlockIndex] = useState(0);
   const editorRef = useRef<HTMLDivElement | null>(null);
+  const savedRange = useRef<Range | null>(null);
   const skipExternal = useRef(false);
 
   useEffect(() => {
@@ -109,7 +118,21 @@ export function RichDocEditor({
     setDoc(sanitizeRichDoc(value));
   }, [value]);
 
+  useEffect(() => {
+    function rememberSelection() {
+      const root = editorRef.current;
+      const selection = window.getSelection();
+      if (!root || !selection || selection.rangeCount === 0) return;
+      const range = selection.getRangeAt(0);
+      if (!rangeInside(root, range)) return;
+      savedRange.current = range.cloneRange();
+    }
+    document.addEventListener("selectionchange", rememberSelection);
+    return () => document.removeEventListener("selectionchange", rememberSelection);
+  }, []);
+
   const blocks = doc.blocks.length ? doc.blocks : [{ type: "paragraph" as const, inlines: [] }];
+  const activeType = blocks[activeBlockIndex]?.type;
 
   function currentDoc(): CampusRichDoc {
     return editorRef.current
@@ -130,24 +153,37 @@ export function RichDocEditor({
     emit(readDocFromDom(root, { format: "campus-rich-v1", blocks }));
   }
 
+  function restoreSelection(): boolean {
+    const root = editorRef.current;
+    const range = savedRange.current;
+    if (!root || !range || !rangeInside(root, range)) return false;
+    const selection = window.getSelection();
+    if (!selection) return false;
+    selection.removeAllRanges();
+    try {
+      selection.addRange(range);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   function format(command: string, value?: string) {
-    applyCommand(command, value);
+    restoreSelection();
+    document.execCommand("styleWithCSS", false, "true");
+    document.execCommand(command, false, value);
     serializeFromDom();
   }
 
-  function addBlock(type: RichBlock["type"]) {
-    const current = currentDoc();
-    const base = current.blocks.length ? current.blocks : [];
-    if (type === "bulletList" || type === "orderedList") {
-      emit({ format: "campus-rich-v1", blocks: [...base, { type, items: [[]] }] });
-      return;
-    }
-    if (type === "checklist") {
-      emit({ format: "campus-rich-v1", blocks: [...base, { type: "checklist", items: [{ checked: false, inlines: [] }] }] });
-      return;
-    }
-    if (type === "callout") return;
-    emit({ format: "campus-rich-v1", blocks: [...base, { type, inlines: [] }] });
+  function setColor(color: RichTextColorId) {
+    restoreSelection();
+    document.execCommand("styleWithCSS", false, "true");
+    document.execCommand("foreColor", false, RICH_TEXT_COLOR_HEX[color]);
+    serializeFromDom();
+  }
+
+  function applyStructure(type: RichStructureType) {
+    emit(applyStructureToDoc(currentDoc(), activeBlockIndex, type));
   }
 
   function addQuick(kind: QuickBlockKind) {
@@ -158,15 +194,8 @@ export function RichDocEditor({
     const raw = window.prompt("Lien (https:// ou mailto:)", "https://");
     const href = sanitizeHref(raw);
     if (!href) return;
-    applyCommand("createLink", href);
-    serializeFromDom();
-  }
-
-  function setColor(color: RichTextColorId) {
-    applyCommand("foreColor", RICH_TEXT_COLOR_HEX[color]);
-    const selection = window.getSelection();
-    const el = selection?.anchorNode instanceof Element ? selection.anchorNode : selection?.anchorNode?.parentElement;
-    if (el instanceof HTMLElement) el.setAttribute("data-color", color);
+    restoreSelection();
+    document.execCommand("createLink", false, href);
     serializeFromDom();
   }
 
@@ -208,76 +237,89 @@ export function RichDocEditor({
   return (
     <div className={`rich-doc-editor is-${variant}`} ref={editorRef}>
       <div className="rich-doc-toolbar" role="toolbar" aria-label="Mise en forme">
-        {showExtended ? (
-          <button type="button" onClick={() => addBlock("heading")}>
-            Titre
-          </button>
-        ) : null}
-        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => format("bold")}>
-          <strong>B</strong>
-        </button>
-        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => format("italic")}>
-          <em>I</em>
-        </button>
-        {showExtended ? (
-          <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => format("underline")}>
-            <u>U</u>
-          </button>
-        ) : null}
-        {showExtended ? (
-          <label className="rich-doc-color">
-            <span>Couleur</span>
-            <select
-              defaultValue=""
-              onChange={(event) => {
-                const selected = event.target.value;
-                if ((RICH_TEXT_COLOR_IDS as readonly string[]).includes(selected)) {
-                  setColor(selected as RichTextColorId);
-                }
-                event.target.value = "";
-              }}
-            >
-              <option value="" disabled>
-                Couleur
-              </option>
+        <div className="rich-doc-tool-group" role="group" aria-label="Caractère">
+          <ToolButton label="Gras" onClick={() => format("bold")}>
+            <strong>B</strong>
+          </ToolButton>
+          <ToolButton label="Italique" onClick={() => format("italic")}>
+            <em>I</em>
+          </ToolButton>
+          {showExtended ? (
+            <ToolButton label="Souligné" onClick={() => format("underline")}>
+              <u>S</u>
+            </ToolButton>
+          ) : null}
+          {showExtended ? (
+            <div className="rich-doc-swatches" role="group" aria-label="Couleur du texte">
               {RICH_TEXT_COLOR_IDS.map((color) => (
-                <option key={color} value={color}>
-                  {color}
-                </option>
+                <button
+                  key={color}
+                  type="button"
+                  className="rich-doc-swatch"
+                  title={RICH_TEXT_COLOR_LABELS[color]}
+                  aria-label={RICH_TEXT_COLOR_LABELS[color]}
+                  data-color-swatch={color}
+                  style={{ background: RICH_TEXT_COLOR_HEX[color] }}
+                  onMouseDown={keepEditorFocus}
+                  onClick={() => setColor(color)}
+                />
               ))}
-            </select>
-          </label>
-        ) : null}
-        {showExtended ? (
-          <button
-            type="button"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => format("hiliteColor", RICH_HIGHLIGHT_HEX)}
-          >
-            Surlignage
-          </button>
-        ) : null}
-        <button type="button" onClick={() => addBlock("bulletList")}>
-          Liste
-        </button>
-        <button type="button" onClick={() => addBlock("orderedList")}>
-          1.
-        </button>
-        {showExtended ? (
-          <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={wrapLink}>
-            Lien
-          </button>
-        ) : null}
-        <button type="button" onClick={() => addBlock("checklist")}>
-          ☐
-        </button>
+            </div>
+          ) : null}
+          {showExtended ? (
+            <ToolButton
+              label="Surligner la sélection"
+              onClick={() => format("hiliteColor", RICH_HIGHLIGHT_HEX)}
+            >
+              <span className="rich-doc-highlight-mark">Abc</span>
+            </ToolButton>
+          ) : null}
+        </div>
+
+        <div className="rich-doc-tool-group" role="group" aria-label="Paragraphe">
+          {showExtended ? (
+            <ToolButton
+              label="Titre"
+              text="Titre"
+              active={activeType === "heading"}
+              onClick={() => applyStructure("heading")}
+            />
+          ) : null}
+          <ToolButton
+            label="Liste à puces"
+            text="Puces"
+            active={activeType === "bulletList"}
+            onClick={() => applyStructure("bulletList")}
+          />
+          <ToolButton
+            label="Liste numérotée"
+            text="1. 2. 3."
+            active={activeType === "orderedList"}
+            onClick={() => applyStructure("orderedList")}
+          />
+          <ToolButton
+            label="Liste à cocher"
+            text="Cases"
+            active={activeType === "checklist"}
+            onClick={() => applyStructure("checklist")}
+          />
+          {showExtended ? (
+            <ToolButton label="Insérer un lien" text="Lien" onClick={wrapLink} />
+          ) : null}
+        </div>
       </div>
 
       {showExtended ? (
-        <div className="rich-doc-quick">
-          <span>Blocs rapides</span>
+        <div className="rich-doc-quick" role="group" aria-label="Blocs pédagogiques">
+          <span>Blocs de la semaine</span>
           {QUICK_BLOCK_KINDS.map((kind) => (
-            <button key={kind} type="button" onClick={() => addQuick(kind)}>
+            <button
+              key={kind}
+              type="button"
+              className={`rich-doc-quick-chip is-${kind}`}
+              onMouseDown={keepEditorFocus}
+              onClick={() => addQuick(kind)}
+            >
               {QUICK_BLOCK_LABELS[kind]}
             </button>
           ))}
@@ -290,6 +332,7 @@ export function RichDocEditor({
             key={`${block.type}-${index}`}
             block={block}
             index={index}
+            onFocusBlock={() => setActiveBlockIndex(index)}
             onBlur={serializeFromDom}
             onToggleCheck={(itemIndex, checked) => toggleCheck(index, itemIndex, checked)}
             onAddListItem={(afterIndex) => addListItem(index, afterIndex)}
@@ -301,9 +344,38 @@ export function RichDocEditor({
   );
 }
 
+function ToolButton({
+  label,
+  text,
+  active = false,
+  onClick,
+  children,
+}: {
+  label: string;
+  text?: string;
+  active?: boolean;
+  onClick: () => void;
+  children?: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={active ? "is-active" : undefined}
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      onMouseDown={keepEditorFocus}
+      onClick={onClick}
+    >
+      {children ?? text}
+    </button>
+  );
+}
+
 function EditorBlock({
   block,
   index,
+  onFocusBlock,
   onBlur,
   onToggleCheck,
   onAddListItem,
@@ -311,6 +383,7 @@ function EditorBlock({
 }: {
   block: RichBlock;
   index: number;
+  onFocusBlock: () => void;
   onBlur: () => void;
   onToggleCheck: (itemIndex: number, checked: boolean) => void;
   onAddListItem: (afterIndex?: number) => void;
@@ -328,6 +401,7 @@ function EditorBlock({
                 html={inlinesToHtml(item)}
                 blockIndex={index}
                 itemIndex={itemIndex}
+                onFocus={onFocusBlock}
                 onBlur={onBlur}
                 onEnter={() => onAddListItem(itemIndex)}
               />
@@ -336,7 +410,7 @@ function EditorBlock({
                   type="button"
                   className="rich-doc-list-remove"
                   aria-label="Supprimer l’élément"
-                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseDown={keepEditorFocus}
                   onClick={() => onRemoveListItem(itemIndex)}
                 >
                   ×
@@ -369,6 +443,7 @@ function EditorBlock({
                 html={inlinesToHtml(item.inlines)}
                 blockIndex={index}
                 itemIndex={itemIndex}
+                onFocus={onFocusBlock}
                 onBlur={onBlur}
                 onEnter={() => onAddListItem(itemIndex)}
               />
@@ -377,7 +452,7 @@ function EditorBlock({
                   type="button"
                   className="rich-doc-list-remove"
                   aria-label="Supprimer l’élément"
-                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseDown={keepEditorFocus}
                   onClick={() => onRemoveListItem(itemIndex)}
                 >
                   ×
@@ -398,7 +473,12 @@ function EditorBlock({
     return (
       <aside className={`rich-doc-callout is-${block.kind}`}>
         <strong>{QUICK_BLOCK_LABELS[block.kind]}</strong>
-        <InlineEditor html={inlinesToHtml(block.inlines)} blockIndex={index} onBlur={onBlur} />
+        <InlineEditor
+          html={inlinesToHtml(block.inlines)}
+          blockIndex={index}
+          onFocus={onFocusBlock}
+          onBlur={onBlur}
+        />
       </aside>
     );
   }
@@ -407,6 +487,7 @@ function EditorBlock({
       html={inlinesToHtml(block.inlines)}
       blockIndex={index}
       heading={block.type === "heading"}
+      onFocus={onFocusBlock}
       onBlur={onBlur}
     />
   );
@@ -417,6 +498,7 @@ function InlineEditor({
   blockIndex,
   itemIndex,
   heading,
+  onFocus,
   onBlur,
   onEnter,
 }: {
@@ -424,6 +506,7 @@ function InlineEditor({
   blockIndex: number;
   itemIndex?: number;
   heading?: boolean;
+  onFocus: () => void;
   onBlur: () => void;
   onEnter?: () => void;
 }) {
@@ -439,6 +522,7 @@ function InlineEditor({
       data-block-index={blockIndex}
       data-item-index={itemIndex}
       dangerouslySetInnerHTML={{ __html: html }}
+      onFocus={onFocus}
       onBlur={onBlur}
       onKeyDown={(event) => {
         if (!onEnter || event.key !== "Enter" || event.shiftKey) return;

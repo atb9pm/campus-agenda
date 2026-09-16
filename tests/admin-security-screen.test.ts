@@ -62,8 +62,8 @@ async function enrollAdmin() {
   return { secret: start.manualKey, codes: confirm.recoveryCodes };
 }
 
-test("version 2.54.0 — écran Sécurité administrateur", () => {
-  assert.equal(APP_VERSION, "2.54.0");
+test("version 2.54.1 — écran Sécurité administrateur", () => {
+  assert.equal(APP_VERSION, "2.54.1");
 });
 
 test("A — écran principal : trois actions, pas de TOTP par défaut", async () => {
