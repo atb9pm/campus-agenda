@@ -14,10 +14,13 @@ export interface ClassNotesDocument {
 }
 
 export interface NotebookClipboard {
-  kind: "publication" | "note";
+  kind: "publication" | "note" | "line";
   sourceWeekNumber: number;
   publicationId?: number;
   noteId?: string;
   noteText?: string;
   mode: "cut" | "copy";
+  lineSource?: "publication" | "notes";
+  blockIndex?: number;
+  itemIndex?: number | null;
 }

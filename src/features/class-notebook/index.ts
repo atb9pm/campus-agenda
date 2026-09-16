@@ -105,6 +105,7 @@ export {
   applyStructureToLine,
   appendBlock,
   extractLine,
+  copyLineToDoc,
   inlinesPlainText,
   lineInlines,
   marksInRange,

@@ -121,8 +121,9 @@ test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async (
   assert.match(editor, /Texte normal/);
   assert.match(editor, /rich-doc-link-bar/);
   assert.doesNotMatch(editor, /showExtended/);
-  assert.match(panel, /class-notebook-line-handle/);
-  assert.match(panel, /moveLineToDoc/);
+  assert.match(panel, /selectAndCopyLine/);
+  assert.match(panel, /Supprimer/);
+  assert.doesNotMatch(panel, /class-notebook-line-handle/);
   // Plus aucune mise en forme via execCommand : le modèle est la seule source de vérité.
   assert.doesNotMatch(editor, /execCommand/);
   assert.doesNotMatch(editor, /styleWithCSS/);
