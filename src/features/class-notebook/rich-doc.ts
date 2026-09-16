@@ -863,6 +863,18 @@ export function moveLineToDoc(
   };
 }
 
+/** Copie une ligne vers la fin d’un autre document, sans la retirer de la source. */
+export function copyLineToDoc(
+  source: CampusRichDoc,
+  target: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+): CampusRichDoc | null {
+  const extracted = extractLine(source, blockIndex, itemIndex);
+  if (!extracted) return null;
+  return appendBlock(target, extracted.extracted);
+}
+
 export function addStructuredListItem(block: RichBlock, afterIndex?: number): RichBlock {
   if (block.type === "bulletList" || block.type === "orderedList") {
     const items = [...block.items];

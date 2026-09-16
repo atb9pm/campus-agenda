@@ -9,6 +9,7 @@ import {
   decodeRichDetail,
   emptyRichDoc,
   extractLine,
+  copyLineToDoc,
   inlinesPlainText,
   insertQuickBlock,
   marksInRange,
@@ -271,23 +272,29 @@ test("vue compacte — résumé lisible, sans cases décalées ni cadres", async
   assert.match(view, /rich-doc-summary/);
   assert.match(view, /richDocLines/);
   assert.match(view, /COMPACT_LINE_LIMIT/);
-  assert.match(view, /renderLineLeading/);
+  assert.match(view, /data-carnet-line/);
+  assert.match(view, /is-interactive/);
   assert.doesNotMatch(view, /is-compact/);
+  assert.doesNotMatch(view, /renderLineLeading/);
 
   const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
   assert.match(css, /\.rich-doc-summary-line/);
   assert.match(css, /\.rich-doc-line-marker/);
-  assert.match(css, /\.class-notebook-line-handle/);
+  assert.match(css, /\.is-selected/);
+  assert.doesNotMatch(css, /class-notebook-line-handle/);
   assert.doesNotMatch(css, /rich-doc-view\.is-compact/);
 
   const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
   assert.match(panel, /class-notebook-drag-handle/);
-  assert.match(panel, /class-notebook-line-handle/);
-  assert.match(panel, /data-line-handle/);
+  assert.doesNotMatch(panel, /class-notebook-line-handle/);
+  assert.doesNotMatch(panel, /data-line-handle/);
+  assert.match(panel, /selectAndCopyLine/);
+  assert.match(panel, /copyLineToDoc/);
   assert.match(panel, /onDragStart/);
   assert.match(panel, /moveLineToDoc/);
   assert.match(panel, /encodeCarnetMove/);
-  // Le glisser HTML5 ne suffit pas (tactile, drags synthétiques) : menu explicite en repli.
+  assert.match(panel, /Supprimer/);
+  // Le glisser HTML5 ne suffit pas (tactile) : clic sur la ligne = copie, toucher une autre semaine = coller.
   assert.match(panel, /class-notebook-move-menu/);
   assert.match(panel, /Déplacer vers/);
   assert.match(panel, /setData\("text\/plain"/);
@@ -306,6 +313,9 @@ test("version 2.57.0 — curseur, menus notes, déplacement d’une ligne", asyn
   assert.match(editor, /Blocs de la semaine/);
   assert.match(editor, /label="Titre"/);
   assert.match(editor, /Insérer un lien/);
+  const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
+  assert.match(panel, /selectAndCopyLine/);
+  assert.match(panel, /Supprimer/);
 });
 
 test("extraire une puce ne déplace pas le reste de la liste", () => {
@@ -369,4 +379,20 @@ test("déplacer une ligne vers un autre document — fusion des puces, dernière
   assert.ok(emptied);
   assert.equal(emptied!.source.blocks.length, 0);
   assert.equal(emptied!.target.blocks[0]?.type, "paragraph");
+});
+
+test("copier une ligne laisse la source intacte", () => {
+  const source = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [
+      { type: "paragraph", inlines: [{ text: "à copier" }] },
+      { type: "paragraph", inlines: [{ text: "reste" }] },
+    ],
+  });
+  const copied = copyLineToDoc(source, emptyRichDoc(), 0, null);
+  assert.ok(copied);
+  assert.equal(copied!.blocks[0]?.type, "paragraph");
+  assert.equal(inlinesPlainText(richDocLines(copied!)[0]?.inlines ?? []), "à copier");
+  assert.equal(source.blocks.length, 2);
+  assert.equal(inlinesPlainText(richDocLines(source)[0]?.inlines ?? []), "à copier");
 });

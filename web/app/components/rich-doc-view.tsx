@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { DragEvent, ReactNode } from "react";
 
 import {
   QUICK_BLOCK_LABELS,
@@ -68,16 +68,30 @@ function SummaryLineBody({ line }: { line: RichDocLine }) {
   );
 }
 
+export function lineViewKey(line: Pick<RichDocLine, "blockIndex" | "itemIndex">): string {
+  return `${line.blockIndex}-${line.itemIndex ?? "x"}`;
+}
+
 export function RichDocView({
   doc,
   compact = false,
   emptyLabel = "Aucun contenu",
-  renderLineLeading,
+  interactive = false,
+  selectedLineKey,
+  lineDraggable = false,
+  onLineClick,
+  onLineDragStart,
+  onLineDragEnd,
 }: {
   doc: CampusRichDoc;
   compact?: boolean;
   emptyLabel?: string;
-  renderLineLeading?: (line: RichDocLine) => ReactNode;
+  interactive?: boolean;
+  selectedLineKey?: string;
+  lineDraggable?: boolean;
+  onLineClick?: (line: RichDocLine) => void;
+  onLineDragStart?: (line: RichDocLine, event: DragEvent<HTMLDivElement>) => void;
+  onLineDragEnd?: () => void;
 }) {
   if (isEmptyRichDoc(doc)) {
     return <p className="rich-doc-empty">{emptyLabel}</p>;
@@ -85,20 +99,53 @@ export function RichDocView({
 
   if (compact) {
     const lines = richDocLines(doc).filter((line) => line.inlines.length > 0);
-    const showAll = Boolean(renderLineLeading);
-    const shown = showAll ? lines : lines.slice(0, COMPACT_LINE_LIMIT);
+    const shown = interactive ? lines : lines.slice(0, COMPACT_LINE_LIMIT);
     const hidden = lines.length - shown.length;
     return (
       <div className="rich-doc-summary">
-        {shown.map((line) => (
-          <div
-            key={`${line.blockIndex}-${line.itemIndex ?? "x"}`}
-            className={`rich-doc-summary-line is-${line.kind}`}
-          >
-            {renderLineLeading ? renderLineLeading(line) : null}
-            <SummaryLineBody line={line} />
-          </div>
-        ))}
+        {shown.map((line) => {
+          const key = lineViewKey(line);
+          const selected = selectedLineKey === key;
+          return (
+            <div
+              key={key}
+              className={`rich-doc-summary-line is-${line.kind}${interactive ? " is-interactive" : ""}${selected ? " is-selected" : ""}`}
+              data-carnet-line={interactive ? "" : undefined}
+              draggable={lineDraggable}
+              role={interactive ? "button" : undefined}
+              tabIndex={interactive ? 0 : undefined}
+              aria-pressed={interactive ? selected : undefined}
+              onClick={
+                onLineClick
+                  ? (event) => {
+                      if ((event.target as HTMLElement).closest("a")) return;
+                      event.stopPropagation();
+                      onLineClick(line);
+                    }
+                  : undefined
+              }
+              onKeyDown={
+                onLineClick
+                  ? (event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      onLineClick(line);
+                    }
+                  : undefined
+              }
+              onDragStart={
+                onLineDragStart
+                  ? (event) => {
+                      onLineDragStart(line, event);
+                    }
+                  : undefined
+              }
+              onDragEnd={onLineDragEnd}
+            >
+              <SummaryLineBody line={line} />
+            </div>
+          );
+        })}
         {hidden > 0 ? (
           <p className="rich-doc-more">+ {hidden} ligne{hidden > 1 ? "s" : ""}</p>
         ) : null}
