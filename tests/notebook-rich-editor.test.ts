@@ -84,7 +84,7 @@ function sampleDoc(): CampusRichDoc {
 }
 
 test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async () => {
-  assert.equal(APP_VERSION, "2.55.0");
+  assert.equal(APP_VERSION, "2.56.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
   const [panel, notesApi, studentPage] = await Promise.all([
     readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8"),
@@ -109,19 +109,23 @@ test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async (
   assert.doesNotMatch(studentPage, /notebookCopyPreviousPublication/);
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.match(editor, /parseInlinesFromHtml/);
-  assert.match(editor, /hiliteColor/);
-  assert.match(editor, /serializeFromDom/);
-  assert.match(editor, /Ajouter un élément/);
-  assert.match(editor, /Supprimer l’élément/);
-  assert.match(editor, /onEnter/);
-  assert.match(editor, /addStructuredListItem/);
-  assert.match(editor, /applyStructureToDoc/);
+  assert.match(editor, /applyMarkToRange/);
+  assert.match(editor, /applyStructureToLine/);
+  assert.match(editor, /marksInRange/);
+  assert.match(editor, /setCharacterSelection/);
+  assert.match(editor, /characterOffset/);
+  assert.match(editor, /splitLine/);
+  assert.match(editor, /removeLine/);
   assert.match(editor, /data-color-swatch/);
-  assert.match(editor, /keepEditorFocus/);
-  assert.match(editor, /styleWithCSS/);
   assert.match(editor, /Liste numérotée/);
+  assert.match(editor, /Texte normal/);
+  assert.match(editor, /rich-doc-link-bar/);
+  // Plus aucune mise en forme via execCommand : le modèle est la seule source de vérité.
+  assert.doesNotMatch(editor, /execCommand/);
+  assert.doesNotMatch(editor, /styleWithCSS/);
+  assert.doesNotMatch(editor, /window\.prompt/);
+  assert.doesNotMatch(editor, /dangerouslySetInnerHTML/);
   assert.doesNotMatch(editor, /<select/);
-  assert.doesNotMatch(editor, /addBlock\(/);
 });
 
 test("création / modification / persistance d’une publication riche", () => {

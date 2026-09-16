@@ -388,6 +388,23 @@ export function ClassNotebookPanel({
               >
                 <div className="class-notebook-zone-heading">
                   <h3>Publication élèves</h3>
+                  {weekCarnetPublications[0] ? (
+                    <span
+                      className="class-notebook-drag-handle"
+                      role="button"
+                      tabIndex={0}
+                      draggable
+                      aria-label={`Déplacer la publication de ${formatWeekColumnLabel(week)}`}
+                      title="Glisser vers une autre semaine"
+                      onDragStart={(event) => {
+                        setDragPublicationId(weekCarnetPublications[0]!.id);
+                        event.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragEnd={() => setDragPublicationId(null)}
+                    >
+                      ⠿
+                    </span>
+                  ) : null}
                   {visibility === "draft" ? (
                     <span className="class-notebook-visibility-badge is-draft">Brouillon</span>
                   ) : null}

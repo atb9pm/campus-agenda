@@ -5,9 +5,12 @@ import {
   RICH_HIGHLIGHT_HEX,
   RICH_TEXT_COLOR_HEX,
   isEmptyRichDoc,
+  richDocLines,
   type CampusRichDoc,
   type RichInline,
 } from "@campus/features/class-notebook";
+
+const COMPACT_LINE_LIMIT = 6;
 
 function InlineView({ inline }: { inline: RichInline }) {
   const marks = inline.marks;
@@ -55,10 +58,45 @@ export function RichDocView({
     return <p className="rich-doc-empty">{emptyLabel}</p>;
   }
 
-  const blocks = compact ? doc.blocks.slice(0, 4) : doc.blocks;
+  if (compact) {
+    const lines = richDocLines(doc).filter((line) => line.inlines.length > 0);
+    const shown = lines.slice(0, COMPACT_LINE_LIMIT);
+    const hidden = lines.length - shown.length;
+    return (
+      <div className="rich-doc-summary">
+        {shown.map((line) => (
+          <p
+            key={`${line.blockIndex}-${line.itemIndex ?? "x"}`}
+            className={`rich-doc-summary-line is-${line.kind}`}
+          >
+            {line.kind === "callout" && line.calloutKind ? (
+              <span className={`rich-doc-summary-tag is-${line.calloutKind}`}>
+                {QUICK_BLOCK_LABELS[line.calloutKind]}
+              </span>
+            ) : null}
+            {line.kind === "bulletList" ? <span className="rich-doc-summary-marker">•</span> : null}
+            {line.kind === "orderedList" ? (
+              <span className="rich-doc-summary-marker">{line.ordinal}.</span>
+            ) : null}
+            {line.kind === "checklist" ? (
+              <span className="rich-doc-summary-marker">{line.checked ? "☑" : "☐"}</span>
+            ) : null}
+            <span className="rich-doc-summary-text">
+              <Inlines inlines={line.inlines} />
+            </span>
+          </p>
+        ))}
+        {hidden > 0 ? (
+          <p className="rich-doc-more">+ {hidden} ligne{hidden > 1 ? "s" : ""}</p>
+        ) : null}
+      </div>
+    );
+  }
+
+  const blocks = doc.blocks;
 
   return (
-    <div className={`rich-doc-view${compact ? " is-compact" : ""}`}>
+    <div className="rich-doc-view">
       {blocks.map((block, index) => {
         if (block.type === "heading") {
           return (
@@ -119,7 +157,6 @@ export function RichDocView({
           </aside>
         );
       })}
-      {compact && doc.blocks.length > 4 ? <p className="rich-doc-more">…</p> : null}
     </div>
   );
 }

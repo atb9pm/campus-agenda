@@ -130,15 +130,18 @@ export function fromPlainLines(lines: readonly string[]): CampusRichDoc {
   return sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks });
 }
 
-export function insertQuickBlock(doc: CampusRichDoc, kind: QuickBlockKind): CampusRichDoc {
+/** Insère un bloc de semaine juste après le bloc actif (ou à la fin si non précisé). */
+export function insertQuickBlock(
+  doc: CampusRichDoc,
+  kind: QuickBlockKind,
+  afterBlockIndex?: number,
+): CampusRichDoc {
   const next = sanitizeRichDoc(doc);
-  return sanitizeRichDoc({
-    format: CAMPUS_RICH_FORMAT,
-    blocks: [
-      ...next.blocks,
-      { type: "callout", kind, inlines: [{ text: "" }] },
-    ],
-  });
+  const blocks = [...next.blocks];
+  const callout: RichBlock = { type: "callout", kind, inlines: [] };
+  const at = afterBlockIndex == null ? blocks.length : Math.min(blocks.length, afterBlockIndex + 1);
+  blocks.splice(at, 0, callout);
+  return { format: CAMPUS_RICH_FORMAT, blocks: blocks.slice(0, MAX_BLOCKS) };
 }
 
 export function sanitizeHref(raw: string | null | undefined): string | undefined {
@@ -414,6 +417,366 @@ function decodeHtmlEntities(value: string): string {
     .replace(/&quot;/g, '"');
 }
 
+export function inlinesPlainText(inlines: readonly RichInline[]): string {
+  return inlines.map((entry) => entry.text).join("");
+}
+
+function marksEqual(left?: RichMarks, right?: RichMarks): boolean {
+  const a = left ?? {};
+  const b = right ?? {};
+  return (
+    Boolean(a.bold) === Boolean(b.bold) &&
+    Boolean(a.italic) === Boolean(b.italic) &&
+    Boolean(a.underline) === Boolean(b.underline) &&
+    Boolean(a.highlight) === Boolean(b.highlight) &&
+    (a.color ?? null) === (b.color ?? null) &&
+    (a.href ?? null) === (b.href ?? null)
+  );
+}
+
+function cleanMarks(marks: RichMarks | undefined): RichMarks | undefined {
+  if (!marks) return undefined;
+  const next: RichMarks = {};
+  if (marks.bold) next.bold = true;
+  if (marks.italic) next.italic = true;
+  if (marks.underline) next.underline = true;
+  if (marks.highlight) next.highlight = true;
+  if (marks.color) next.color = marks.color;
+  if (marks.href) next.href = marks.href;
+  return Object.keys(next).length ? next : undefined;
+}
+
+/** Fusionne les segments voisins de même mise en forme et supprime les vides. */
+export function normalizeInlines(inlines: readonly RichInline[]): RichInline[] {
+  const result: RichInline[] = [];
+  for (const entry of inlines) {
+    if (!entry.text) continue;
+    const marks = cleanMarks(entry.marks);
+    const previous = result[result.length - 1];
+    if (previous && marksEqual(previous.marks, marks)) {
+      result[result.length - 1] = marks
+        ? { text: previous.text + entry.text, marks }
+        : { text: previous.text + entry.text };
+      continue;
+    }
+    result.push(marks ? { text: entry.text, marks } : { text: entry.text });
+  }
+  return result;
+}
+
+export type RichMarkName = "bold" | "italic" | "underline" | "highlight" | "color" | "href";
+
+function withMark(
+  marks: RichMarks | undefined,
+  mark: RichMarkName,
+  value: boolean | RichTextColorId | string | undefined,
+): RichMarks | undefined {
+  const next: RichMarks = { ...(marks ?? {}) };
+  if (value === undefined || value === false) {
+    delete next[mark];
+  } else if (mark === "color") {
+    next.color = value as RichTextColorId;
+  } else if (mark === "href") {
+    next.href = value as string;
+  } else {
+    next[mark] = true;
+  }
+  return cleanMarks(next);
+}
+
+/**
+ * Applique (ou retire) une mise en forme sur l'intervalle de caractères [start, end).
+ * Aucun HTML n'est manipulé : le document reste la source de vérité.
+ */
+export function applyMarkToRange(
+  inlines: readonly RichInline[],
+  start: number,
+  end: number,
+  mark: RichMarkName,
+  value: boolean | RichTextColorId | string | undefined,
+): RichInline[] {
+  const from = Math.max(0, Math.min(start, end));
+  const to = Math.max(start, end);
+  if (to <= from) return normalizeInlines(inlines);
+
+  const result: RichInline[] = [];
+  let offset = 0;
+  for (const entry of inlines) {
+    const entryStart = offset;
+    const entryEnd = offset + entry.text.length;
+    offset = entryEnd;
+    if (entryEnd <= from || entryStart >= to) {
+      result.push(entry);
+      continue;
+    }
+    const localFrom = Math.max(0, from - entryStart);
+    const localTo = Math.min(entry.text.length, to - entryStart);
+    if (localFrom > 0) {
+      result.push({ text: entry.text.slice(0, localFrom), ...(entry.marks ? { marks: entry.marks } : {}) });
+    }
+    const marked = withMark(entry.marks, mark, value);
+    result.push({ text: entry.text.slice(localFrom, localTo), ...(marked ? { marks: marked } : {}) });
+    if (localTo < entry.text.length) {
+      result.push({ text: entry.text.slice(localTo), ...(entry.marks ? { marks: entry.marks } : {}) });
+    }
+  }
+  return normalizeInlines(result);
+}
+
+/** Mise en forme commune à tout l'intervalle — sert à l'état actif de la barre d'outils. */
+export function marksInRange(
+  inlines: readonly RichInline[],
+  start: number,
+  end: number,
+): RichMarks {
+  const from = Math.max(0, Math.min(start, end));
+  const to = Math.max(start, end);
+  const covered: RichMarks[] = [];
+  let offset = 0;
+  for (const entry of inlines) {
+    const entryStart = offset;
+    const entryEnd = offset + entry.text.length;
+    offset = entryEnd;
+    if (entryEnd <= from || entryStart >= to) continue;
+    covered.push(entry.marks ?? {});
+  }
+  if (!covered.length) return {};
+  const first = covered[0]!;
+  const common: RichMarks = {};
+  if (covered.every((marks) => marks.bold)) common.bold = true;
+  if (covered.every((marks) => marks.italic)) common.italic = true;
+  if (covered.every((marks) => marks.underline)) common.underline = true;
+  if (covered.every((marks) => marks.highlight)) common.highlight = true;
+  if (first.color && covered.every((marks) => marks.color === first.color)) common.color = first.color;
+  if (first.href && covered.every((marks) => marks.href === first.href)) common.href = first.href;
+  return common;
+}
+
+export function splitInlinesAt(
+  inlines: readonly RichInline[],
+  offset: number,
+): [RichInline[], RichInline[]] {
+  const before: RichInline[] = [];
+  const after: RichInline[] = [];
+  let seen = 0;
+  for (const entry of inlines) {
+    const entryEnd = seen + entry.text.length;
+    if (entryEnd <= offset) {
+      before.push(entry);
+    } else if (seen >= offset) {
+      after.push(entry);
+    } else {
+      const cut = offset - seen;
+      before.push({ text: entry.text.slice(0, cut), ...(entry.marks ? { marks: entry.marks } : {}) });
+      after.push({ text: entry.text.slice(cut), ...(entry.marks ? { marks: entry.marks } : {}) });
+    }
+    seen = entryEnd;
+  }
+  return [normalizeInlines(before), normalizeInlines(after)];
+}
+
+/** Une ligne éditable : un bloc simple, ou un élément de liste. */
+export interface RichDocLine {
+  blockIndex: number;
+  itemIndex: number | null;
+  kind: "heading" | "paragraph" | "callout" | "bulletList" | "orderedList" | "checklist";
+  inlines: RichInline[];
+  checked?: boolean;
+  calloutKind?: QuickBlockKind;
+  /** Numéro affiché pour une liste numérotée. */
+  ordinal?: number;
+}
+
+export function richDocLines(doc: CampusRichDoc): RichDocLine[] {
+  const blocks = doc.blocks.length ? doc.blocks : [{ type: "paragraph" as const, inlines: [] }];
+  const lines: RichDocLine[] = [];
+  blocks.forEach((block, blockIndex) => {
+    if (block.type === "bulletList" || block.type === "orderedList") {
+      const items = block.items.length ? block.items : [[]];
+      items.forEach((item, itemIndex) => {
+        lines.push({
+          blockIndex,
+          itemIndex,
+          kind: block.type,
+          inlines: item,
+          ordinal: itemIndex + 1,
+        });
+      });
+      return;
+    }
+    if (block.type === "checklist") {
+      const items = block.items.length ? block.items : [{ checked: false, inlines: [] }];
+      items.forEach((item, itemIndex) => {
+        lines.push({
+          blockIndex,
+          itemIndex,
+          kind: "checklist",
+          inlines: item.inlines,
+          checked: item.checked,
+        });
+      });
+      return;
+    }
+    lines.push({
+      blockIndex,
+      itemIndex: null,
+      kind: block.type,
+      inlines: block.inlines,
+      calloutKind: block.type === "callout" ? block.kind : undefined,
+    });
+  });
+  return lines;
+}
+
+export function lineInlines(doc: CampusRichDoc, blockIndex: number, itemIndex: number | null): RichInline[] {
+  return (
+    richDocLines(doc).find((line) => line.blockIndex === blockIndex && line.itemIndex === itemIndex)?.inlines ?? []
+  );
+}
+
+export function setLineInlines(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+  inlines: readonly RichInline[],
+): CampusRichDoc {
+  const blocks = doc.blocks.length ? [...doc.blocks] : [{ type: "paragraph" as const, inlines: [] }];
+  const block = blocks[blockIndex];
+  if (!block) return doc;
+  const next = normalizeInlines(inlines);
+  if (block.type === "bulletList" || block.type === "orderedList") {
+    const items = block.items.length ? [...block.items] : [[]];
+    items[itemIndex ?? 0] = next;
+    blocks[blockIndex] = { ...block, items };
+  } else if (block.type === "checklist") {
+    const items = block.items.length ? [...block.items] : [{ checked: false, inlines: [] }];
+    const current = items[itemIndex ?? 0] ?? { checked: false, inlines: [] };
+    items[itemIndex ?? 0] = { ...current, inlines: next };
+    blocks[blockIndex] = { ...block, items };
+  } else {
+    blocks[blockIndex] = { ...block, inlines: next };
+  }
+  return { format: CAMPUS_RICH_FORMAT, blocks };
+}
+
+export function setChecklistChecked(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number,
+  checked: boolean,
+): CampusRichDoc {
+  const blocks = [...doc.blocks];
+  const block = blocks[blockIndex];
+  if (!block || block.type !== "checklist") return doc;
+  blocks[blockIndex] = {
+    ...block,
+    items: block.items.map((item, index) => (index === itemIndex ? { ...item, checked } : item)),
+  };
+  return { format: CAMPUS_RICH_FORMAT, blocks };
+}
+
+export interface RichLinePosition {
+  blockIndex: number;
+  itemIndex: number | null;
+  offset: number;
+}
+
+/**
+ * Entrée : nouvelle ligne au même niveau.
+ * Dans une liste, un nouvel élément. Ailleurs, un nouveau paragraphe.
+ * Un titre ou un bloc de semaine passe au paragraphe suivant : le titre ne contamine plus la suite.
+ */
+export function splitLine(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+  offset: number,
+): { doc: CampusRichDoc; caret: RichLinePosition } {
+  const blocks = doc.blocks.length ? [...doc.blocks] : [{ type: "paragraph" as const, inlines: [] }];
+  const block = blocks[blockIndex];
+  if (!block) return { doc, caret: { blockIndex, itemIndex, offset } };
+
+  if (block.type === "bulletList" || block.type === "orderedList") {
+    const items = block.items.length ? [...block.items] : [[]];
+    const at = itemIndex ?? 0;
+    const [before, after] = splitInlinesAt(items[at] ?? [], offset);
+    items.splice(at, 1, before, after);
+    blocks[blockIndex] = { ...block, items: items.slice(0, MAX_LIST_ITEMS) };
+    return {
+      doc: { format: CAMPUS_RICH_FORMAT, blocks },
+      caret: { blockIndex, itemIndex: at + 1, offset: 0 },
+    };
+  }
+
+  if (block.type === "checklist") {
+    const items = block.items.length ? [...block.items] : [{ checked: false, inlines: [] }];
+    const at = itemIndex ?? 0;
+    const [before, after] = splitInlinesAt(items[at]?.inlines ?? [], offset);
+    items.splice(at, 1, { checked: items[at]?.checked ?? false, inlines: before }, { checked: false, inlines: after });
+    blocks[blockIndex] = { ...block, items: items.slice(0, MAX_LIST_ITEMS) };
+    return {
+      doc: { format: CAMPUS_RICH_FORMAT, blocks },
+      caret: { blockIndex, itemIndex: at + 1, offset: 0 },
+    };
+  }
+
+  const [before, after] = splitInlinesAt(block.inlines, offset);
+  const head: RichBlock = block.type === "callout"
+    ? { ...block, inlines: before }
+    : { type: block.type, inlines: before };
+  blocks.splice(blockIndex, 1, head, { type: "paragraph", inlines: after });
+  return {
+    doc: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: blocks.slice(0, MAX_BLOCKS) }),
+    caret: { blockIndex: blockIndex + 1, itemIndex: null, offset: 0 },
+  };
+}
+
+/**
+ * Retour arrière en début de ligne vide : supprime la ligne et place le curseur
+ * à la fin de la précédente. Ne laisse jamais le document sans ligne.
+ */
+export function removeLine(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+): { doc: CampusRichDoc; caret: RichLinePosition } | null {
+  const lines = richDocLines(doc);
+  if (lines.length <= 1) return null;
+  const position = lines.findIndex((line) => line.blockIndex === blockIndex && line.itemIndex === itemIndex);
+  if (position <= 0) return null;
+  const previous = lines[position - 1]!;
+
+  const blocks = [...doc.blocks];
+  const block = blocks[blockIndex];
+  if (!block) return null;
+
+  if (block.type === "bulletList" || block.type === "orderedList") {
+    const items = block.items.filter((_, index) => index !== (itemIndex ?? 0));
+    if (items.length) blocks[blockIndex] = { ...block, items };
+    else blocks.splice(blockIndex, 1);
+  } else if (block.type === "checklist") {
+    const items = block.items.filter((_, index) => index !== (itemIndex ?? 0));
+    if (items.length) blocks[blockIndex] = { ...block, items };
+    else blocks.splice(blockIndex, 1);
+  } else {
+    blocks.splice(blockIndex, 1);
+  }
+
+  const nextDoc = sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks });
+  const target = richDocLines(nextDoc).find(
+    (line) => line.blockIndex === Math.min(previous.blockIndex, nextDoc.blocks.length - 1),
+  );
+  const caretLine = target ?? richDocLines(nextDoc)[0]!;
+  return {
+    doc: nextDoc,
+    caret: {
+      blockIndex: caretLine.blockIndex,
+      itemIndex: caretLine.itemIndex,
+      offset: inlinesPlainText(caretLine.inlines).length,
+    },
+  };
+}
+
 export function addStructuredListItem(block: RichBlock, afterIndex?: number): RichBlock {
   if (block.type === "bulletList" || block.type === "orderedList") {
     const items = [...block.items];
@@ -480,6 +843,65 @@ export function convertBlock(block: RichBlock, type: RichStructureType): RichBlo
  * Applique un type de paragraphe au bloc actif.
  * Un second clic sur le même type (sauf paragraphe) revient au paragraphe.
  */
+function isListType(type: RichStructureType | RichBlock["type"]): boolean {
+  return type === "bulletList" || type === "orderedList" || type === "checklist";
+}
+
+/**
+ * Applique un type à la ligne active.
+ * Sur une liste, passer à un titre ou un paragraphe n'extrait que la ligne visée :
+ * le reste de la liste est conservé tel quel.
+ */
+export function applyStructureToLine(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+  type: RichStructureType,
+): { doc: CampusRichDoc; caret: RichLinePosition } {
+  const blocks = doc.blocks.length ? [...doc.blocks] : [{ type: "paragraph" as const, inlines: [] }];
+  const index = Math.min(Math.max(0, blockIndex), blocks.length - 1);
+  const block = blocks[index] ?? { type: "paragraph" as const, inlines: [] };
+
+  const sameType = block.type === type;
+  const target: RichStructureType = sameType && type !== "paragraph" ? "paragraph" : type;
+
+  if (isListType(block.type) && !isListType(target) && itemIndex != null) {
+    const items = itemsFromBlock(block);
+    const before = items.slice(0, itemIndex);
+    const after = items.slice(itemIndex + 1);
+    const extracted: RichBlock = target === "heading"
+      ? { type: "heading", inlines: items[itemIndex] ?? [] }
+      : { type: "paragraph", inlines: items[itemIndex] ?? [] };
+
+    const replacement: RichBlock[] = [];
+    if (before.length) replacement.push(listBlockOfType(block, before));
+    replacement.push(extracted);
+    if (after.length) replacement.push(listBlockOfType(block, after));
+
+    blocks.splice(index, 1, ...replacement);
+    return {
+      doc: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: blocks.slice(0, MAX_BLOCKS) }),
+      caret: { blockIndex: before.length ? index + 1 : index, itemIndex: null, offset: 0 },
+    };
+  }
+
+  blocks[index] = convertBlock(block, target);
+  const nextDoc = sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks });
+  const caretItem = isListType(target) ? Math.min(itemIndex ?? 0, MAX_LIST_ITEMS - 1) : null;
+  return {
+    doc: nextDoc,
+    caret: { blockIndex: index, itemIndex: isListType(target) ? (caretItem ?? 0) : null, offset: 0 },
+  };
+}
+
+function listBlockOfType(source: RichBlock, items: RichInline[][]): RichBlock {
+  if (source.type === "checklist") {
+    return { type: "checklist", items: items.map((inlines) => ({ checked: false, inlines })) };
+  }
+  if (source.type === "orderedList") return { type: "orderedList", items };
+  return { type: "bulletList", items };
+}
+
 export function applyStructureToDoc(
   doc: CampusRichDoc,
   blockIndex: number,
