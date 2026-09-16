@@ -21,12 +21,14 @@ import {
   isCarnetOwnedPublication,
   isPublicationLine,
   listWeekNotes,
+  moveLineToDoc,
   moveWeekNote,
   setWeekRichNote,
   weekCarnetVisibility,
   type CampusRichDoc,
   type ClassNotesDocument,
   type NotebookClipboard,
+  type RichDocLine,
   type WeekDisplayCount,
   weekNotesKey,
   visibleSchoolWeeks,
@@ -67,6 +69,51 @@ type LineSelection =
   | { kind: "note"; noteId: string; weekNumber: number };
 
 type EditorKind = "publication" | "notes";
+type LineSource = "publication" | "notes";
+
+type DragPayload =
+  | { kind: "week"; itemId: number; weekNumber: number }
+  | { kind: "line"; source: LineSource; weekNumber: number; blockIndex: number; itemIndex: number | null };
+
+type MoveMenu =
+  | { kind: "week"; weekNumber: number }
+  | { kind: "line"; source: LineSource; weekNumber: number; blockIndex: number; itemIndex: number | null };
+
+const CARNET_MOVE_PREFIX = "campus-carnet-move:";
+
+function encodeCarnetMove(payload: DragPayload): string {
+  return `${CARNET_MOVE_PREFIX}${JSON.stringify(payload)}`;
+}
+
+function decodeCarnetMove(raw: string, fallback: DragPayload | null): DragPayload | null {
+  if (raw.startsWith(CARNET_MOVE_PREFIX)) {
+    try {
+      return JSON.parse(raw.slice(CARNET_MOVE_PREFIX.length)) as DragPayload;
+    } catch {
+      return fallback;
+    }
+  }
+  const itemId = Number(raw);
+  if (Number.isFinite(itemId) && itemId > 0) {
+    return fallback?.kind === "week" ? fallback : { kind: "week", itemId, weekNumber: fallback?.weekNumber ?? 0 };
+  }
+  return fallback;
+}
+
+function lineMenuMatches(
+  menu: MoveMenu | null,
+  source: LineSource,
+  weekNumber: number,
+  line: RichDocLine,
+): boolean {
+  return (
+    menu?.kind === "line" &&
+    menu.source === source &&
+    menu.weekNumber === weekNumber &&
+    menu.blockIndex === line.blockIndex &&
+    menu.itemIndex === line.itemIndex
+  );
+}
 
 export function ClassNotebookPanel({
   classSetup,
@@ -95,12 +142,12 @@ export function ClassNotebookPanel({
   const [controlsOpen, setControlsOpen] = useState(false);
   const [clipboard, setClipboard] = useState<NotebookClipboard | null>(null);
   const [selection, setSelection] = useState<LineSelection | null>(null);
-  const [dragPublicationId, setDragPublicationId] = useState<number | null>(null);
+  const [dragPayload, setDragPayload] = useState<DragPayload | null>(null);
   const [editor, setEditor] = useState<{ kind: EditorKind; weekNumber: number } | null>(null);
   const [editorDoc, setEditorDoc] = useState<CampusRichDoc>(emptyRichDoc());
   const [studentPreviewOpen, setStudentPreviewOpen] = useState(false);
   const [unpublishWeek, setUnpublishWeek] = useState<number | null>(null);
-  const [moveMenuWeek, setMoveMenuWeek] = useState<number | null>(null);
+  const [moveMenu, setMoveMenu] = useState<MoveMenu | null>(null);
 
   const visibleWeeks = useMemo(
     () => visibleSchoolWeeks(schoolWeeks, centerWeekNumber, weekDisplayCount),
@@ -208,14 +255,14 @@ export function ClassNotebookPanel({
   }, [classSetup.id, handlePaste, notesDocument, selection]);
 
   useEffect(() => {
-    if (moveMenuWeek == null) return;
+    if (moveMenu == null) return;
     function close(event: Event) {
       if (event instanceof KeyboardEvent && event.key !== "Escape") return;
       if (event.type === "pointerdown") {
         const target = event.target as HTMLElement | null;
         if (target?.closest(".class-notebook-move")) return;
       }
-      setMoveMenuWeek(null);
+      setMoveMenu(null);
     }
     document.addEventListener("pointerdown", close);
     document.addEventListener("keydown", close);
@@ -223,7 +270,7 @@ export function ClassNotebookPanel({
       document.removeEventListener("pointerdown", close);
       document.removeEventListener("keydown", close);
     };
-  }, [moveMenuWeek]);
+  }, [moveMenu]);
 
   function openEditor(kind: EditorKind, weekNumber: number) {
     const weekItems = items.filter((item) => item.schoolWeekNumber === weekNumber);
@@ -254,21 +301,132 @@ export function ClassNotebookPanel({
     setStudentPreviewOpen(false);
   }
 
-  function handlePublicationDragStart(event: DragEvent<HTMLLIElement>, itemId: number) {
-    setDragPublicationId(itemId);
+  function handlePublicationDragStart(event: DragEvent<HTMLLIElement>, itemId: number, weekNumber: number) {
+    const payload: DragPayload = { kind: "week", itemId, weekNumber };
+    setDragPayload(payload);
     event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", String(itemId));
+    event.dataTransfer.setData("text/plain", encodeCarnetMove(payload));
+  }
+
+  async function moveCarnetLine(
+    source: LineSource,
+    fromWeek: number,
+    toWeek: number,
+    blockIndex: number,
+    itemIndex: number | null,
+  ) {
+    if (fromWeek === toWeek) return;
+    if (source === "publication") {
+      if (!canPublish) return;
+      const moved = moveLineToDoc(
+        composeWeekPublicationDoc(items.filter((item) => item.schoolWeekNumber === fromWeek)),
+        composeWeekPublicationDoc(items.filter((item) => item.schoolWeekNumber === toWeek)),
+        blockIndex,
+        itemIndex,
+      );
+      if (!moved) return;
+      await onSaveWeekPublication(toWeek, moved.target);
+      await onSaveWeekPublication(fromWeek, moved.source);
+      return;
+    }
+    const fromKey = weekNotesKey(classSetup.id, fromWeek);
+    const toKey = weekNotesKey(classSetup.id, toWeek);
+    const moved = moveLineToDoc(
+      composeWeekNotesDoc(listWeekNotes(notesDocument, fromKey)),
+      composeWeekNotesDoc(listWeekNotes(notesDocument, toKey)),
+      blockIndex,
+      itemIndex,
+    );
+    if (!moved) return;
+    onNotesChange(
+      setWeekRichNote(setWeekRichNote(notesDocument, fromKey, moved.source), toKey, moved.target),
+    );
   }
 
   async function handleDropOnWeek(event: DragEvent<HTMLElement>, weekNumber: number) {
     event.preventDefault();
-    const transferred = Number(event.dataTransfer.getData("text/plain"));
-    const itemId = Number.isFinite(transferred) && transferred > 0 ? transferred : dragPublicationId;
-    if (itemId === null) return;
-    const source = items.find((item) => item.id === itemId);
-    setDragPublicationId(null);
-    if (!source || source.schoolWeekNumber === weekNumber) return;
-    await onMovePublication(itemId, weekNumber);
+    const payload = decodeCarnetMove(event.dataTransfer.getData("text/plain"), dragPayload);
+    setDragPayload(null);
+    if (!payload || payload.weekNumber === weekNumber) return;
+    if (payload.kind === "week") {
+      const source = items.find((item) => item.id === payload.itemId);
+      if (!source || source.schoolWeekNumber === weekNumber) return;
+      await onMovePublication(payload.itemId, weekNumber);
+      return;
+    }
+    await moveCarnetLine(payload.source, payload.weekNumber, weekNumber, payload.blockIndex, payload.itemIndex);
+  }
+
+  function startLineDrag(
+    event: DragEvent<HTMLButtonElement>,
+    source: LineSource,
+    weekNumber: number,
+    line: RichDocLine,
+  ) {
+    const payload: DragPayload = {
+      kind: "line",
+      source,
+      weekNumber,
+      blockIndex: line.blockIndex,
+      itemIndex: line.itemIndex,
+    };
+    setDragPayload(payload);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", encodeCarnetMove(payload));
+  }
+
+  function renderLineHandle(source: LineSource, weekNumber: number, line: RichDocLine) {
+    const open = lineMenuMatches(moveMenu, source, weekNumber, line);
+    return (
+      <div className="class-notebook-move">
+        <button
+          type="button"
+          className="class-notebook-drag-handle class-notebook-line-handle"
+          draggable
+          data-line-handle=""
+          aria-label={`Déplacer cette ligne vers une autre semaine`}
+          aria-expanded={open}
+          title="Glisser, ou cliquer pour choisir la semaine"
+          onDragStart={(event) => startLineDrag(event, source, weekNumber, line)}
+          onDragEnd={() => setDragPayload(null)}
+          onClick={() =>
+            setMoveMenu((current) =>
+              lineMenuMatches(current, source, weekNumber, line)
+                ? null
+                : {
+                    kind: "line",
+                    source,
+                    weekNumber,
+                    blockIndex: line.blockIndex,
+                    itemIndex: line.itemIndex,
+                  },
+            )
+          }
+        >
+          ⠿
+        </button>
+        {open ? (
+          <menu className="class-notebook-move-menu">
+            <li className="class-notebook-move-menu-title">Déplacer vers</li>
+            {schoolWeeks
+              .filter((entry) => entry.number !== weekNumber)
+              .map((entry) => (
+                <li key={entry.number}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMoveMenu(null);
+                      void moveCarnetLine(source, weekNumber, entry.number, line.blockIndex, line.itemIndex);
+                    }}
+                  >
+                    {formatWeekColumnLabel(entry)}
+                  </button>
+                </li>
+              ))}
+          </menu>
+        ) : null}
+      </div>
+    );
   }
 
   const editorVisibility = editor
@@ -356,9 +514,7 @@ export function ClassNotebookPanel({
             <article
               key={week.number}
               className={`class-notebook-column${isActive ? " active" : ""}${
-                dragPublicationId !== null && !weekCarnetPublications.some((item) => item.id === dragPublicationId)
-                  ? " is-drop-target"
-                  : ""
+                dragPayload !== null && dragPayload.weekNumber !== week.number ? " is-drop-target" : ""
               }`}
               onDragOver={(event) => {
                 event.preventDefault();
@@ -381,7 +537,7 @@ export function ClassNotebookPanel({
                       <li
                         key={item.id}
                         draggable
-                        onDragStart={(event) => handlePublicationDragStart(event, item.id)}
+                        onDragStart={(event) => handlePublicationDragStart(event, item.id, week.number)}
                       >
                         <button
                           type="button"
@@ -425,23 +581,28 @@ export function ClassNotebookPanel({
                         className="class-notebook-drag-handle"
                         draggable
                         aria-label={`Déplacer la publication de ${formatWeekColumnLabel(week)}`}
-                        aria-expanded={moveMenuWeek === week.number}
+                        aria-expanded={moveMenu?.kind === "week" && moveMenu.weekNumber === week.number}
                         title="Glisser, ou cliquer pour choisir la semaine"
                         onDragStart={(event) => {
                           const itemId = weekCarnetPublications[0]!.id;
-                          setDragPublicationId(itemId);
+                          const payload: DragPayload = { kind: "week", itemId, weekNumber: week.number };
+                          setDragPayload(payload);
                           event.dataTransfer.effectAllowed = "move";
                           // Chrome annule un drag sans données : l'identifiant sert aussi de repli au drop.
-                          event.dataTransfer.setData("text/plain", String(itemId));
+                          event.dataTransfer.setData("text/plain", encodeCarnetMove(payload));
                         }}
-                        onDragEnd={() => setDragPublicationId(null)}
+                        onDragEnd={() => setDragPayload(null)}
                         onClick={() =>
-                          setMoveMenuWeek((current) => (current === week.number ? null : week.number))
+                          setMoveMenu((current) =>
+                            current?.kind === "week" && current.weekNumber === week.number
+                              ? null
+                              : { kind: "week", weekNumber: week.number },
+                          )
                         }
                       >
                         ⠿
                       </button>
-                      {moveMenuWeek === week.number ? (
+                      {moveMenu?.kind === "week" && moveMenu.weekNumber === week.number ? (
                         <menu className="class-notebook-move-menu">
                           <li className="class-notebook-move-menu-title">Déplacer vers</li>
                           {schoolWeeks
@@ -451,7 +612,7 @@ export function ClassNotebookPanel({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setMoveMenuWeek(null);
+                                    setMoveMenu(null);
                                     void onMovePublication(weekCarnetPublications[0]!.id, entry.number);
                                   }}
                                 >
@@ -477,6 +638,11 @@ export function ClassNotebookPanel({
                   doc={composeWeekPublicationDoc(weekCarnetPublications)}
                   compact
                   emptyLabel="Aucune publication pour cette semaine."
+                  renderLineLeading={
+                    canPublish
+                      ? (line) => renderLineHandle("publication", week.number, line)
+                      : undefined
+                  }
                 />
                 {weekStructuredPublications.map((item) => (
                   <p key={item.id} className="class-notebook-structured-line">
@@ -519,6 +685,7 @@ export function ClassNotebookPanel({
                   doc={composeWeekNotesDoc(weekNotes)}
                   compact
                   emptyLabel="Aucune note privée."
+                  renderLineLeading={(line) => renderLineHandle("notes", week.number, line)}
                 />
                 <div className="class-notebook-zone-actions">
                   <button

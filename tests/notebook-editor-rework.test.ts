@@ -8,9 +8,11 @@ import {
   encodeRichDetail,
   decodeRichDetail,
   emptyRichDoc,
+  extractLine,
   inlinesPlainText,
   insertQuickBlock,
   marksInRange,
+  moveLineToDoc,
   normalizeInlines,
   removeLine,
   richDocLines,
@@ -38,7 +40,7 @@ function lineText(doc: CampusRichDoc, blockIndex: number, itemIndex: number | nu
 
 test("version 2.56.0 — éditeur Carnet reconstruit sur le modèle, sans execCommand", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.56.0");
+  assert.equal(APP_VERSION, "2.57.0");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(editor, /execCommand/);
   assert.doesNotMatch(editor, /window\.prompt/);
@@ -269,19 +271,102 @@ test("vue compacte — résumé lisible, sans cases décalées ni cadres", async
   assert.match(view, /rich-doc-summary/);
   assert.match(view, /richDocLines/);
   assert.match(view, /COMPACT_LINE_LIMIT/);
+  assert.match(view, /renderLineLeading/);
   assert.doesNotMatch(view, /is-compact/);
 
   const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
   assert.match(css, /\.rich-doc-summary-line/);
   assert.match(css, /\.rich-doc-line-marker/);
+  assert.match(css, /\.class-notebook-line-handle/);
   assert.doesNotMatch(css, /rich-doc-view\.is-compact/);
 
   const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
   assert.match(panel, /class-notebook-drag-handle/);
+  assert.match(panel, /class-notebook-line-handle/);
+  assert.match(panel, /data-line-handle/);
   assert.match(panel, /onDragStart/);
+  assert.match(panel, /moveLineToDoc/);
+  assert.match(panel, /encodeCarnetMove/);
   // Le glisser HTML5 ne suffit pas (tactile, drags synthétiques) : menu explicite en repli.
   assert.match(panel, /class-notebook-move-menu/);
   assert.match(panel, /Déplacer vers/);
   assert.match(panel, /setData\("text\/plain"/);
   assert.match(panel, /dataTransfer\.getData\("text\/plain"\)/);
+});
+
+test("version 2.57.0 — curseur, menus notes, déplacement d’une ligne", async () => {
+  const { APP_VERSION } = await import("../src/lib/app-version.ts");
+  assert.equal(APP_VERSION, "2.57.0");
+  const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
+  assert.match(editor, /Le DOM n'est réécrit que sur syncToken/);
+  assert.match(editor, /snapCaretToClick/);
+  assert.match(editor, /rewriteDom: false/);
+  assert.doesNotMatch(editor, /showExtended/);
+  assert.doesNotMatch(editor, /\[lines, syncToken\]/);
+  assert.match(editor, /Blocs de la semaine/);
+  assert.match(editor, /label="Titre"/);
+  assert.match(editor, /Insérer un lien/);
+});
+
+test("extraire une puce ne déplace pas le reste de la liste", () => {
+  const doc = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [
+      { type: "bulletList", items: [[{ text: "alpha" }], [{ text: "beta" }], [{ text: "gamma" }]] },
+    ],
+  });
+  const extracted = extractLine(doc, 0, 1);
+  assert.ok(extracted);
+  assert.equal(extracted!.extracted.type, "bulletList");
+  if (extracted!.extracted.type === "bulletList") {
+    assert.equal(extracted!.extracted.items.length, 1);
+    assert.equal(inlinesPlainText(extracted!.extracted.items[0] ?? []), "beta");
+  }
+  const remaining = richDocLines(extracted!.remaining);
+  assert.equal(remaining.length, 2);
+  assert.equal(inlinesPlainText(remaining[0]!.inlines), "alpha");
+  assert.equal(inlinesPlainText(remaining[1]!.inlines), "gamma");
+});
+
+test("déplacer une ligne vers un autre document — fusion des puces, dernière ligne vide", () => {
+  const source = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [
+      { type: "callout", kind: "todo", inlines: [{ text: "Devoir injection" }] },
+      { type: "paragraph", inlines: [{ text: "Rester ici" }] },
+    ],
+  });
+  const target = emptyRichDoc();
+  const movedCallout = moveLineToDoc(source, target, 0, null);
+  assert.ok(movedCallout);
+  assert.equal(movedCallout!.source.blocks[0]?.type, "paragraph");
+  assert.equal(movedCallout!.target.blocks[0]?.type, "callout");
+
+  const listSource = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [{ type: "bulletList", items: [[{ text: "nouvelle puce" }], [{ text: "reste" }]] }],
+  });
+  const listTarget = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [{ type: "bulletList", items: [[{ text: "déjà là" }]] }],
+  });
+  const merged = moveLineToDoc(listSource, listTarget, 0, 0);
+  assert.ok(merged);
+  const bullets = merged!.target.blocks[0];
+  assert.ok(bullets && bullets.type === "bulletList");
+  if (bullets && bullets.type === "bulletList") {
+    assert.equal(bullets.items.length, 2);
+    assert.equal(inlinesPlainText(bullets.items[0] ?? []), "déjà là");
+    assert.equal(inlinesPlainText(bullets.items[1] ?? []), "nouvelle puce");
+  }
+  assert.equal(inlinesPlainText(richDocLines(merged!.source)[0]?.inlines ?? []), "reste");
+
+  const lastLine = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [{ type: "paragraph", inlines: [{ text: "unique" }] }],
+  });
+  const emptied = moveLineToDoc(lastLine, emptyRichDoc(), 0, null);
+  assert.ok(emptied);
+  assert.equal(emptied!.source.blocks.length, 0);
+  assert.equal(emptied!.target.blocks[0]?.type, "paragraph");
 });

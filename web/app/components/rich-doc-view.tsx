@@ -7,6 +7,7 @@ import {
   isEmptyRichDoc,
   richDocLines,
   type CampusRichDoc,
+  type RichDocLine,
   type RichInline,
 } from "@campus/features/class-notebook";
 
@@ -45,14 +46,38 @@ function Inlines({ inlines }: { inlines: RichInline[] }) {
   );
 }
 
+function SummaryLineBody({ line }: { line: RichDocLine }) {
+  return (
+    <>
+      {line.kind === "callout" && line.calloutKind ? (
+        <span className={`rich-doc-summary-tag is-${line.calloutKind}`}>
+          {QUICK_BLOCK_LABELS[line.calloutKind]}
+        </span>
+      ) : null}
+      {line.kind === "bulletList" ? <span className="rich-doc-summary-marker">•</span> : null}
+      {line.kind === "orderedList" ? (
+        <span className="rich-doc-summary-marker">{line.ordinal}.</span>
+      ) : null}
+      {line.kind === "checklist" ? (
+        <span className="rich-doc-summary-marker">{line.checked ? "☑" : "☐"}</span>
+      ) : null}
+      <span className="rich-doc-summary-text">
+        <Inlines inlines={line.inlines} />
+      </span>
+    </>
+  );
+}
+
 export function RichDocView({
   doc,
   compact = false,
   emptyLabel = "Aucun contenu",
+  renderLineLeading,
 }: {
   doc: CampusRichDoc;
   compact?: boolean;
   emptyLabel?: string;
+  renderLineLeading?: (line: RichDocLine) => ReactNode;
 }) {
   if (isEmptyRichDoc(doc)) {
     return <p className="rich-doc-empty">{emptyLabel}</p>;
@@ -60,31 +85,19 @@ export function RichDocView({
 
   if (compact) {
     const lines = richDocLines(doc).filter((line) => line.inlines.length > 0);
-    const shown = lines.slice(0, COMPACT_LINE_LIMIT);
+    const showAll = Boolean(renderLineLeading);
+    const shown = showAll ? lines : lines.slice(0, COMPACT_LINE_LIMIT);
     const hidden = lines.length - shown.length;
     return (
       <div className="rich-doc-summary">
         {shown.map((line) => (
-          <p
+          <div
             key={`${line.blockIndex}-${line.itemIndex ?? "x"}`}
             className={`rich-doc-summary-line is-${line.kind}`}
           >
-            {line.kind === "callout" && line.calloutKind ? (
-              <span className={`rich-doc-summary-tag is-${line.calloutKind}`}>
-                {QUICK_BLOCK_LABELS[line.calloutKind]}
-              </span>
-            ) : null}
-            {line.kind === "bulletList" ? <span className="rich-doc-summary-marker">•</span> : null}
-            {line.kind === "orderedList" ? (
-              <span className="rich-doc-summary-marker">{line.ordinal}.</span>
-            ) : null}
-            {line.kind === "checklist" ? (
-              <span className="rich-doc-summary-marker">{line.checked ? "☑" : "☐"}</span>
-            ) : null}
-            <span className="rich-doc-summary-text">
-              <Inlines inlines={line.inlines} />
-            </span>
-          </p>
+            {renderLineLeading ? renderLineLeading(line) : null}
+            <SummaryLineBody line={line} />
+          </div>
         ))}
         {hidden > 0 ? (
           <p className="rich-doc-more">+ {hidden} ligne{hidden > 1 ? "s" : ""}</p>

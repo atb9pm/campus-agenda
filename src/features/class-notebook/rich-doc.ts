@@ -777,6 +777,92 @@ export function removeLine(
   };
 }
 
+function cloneBlock(block: RichBlock): RichBlock {
+  return JSON.parse(JSON.stringify(block)) as RichBlock;
+}
+
+/** Extraie une ligne (bloc entier, ou un seul élément de liste) sans toucher au reste. */
+export function extractLine(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+): { extracted: RichBlock; remaining: CampusRichDoc } | null {
+  const blocks = doc.blocks.length ? [...doc.blocks] : [];
+  const block = blocks[blockIndex];
+  if (!block) return null;
+
+  let extracted: RichBlock;
+  if (block.type === "bulletList" || block.type === "orderedList") {
+    const at = itemIndex ?? 0;
+    const item = block.items[at];
+    if (!item) return null;
+    extracted = { type: block.type, items: [item.map((inline) => ({ ...inline, marks: inline.marks ? { ...inline.marks } : undefined }))] };
+    const nextItems = block.items.filter((_, index) => index !== at);
+    if (nextItems.length) blocks[blockIndex] = { ...block, items: nextItems };
+    else blocks.splice(blockIndex, 1);
+  } else if (block.type === "checklist") {
+    const at = itemIndex ?? 0;
+    const item = block.items[at];
+    if (!item) return null;
+    extracted = {
+      type: "checklist",
+      items: [{ checked: item.checked, inlines: item.inlines.map((inline) => ({ ...inline, marks: inline.marks ? { ...inline.marks } : undefined })) }],
+    };
+    const nextItems = block.items.filter((_, index) => index !== at);
+    if (nextItems.length) blocks[blockIndex] = { ...block, items: nextItems };
+    else blocks.splice(blockIndex, 1);
+  } else {
+    extracted = cloneBlock(block);
+    blocks.splice(blockIndex, 1);
+  }
+
+  if (!blockHasText(extracted)) return null;
+  return {
+    extracted,
+    remaining: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks }),
+  };
+}
+
+function mergeListBlocks(left: RichBlock, right: RichBlock): RichBlock | null {
+  if (left.type === "checklist" && right.type === "checklist") {
+    return { type: "checklist", items: [...left.items, ...right.items].slice(0, MAX_LIST_ITEMS) };
+  }
+  if (
+    (left.type === "bulletList" || left.type === "orderedList") &&
+    left.type === right.type
+  ) {
+    return { type: left.type, items: [...left.items, ...right.items].slice(0, MAX_LIST_ITEMS) };
+  }
+  return null;
+}
+
+/** Ajoute un bloc en fin de document. Fusionne avec la dernière liste si le type est le même. */
+export function appendBlock(doc: CampusRichDoc, block: RichBlock): CampusRichDoc {
+  const incoming = cloneBlock(block);
+  if (!blockHasText(incoming)) return sanitizeRichDoc(doc);
+  const blocks = isEmptyRichDoc(doc) ? [] : [...sanitizeRichDoc(doc).blocks];
+  const last = blocks[blocks.length - 1];
+  const merged = last ? mergeListBlocks(last, incoming) : null;
+  if (merged) blocks[blocks.length - 1] = merged;
+  else blocks.push(incoming);
+  return sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: blocks.slice(0, MAX_BLOCKS) });
+}
+
+/** Déplace une ligne d’un document vers la fin d’un autre. */
+export function moveLineToDoc(
+  source: CampusRichDoc,
+  target: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+): { source: CampusRichDoc; target: CampusRichDoc } | null {
+  const extracted = extractLine(source, blockIndex, itemIndex);
+  if (!extracted) return null;
+  return {
+    source: extracted.remaining,
+    target: appendBlock(target, extracted.extracted),
+  };
+}
+
 export function addStructuredListItem(block: RichBlock, afterIndex?: number): RichBlock {
   if (block.type === "bulletList" || block.type === "orderedList") {
     const items = [...block.items];

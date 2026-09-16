@@ -84,7 +84,7 @@ function sampleDoc(): CampusRichDoc {
 }
 
 test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async () => {
-  assert.equal(APP_VERSION, "2.56.0");
+  assert.equal(APP_VERSION, "2.57.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
   const [panel, notesApi, studentPage] = await Promise.all([
     readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8"),
@@ -120,6 +120,9 @@ test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async (
   assert.match(editor, /Liste numérotée/);
   assert.match(editor, /Texte normal/);
   assert.match(editor, /rich-doc-link-bar/);
+  assert.doesNotMatch(editor, /showExtended/);
+  assert.match(panel, /class-notebook-line-handle/);
+  assert.match(panel, /moveLineToDoc/);
   // Plus aucune mise en forme via execCommand : le modèle est la seule source de vérité.
   assert.doesNotMatch(editor, /execCommand/);
   assert.doesNotMatch(editor, /styleWithCSS/);
