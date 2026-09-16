@@ -100,6 +100,7 @@ export function ClassNotebookPanel({
   const [editorDoc, setEditorDoc] = useState<CampusRichDoc>(emptyRichDoc());
   const [studentPreviewOpen, setStudentPreviewOpen] = useState(false);
   const [unpublishWeek, setUnpublishWeek] = useState<number | null>(null);
+  const [moveMenuWeek, setMoveMenuWeek] = useState<number | null>(null);
 
   const visibleWeeks = useMemo(
     () => visibleSchoolWeeks(schoolWeeks, centerWeekNumber, weekDisplayCount),
@@ -206,6 +207,24 @@ export function ClassNotebookPanel({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [classSetup.id, handlePaste, notesDocument, selection]);
 
+  useEffect(() => {
+    if (moveMenuWeek == null) return;
+    function close(event: Event) {
+      if (event instanceof KeyboardEvent && event.key !== "Escape") return;
+      if (event.type === "pointerdown") {
+        const target = event.target as HTMLElement | null;
+        if (target?.closest(".class-notebook-move")) return;
+      }
+      setMoveMenuWeek(null);
+    }
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [moveMenuWeek]);
+
   function openEditor(kind: EditorKind, weekNumber: number) {
     const weekItems = items.filter((item) => item.schoolWeekNumber === weekNumber);
     const weekKey = weekNotesKey(classSetup.id, weekNumber);
@@ -238,14 +257,18 @@ export function ClassNotebookPanel({
   function handlePublicationDragStart(event: DragEvent<HTMLLIElement>, itemId: number) {
     setDragPublicationId(itemId);
     event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", String(itemId));
   }
 
   async function handleDropOnWeek(event: DragEvent<HTMLElement>, weekNumber: number) {
     event.preventDefault();
-    if (dragPublicationId !== null) {
-      await onMovePublication(dragPublicationId, weekNumber);
-      setDragPublicationId(null);
-    }
+    const transferred = Number(event.dataTransfer.getData("text/plain"));
+    const itemId = Number.isFinite(transferred) && transferred > 0 ? transferred : dragPublicationId;
+    if (itemId === null) return;
+    const source = items.find((item) => item.id === itemId);
+    setDragPublicationId(null);
+    if (!source || source.schoolWeekNumber === weekNumber) return;
+    await onMovePublication(itemId, weekNumber);
   }
 
   const editorVisibility = editor
@@ -332,8 +355,15 @@ export function ClassNotebookPanel({
           return (
             <article
               key={week.number}
-              className={`class-notebook-column${isActive ? " active" : ""}`}
-              onDragOver={(event) => event.preventDefault()}
+              className={`class-notebook-column${isActive ? " active" : ""}${
+                dragPublicationId !== null && !weekCarnetPublications.some((item) => item.id === dragPublicationId)
+                  ? " is-drop-target"
+                  : ""
+              }`}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+              }}
               onDrop={(event) => void handleDropOnWeek(event, week.number)}
             >
               <header className="class-notebook-column-header">
@@ -388,22 +418,50 @@ export function ClassNotebookPanel({
               >
                 <div className="class-notebook-zone-heading">
                   <h3>Publication élèves</h3>
-                  {weekCarnetPublications[0] ? (
-                    <span
-                      className="class-notebook-drag-handle"
-                      role="button"
-                      tabIndex={0}
-                      draggable
-                      aria-label={`Déplacer la publication de ${formatWeekColumnLabel(week)}`}
-                      title="Glisser vers une autre semaine"
-                      onDragStart={(event) => {
-                        setDragPublicationId(weekCarnetPublications[0]!.id);
-                        event.dataTransfer.effectAllowed = "move";
-                      }}
-                      onDragEnd={() => setDragPublicationId(null)}
-                    >
-                      ⠿
-                    </span>
+                  {weekCarnetPublications[0] && canPublish ? (
+                    <div className="class-notebook-move">
+                      <button
+                        type="button"
+                        className="class-notebook-drag-handle"
+                        draggable
+                        aria-label={`Déplacer la publication de ${formatWeekColumnLabel(week)}`}
+                        aria-expanded={moveMenuWeek === week.number}
+                        title="Glisser, ou cliquer pour choisir la semaine"
+                        onDragStart={(event) => {
+                          const itemId = weekCarnetPublications[0]!.id;
+                          setDragPublicationId(itemId);
+                          event.dataTransfer.effectAllowed = "move";
+                          // Chrome annule un drag sans données : l'identifiant sert aussi de repli au drop.
+                          event.dataTransfer.setData("text/plain", String(itemId));
+                        }}
+                        onDragEnd={() => setDragPublicationId(null)}
+                        onClick={() =>
+                          setMoveMenuWeek((current) => (current === week.number ? null : week.number))
+                        }
+                      >
+                        ⠿
+                      </button>
+                      {moveMenuWeek === week.number ? (
+                        <menu className="class-notebook-move-menu">
+                          <li className="class-notebook-move-menu-title">Déplacer vers</li>
+                          {schoolWeeks
+                            .filter((entry) => entry.number !== week.number)
+                            .map((entry) => (
+                              <li key={entry.number}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMoveMenuWeek(null);
+                                    void onMovePublication(weekCarnetPublications[0]!.id, entry.number);
+                                  }}
+                                >
+                                  {formatWeekColumnLabel(entry)}
+                                </button>
+                              </li>
+                            ))}
+                        </menu>
+                      ) : null}
+                    </div>
                   ) : null}
                   {visibility === "draft" ? (
                     <span className="class-notebook-visibility-badge is-draft">Brouillon</span>

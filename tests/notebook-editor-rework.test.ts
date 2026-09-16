@@ -279,4 +279,9 @@ test("vue compacte — résumé lisible, sans cases décalées ni cadres", async
   const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
   assert.match(panel, /class-notebook-drag-handle/);
   assert.match(panel, /onDragStart/);
+  // Le glisser HTML5 ne suffit pas (tactile, drags synthétiques) : menu explicite en repli.
+  assert.match(panel, /class-notebook-move-menu/);
+  assert.match(panel, /Déplacer vers/);
+  assert.match(panel, /setData\("text\/plain"/);
+  assert.match(panel, /dataTransfer\.getData\("text\/plain"\)/);
 });

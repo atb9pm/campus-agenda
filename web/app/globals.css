@@ -1687,6 +1687,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .class-notebook-grid { display: grid; gap: 14px; margin: 0 38px 24px; align-items: start; }
 .class-notebook-column { display: grid; gap: 0; min-height: 420px; border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; }
 .class-notebook-column.active { border-color: #85a9e8; box-shadow: 0 0 0 1px #85a9e8; }
+.class-notebook-column.is-drop-target { border-color: #1d4ed8; border-style: dashed; background: #f7faff; }
 .class-notebook-column-header { padding: 12px 14px; border-bottom: 1px solid var(--line); background: #f8fbff; }
 .class-notebook-column-header button { display: grid; gap: 2px; width: 100%; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
 .class-notebook-column-header strong { color: var(--navy); font-size: 13px; }
@@ -1696,15 +1697,55 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .class-notebook-zone-publication { border-bottom: 1px dashed var(--line-strong); }
 .class-notebook-zone-heading { display: flex; align-items: center; gap: 8px; }
 .class-notebook-zone-heading h3 { flex: 1; }
+.class-notebook-move { position: relative; flex: none; }
 .class-notebook-drag-handle {
-  flex: none;
-  padding: 0 4px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
   color: #a7b3c6;
   font-size: 13px;
   line-height: 1;
   cursor: grab;
 }
-.class-notebook-drag-handle:hover { color: var(--blue); }
+.class-notebook-drag-handle:hover { background: #eef4fd; color: var(--blue); }
+.class-notebook-move-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  gap: 2px;
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+.class-notebook-move-menu-title {
+  padding: 2px 8px 4px;
+  color: #8793a9;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.class-notebook-move-menu button {
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--navy);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.class-notebook-move-menu button:hover { background: #f1f6fd; }
 .class-notebook-visibility-badge {
   display: inline-flex;
   align-items: center;
