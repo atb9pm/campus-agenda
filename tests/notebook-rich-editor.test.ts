@@ -93,7 +93,6 @@ test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async (
   ]);
   assert.match(panel, /Publication élèves/);
   assert.match(panel, /Notes prof/);
-  assert.match(panel, /Reprendre \{formatWeekColumnLabel/);
   assert.match(panel, /Publier aux élèves/);
   assert.match(panel, /Aperçu élève/);
   assert.match(panel, /isCarnetOwnedPublication/);
@@ -106,6 +105,8 @@ test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async (
   assert.match(studentPage, /isPlaceholderDetail/);
   assert.match(studentPage, /isCarnetOwnedPublication/);
   assert.match(studentPage, /planCarnetWeekPublicationSave/);
+  assert.doesNotMatch(panel, /onCopyPreviousPublication/);
+  assert.doesNotMatch(studentPage, /notebookCopyPreviousPublication/);
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.match(editor, /parseInlinesFromHtml/);
   assert.match(editor, /hiliteColor/);
@@ -211,7 +212,7 @@ test("notes prof privées — jamais dans une publication", () => {
   assert.equal(isClassNotesPayload(notes), true);
 });
 
-test("copie semaine précédente — indépendante, sans contrôle ni notes", () => {
+test("cloneRichDoc — copie indépendante, sans contrôle ni notes", () => {
   const sourceItems: PrototypeAgendaItem[] = [
     item({
       id: 10,

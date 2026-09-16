@@ -19,11 +19,9 @@ import {
   formatWeekColumnLabel,
   formatWeekColumnSubtitle,
   isCarnetOwnedPublication,
-  isEmptyRichDoc,
   isPublicationLine,
   listWeekNotes,
   moveWeekNote,
-  previousSchoolWeekNumber,
   setWeekRichNote,
   weekCarnetVisibility,
   type CampusRichDoc,
@@ -57,7 +55,6 @@ interface ClassNotebookPanelProps {
   onNotesChange: (document: ClassNotesDocument) => void;
   onCreatePublication: (schoolWeekNumber: number, text: string) => Promise<void>;
   onSaveWeekPublication: (schoolWeekNumber: number, doc: CampusRichDoc, options?: { studentVisible?: boolean }) => Promise<void>;
-  onCopyPreviousPublication: (schoolWeekNumber: number) => Promise<void>;
   onSetWeekPublicationVisibility: (schoolWeekNumber: number, studentVisible: boolean) => Promise<void>;
   onMovePublication: (itemId: number, schoolWeekNumber: number) => Promise<void>;
   onSaveControl: (input: { schoolWeekNumber: number; day: number; title: string }) => Promise<void>;
@@ -88,7 +85,6 @@ export function ClassNotebookPanel({
   onNotesChange,
   onCreatePublication,
   onSaveWeekPublication,
-  onCopyPreviousPublication,
   onSetWeekPublicationVisibility,
   onMovePublication,
   onSaveControl,
@@ -103,7 +99,6 @@ export function ClassNotebookPanel({
   const [editor, setEditor] = useState<{ kind: EditorKind; weekNumber: number } | null>(null);
   const [editorDoc, setEditorDoc] = useState<CampusRichDoc>(emptyRichDoc());
   const [studentPreviewOpen, setStudentPreviewOpen] = useState(false);
-  const [copyConfirmWeek, setCopyConfirmWeek] = useState<number | null>(null);
   const [unpublishWeek, setUnpublishWeek] = useState<number | null>(null);
 
   const visibleWeeks = useMemo(
@@ -256,9 +251,6 @@ export function ClassNotebookPanel({
   const editorVisibility = editor
     ? weekCarnetVisibility(items.filter((item) => item.schoolWeekNumber === editor.weekNumber))
     : "empty";
-  const copySourceWeek =
-    copyConfirmWeek != null ? schoolWeeks.find((week) => week.number === previousSchoolWeekNumber(schoolWeeks, copyConfirmWeek)) : undefined;
-  const copyTargetWeek = copyConfirmWeek != null ? schoolWeeks.find((week) => week.number === copyConfirmWeek) : undefined;
   const unpublishTargetWeek = unpublishWeek != null ? schoolWeeks.find((week) => week.number === unpublishWeek) : undefined;
 
   return (
@@ -336,16 +328,6 @@ export function ClassNotebookPanel({
           );
           const isActive = week.number === centerWeekNumber;
           const visibility = weekCarnetVisibility(weekCarnetPublications);
-          const previousNumber = previousSchoolWeekNumber(schoolWeeks, week.number);
-          const previousWeek = previousNumber != null
-            ? schoolWeeks.find((entry) => entry.number === previousNumber)
-            : undefined;
-          const previousDoc = previousNumber != null
-            ? composeWeekPublicationDoc(
-                items.filter((item) => item.schoolWeekNumber === previousNumber && isCarnetOwnedPublication(item)),
-              )
-            : emptyRichDoc();
-          const canCopyPrevious = Boolean(canPublish && previousWeek && !isEmptyRichDoc(previousDoc));
 
           return (
             <article
@@ -453,15 +435,6 @@ export function ClassNotebookPanel({
                       Repasser en brouillon
                     </button>
                   ) : null}
-                  {canCopyPrevious && previousWeek ? (
-                    <button
-                      type="button"
-                      className="class-notebook-quiet-action"
-                      onClick={() => setCopyConfirmWeek(week.number)}
-                    >
-                      Reprendre {formatWeekColumnLabel(previousWeek)}
-                    </button>
-                  ) : null}
                 </div>
               </section>
 
@@ -566,24 +539,6 @@ export function ClassNotebookPanel({
         </div>
       ) : null}
 
-      <ConfirmDialog
-        open={copyConfirmWeek != null && Boolean(copySourceWeek) && Boolean(copyTargetWeek)}
-        title={`Reprendre ${copySourceWeek ? formatWeekColumnLabel(copySourceWeek) : "la semaine précédente"}`}
-        body={
-          copyTargetWeek
-            ? `Le texte élèves de ${copySourceWeek ? formatWeekColumnLabel(copySourceWeek) : "la semaine précédente"} remplace celui de ${formatWeekColumnLabel(copyTargetWeek)}. Il reste en brouillon : les élèves ne le voient pas tant que vous n’avez pas cliqué sur Publier aux élèves.`
-            : ""
-        }
-        confirmLabel="Remplacer"
-        cancelLabel="Annuler"
-        onCancel={() => setCopyConfirmWeek(null)}
-        onConfirm={() => {
-          if (copyConfirmWeek == null) return;
-          const weekNumber = copyConfirmWeek;
-          setCopyConfirmWeek(null);
-          void onCopyPreviousPublication(weekNumber);
-        }}
-      />
       <ConfirmDialog
         open={unpublishWeek != null}
         title="Repasser en brouillon"

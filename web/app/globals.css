@@ -1710,17 +1710,6 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .class-notebook-visibility-badge.is-published { background: #e7f6ec; color: #1f7a3a; }
 .class-notebook-visibility-hint { margin: 0; color: #8a6a12; font-size: 10px; line-height: 1.4; }
 .class-notebook-zone-publication.is-draft .rich-doc-view { opacity: .78; }
-.class-notebook-quiet-action {
-  justify-self: start;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #8793a9;
-  font-size: 10px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.class-notebook-quiet-action:hover { color: var(--blue); }
 .class-notebook-zone-notes { background: #fafafa; }
 .class-notebook-zone h3 { margin: 0; color: #8793a9; font-size: 8px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .class-notebook-zone ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }

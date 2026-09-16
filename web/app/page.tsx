@@ -109,13 +109,10 @@ import {
   resolveNotebookSubjectId,
   workspaceAllowsNotebookPublish,
   weekdayToCourseDayIndex,
-  cloneRichDoc,
-  composeWeekPublicationDoc,
   decodeRichDetail,
   isCarnetOwnedPublication,
   isPlaceholderDetail,
   planCarnetWeekPublicationSave,
-  previousSchoolWeekNumber,
   type CampusRichDoc,
   type ClassNotesDocument,
   type NotebookCourseContext,
@@ -1255,15 +1252,6 @@ export default function Home() {
     showNotice(studentVisible ? "Visible aux élèves." : "Repassé en brouillon.");
   }
 
-  async function notebookCopyPreviousPublication(schoolWeekNumber: number) {
-    const previous = previousSchoolWeekNumber(schoolWeeksMemo, schoolWeekNumber);
-    if (previous == null) return;
-    const source = composeWeekPublicationDoc(
-      notebookItems.filter((item) => item.schoolWeekNumber === previous && isCarnetOwnedPublication(item)),
-    );
-    await notebookSaveWeekPublication(schoolWeekNumber, cloneRichDoc(source), { studentVisible: false });
-  }
-
   async function notebookMovePublication(itemId: number, schoolWeekNumber: number) {
     const updated = await updateAgendaItemApi(itemId, { schoolWeekNumber });
     setItems((previous) => previous.map((item) => (item.id === itemId ? updated : item)));
@@ -1692,7 +1680,6 @@ export default function Home() {
             onNotesChange={setClassNotesDocument}
             onCreatePublication={notebookCreatePublication}
             onSaveWeekPublication={notebookSaveWeekPublication}
-            onCopyPreviousPublication={notebookCopyPreviousPublication}
             onSetWeekPublicationVisibility={notebookSetWeekPublicationVisibility}
             onMovePublication={notebookMovePublication}
             onSaveControl={notebookSaveControl}

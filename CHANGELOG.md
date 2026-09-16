@@ -14,9 +14,9 @@ Planifier une semaine n’affiche plus automatiquement le texte aux élèves. Ch
 - Colonne `agenda_items.student_visible` (migration `0030_agenda_student_visible.sql`). Les lignes existantes restent visibles (`DEFAULT 1`).
 - L’agenda élève (API + aperçu enseignant) masque les brouillons. Les contrôles restent visibles.
 
-### Changé
+### Retiré
 
-- **Reprendre Sem XX** remplace le bouton « Copier depuis la semaine précédente » : confirmation dans la page, copie en brouillon, masqué si la semaine précédente est vide.
+- Bouton **Copier depuis la semaine précédente** / **Reprendre Sem XX** : pas de plus-value, le texte se reprend dans l’éditeur si besoin.
 
 ### Conservé
 

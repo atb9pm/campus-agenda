@@ -46,8 +46,9 @@ test("2.55.0 — brouillon / publié Carnet, migration 0030", async () => {
   assert.match(panel, /Visible aux élèves/);
   assert.match(panel, /Brouillon/);
   assert.match(panel, /Enregistrer et publier/);
-  assert.match(panel, /Reprendre \{formatWeekColumnLabel/);
   assert.doesNotMatch(panel, /Copier depuis la semaine précédente/);
+  assert.doesNotMatch(panel, /onCopyPreviousPublication/);
+  assert.doesNotMatch(panel, /Reprendre \{formatWeekColumnLabel/);
   assert.match(agendaGet, /isVisibleToStudent/);
   assert.match(agendaGet, /session\?\.kind === "student"/);
   assert.match(library, /brouillon/);
