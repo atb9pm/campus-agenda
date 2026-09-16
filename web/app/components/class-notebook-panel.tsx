@@ -383,6 +383,7 @@ export function ClassNotebookPanel({
           type="button"
           className="class-notebook-drag-handle class-notebook-line-handle"
           draggable
+          data-line-handle=""
           aria-label={`Déplacer cette ligne vers une autre semaine`}
           aria-expanded={open}
           title="Glisser, ou cliquer pour choisir la semaine"

@@ -283,6 +283,7 @@ test("vue compacte — résumé lisible, sans cases décalées ni cadres", async
   const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
   assert.match(panel, /class-notebook-drag-handle/);
   assert.match(panel, /class-notebook-line-handle/);
+  assert.match(panel, /data-line-handle/);
   assert.match(panel, /onDragStart/);
   assert.match(panel, /moveLineToDoc/);
   assert.match(panel, /encodeCarnetMove/);

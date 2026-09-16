@@ -1710,10 +1710,19 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 }
 .class-notebook-drag-handle:hover { background: #eef4fd; color: var(--blue); }
 .class-notebook-line-handle {
-  padding: 1px 2px;
-  font-size: 11px;
-  color: #c5cedb;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 2px 5px;
+  border: 1px solid #d3deec;
+  border-radius: 6px;
+  background: #f4f7fb;
+  color: #4d6280;
+  font-size: 13px;
 }
+.class-notebook-line-handle:hover { background: #e4eefc; color: var(--blue); border-color: #9bb6e0; }
 .rich-doc-summary-line .class-notebook-move {
   flex: none;
   align-self: center;
@@ -1833,12 +1842,32 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .rich-doc-callout.is-bring { background: #f0fdf4; border-left-color: #15803d; }
 .rich-doc-callout.is-read { background: #faf5ff; border-left-color: #7e22ce; }
 .rich-doc-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 18px; background: rgba(15, 32, 67, .28); }
-.rich-doc-overlay-card { width: min(760px, 100%); max-height: min(90vh, 820px); overflow: auto; display: grid; gap: 14px; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: var(--shadow); }
+.rich-doc-overlay-card {
+  width: min(760px, 100%);
+  max-height: min(92vh, 900px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+.rich-doc-overlay-card header { flex: none; }
 .rich-doc-overlay-card h2 { margin: 4px 0 0; color: var(--navy); font-size: 18px; }
 .rich-doc-visibility-status { margin: 8px 0 0; color: #516582; font-size: 12px; line-height: 1.4; }
-.rich-doc-overlay-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.rich-doc-student-preview { padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #fbfcfe; }
-.rich-doc-editor { display: grid; gap: 10px; }
+.rich-doc-overlay-actions { flex: none; display: flex; flex-wrap: wrap; gap: 8px; }
+.rich-doc-student-preview { padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #fbfcfe; overflow: auto; }
+.rich-doc-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 .rich-doc-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -1929,7 +1958,8 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .rich-doc-quick-chip.is-bring { border-left-color: #15803d; }
 .rich-doc-quick-chip.is-read { border-left-color: #7e22ce; }
 .rich-doc-canvas {
-  min-height: 220px;
+  flex: 1 1 auto;
+  min-height: 180px;
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1959,6 +1989,11 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   color: var(--navy);
   font-size: 13px;
   line-height: 1.5;
+}
+.rich-doc-line-input:empty::before {
+  content: "Écrire ici…";
+  color: #a7b3c6;
+  pointer-events: none;
 }
 .rich-doc-line-input:focus { background: #f4f8ff; box-shadow: inset 0 0 0 1px #c9daf3; }
 .rich-doc-line.is-heading .rich-doc-line-input { font-size: 15px; font-weight: 800; }
