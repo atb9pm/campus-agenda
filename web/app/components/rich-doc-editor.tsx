@@ -98,7 +98,7 @@ function characterOffset(root: HTMLElement, container: Node, domOffset: number):
 }
 
 function setCharacterSelection(root: HTMLElement, start: number, end: number): void {
-  const nodes = textNodesOf(root);
+  const nodes = textNodesOf(root).filter((node) => node.data.length > 0);
   const selection = window.getSelection();
   if (!selection) return;
   const range = document.createRange();
@@ -113,13 +113,15 @@ function setCharacterSelection(root: HTMLElement, start: number, end: number): v
 
   let placedStart = false;
   let offset = 0;
-  for (const node of nodes) {
+  for (let index = 0; index < nodes.length; index += 1) {
+    const node = nodes[index]!;
     const nodeEnd = offset + node.data.length;
-    if (!placedStart && start <= nodeEnd) {
+    const isLast = index === nodes.length - 1;
+    if (!placedStart && (start < nodeEnd || (start === nodeEnd && isLast))) {
       range.setStart(node, Math.max(0, Math.min(node.data.length, start - offset)));
       placedStart = true;
     }
-    if (end <= nodeEnd) {
+    if (end < nodeEnd || (end === nodeEnd && isLast)) {
       range.setEnd(node, Math.max(0, Math.min(node.data.length, end - offset)));
       selection.removeAllRanges();
       selection.addRange(range);
@@ -133,6 +135,27 @@ function setCharacterSelection(root: HTMLElement, start: number, end: number): v
   range.setEnd(last, last.data.length);
   selection.removeAllRanges();
   selection.addRange(range);
+}
+
+/** Clic à droite du texte : placer le curseur après la dernière lettre, pas au début du premier nœud. */
+function snapCaretToClick(root: HTMLElement, clientX: number, clientY: number): void {
+  const nodes = textNodesOf(root).filter((node) => node.data.length > 0);
+  const length = nodes.reduce((sum, node) => sum + node.data.length, 0);
+  if (!length) {
+    setCharacterSelection(root, 0, 0);
+    return;
+  }
+  const last = nodes[nodes.length - 1]!;
+  const probe = document.createRange();
+  probe.setStart(last, Math.max(0, last.data.length - 1));
+  probe.setEnd(last, last.data.length);
+  const rect = probe.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) {
+    setCharacterSelection(root, length, length);
+    return;
+  }
+  const afterLastLetter = clientX >= rect.right - 1 && clientY >= rect.top - 4 && clientY <= rect.bottom + 4;
+  if (afterLastLetter) setCharacterSelection(root, length, length);
 }
 
 interface EditorSelection {
@@ -162,23 +185,21 @@ export function RichDocEditor({
   const localEdit = useRef(false);
 
   useEffect(() => {
-    docRef.current = doc;
-  }, [doc]);
-
-  useEffect(() => {
     if (localEdit.current) {
       localEdit.current = false;
       return;
     }
-    setDoc(sanitizeRichDoc(value));
+    const clean = sanitizeRichDoc(value);
+    docRef.current = clean;
+    setDoc(clean);
     setSyncToken((token) => token + 1);
   }, [value]);
 
   const lines = useMemo(() => richDocLines(doc), [doc]);
 
-  /** Le DOM n'est réécrit que sur action outil / structure, jamais pendant la frappe. */
+  /** Le DOM n'est réécrit que sur syncToken (outil, Entrée, chargement), jamais pendant la frappe. */
   useEffect(() => {
-    for (const line of lines) {
+    for (const line of richDocLines(docRef.current)) {
       const element = lineRefs.current.get(lineKey(line.blockIndex, line.itemIndex));
       if (!element) continue;
       const html = inlinesToHtml(line.inlines);
@@ -197,13 +218,14 @@ export function RichDocEditor({
       start: caret.offset,
       end: caret.offset,
     });
-  }, [lines, syncToken]);
+  }, [syncToken]);
 
   const commit = useCallback(
     (next: CampusRichDoc, caret?: RichLinePosition, options?: { rewriteDom?: boolean }) => {
       const clean = sanitizeRichDoc(next);
       const result = clean.blocks.length ? clean : emptyRichDoc();
       localEdit.current = true;
+      docRef.current = result;
       if (caret) pendingCaret.current = caret;
       setDoc(result);
       if (caret || options?.rewriteDom !== false) setSyncToken((token) => token + 1);
@@ -235,7 +257,9 @@ export function RichDocEditor({
   function handleLineInput(line: RichDocLine, element: HTMLElement) {
     const inlines = parseInlinesFromHtml(element.innerHTML);
     const next = setLineInlines(docRef.current, line.blockIndex, line.itemIndex, inlines);
+    const caret = readSelection(line, element);
     commit(next, undefined, { rewriteDom: false });
+    if (caret) setSelection(caret);
   }
 
   /** Sélection courante, ou la ligne entière si rien n'est sélectionné. */
@@ -262,10 +286,12 @@ export function RichDocEditor({
     const { selection: range, inlines } = target;
     const next = applyMarkToRange(inlines, range.start, range.end, mark, value);
     const nextDoc = setLineInlines(docRef.current, range.blockIndex, range.itemIndex, next);
+    const clean = sanitizeRichDoc(nextDoc);
     localEdit.current = true;
-    setDoc(sanitizeRichDoc(nextDoc));
+    docRef.current = clean;
+    setDoc(clean);
     setSyncToken((token) => token + 1);
-    onChange(sanitizeRichDoc(nextDoc));
+    onChange(clean);
     requestAnimationFrame(() => {
       const element = lineRefs.current.get(lineKey(range.blockIndex, range.itemIndex));
       if (!element) return;
@@ -334,8 +360,6 @@ export function RichDocEditor({
     }
   }
 
-  const showExtended = variant === "publication";
-
   return (
     <div className={`rich-doc-editor is-${variant}`}>
       <div className="rich-doc-toolbar" role="toolbar" aria-label="Mise en forme">
@@ -357,35 +381,31 @@ export function RichDocEditor({
           >
             <u>S</u>
           </ToolButton>
-          {showExtended ? (
-            <ToolButton
-              label="Surligner"
-              active={Boolean(activeMarks.highlight)}
-              onClick={() => applyMark("highlight", !activeMarks.highlight)}
-            >
-              <span className="rich-doc-highlight-mark">Abc</span>
-            </ToolButton>
-          ) : null}
+          <ToolButton
+            label="Surligner"
+            active={Boolean(activeMarks.highlight)}
+            onClick={() => applyMark("highlight", !activeMarks.highlight)}
+          >
+            <span className="rich-doc-highlight-mark">Abc</span>
+          </ToolButton>
         </div>
 
-        {showExtended ? (
-          <div className="rich-doc-tool-group" role="group" aria-label="Couleur du texte">
-            {RICH_TEXT_COLOR_IDS.map((color) => (
-              <button
-                key={color}
-                type="button"
-                className={`rich-doc-swatch${activeMarks.color === color ? " is-active" : ""}`}
-                title={RICH_TEXT_COLOR_LABELS[color]}
-                aria-label={RICH_TEXT_COLOR_LABELS[color]}
-                aria-pressed={activeMarks.color === color}
-                data-color-swatch={color}
-                style={{ background: RICH_TEXT_COLOR_HEX[color] }}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => applyMark("color", activeMarks.color === color ? undefined : color)}
-              />
-            ))}
-          </div>
-        ) : null}
+        <div className="rich-doc-tool-group" role="group" aria-label="Couleur du texte">
+          {RICH_TEXT_COLOR_IDS.map((color) => (
+            <button
+              key={color}
+              type="button"
+              className={`rich-doc-swatch${activeMarks.color === color ? " is-active" : ""}`}
+              title={RICH_TEXT_COLOR_LABELS[color]}
+              aria-label={RICH_TEXT_COLOR_LABELS[color]}
+              aria-pressed={activeMarks.color === color}
+              data-color-swatch={color}
+              style={{ background: RICH_TEXT_COLOR_HEX[color] }}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => applyMark("color", activeMarks.color === color ? undefined : color)}
+            />
+          ))}
+        </div>
 
         <div className="rich-doc-tool-group" role="group" aria-label="Ligne">
           <ToolButton
@@ -394,14 +414,12 @@ export function RichDocEditor({
             active={activeKind === "paragraph"}
             onClick={() => applyStructure("paragraph")}
           />
-          {showExtended ? (
-            <ToolButton
-              label="Titre"
-              text="Titre"
-              active={activeKind === "heading"}
-              onClick={() => applyStructure("heading")}
-            />
-          ) : null}
+          <ToolButton
+            label="Titre"
+            text="Titre"
+            active={activeKind === "heading"}
+            onClick={() => applyStructure("heading")}
+          />
           <ToolButton
             label="Liste à puces"
             text="Puces"
@@ -422,19 +440,17 @@ export function RichDocEditor({
           />
         </div>
 
-        {showExtended ? (
-          <div className="rich-doc-tool-group" role="group" aria-label="Lien">
-            <ToolButton
-              label="Insérer un lien"
-              text="Lien"
-              active={Boolean(activeMarks.href)}
-              onClick={() => setLinkDraft(activeMarks.href ?? "https://")}
-            />
-            {activeMarks.href ? (
-              <ToolButton label="Retirer le lien" text="Sans lien" onClick={() => applyMark("href", undefined)} />
-            ) : null}
-          </div>
-        ) : null}
+        <div className="rich-doc-tool-group" role="group" aria-label="Lien">
+          <ToolButton
+            label="Insérer un lien"
+            text="Lien"
+            active={Boolean(activeMarks.href)}
+            onClick={() => setLinkDraft(activeMarks.href ?? "https://")}
+          />
+          {activeMarks.href ? (
+            <ToolButton label="Retirer le lien" text="Sans lien" onClick={() => applyMark("href", undefined)} />
+          ) : null}
+        </div>
       </div>
 
       {linkDraft != null ? (
@@ -465,22 +481,20 @@ export function RichDocEditor({
         </div>
       ) : null}
 
-      {showExtended ? (
-        <div className="rich-doc-quick" role="group" aria-label="Blocs de la semaine">
-          <span>Blocs de la semaine</span>
-          {QUICK_BLOCK_KINDS.map((kind) => (
-            <button
-              key={kind}
-              type="button"
-              className={`rich-doc-quick-chip is-${kind}`}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => addQuickBlock(kind)}
-            >
-              {QUICK_BLOCK_LABELS[kind]}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      <div className="rich-doc-quick" role="group" aria-label="Blocs de la semaine">
+        <span>Blocs de la semaine</span>
+        {QUICK_BLOCK_KINDS.map((kind) => (
+          <button
+            key={kind}
+            type="button"
+            className={`rich-doc-quick-chip is-${kind}`}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => addQuickBlock(kind)}
+          >
+            {QUICK_BLOCK_LABELS[kind]}
+          </button>
+        ))}
+      </div>
 
       <div className="rich-doc-canvas">
         {lines.map((line) => {
@@ -532,7 +546,10 @@ export function RichDocEditor({
                   ref={(element) => registerLine(key, element)}
                   onInput={(event) => handleLineInput(line, event.currentTarget)}
                   onKeyUp={(event) => setSelection(readSelection(line, event.currentTarget))}
-                  onMouseUp={(event) => setSelection(readSelection(line, event.currentTarget))}
+                  onMouseUp={(event) => {
+                    snapCaretToClick(event.currentTarget, event.clientX, event.clientY);
+                    setSelection(readSelection(line, event.currentTarget));
+                  }}
                   onFocus={(event) => setSelection(readSelection(line, event.currentTarget))}
                   onKeyDown={(event) => handleKeyDown(line, event.currentTarget, event)}
                   onPaste={(event) => {

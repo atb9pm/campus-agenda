@@ -2,6 +2,21 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.57.0] — Curseur, menus notes, déplacement par ligne
+
+### Corrigé
+
+- **Curseur en fin de texte** : après une saisie, un clic ailleurs puis un retour à la fin de la ligne, on peut à nouveau taper après la dernière lettre. Le HTML n’est plus réécrit pendant la frappe (seulement après un outil, Entrée ou le chargement). Un clic à droite du texte place le curseur après la dernière lettre.
+
+### Changé
+
+- **Notes prof** : la barre d’outils est identique à **Publication élèves** (surlignage, couleurs, titre, lien, blocs de la semaine). Les notes restent privées : pas d’aperçu élève, pas de publier / brouillon.
+- **Vue semaine** : chaque ligne (publication et notes) a une poignée `⠿` pour la glisser vers une autre colonne, ou un menu **Déplacer vers** au clic. Une puce / une case se déplace seule. Le `⠿` du bloc **Publication élèves** déplace toujours la semaine entière.
+
+### Conservé
+
+Format `campus-rich-v1`, brouillon / publié, contrôles, menu **Déplacer vers** du bloc. Aucune migration SQL.
+
 ## [2.56.0] — Éditeur Carnet reconstruit et vue semaine lisible
 
 L’éditeur ne pilote plus la mise en forme par `execCommand` : la sélection est convertie en positions de caractères et le document JSON est la seule source de vérité. Le HTML n’est réécrit qu’après une action d’outil, jamais pendant la frappe.
@@ -22,7 +37,7 @@ L’éditeur ne pilote plus la mise en forme par `execCommand` : la sélection e
 - Sans sélection, un outil s’applique à toute la ligne.
 - **Blocs de la semaine** insérés après la ligne active, plus en fin de document.
 - Colonne semaine : aperçu remplacé par un résumé dense (titres, puces, `☐`, badges de bloc) — la vue d’ensemble redevient lisible.
-- Poignée de déplacement sur la publication d’une semaine (glisser vers une autre colonne).
+- Déplacement d’une publication : poignée `⠿` glissable **et** menu **Déplacer vers** au clic (fiable au doigt comme à la souris), colonne cible surlignée pendant le glisser.
 
 ### Conservé
 

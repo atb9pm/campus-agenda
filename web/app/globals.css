@@ -1685,7 +1685,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .class-notebook-display-count legend { width: 100%; margin-bottom: 4px; color: #8793a9; font-size: 8px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .class-notebook-display-count label { display: flex; align-items: center; gap: 6px; color: #516582; font-size: 11px; }
 .class-notebook-grid { display: grid; gap: 14px; margin: 0 38px 24px; align-items: start; }
-.class-notebook-column { display: grid; gap: 0; min-height: 420px; border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; }
+.class-notebook-column { display: grid; gap: 0; min-height: 420px; border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: visible; }
 .class-notebook-column.active { border-color: #85a9e8; box-shadow: 0 0 0 1px #85a9e8; }
 .class-notebook-column.is-drop-target { border-color: #1d4ed8; border-style: dashed; background: #f7faff; }
 .class-notebook-column-header { padding: 12px 14px; border-bottom: 1px solid var(--line); background: #f8fbff; }
@@ -1709,6 +1709,19 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   cursor: grab;
 }
 .class-notebook-drag-handle:hover { background: #eef4fd; color: var(--blue); }
+.class-notebook-line-handle {
+  padding: 1px 2px;
+  font-size: 11px;
+  color: #c5cedb;
+}
+.rich-doc-summary-line .class-notebook-move {
+  flex: none;
+  align-self: center;
+}
+.rich-doc-summary-line .class-notebook-move-menu {
+  left: 0;
+  right: auto;
+}
 .class-notebook-move-menu {
   position: absolute;
   top: calc(100% + 4px);
