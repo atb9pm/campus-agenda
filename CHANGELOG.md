@@ -2,6 +2,32 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.56.0] — Éditeur Carnet reconstruit et vue semaine lisible
+
+L’éditeur ne pilote plus la mise en forme par `execCommand` : la sélection est convertie en positions de caractères et le document JSON est la seule source de vérité. Le HTML n’est réécrit qu’après une action d’outil, jamais pendant la frappe.
+
+### Corrigé
+
+- **Souligné** : s’applique et se retire sur la sélection exacte, plusieurs fois de suite, sans décalage ni perte de texte.
+- **Couleur / surlignage** : remplaçables sur la même sélection ; la pastille active est visible dans la barre.
+- **Titre** : ne s’applique qu’à la ligne active. Entrée ouvre un paragraphe normal, le titre ne contamine plus la suite.
+- **Puces, liste numérotée, cases** : une ligne = un élément, marqueurs alignés (plus de puces natives décalées). Entrée ajoute un élément, Retour arrière sur une ligne vide le retire. Plus de bouton « Ajouter un élément ».
+- **Liste → titre** : n’extrait que la ligne visée, le reste de la liste est conservé.
+- **Lien** : champ dans la page (plus de fenêtre du navigateur), appliqué à la sélection, avec **Sans lien** pour le retirer.
+- Coller du texte n’injecte plus de HTML étranger.
+
+### Changé
+
+- Barre d’outils : groupes Texte / Couleur / Ligne / Lien, états actifs reflétant la sélection, bouton **Texte normal**.
+- Sans sélection, un outil s’applique à toute la ligne.
+- **Blocs de la semaine** insérés après la ligne active, plus en fin de document.
+- Colonne semaine : aperçu remplacé par un résumé dense (titres, puces, `☐`, badges de bloc) — la vue d’ensemble redevient lisible.
+- Poignée de déplacement sur la publication d’une semaine (glisser vers une autre colonne).
+
+### Conservé
+
+Format `campus-rich-v1`, documents existants, brouillon / publié, notes prof, contrôles. Aucune migration SQL.
+
 ## [2.55.0] — Carnet : brouillon / publié aux élèves
 
 Planifier une semaine n’affiche plus automatiquement le texte aux élèves. Chaque publication Carnet a un statut **Brouillon** ou **Visible aux élèves**.

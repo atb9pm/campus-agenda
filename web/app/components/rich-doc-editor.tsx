@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   QUICK_BLOCK_KINDS,
@@ -9,18 +9,27 @@ import {
   RICH_TEXT_COLOR_HEX,
   RICH_TEXT_COLOR_IDS,
   RICH_TEXT_COLOR_LABELS,
-  addStructuredListItem,
-  applyStructureToDoc,
+  applyMarkToRange,
+  applyStructureToLine,
   emptyRichDoc,
+  inlinesPlainText,
   insertQuickBlock,
+  marksInRange,
   parseInlinesFromHtml,
-  removeStructuredListItem,
+  removeLine,
+  richDocLines,
   sanitizeHref,
   sanitizeRichDoc,
+  setChecklistChecked,
+  setLineInlines,
+  splitLine,
   type CampusRichDoc,
   type QuickBlockKind,
-  type RichBlock,
+  type RichDocLine,
   type RichInline,
+  type RichLinePosition,
+  type RichMarkName,
+  type RichMarks,
   type RichStructureType,
   type RichTextColorId,
 } from "@campus/features/class-notebook";
@@ -33,7 +42,7 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function inlinesToHtml(inlines: RichInline[]): string {
+function inlinesToHtml(inlines: readonly RichInline[]): string {
   if (!inlines.length) return "";
   return inlines
     .map((inline) => {
@@ -48,51 +57,89 @@ function inlinesToHtml(inlines: RichInline[]): string {
         html = `<span data-color="${marks.color}" style="color:${RICH_TEXT_COLOR_HEX[marks.color]}">${html}</span>`;
       }
       if (marks.href) {
-        html = `<a href="${escapeHtml(marks.href)}" target="_blank" rel="noreferrer">${html}</a>`;
+        html = `<a href="${escapeHtml(marks.href)}">${html}</a>`;
       }
       return html;
     })
     .join("");
 }
 
-function inlinesFromElement(root: HTMLElement): RichInline[] {
-  return parseInlinesFromHtml(root.innerHTML);
+function lineKey(blockIndex: number, itemIndex: number | null): string {
+  return `${blockIndex}:${itemIndex ?? "-"}`;
 }
 
-function keepEditorFocus(event: { preventDefault: () => void }) {
-  event.preventDefault();
-}
-
-function readDocFromDom(root: HTMLElement, fallback: CampusRichDoc): CampusRichDoc {
-  const nextBlocks: RichBlock[] = fallback.blocks.length ? [...fallback.blocks] : [{ type: "paragraph", inlines: [] }];
-  const editors = root.querySelectorAll<HTMLElement>("[data-inline-editor]");
-  for (const editor of editors) {
-    const index = Number(editor.dataset.blockIndex);
-    const itemIndex = editor.dataset.itemIndex != null ? Number(editor.dataset.itemIndex) : null;
-    const inlines = inlinesFromElement(editor);
-    const current = nextBlocks[index];
-    if (!current) continue;
-    if (current.type === "bulletList" || current.type === "orderedList") {
-      nextBlocks[index] = {
-        ...current,
-        items: current.items.map((item, currentIndex) => (currentIndex === itemIndex ? inlines : item)),
-      };
-    } else if (current.type === "checklist") {
-      nextBlocks[index] = {
-        ...current,
-        items: current.items.map((item, currentIndex) =>
-          currentIndex === itemIndex ? { ...item, inlines } : item,
-        ),
-      };
-    } else {
-      nextBlocks[index] = { ...current, inlines };
-    }
+function textNodesOf(root: Node): Text[] {
+  const nodes: Text[] = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    nodes.push(node as Text);
+    node = walker.nextNode();
   }
-  return sanitizeRichDoc({ format: "campus-rich-v1", blocks: nextBlocks });
+  return nodes;
 }
 
-function rangeInside(root: HTMLElement, range: Range): boolean {
-  return root.contains(range.commonAncestorContainer);
+/** Position d'un point DOM exprimée en nombre de caractères depuis le début de la ligne. */
+function characterOffset(root: HTMLElement, container: Node, domOffset: number): number | null {
+  if (container === root) {
+    let total = 0;
+    for (let index = 0; index < domOffset && index < root.childNodes.length; index += 1) {
+      total += root.childNodes[index]!.textContent?.length ?? 0;
+    }
+    return total;
+  }
+  if (!root.contains(container)) return null;
+  let offset = 0;
+  for (const node of textNodesOf(root)) {
+    if (node === container) return offset + domOffset;
+    offset += node.data.length;
+  }
+  return offset;
+}
+
+function setCharacterSelection(root: HTMLElement, start: number, end: number): void {
+  const nodes = textNodesOf(root);
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+
+  if (!nodes.length) {
+    range.setStart(root, 0);
+    range.setEnd(root, 0);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return;
+  }
+
+  let placedStart = false;
+  let offset = 0;
+  for (const node of nodes) {
+    const nodeEnd = offset + node.data.length;
+    if (!placedStart && start <= nodeEnd) {
+      range.setStart(node, Math.max(0, Math.min(node.data.length, start - offset)));
+      placedStart = true;
+    }
+    if (end <= nodeEnd) {
+      range.setEnd(node, Math.max(0, Math.min(node.data.length, end - offset)));
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return;
+    }
+    offset = nodeEnd;
+  }
+
+  const last = nodes[nodes.length - 1]!;
+  if (!placedStart) range.setStart(last, last.data.length);
+  range.setEnd(last, last.data.length);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+interface EditorSelection {
+  blockIndex: number;
+  itemIndex: number | null;
+  start: number;
+  end: number;
 }
 
 export function RichDocEditor({
@@ -105,220 +152,329 @@ export function RichDocEditor({
   onChange: (doc: CampusRichDoc) => void;
 }) {
   const [doc, setDoc] = useState<CampusRichDoc>(() => sanitizeRichDoc(value));
-  const [activeBlockIndex, setActiveBlockIndex] = useState(0);
-  const editorRef = useRef<HTMLDivElement | null>(null);
-  const savedRange = useRef<Range | null>(null);
-  const skipExternal = useRef(false);
+  const [selection, setSelection] = useState<EditorSelection | null>(null);
+  const [linkDraft, setLinkDraft] = useState<string | null>(null);
+  const [syncToken, setSyncToken] = useState(0);
+
+  const docRef = useRef(doc);
+  const lineRefs = useRef(new Map<string, HTMLElement>());
+  const pendingCaret = useRef<RichLinePosition | null>(null);
+  const localEdit = useRef(false);
 
   useEffect(() => {
-    if (skipExternal.current) {
-      skipExternal.current = false;
+    docRef.current = doc;
+  }, [doc]);
+
+  useEffect(() => {
+    if (localEdit.current) {
+      localEdit.current = false;
       return;
     }
     setDoc(sanitizeRichDoc(value));
+    setSyncToken((token) => token + 1);
   }, [value]);
 
+  const lines = useMemo(() => richDocLines(doc), [doc]);
+
+  /** Le DOM n'est réécrit que sur action outil / structure, jamais pendant la frappe. */
   useEffect(() => {
-    function rememberSelection() {
-      const root = editorRef.current;
-      const selection = window.getSelection();
-      if (!root || !selection || selection.rangeCount === 0) return;
-      const range = selection.getRangeAt(0);
-      if (!rangeInside(root, range)) return;
-      savedRange.current = range.cloneRange();
+    for (const line of lines) {
+      const element = lineRefs.current.get(lineKey(line.blockIndex, line.itemIndex));
+      if (!element) continue;
+      const html = inlinesToHtml(line.inlines);
+      if (element.innerHTML !== html) element.innerHTML = html;
     }
-    document.addEventListener("selectionchange", rememberSelection);
-    return () => document.removeEventListener("selectionchange", rememberSelection);
-  }, []);
+    const caret = pendingCaret.current;
+    pendingCaret.current = null;
+    if (!caret) return;
+    const element = lineRefs.current.get(lineKey(caret.blockIndex, caret.itemIndex));
+    if (!element) return;
+    element.focus({ preventScroll: true });
+    setCharacterSelection(element, caret.offset, caret.offset);
+    setSelection({
+      blockIndex: caret.blockIndex,
+      itemIndex: caret.itemIndex,
+      start: caret.offset,
+      end: caret.offset,
+    });
+  }, [lines, syncToken]);
 
-  const blocks = doc.blocks.length ? doc.blocks : [{ type: "paragraph" as const, inlines: [] }];
-  const activeType = blocks[activeBlockIndex]?.type;
+  const commit = useCallback(
+    (next: CampusRichDoc, caret?: RichLinePosition, options?: { rewriteDom?: boolean }) => {
+      const clean = sanitizeRichDoc(next);
+      const result = clean.blocks.length ? clean : emptyRichDoc();
+      localEdit.current = true;
+      if (caret) pendingCaret.current = caret;
+      setDoc(result);
+      if (caret || options?.rewriteDom !== false) setSyncToken((token) => token + 1);
+      onChange(result);
+    },
+    [onChange],
+  );
 
-  function currentDoc(): CampusRichDoc {
-    return editorRef.current
-      ? readDocFromDom(editorRef.current, { format: "campus-rich-v1", blocks })
-      : doc;
+  function registerLine(key: string, element: HTMLElement | null) {
+    if (element) lineRefs.current.set(key, element);
+    else lineRefs.current.delete(key);
   }
 
-  function emit(next: CampusRichDoc) {
-    const clean = sanitizeRichDoc(next);
-    skipExternal.current = true;
-    setDoc(clean.blocks.length ? clean : emptyRichDoc());
-    onChange(clean);
+  function readSelection(line: RichDocLine, element: HTMLElement): EditorSelection | null {
+    const domSelection = window.getSelection();
+    if (!domSelection || domSelection.rangeCount === 0) return null;
+    const range = domSelection.getRangeAt(0);
+    const start = characterOffset(element, range.startContainer, range.startOffset);
+    const end = characterOffset(element, range.endContainer, range.endOffset);
+    if (start == null || end == null) return null;
+    return {
+      blockIndex: line.blockIndex,
+      itemIndex: line.itemIndex,
+      start: Math.min(start, end),
+      end: Math.max(start, end),
+    };
   }
 
-  function serializeFromDom() {
-    const root = editorRef.current;
-    if (!root) return;
-    emit(readDocFromDom(root, { format: "campus-rich-v1", blocks }));
+  function handleLineInput(line: RichDocLine, element: HTMLElement) {
+    const inlines = parseInlinesFromHtml(element.innerHTML);
+    const next = setLineInlines(docRef.current, line.blockIndex, line.itemIndex, inlines);
+    commit(next, undefined, { rewriteDom: false });
   }
 
-  function restoreSelection(): boolean {
-    const root = editorRef.current;
-    const range = savedRange.current;
-    if (!root || !range || !rangeInside(root, range)) return false;
-    const selection = window.getSelection();
-    if (!selection) return false;
-    selection.removeAllRanges();
-    try {
-      selection.addRange(range);
-      return true;
-    } catch {
-      return false;
-    }
+  /** Sélection courante, ou la ligne entière si rien n'est sélectionné. */
+  function targetRange(): { selection: EditorSelection; inlines: RichInline[] } | null {
+    const current = selection ?? (lines[0] ? { blockIndex: lines[0].blockIndex, itemIndex: lines[0].itemIndex, start: 0, end: 0 } : null);
+    if (!current) return null;
+    const line = lines.find(
+      (entry) => entry.blockIndex === current.blockIndex && entry.itemIndex === current.itemIndex,
+    );
+    if (!line) return null;
+    const element = lineRefs.current.get(lineKey(line.blockIndex, line.itemIndex));
+    const inlines = element ? parseInlinesFromHtml(element.innerHTML) : line.inlines;
+    const length = inlinesPlainText(inlines).length;
+    const collapsed = current.start === current.end;
+    return {
+      selection: collapsed ? { ...current, start: 0, end: length } : current,
+      inlines,
+    };
   }
 
-  function format(command: string, value?: string) {
-    restoreSelection();
-    document.execCommand("styleWithCSS", false, "true");
-    document.execCommand(command, false, value);
-    serializeFromDom();
+  function applyMark(mark: RichMarkName, value: boolean | RichTextColorId | string | undefined) {
+    const target = targetRange();
+    if (!target) return;
+    const { selection: range, inlines } = target;
+    const next = applyMarkToRange(inlines, range.start, range.end, mark, value);
+    const nextDoc = setLineInlines(docRef.current, range.blockIndex, range.itemIndex, next);
+    localEdit.current = true;
+    setDoc(sanitizeRichDoc(nextDoc));
+    setSyncToken((token) => token + 1);
+    onChange(sanitizeRichDoc(nextDoc));
+    requestAnimationFrame(() => {
+      const element = lineRefs.current.get(lineKey(range.blockIndex, range.itemIndex));
+      if (!element) return;
+      element.focus({ preventScroll: true });
+      setCharacterSelection(element, range.start, range.end);
+      setSelection(range);
+    });
   }
 
-  function setColor(color: RichTextColorId) {
-    restoreSelection();
-    document.execCommand("styleWithCSS", false, "true");
-    document.execCommand("foreColor", false, RICH_TEXT_COLOR_HEX[color]);
-    serializeFromDom();
-  }
+  const activeMarks: RichMarks = useMemo(() => {
+    if (!selection) return {};
+    const line = lines.find(
+      (entry) => entry.blockIndex === selection.blockIndex && entry.itemIndex === selection.itemIndex,
+    );
+    if (!line) return {};
+    const length = inlinesPlainText(line.inlines).length;
+    const start = selection.start === selection.end ? 0 : selection.start;
+    const end = selection.start === selection.end ? length : selection.end;
+    return marksInRange(line.inlines, start, end);
+  }, [lines, selection]);
+
+  const activeLine = selection
+    ? lines.find((entry) => entry.blockIndex === selection.blockIndex && entry.itemIndex === selection.itemIndex)
+    : undefined;
+  const activeKind = activeLine?.kind ?? "paragraph";
 
   function applyStructure(type: RichStructureType) {
-    emit(applyStructureToDoc(currentDoc(), activeBlockIndex, type));
+    const current = selection ?? { blockIndex: 0, itemIndex: lines[0]?.itemIndex ?? null, start: 0, end: 0 };
+    const result = applyStructureToLine(docRef.current, current.blockIndex, current.itemIndex, type);
+    commit(result.doc, result.caret);
   }
 
-  function addQuick(kind: QuickBlockKind) {
-    emit(insertQuickBlock(currentDoc(), kind));
+  function addQuickBlock(kind: QuickBlockKind) {
+    const at = selection?.blockIndex ?? docRef.current.blocks.length - 1;
+    const next = insertQuickBlock(docRef.current, kind, at);
+    commit(next, { blockIndex: at + 1, itemIndex: null, offset: 0 });
   }
 
-  function wrapLink() {
-    const raw = window.prompt("Lien (https:// ou mailto:)", "https://");
-    const href = sanitizeHref(raw);
+  function confirmLink() {
+    const href = sanitizeHref(linkDraft);
+    setLinkDraft(null);
     if (!href) return;
-    restoreSelection();
-    document.execCommand("createLink", false, href);
-    serializeFromDom();
+    applyMark("href", href);
   }
 
-  function mutateList(blockIndex: number, mutate: (block: RichBlock) => RichBlock) {
-    const current = currentDoc();
-    emit({
-      format: "campus-rich-v1",
-      blocks: current.blocks.map((block, index) => (index === blockIndex ? mutate(block) : block)),
-    });
-  }
-
-  function addListItem(blockIndex: number, afterIndex?: number) {
-    mutateList(blockIndex, (block) => addStructuredListItem(block, afterIndex));
-  }
-
-  function removeListItem(blockIndex: number, itemIndex: number) {
-    mutateList(blockIndex, (block) => removeStructuredListItem(block, itemIndex));
-  }
-
-  function toggleCheck(blockIndex: number, itemIndex: number, checked: boolean) {
-    const current = currentDoc();
-    emit({
-      format: "campus-rich-v1",
-      blocks: current.blocks.map((block, index) =>
-        index === blockIndex && block.type === "checklist"
-          ? {
-              ...block,
-              items: block.items.map((item, currentIndex) =>
-                currentIndex === itemIndex ? { ...item, checked } : item,
-              ),
-            }
-          : block,
-      ),
-    });
+  function handleKeyDown(line: RichDocLine, element: HTMLElement, event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      const current = readSelection(line, element);
+      const inlines = parseInlinesFromHtml(element.innerHTML);
+      const withText = setLineInlines(docRef.current, line.blockIndex, line.itemIndex, inlines);
+      const result = splitLine(withText, line.blockIndex, line.itemIndex, current?.start ?? 0);
+      commit(result.doc, result.caret);
+      return;
+    }
+    if (event.key === "Backspace") {
+      const current = readSelection(line, element);
+      const empty = element.textContent?.length === 0;
+      if (empty && current && current.start === 0 && current.end === 0) {
+        const result = removeLine(docRef.current, line.blockIndex, line.itemIndex);
+        if (result) {
+          event.preventDefault();
+          commit(result.doc, result.caret);
+        }
+      }
+    }
   }
 
   const showExtended = variant === "publication";
 
   return (
-    <div className={`rich-doc-editor is-${variant}`} ref={editorRef}>
+    <div className={`rich-doc-editor is-${variant}`}>
       <div className="rich-doc-toolbar" role="toolbar" aria-label="Mise en forme">
-        <div className="rich-doc-tool-group" role="group" aria-label="Caractère">
-          <ToolButton label="Gras" onClick={() => format("bold")}>
+        <div className="rich-doc-tool-group" role="group" aria-label="Texte">
+          <ToolButton label="Gras" active={Boolean(activeMarks.bold)} onClick={() => applyMark("bold", !activeMarks.bold)}>
             <strong>B</strong>
           </ToolButton>
-          <ToolButton label="Italique" onClick={() => format("italic")}>
+          <ToolButton
+            label="Italique"
+            active={Boolean(activeMarks.italic)}
+            onClick={() => applyMark("italic", !activeMarks.italic)}
+          >
             <em>I</em>
           </ToolButton>
-          {showExtended ? (
-            <ToolButton label="Souligné" onClick={() => format("underline")}>
-              <u>S</u>
-            </ToolButton>
-          ) : null}
-          {showExtended ? (
-            <div className="rich-doc-swatches" role="group" aria-label="Couleur du texte">
-              {RICH_TEXT_COLOR_IDS.map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  className="rich-doc-swatch"
-                  title={RICH_TEXT_COLOR_LABELS[color]}
-                  aria-label={RICH_TEXT_COLOR_LABELS[color]}
-                  data-color-swatch={color}
-                  style={{ background: RICH_TEXT_COLOR_HEX[color] }}
-                  onMouseDown={keepEditorFocus}
-                  onClick={() => setColor(color)}
-                />
-              ))}
-            </div>
-          ) : null}
+          <ToolButton
+            label="Souligné"
+            active={Boolean(activeMarks.underline)}
+            onClick={() => applyMark("underline", !activeMarks.underline)}
+          >
+            <u>S</u>
+          </ToolButton>
           {showExtended ? (
             <ToolButton
-              label="Surligner la sélection"
-              onClick={() => format("hiliteColor", RICH_HIGHLIGHT_HEX)}
+              label="Surligner"
+              active={Boolean(activeMarks.highlight)}
+              onClick={() => applyMark("highlight", !activeMarks.highlight)}
             >
               <span className="rich-doc-highlight-mark">Abc</span>
             </ToolButton>
           ) : null}
         </div>
 
-        <div className="rich-doc-tool-group" role="group" aria-label="Paragraphe">
+        {showExtended ? (
+          <div className="rich-doc-tool-group" role="group" aria-label="Couleur du texte">
+            {RICH_TEXT_COLOR_IDS.map((color) => (
+              <button
+                key={color}
+                type="button"
+                className={`rich-doc-swatch${activeMarks.color === color ? " is-active" : ""}`}
+                title={RICH_TEXT_COLOR_LABELS[color]}
+                aria-label={RICH_TEXT_COLOR_LABELS[color]}
+                aria-pressed={activeMarks.color === color}
+                data-color-swatch={color}
+                style={{ background: RICH_TEXT_COLOR_HEX[color] }}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => applyMark("color", activeMarks.color === color ? undefined : color)}
+              />
+            ))}
+          </div>
+        ) : null}
+
+        <div className="rich-doc-tool-group" role="group" aria-label="Ligne">
+          <ToolButton
+            label="Texte normal"
+            text="Texte"
+            active={activeKind === "paragraph"}
+            onClick={() => applyStructure("paragraph")}
+          />
           {showExtended ? (
             <ToolButton
               label="Titre"
               text="Titre"
-              active={activeType === "heading"}
+              active={activeKind === "heading"}
               onClick={() => applyStructure("heading")}
             />
           ) : null}
           <ToolButton
             label="Liste à puces"
             text="Puces"
-            active={activeType === "bulletList"}
+            active={activeKind === "bulletList"}
             onClick={() => applyStructure("bulletList")}
           />
           <ToolButton
             label="Liste numérotée"
             text="1. 2. 3."
-            active={activeType === "orderedList"}
+            active={activeKind === "orderedList"}
             onClick={() => applyStructure("orderedList")}
           />
           <ToolButton
             label="Liste à cocher"
             text="Cases"
-            active={activeType === "checklist"}
+            active={activeKind === "checklist"}
             onClick={() => applyStructure("checklist")}
           />
-          {showExtended ? (
-            <ToolButton label="Insérer un lien" text="Lien" onClick={wrapLink} />
-          ) : null}
         </div>
+
+        {showExtended ? (
+          <div className="rich-doc-tool-group" role="group" aria-label="Lien">
+            <ToolButton
+              label="Insérer un lien"
+              text="Lien"
+              active={Boolean(activeMarks.href)}
+              onClick={() => setLinkDraft(activeMarks.href ?? "https://")}
+            />
+            {activeMarks.href ? (
+              <ToolButton label="Retirer le lien" text="Sans lien" onClick={() => applyMark("href", undefined)} />
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
+      {linkDraft != null ? (
+        <div className="rich-doc-link-bar">
+          <label>
+            Adresse du lien
+            <input
+              type="url"
+              ref={(element) => element?.focus()}
+              value={linkDraft}
+              placeholder="https://"
+              onChange={(event) => setLinkDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  confirmLink();
+                }
+                if (event.key === "Escape") setLinkDraft(null);
+              }}
+            />
+          </label>
+          <button type="button" className="workspace-action" onClick={confirmLink}>
+            Appliquer
+          </button>
+          <button type="button" className="workspace-action secondary" onClick={() => setLinkDraft(null)}>
+            Annuler
+          </button>
+        </div>
+      ) : null}
+
       {showExtended ? (
-        <div className="rich-doc-quick" role="group" aria-label="Blocs pédagogiques">
+        <div className="rich-doc-quick" role="group" aria-label="Blocs de la semaine">
           <span>Blocs de la semaine</span>
           {QUICK_BLOCK_KINDS.map((kind) => (
             <button
               key={kind}
               type="button"
               className={`rich-doc-quick-chip is-${kind}`}
-              onMouseDown={keepEditorFocus}
-              onClick={() => addQuick(kind)}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => addQuickBlock(kind)}
             >
               {QUICK_BLOCK_LABELS[kind]}
             </button>
@@ -327,19 +483,78 @@ export function RichDocEditor({
       ) : null}
 
       <div className="rich-doc-canvas">
-        {blocks.map((block, index) => (
-          <EditorBlock
-            key={`${block.type}-${index}`}
-            block={block}
-            index={index}
-            onFocusBlock={() => setActiveBlockIndex(index)}
-            onBlur={serializeFromDom}
-            onToggleCheck={(itemIndex, checked) => toggleCheck(index, itemIndex, checked)}
-            onAddListItem={(afterIndex) => addListItem(index, afterIndex)}
-            onRemoveListItem={(itemIndex) => removeListItem(index, itemIndex)}
-          />
-        ))}
+        {lines.map((line) => {
+          const key = lineKey(line.blockIndex, line.itemIndex);
+          return (
+            <div
+              key={key}
+              className={`rich-doc-line is-${line.kind}`}
+              data-line-kind={line.kind}
+            >
+              {line.kind === "callout" && line.calloutKind ? (
+                <span className={`rich-doc-line-badge is-${line.calloutKind}`}>
+                  {QUICK_BLOCK_LABELS[line.calloutKind]}
+                </span>
+              ) : null}
+              <div className="rich-doc-line-body">
+                {line.kind === "bulletList" ? <span className="rich-doc-line-marker" aria-hidden>•</span> : null}
+                {line.kind === "orderedList" ? (
+                  <span className="rich-doc-line-marker" aria-hidden>{line.ordinal}.</span>
+                ) : null}
+                {line.kind === "checklist" ? (
+                  <input
+                    type="checkbox"
+                    className="rich-doc-line-check"
+                    checked={Boolean(line.checked)}
+                    aria-label="Élément fait"
+                    onChange={(event) =>
+                      commit(
+                        setChecklistChecked(
+                          docRef.current,
+                          line.blockIndex,
+                          line.itemIndex ?? 0,
+                          event.target.checked,
+                        ),
+                      )
+                    }
+                  />
+                ) : null}
+                <div
+                  className="rich-doc-line-input"
+                  role="textbox"
+                  aria-multiline="false"
+                  tabIndex={0}
+                  contentEditable
+                  suppressContentEditableWarning
+                  data-inline-editor=""
+                  data-block-index={line.blockIndex}
+                  data-item-index={line.itemIndex ?? undefined}
+                  ref={(element) => registerLine(key, element)}
+                  onInput={(event) => handleLineInput(line, event.currentTarget)}
+                  onKeyUp={(event) => setSelection(readSelection(line, event.currentTarget))}
+                  onMouseUp={(event) => setSelection(readSelection(line, event.currentTarget))}
+                  onFocus={(event) => setSelection(readSelection(line, event.currentTarget))}
+                  onKeyDown={(event) => handleKeyDown(line, event.currentTarget, event)}
+                  onPaste={(event) => {
+                    event.preventDefault();
+                    const text = event.clipboardData.getData("text/plain").replace(/\s*\n\s*/g, " ");
+                    const domSelection = window.getSelection();
+                    if (!domSelection || domSelection.rangeCount === 0) return;
+                    domSelection.deleteFromDocument();
+                    domSelection.getRangeAt(0).insertNode(document.createTextNode(text));
+                    domSelection.collapseToEnd();
+                    handleLineInput(line, event.currentTarget);
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })}
       </div>
+
+      <p className="rich-doc-hint">
+        Entrée crée une ligne. Sans sélection, un outil s’applique à toute la ligne.
+      </p>
     </div>
   );
 }
@@ -364,175 +579,10 @@ function ToolButton({
       title={label}
       aria-label={label}
       aria-pressed={active}
-      onMouseDown={keepEditorFocus}
+      onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
     >
       {children ?? text}
     </button>
-  );
-}
-
-function EditorBlock({
-  block,
-  index,
-  onFocusBlock,
-  onBlur,
-  onToggleCheck,
-  onAddListItem,
-  onRemoveListItem,
-}: {
-  block: RichBlock;
-  index: number;
-  onFocusBlock: () => void;
-  onBlur: () => void;
-  onToggleCheck: (itemIndex: number, checked: boolean) => void;
-  onAddListItem: (afterIndex?: number) => void;
-  onRemoveListItem: (itemIndex: number) => void;
-}) {
-  if (block.type === "bulletList" || block.type === "orderedList") {
-    const List = block.type === "orderedList" ? "ol" : "ul";
-    const canRemove = block.items.length > 1;
-    return (
-      <div className="rich-doc-list-wrap">
-        <List className="rich-doc-edit-list">
-          {block.items.map((item, itemIndex) => (
-            <li key={itemIndex} className="rich-doc-list-item">
-              <InlineEditor
-                html={inlinesToHtml(item)}
-                blockIndex={index}
-                itemIndex={itemIndex}
-                onFocus={onFocusBlock}
-                onBlur={onBlur}
-                onEnter={() => onAddListItem(itemIndex)}
-              />
-              {canRemove ? (
-                <button
-                  type="button"
-                  className="rich-doc-list-remove"
-                  aria-label="Supprimer l’élément"
-                  onMouseDown={keepEditorFocus}
-                  onClick={() => onRemoveListItem(itemIndex)}
-                >
-                  ×
-                </button>
-              ) : null}
-            </li>
-          ))}
-        </List>
-        <div className="rich-doc-list-actions">
-          <button type="button" onClick={() => onAddListItem()}>
-            Ajouter un élément
-          </button>
-        </div>
-      </div>
-    );
-  }
-  if (block.type === "checklist") {
-    const canRemove = block.items.length > 1;
-    return (
-      <div className="rich-doc-list-wrap">
-        <ul className="rich-doc-edit-check">
-          {block.items.map((item, itemIndex) => (
-            <li key={itemIndex} className="rich-doc-list-item">
-              <input
-                type="checkbox"
-                checked={item.checked}
-                onChange={(event) => onToggleCheck(itemIndex, event.target.checked)}
-              />
-              <InlineEditor
-                html={inlinesToHtml(item.inlines)}
-                blockIndex={index}
-                itemIndex={itemIndex}
-                onFocus={onFocusBlock}
-                onBlur={onBlur}
-                onEnter={() => onAddListItem(itemIndex)}
-              />
-              {canRemove ? (
-                <button
-                  type="button"
-                  className="rich-doc-list-remove"
-                  aria-label="Supprimer l’élément"
-                  onMouseDown={keepEditorFocus}
-                  onClick={() => onRemoveListItem(itemIndex)}
-                >
-                  ×
-                </button>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-        <div className="rich-doc-list-actions">
-          <button type="button" onClick={() => onAddListItem()}>
-            Ajouter un élément
-          </button>
-        </div>
-      </div>
-    );
-  }
-  if (block.type === "callout") {
-    return (
-      <aside className={`rich-doc-callout is-${block.kind}`}>
-        <strong>{QUICK_BLOCK_LABELS[block.kind]}</strong>
-        <InlineEditor
-          html={inlinesToHtml(block.inlines)}
-          blockIndex={index}
-          onFocus={onFocusBlock}
-          onBlur={onBlur}
-        />
-      </aside>
-    );
-  }
-  return (
-    <InlineEditor
-      html={inlinesToHtml(block.inlines)}
-      blockIndex={index}
-      heading={block.type === "heading"}
-      onFocus={onFocusBlock}
-      onBlur={onBlur}
-    />
-  );
-}
-
-function InlineEditor({
-  html,
-  blockIndex,
-  itemIndex,
-  heading,
-  onFocus,
-  onBlur,
-  onEnter,
-}: {
-  html: string;
-  blockIndex: number;
-  itemIndex?: number;
-  heading?: boolean;
-  onFocus: () => void;
-  onBlur: () => void;
-  onEnter?: () => void;
-}) {
-  return (
-    <div
-      className={heading ? "rich-doc-heading-input" : "rich-doc-text-input"}
-      role="textbox"
-      aria-multiline="true"
-      tabIndex={0}
-      contentEditable
-      suppressContentEditableWarning
-      data-inline-editor=""
-      data-block-index={blockIndex}
-      data-item-index={itemIndex}
-      dangerouslySetInnerHTML={{ __html: html }}
-      onFocus={onFocus}
-      onBlur={onBlur}
-      onKeyDown={(event) => {
-        if (!onEnter || event.key !== "Enter" || event.shiftKey) return;
-        event.preventDefault();
-        onEnter();
-      }}
-      onPaste={(event) => {
-        event.preventDefault();
-        document.execCommand("insertText", false, event.clipboardData.getData("text/plain"));
-      }}
-    />
   );
 }
