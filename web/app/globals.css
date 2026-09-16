@@ -1694,6 +1694,33 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .class-notebook-zone { display: grid; gap: 8px; padding: 12px 14px; }
 .class-notebook-zone-control { border-bottom: 1px dashed var(--line-strong); background: #fcfdff; }
 .class-notebook-zone-publication { border-bottom: 1px dashed var(--line-strong); }
+.class-notebook-zone-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.class-notebook-visibility-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.class-notebook-visibility-badge.is-draft { background: #fff4d6; color: #8a6a12; }
+.class-notebook-visibility-badge.is-published { background: #e7f6ec; color: #1f7a3a; }
+.class-notebook-visibility-hint { margin: 0; color: #8a6a12; font-size: 10px; line-height: 1.4; }
+.class-notebook-zone-publication.is-draft .rich-doc-view { opacity: .78; }
+.class-notebook-quiet-action {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #8793a9;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.class-notebook-quiet-action:hover { color: var(--blue); }
 .class-notebook-zone-notes { background: #fafafa; }
 .class-notebook-zone h3 { margin: 0; color: #8793a9; font-size: 8px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .class-notebook-zone ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
@@ -1725,6 +1752,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .rich-doc-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 18px; background: rgba(15, 32, 67, .28); }
 .rich-doc-overlay-card { width: min(760px, 100%); max-height: min(90vh, 820px); overflow: auto; display: grid; gap: 14px; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: var(--shadow); }
 .rich-doc-overlay-card h2 { margin: 4px 0 0; color: var(--navy); font-size: 18px; }
+.rich-doc-visibility-status { margin: 8px 0 0; color: #516582; font-size: 12px; line-height: 1.4; }
 .rich-doc-overlay-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .rich-doc-student-preview { padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #fbfcfe; }
 .rich-doc-editor { display: grid; gap: 10px; }

@@ -19,11 +19,13 @@ import {
   formatWeekColumnLabel,
   formatWeekColumnSubtitle,
   isCarnetOwnedPublication,
+  isEmptyRichDoc,
   isPublicationLine,
   listWeekNotes,
   moveWeekNote,
   previousSchoolWeekNumber,
   setWeekRichNote,
+  weekCarnetVisibility,
   type CampusRichDoc,
   type ClassNotesDocument,
   type NotebookClipboard,
@@ -34,6 +36,7 @@ import {
 import { isStructuredAgendaPublication as isStructuredPublication } from "@campus/features/agenda/publications";
 import type { TeacherClassSetup } from "@campus/features/teacher-setup";
 import { ControlsModal } from "./controls-modal.tsx";
+import { ConfirmDialog } from "./confirm-dialog.tsx";
 import { RichDocEditor } from "./rich-doc-editor.tsx";
 import { RichDocView } from "./rich-doc-view.tsx";
 
@@ -53,8 +56,9 @@ interface ClassNotebookPanelProps {
   onCenterWeekChange: (weekNumber: number) => void;
   onNotesChange: (document: ClassNotesDocument) => void;
   onCreatePublication: (schoolWeekNumber: number, text: string) => Promise<void>;
-  onSaveWeekPublication: (schoolWeekNumber: number, doc: CampusRichDoc) => Promise<void>;
+  onSaveWeekPublication: (schoolWeekNumber: number, doc: CampusRichDoc, options?: { studentVisible?: boolean }) => Promise<void>;
   onCopyPreviousPublication: (schoolWeekNumber: number) => Promise<void>;
+  onSetWeekPublicationVisibility: (schoolWeekNumber: number, studentVisible: boolean) => Promise<void>;
   onMovePublication: (itemId: number, schoolWeekNumber: number) => Promise<void>;
   onSaveControl: (input: { schoolWeekNumber: number; day: number; title: string }) => Promise<void>;
   onDeleteControl: (itemId: number) => Promise<void>;
@@ -85,6 +89,7 @@ export function ClassNotebookPanel({
   onCreatePublication,
   onSaveWeekPublication,
   onCopyPreviousPublication,
+  onSetWeekPublicationVisibility,
   onMovePublication,
   onSaveControl,
   onDeleteControl,
@@ -98,6 +103,8 @@ export function ClassNotebookPanel({
   const [editor, setEditor] = useState<{ kind: EditorKind; weekNumber: number } | null>(null);
   const [editorDoc, setEditorDoc] = useState<CampusRichDoc>(emptyRichDoc());
   const [studentPreviewOpen, setStudentPreviewOpen] = useState(false);
+  const [copyConfirmWeek, setCopyConfirmWeek] = useState<number | null>(null);
+  const [unpublishWeek, setUnpublishWeek] = useState<number | null>(null);
 
   const visibleWeeks = useMemo(
     () => visibleSchoolWeeks(schoolWeeks, centerWeekNumber, weekDisplayCount),
@@ -216,11 +223,15 @@ export function ClassNotebookPanel({
     setEditor({ kind, weekNumber });
   }
 
-  async function saveEditor() {
+  async function saveEditor(studentVisible?: boolean) {
     if (!editor) return;
     if (editor.kind === "publication") {
       if (!canPublish) return;
-      await onSaveWeekPublication(editor.weekNumber, editorDoc);
+      await onSaveWeekPublication(
+        editor.weekNumber,
+        editorDoc,
+        studentVisible === undefined ? undefined : { studentVisible },
+      );
     } else {
       const key = weekNotesKey(classSetup.id, editor.weekNumber);
       onNotesChange(setWeekRichNote(notesDocument, key, editorDoc));
@@ -241,6 +252,14 @@ export function ClassNotebookPanel({
       setDragPublicationId(null);
     }
   }
+
+  const editorVisibility = editor
+    ? weekCarnetVisibility(items.filter((item) => item.schoolWeekNumber === editor.weekNumber))
+    : "empty";
+  const copySourceWeek =
+    copyConfirmWeek != null ? schoolWeeks.find((week) => week.number === previousSchoolWeekNumber(schoolWeeks, copyConfirmWeek)) : undefined;
+  const copyTargetWeek = copyConfirmWeek != null ? schoolWeeks.find((week) => week.number === copyConfirmWeek) : undefined;
+  const unpublishTargetWeek = unpublishWeek != null ? schoolWeeks.find((week) => week.number === unpublishWeek) : undefined;
 
   return (
     <section
@@ -316,6 +335,17 @@ export function ClassNotebookPanel({
               isStructuredPublication(item),
           );
           const isActive = week.number === centerWeekNumber;
+          const visibility = weekCarnetVisibility(weekCarnetPublications);
+          const previousNumber = previousSchoolWeekNumber(schoolWeeks, week.number);
+          const previousWeek = previousNumber != null
+            ? schoolWeeks.find((entry) => entry.number === previousNumber)
+            : undefined;
+          const previousDoc = previousNumber != null
+            ? composeWeekPublicationDoc(
+                items.filter((item) => item.schoolWeekNumber === previousNumber && isCarnetOwnedPublication(item)),
+              )
+            : emptyRichDoc();
+          const canCopyPrevious = Boolean(canPublish && previousWeek && !isEmptyRichDoc(previousDoc));
 
           return (
             <article
@@ -370,8 +400,22 @@ export function ClassNotebookPanel({
                 )}
               </section>
 
-              <section className="class-notebook-zone class-notebook-zone-publication" aria-label="Publication élèves">
-                <h3>Publication élèves</h3>
+              <section
+                className={`class-notebook-zone class-notebook-zone-publication${visibility === "draft" ? " is-draft" : ""}${visibility === "published" ? " is-published" : ""}`}
+                aria-label="Publication élèves"
+              >
+                <div className="class-notebook-zone-heading">
+                  <h3>Publication élèves</h3>
+                  {visibility === "draft" ? (
+                    <span className="class-notebook-visibility-badge is-draft">Brouillon</span>
+                  ) : null}
+                  {visibility === "published" ? (
+                    <span className="class-notebook-visibility-badge is-published">Visible aux élèves</span>
+                  ) : null}
+                </div>
+                {visibility === "draft" ? (
+                  <p className="class-notebook-visibility-hint">Les élèves ne voient pas encore ce texte.</p>
+                ) : null}
                 <RichDocView
                   doc={composeWeekPublicationDoc(weekCarnetPublications)}
                   compact
@@ -389,15 +433,33 @@ export function ClassNotebookPanel({
                     disabled={!canPublish}
                     onClick={() => openEditor("publication", week.number)}
                   >
-                    Modifier
+                    {visibility === "empty" ? "Rédiger" : "Modifier"}
                   </button>
-                  {canPublish && previousSchoolWeekNumber(schoolWeeks, week.number) != null ? (
+                  {visibility === "draft" && canPublish ? (
+                    <button
+                      type="button"
+                      className="workspace-action"
+                      onClick={() => void onSetWeekPublicationVisibility(week.number, true)}
+                    >
+                      Publier aux élèves
+                    </button>
+                  ) : null}
+                  {visibility === "published" && canPublish ? (
                     <button
                       type="button"
                       className="workspace-action secondary"
-                      onClick={() => void onCopyPreviousPublication(week.number)}
+                      onClick={() => setUnpublishWeek(week.number)}
                     >
-                      Copier depuis la semaine précédente
+                      Repasser en brouillon
+                    </button>
+                  ) : null}
+                  {canCopyPrevious && previousWeek ? (
+                    <button
+                      type="button"
+                      className="class-notebook-quiet-action"
+                      onClick={() => setCopyConfirmWeek(week.number)}
+                    >
+                      Reprendre {formatWeekColumnLabel(previousWeek)}
                     </button>
                   ) : null}
                 </div>
@@ -441,11 +503,28 @@ export function ClassNotebookPanel({
                   ? "Rédiger la publication de la semaine"
                   : "Notes privées de la semaine"}
               </h2>
+              {editor.kind === "publication" ? (
+                <p className="rich-doc-visibility-status">
+                  {editorVisibility === "published"
+                    ? "Actuellement visible aux élèves. Enregistrer met à jour le texte publié."
+                    : "Brouillon — les élèves ne voient pas encore cette semaine."}
+                </p>
+              ) : null}
             </header>
             {studentPreviewOpen && editor.kind === "publication" ? (
               <div className="rich-doc-student-preview" data-student-preview="">
                 <p className="eyebrow">Aperçu élève</p>
-                <RichDocView doc={editorDoc} emptyLabel="Rien n’est encore publié." />
+                {editorVisibility === "published" ? (
+                  <RichDocView doc={editorDoc} emptyLabel="Rien n’est encore publié." />
+                ) : (
+                  <>
+                    <p className="class-notebook-visibility-hint">
+                      Les élèves voient une semaine vide tant que vous n’avez pas cliqué sur Publier aux élèves.
+                    </p>
+                    <p className="eyebrow">Texte prévu</p>
+                    <RichDocView doc={editorDoc} emptyLabel="Rien n’est encore rédigé." />
+                  </>
+                )}
               </div>
             ) : (
               <RichDocEditor
@@ -458,6 +537,11 @@ export function ClassNotebookPanel({
               <button type="button" className="workspace-action" onClick={() => void saveEditor()}>
                 Enregistrer
               </button>
+              {editor.kind === "publication" && editorVisibility !== "published" ? (
+                <button type="button" className="workspace-action" onClick={() => void saveEditor(true)}>
+                  Enregistrer et publier
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="workspace-action secondary"
@@ -482,6 +566,42 @@ export function ClassNotebookPanel({
         </div>
       ) : null}
 
+      <ConfirmDialog
+        open={copyConfirmWeek != null && Boolean(copySourceWeek) && Boolean(copyTargetWeek)}
+        title={`Reprendre ${copySourceWeek ? formatWeekColumnLabel(copySourceWeek) : "la semaine précédente"}`}
+        body={
+          copyTargetWeek
+            ? `Le texte élèves de ${copySourceWeek ? formatWeekColumnLabel(copySourceWeek) : "la semaine précédente"} remplace celui de ${formatWeekColumnLabel(copyTargetWeek)}. Il reste en brouillon : les élèves ne le voient pas tant que vous n’avez pas cliqué sur Publier aux élèves.`
+            : ""
+        }
+        confirmLabel="Remplacer"
+        cancelLabel="Annuler"
+        onCancel={() => setCopyConfirmWeek(null)}
+        onConfirm={() => {
+          if (copyConfirmWeek == null) return;
+          const weekNumber = copyConfirmWeek;
+          setCopyConfirmWeek(null);
+          void onCopyPreviousPublication(weekNumber);
+        }}
+      />
+      <ConfirmDialog
+        open={unpublishWeek != null}
+        title="Repasser en brouillon"
+        body={
+          unpublishTargetWeek
+            ? `${formatWeekColumnLabel(unpublishTargetWeek)} disparaît de l’agenda élève. Le texte reste dans le Carnet.`
+            : "Cette semaine disparaît de l’agenda élève. Le texte reste dans le Carnet."
+        }
+        confirmLabel="Masquer aux élèves"
+        cancelLabel="Annuler"
+        onCancel={() => setUnpublishWeek(null)}
+        onConfirm={() => {
+          if (unpublishWeek == null) return;
+          const weekNumber = unpublishWeek;
+          setUnpublishWeek(null);
+          void onSetWeekPublicationVisibility(weekNumber, false);
+        }}
+      />
       <ControlsModal
         open={controlsOpen}
         classLabel={classSetup.name}

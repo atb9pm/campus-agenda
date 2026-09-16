@@ -666,6 +666,7 @@ export async function createNotebookPublicationApi(input: {
   type: "HOMEWORK" | "INFORMATION";
   title: string;
   detail: string;
+  studentVisible?: boolean;
 }): Promise<PrototypeAgendaItem> {
   const response = await fetch("/api/teacher/notebook-publications", {
     method: "POST",
@@ -678,6 +679,7 @@ export async function createNotebookPublicationApi(input: {
       type: input.type,
       title: input.title,
       detail: input.detail,
+      studentVisible: input.studentVisible,
     }),
   });
   const payload = await parseJson<{ ok: boolean; item?: PrototypeAgendaItem; reason?: string }>(response);
@@ -720,6 +722,7 @@ export async function createAgendaItemApi(input: {
   title: string;
   detail: string;
   confirmCoordination?: boolean;
+  studentVisible?: boolean;
 }): Promise<PrototypeAgendaItem> {
   const response = await fetch("/api/agenda", {
     method: "POST",
@@ -743,7 +746,15 @@ export async function createAgendaItemApi(input: {
 
 export async function updateAgendaItemApi(
   itemId: number,
-  patch: Partial<{ title: string; detail: string; day: number; hour: number; subjectId: string; schoolWeekNumber: number }>,
+  patch: Partial<{
+    title: string;
+    detail: string;
+    day: number;
+    hour: number;
+    subjectId: string;
+    schoolWeekNumber: number;
+    studentVisible: boolean;
+  }>,
 ): Promise<PrototypeAgendaItem> {
   const response = await fetch(`/api/agenda/${itemId}`, {
     method: "PATCH",

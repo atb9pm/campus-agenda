@@ -83,9 +83,9 @@ function sampleDoc(): CampusRichDoc {
   });
 }
 
-test("version 2.52.0 — éditeur enrichi Carnet, sans migration", async () => {
-  assert.equal(APP_VERSION, "2.54.1");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0029_admin_mfa.sql");
+test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async () => {
+  assert.equal(APP_VERSION, "2.55.0");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
   const [panel, notesApi, studentPage] = await Promise.all([
     readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/api/teacher/notes/route.ts", import.meta.url), "utf8"),
@@ -93,7 +93,8 @@ test("version 2.52.0 — éditeur enrichi Carnet, sans migration", async () => {
   ]);
   assert.match(panel, /Publication élèves/);
   assert.match(panel, /Notes prof/);
-  assert.match(panel, /Copier depuis la semaine précédente/);
+  assert.match(panel, /Reprendre \{formatWeekColumnLabel/);
+  assert.match(panel, /Publier aux élèves/);
   assert.match(panel, /Aperçu élève/);
   assert.match(panel, /isCarnetOwnedPublication/);
   assert.match(panel, /weekCarnetPublications/);

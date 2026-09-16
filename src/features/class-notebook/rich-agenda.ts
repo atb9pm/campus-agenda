@@ -1,4 +1,5 @@
 import { isStructuredAgendaPublication } from "../agenda/publications.ts";
+import { isStudentVisible } from "../agenda/visibility.ts";
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
 import {
   decodeRichDetail,
@@ -49,6 +50,14 @@ export function listFoldableCarnetPublications(
   items: readonly PrototypeAgendaItem[],
 ): PrototypeAgendaItem[] {
   return items.filter(isCarnetOwnedPublication);
+}
+
+export type WeekPublicationVisibility = "empty" | "draft" | "published";
+
+export function weekCarnetVisibility(items: readonly PrototypeAgendaItem[]): WeekPublicationVisibility {
+  const publications = listFoldableCarnetPublications(items);
+  if (!publications.length) return "empty";
+  return publications.some((item) => isStudentVisible(item)) ? "published" : "draft";
 }
 
 export function previousSchoolWeekNumber(

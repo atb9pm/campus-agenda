@@ -2,6 +2,30 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.55.0] — Carnet : brouillon / publié aux élèves
+
+Planifier une semaine n’affiche plus automatiquement le texte aux élèves. Chaque publication Carnet a un statut **Brouillon** ou **Visible aux élèves**.
+
+### Ajouté
+
+- Pastille et actions dans la colonne : **Publier aux élèves** / **Repasser en brouillon**.
+- Éditeur : **Enregistrer** (reste brouillon ou met à jour le texte déjà publié) et **Enregistrer et publier**.
+- Reprise d’année et nouvelle rédaction Carnet : devoirs et informations en **brouillon**. Les contrôles et les publications Mes cours (clic explicite) restent visibles.
+- Colonne `agenda_items.student_visible` (migration `0030_agenda_student_visible.sql`). Les lignes existantes restent visibles (`DEFAULT 1`).
+- L’agenda élève (API + aperçu enseignant) masque les brouillons. Les contrôles restent visibles.
+
+### Changé
+
+- **Reprendre Sem XX** remplace le bouton « Copier depuis la semaine précédente » : confirmation dans la page, copie en brouillon, masqué si la semaine précédente est vide.
+
+### Conservé
+
+Contrôles, Mes cours « Publier dans l’Agenda », notes prof, éditeur riche 2.54.1. Backup v4 : colonne optionnelle `student_visible` (absente = publié). Glisser-déposer inchangé (suite prévue).
+
+### Migration
+
+`0030_agenda_student_visible.sql`.
+
 ## [2.54.1] — Éditeur Carnet : couleur, listes, barre d’outils
 
 ### Corrigé

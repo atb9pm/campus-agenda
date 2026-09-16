@@ -1,11 +1,12 @@
 import { deletePublication, updatePublication } from "../../../features/agenda/publications.ts";
+import { defaultStudentVisibleForCreate } from "../../../features/agenda/visibility.ts";
 import { verifyPassword } from "../../auth/password.ts";
 import type { AgendaMutationResult, AgendaStore, CreateAgendaInput, StructuredControlPlacement } from "../types.ts";
 import type { PrototypeAgendaItem } from "../../../features/agenda/demo-items.ts";
 import type { AgendaItemRow, SqlDatabase, StudentAccessRow } from "./types.ts";
 
 const AGENDA_ITEM_COLUMNS =
-  "id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id, annual_course_id, course_session_key, course_session_date, reference_session_id, reference_item_id";
+  "id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id, annual_course_id, course_session_key, course_session_date, reference_session_id, reference_item_id, student_visible";
 
 function rowToItem(row: AgendaItemRow): PrototypeAgendaItem {
   return {
@@ -27,6 +28,7 @@ function rowToItem(row: AgendaItemRow): PrototypeAgendaItem {
     courseSessionDate: row.course_session_date ?? null,
     referenceSessionId: row.reference_session_id ?? null,
     referenceItemId: row.reference_item_id ?? null,
+    studentVisible: row.student_visible === 0 ? false : true,
   };
 }
 
@@ -66,13 +68,14 @@ export class SqlAgendaStore implements AgendaStore {
     const title = input.title.trim();
     if (!title) throw new Error("Le titre est obligatoire.");
     const detail = input.detail.trim() || "Aucune précision";
+    const studentVisible = defaultStudentVisibleForCreate(input) ? 1 : 0;
     let result;
     try {
       result = await this.db
         .prepare(
           `INSERT INTO agenda_items
-            (classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id, annual_course_id, course_session_key, course_session_date, reference_session_id, reference_item_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id, annual_course_id, course_session_key, course_session_date, reference_session_id, reference_item_id, student_visible)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           input.classroomId,
@@ -92,6 +95,7 @@ export class SqlAgendaStore implements AgendaStore {
           input.courseSessionDate ?? null,
           input.referenceSessionId ?? null,
           input.referenceItemId ?? null,
+          studentVisible,
         )
         .run();
     } catch (error) {
@@ -122,7 +126,7 @@ export class SqlAgendaStore implements AgendaStore {
   async updateAgendaItem(
     itemId: number,
     actorTeacherId: string,
-    patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber">>,
+    patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber" | "studentVisible">>,
   ): Promise<AgendaMutationResult> {
     const items = await this.exportAllItems();
     const actorIsAdmin = await this.teacherIsAdmin(actorTeacherId);
@@ -136,9 +140,18 @@ export class SqlAgendaStore implements AgendaStore {
 
     await this.db
       .prepare(
-        "UPDATE agenda_items SET title = ?, detail = ?, day = ?, hour = ?, subject_id = ?, school_week_number = ?, updated_at = datetime('now') WHERE id = ?",
+        "UPDATE agenda_items SET title = ?, detail = ?, day = ?, hour = ?, subject_id = ?, school_week_number = ?, student_visible = ?, updated_at = datetime('now') WHERE id = ?",
       )
-      .bind(updated.title, updated.detail, updated.day, updated.hour, updated.subjectId, updated.schoolWeekNumber, itemId)
+      .bind(
+        updated.title,
+        updated.detail,
+        updated.day,
+        updated.hour,
+        updated.subjectId,
+        updated.schoolWeekNumber,
+        updated.studentVisible === false ? 0 : 1,
+        itemId,
+      )
       .run();
 
     return { ok: true, item: updated };
@@ -346,8 +359,8 @@ export class SqlAgendaStore implements AgendaStore {
       await this.db
         .prepare(
           `INSERT INTO agenda_items
-            (id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id, annual_course_id, course_session_key, course_session_date, reference_session_id, reference_item_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id, annual_course_id, course_session_key, course_session_date, reference_session_id, reference_item_id, student_visible)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           item.id,
@@ -368,6 +381,7 @@ export class SqlAgendaStore implements AgendaStore {
           item.courseSessionDate ?? null,
           item.referenceSessionId ?? null,
           item.referenceItemId ?? null,
+          item.studentVisible === false ? 0 : 1,
         )
         .run();
     }

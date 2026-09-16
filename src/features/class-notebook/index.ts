@@ -113,7 +113,9 @@ export {
   planCarnetWeekPublicationSave,
   previousSchoolWeekNumber,
   savePlanTouchesItem,
+  weekCarnetVisibility,
   type CarnetPublicationSavePlan,
+  type WeekPublicationVisibility,
 } from "./rich-agenda.ts";
 export {
   clampWeekDisplayCount,

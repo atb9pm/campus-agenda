@@ -53,6 +53,7 @@ export interface CreateAgendaInput {
   courseSessionDate?: string | null;
   referenceSessionId?: string | null;
   referenceItemId?: string | null;
+  studentVisible?: boolean;
 }
 
 /** Placement dérivé d’une CourseSession réelle. Pas un PATCH générique. */
@@ -75,7 +76,7 @@ export interface AgendaStore {
   updateAgendaItem(
     itemId: number,
     actorTeacherId: string,
-    patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber">>,
+    patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber" | "studentVisible">>,
   ): Promise<AgendaMutationResult>;
   /** Mutation métier de déplacement structuré. Ne pas utiliser pour un PATCH libre. */
   moveStructuredControlPlacement(

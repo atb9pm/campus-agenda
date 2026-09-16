@@ -99,7 +99,7 @@ async function enrollAdmin(store = getMemoryAdminMfaStore(), teacherId = TEACHER
 }
 
 test("version 2.54.1 — 2FA administrateur TOTP", () => {
-  assert.equal(APP_VERSION, "2.54.1");
+  assert.equal(APP_VERSION, "2.55.0");
   assert.ok(CAMPUS_BACKUP_INSERT_ORDER.includes("teacher_mfa"));
   assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 30);
   assert.equal(isReset2faConfirmToken("yes"), false);

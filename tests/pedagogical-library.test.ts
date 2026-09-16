@@ -129,6 +129,11 @@ test("phase 2.1 — dupliquer depuis une année archivée", () => {
   assert.equal(duplicateResult.created.length, archivedItems.length);
   assert.equal(duplicateResult.templatesCreated.length, archivedItems.length);
   assert.ok(duplicateResult.created.every((item) => item.schoolYearId === ACTIVE_YEAR_ID));
+  assert.ok(
+    duplicateResult.created
+      .filter((item) => item.type !== "TEST")
+      .every((item) => item.studentVisible === false),
+  );
 });
 
 test("phase 2.1 — mise à jour directe du modèle par son auteur", () => {

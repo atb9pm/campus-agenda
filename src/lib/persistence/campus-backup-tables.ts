@@ -177,6 +177,7 @@ export const CAMPUS_BACKUP_COLUMNS: Record<CampusBackupTableName, BackupColumnSp
     { name: "course_session_date", type: "text" },
     { name: "reference_session_id", type: "text" },
     { name: "reference_item_id", type: "text" },
+    { name: "student_visible", type: "flag" },
   ),
   timetable_imports: cols(
     { name: "id", type: "text", required: true },

@@ -41,6 +41,7 @@ export interface AgendaItemRow {
   course_session_date: string | null;
   reference_session_id: string | null;
   reference_item_id: string | null;
+  student_visible: number | null;
 }
 
 export interface StudentAccessRow {

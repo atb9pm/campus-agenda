@@ -1,4 +1,5 @@
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
+import { isVisibleToStudent } from "../agenda/visibility.ts";
 import { getItemsForClassroom } from "../teacher/queries.ts";
 
 /** Libellé anonymisé affiché aux élèves — aucun nom d'enseignant réel. */
@@ -8,7 +9,7 @@ export function getStudentAgendaItems(
   items: PrototypeAgendaItem[],
   classroomId: string,
 ): PrototypeAgendaItem[] {
-  return getItemsForClassroom(items, classroomId);
+  return getItemsForClassroom(items, classroomId).filter(isVisibleToStudent);
 }
 
 export function anonymizeAuthorForStudent(_authorTeacherId: string): string {

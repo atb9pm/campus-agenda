@@ -38,6 +38,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     courseSessionDate?: string;
     referenceSessionId?: string;
     referenceItemId?: string;
+    studentVisible?: boolean;
   };
 
   const existing = await auth.store!.findAgendaItem(itemId);
@@ -61,6 +62,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         schoolWeekNumber: body.schoolWeekNumber,
         day: body.day,
         hour: body.hour,
+        studentVisible: body.studentVisible,
       });
       if (!result.ok) {
         return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
@@ -77,6 +79,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const result = await auth.store!.updateAgendaItem(itemId, auth.session!.teacherId, {
       title: body.title,
       detail: body.detail,
+      studentVisible: body.studentVisible,
     });
     if (!result.ok) {
       return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });

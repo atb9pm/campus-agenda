@@ -299,7 +299,7 @@ export function PedagogicalLibraryPanel({
         <article className="library-card">
           <header>
             <h3>Dupliquer depuis l&apos;année précédente</h3>
-            <p>Reprendre vos publications d&apos;une année archivée pour l&apos;année active.</p>
+            <p>Reprendre vos publications d&apos;une année archivée pour l&apos;année active. Les devoirs et informations arrivent en <strong>brouillon</strong> : les élèves ne les voient pas tant que vous ne les publiez pas dans le Carnet.</p>
           </header>
           {archivedYears.length === 0 ? (
             <p className="library-empty">
