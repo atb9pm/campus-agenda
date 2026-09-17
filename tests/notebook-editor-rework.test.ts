@@ -63,7 +63,7 @@ function lineText(doc: CampusRichDoc, blockIndex: number, itemIndex: number | nu
 
 test("version 2.56.0 — éditeur Carnet reconstruit sur le modèle, sans execCommand", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.59.1");
+  assert.equal(APP_VERSION, "2.60.0");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(editor, /execCommand/);
   assert.doesNotMatch(editor, /window\.prompt/);
@@ -333,7 +333,7 @@ test("vue compacte — résumé lisible, sans cases décalées ni cadres", async
 
 test("version 2.57.0 — curseur, menus notes, déplacement d’une ligne", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.59.1");
+  assert.equal(APP_VERSION, "2.60.0");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.match(editor, /Le DOM n'est réécrit que sur syncToken/);
   assert.match(editor, /snapCaretToClick/);
@@ -531,7 +531,7 @@ test("copier une ligne à un emplacement précis", () => {
 
 test("version 2.58.0 — couleur sur la sélection, Annuler / Rétablir", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.59.1");
+  assert.equal(APP_VERSION, "2.60.0");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.match(editor, /Annuler \(Ctrl\+Z\)/);
   assert.match(editor, /Rétablir \(Ctrl\+Y\)/);
@@ -702,7 +702,7 @@ test("couper / supprimer — retire n’importe quelle ligne, y compris la premi
 
 test("version 2.59.1 — souligné ≠ lien, Lien visible sur le mot", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.59.1");
+  assert.equal(APP_VERSION, "2.60.0");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   const view = await readFile(new URL("../web/app/components/rich-doc-view.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
@@ -753,4 +753,23 @@ test("Lien — adresse normalisée, plage au mot si curseur seul", () => {
   const underlined = applyMarkToRange(inlines, 0, 8, "underline", true);
   assert.equal(marksInRange(underlined, 0, 8).underline, true);
   assert.equal(marksInRange(underlined, 0, 8).href, undefined);
+});
+
+test("version 2.60.0 — cartes sans trait, barres d’insertion au survol", async () => {
+  const { APP_VERSION } = await import("../src/lib/app-version.ts");
+  assert.equal(APP_VERSION, "2.60.0");
+  const view = await readFile(new URL("../web/app/components/rich-doc-view.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
+  const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
+  assert.match(view, /insertSlotsDragging/);
+  assert.match(view, /is-insert-dragging/);
+  assert.match(view, /is-dragging/);
+  assert.match(css, /class-notebook-zone-publication \{[^}]*background: #eef4fb/);
+  assert.match(css, /\.rich-doc-summary-line\.is-interactive \{[^}]*background: #fff/);
+  assert.match(css, /\.rich-doc-insert-slot\.is-interactive \.rich-doc-insert-slot-bar \{ background: transparent/);
+  assert.match(css, /is-insert-dragging/);
+  assert.doesNotMatch(css, /\.rich-doc-insert-slot\.is-interactive \.rich-doc-insert-slot-bar \{ background: #c5d4ea/);
+  assert.match(panel, /insertSlotsDragging/);
+  assert.match(panel, /survolez entre les blocs pour coller/);
+  assert.doesNotMatch(panel, /touchez une barre pour l’insérer/);
 });

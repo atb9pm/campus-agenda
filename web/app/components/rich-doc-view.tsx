@@ -84,6 +84,7 @@ function InsertSlot({
   at,
   active = false,
   interactive = false,
+  dragging = false,
   emptyLabel,
   onInsert,
   onDragOver,
@@ -92,6 +93,7 @@ function InsertSlot({
   at: number;
   active?: boolean;
   interactive?: boolean;
+  dragging?: boolean;
   emptyLabel?: string;
   onInsert?: (at: number) => void;
   onDragOver?: (at: number, event: DragEvent<HTMLDivElement>) => void;
@@ -99,7 +101,7 @@ function InsertSlot({
 }) {
   return (
     <div
-      className={`rich-doc-insert-slot${active ? " is-active" : ""}${interactive ? " is-interactive" : ""}${emptyLabel ? " is-empty" : ""}`}
+      className={`rich-doc-insert-slot${active ? " is-active" : ""}${interactive ? " is-interactive" : ""}${dragging ? " is-dragging" : ""}${emptyLabel ? " is-empty" : ""}`}
       data-carnet-insert={String(at)}
       role={interactive ? "button" : undefined}
       tabIndex={interactive ? 0 : undefined}
@@ -155,6 +157,7 @@ export function RichDocView({
   selectedLineKey,
   lineDraggable = false,
   showInsertSlots = false,
+  insertSlotsDragging = false,
   activeInsertSlot,
   hiddenInsertSlots,
   onLineClick,
@@ -172,6 +175,7 @@ export function RichDocView({
   selectedLineKey?: string;
   lineDraggable?: boolean;
   showInsertSlots?: boolean;
+  insertSlotsDragging?: boolean;
   activeInsertSlot?: number | null;
   hiddenInsertSlots?: ReadonlySet<number>;
   onLineClick?: (line: RichDocLine) => void;
@@ -185,11 +189,12 @@ export function RichDocView({
   if (isEmptyRichDoc(doc)) {
     if (showInsertSlots) {
       return (
-        <div className="rich-doc-summary">
+        <div className={`rich-doc-summary${insertSlotsDragging ? " is-insert-dragging" : ""}`}>
           <InsertSlot
             at={0}
             active={activeInsertSlot === 0}
             interactive={Boolean(onInsertSlot)}
+            dragging={insertSlotsDragging}
             emptyLabel={emptyLabel}
             onInsert={onInsertSlot}
             onDragOver={onInsertSlotDragOver}
@@ -213,6 +218,7 @@ export function RichDocView({
           at={at}
           active={activeInsertSlot === at}
           interactive={Boolean(onInsertSlot)}
+          dragging={insertSlotsDragging}
           onInsert={onInsertSlot}
           onDragOver={onInsertSlotDragOver}
           onDrop={onInsertSlotDrop}
@@ -221,7 +227,7 @@ export function RichDocView({
     };
 
     return (
-      <div className="rich-doc-summary">
+      <div className={`rich-doc-summary${insertSlotsDragging ? " is-insert-dragging" : ""}`}>
         {renderSlot(0)}
         {shown.map((line, index) => {
           const key = lineViewKey(line);
