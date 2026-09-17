@@ -2,6 +2,17 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.59.0] — Couper, coller, et Suppr sur la ligne en surbrillance
+
+### Ajouté
+
+- **Couper** (**Ctrl+X**, bouton **Couper**) : le bloc (ou la sélection) part dans le presse-papiers et disparaît. **Coller** le remet où tu es.
+- **Suppr** (ou Retour arrière) sur une **ligne en surbrillance** dans la vue semaine : la ligne est effacée.
+
+### Conservé
+
+Copier / Coller, format `campus-rich-v1`, brouillon / publié, notes. Aucune migration SQL.
+
 ## [2.58.1] — Copier / coller fiable dans le Carnet
 
 ### Corrigé

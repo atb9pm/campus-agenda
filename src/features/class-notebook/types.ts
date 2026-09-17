@@ -1,4 +1,4 @@
-import type { CampusRichDoc } from "./rich-doc.ts";
+import type { CampusRichDoc, RichBlock } from "./rich-doc.ts";
 
 export interface TeacherWeekNote {
   id: string;
@@ -23,4 +23,6 @@ export interface NotebookClipboard {
   lineSource?: "publication" | "notes";
   blockIndex?: number;
   itemIndex?: number | null;
+  /** Contenu de la ligne, pour couper/coller même après suppression. */
+  block?: RichBlock;
 }

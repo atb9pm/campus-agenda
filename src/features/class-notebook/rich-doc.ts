@@ -890,7 +890,7 @@ function cloneBlock(block: RichBlock): RichBlock {
 }
 
 /** Extraie une ligne (bloc entier, ou un seul élément de liste) sans toucher au reste. */
-export function extractLine(
+function takeLine(
   doc: CampusRichDoc,
   blockIndex: number,
   itemIndex: number | null,
@@ -924,10 +924,49 @@ export function extractLine(
     blocks.splice(blockIndex, 1);
   }
 
-  if (!blockHasText(extracted)) return null;
   return {
     extracted,
     remaining: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks }),
+  };
+}
+
+export function extractLine(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+): { extracted: RichBlock; remaining: CampusRichDoc } | null {
+  const taken = takeLine(doc, blockIndex, itemIndex);
+  if (!taken || !blockHasText(taken.extracted)) return null;
+  return taken;
+}
+
+/**
+ * Supprime une ligne, y compris la première. S’il n’en reste aucune, document vide
+ * (l’éditeur affiche alors un paragraphe vide).
+ */
+export function deleteLine(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+): { doc: CampusRichDoc; caret: RichLinePosition } | null {
+  const lines = richDocLines(doc);
+  const position = lines.findIndex((line) => line.blockIndex === blockIndex && line.itemIndex === itemIndex);
+  if (position < 0) return null;
+  const taken = takeLine(doc, blockIndex, itemIndex);
+  if (!taken) return null;
+  const next = taken.remaining.blocks.length ? taken.remaining : emptyRichDoc();
+  const nextLines = richDocLines(next);
+  const caretLine = nextLines[Math.min(position, Math.max(0, nextLines.length - 1))] ?? nextLines[0];
+  if (!caretLine) {
+    return { doc: emptyRichDoc(), caret: { blockIndex: 0, itemIndex: null, offset: 0 } };
+  }
+  return {
+    doc: next,
+    caret: {
+      blockIndex: caretLine.blockIndex,
+      itemIndex: caretLine.itemIndex,
+      offset: position === 0 ? 0 : inlinesPlainText(caretLine.inlines).length,
+    },
   };
 }
 

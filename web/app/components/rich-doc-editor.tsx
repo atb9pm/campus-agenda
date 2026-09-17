@@ -30,6 +30,7 @@ import {
   redoRichDocHistory,
   rememberRichClip,
   removeLine,
+  deleteLine,
   richDocLines,
   sanitizeHref,
   sanitizeRichDoc,
@@ -280,6 +281,7 @@ export function RichDocEditor({
   const softBreakLock = useRef(false);
   const pasteLock = useRef(false);
   const copyCurrentRef = useRef<() => void>(() => undefined);
+  const cutCurrentRef = useRef<() => void>(() => undefined);
   const pasteCurrentRef = useRef<(line?: RichDocLine, element?: HTMLElement) => void>(() => undefined);
 
   function setTypingMarksBoth(marks: RichMarks) {
@@ -360,6 +362,12 @@ export function RichDocEditor({
         event.preventDefault();
         event.stopPropagation();
         copyCurrentRef.current();
+        return;
+      }
+      if (key === "x" && !inLine) {
+        event.preventDefault();
+        event.stopPropagation();
+        cutCurrentRef.current();
         return;
       }
       if (key === "v" && !inLine) {
@@ -582,6 +590,28 @@ export function RichDocEditor({
     storeClip(clip);
   }
 
+  function cutCurrent() {
+    const target = liveTarget();
+    const current = target?.selection ?? fallbackSelection();
+    const clip = buildClip();
+    if (!clip || !current) return;
+    storeClip(clip);
+    if (current.start !== current.end) {
+      const inlines = target?.inlines ?? lineFromSelection(current)?.inlines;
+      if (!inlines) return;
+      const [before] = splitInlinesAt(inlines, current.start);
+      const [, after] = splitInlinesAt(inlines, current.end);
+      commit(setLineInlines(docRef.current, current.blockIndex, current.itemIndex, [...before, ...after]), {
+        blockIndex: current.blockIndex,
+        itemIndex: current.itemIndex,
+        offset: current.start,
+      });
+      return;
+    }
+    const result = deleteLine(docRef.current, current.blockIndex, current.itemIndex);
+    if (result) commit(result.doc, result.caret);
+  }
+
   function applyClip(
     clip: RichClip,
     line?: RichDocLine,
@@ -645,6 +675,7 @@ export function RichDocEditor({
 
   useEffect(() => {
     copyCurrentRef.current = copyCurrent;
+    cutCurrentRef.current = cutCurrent;
     pasteCurrentRef.current = pasteCurrent;
   });
 
@@ -673,6 +704,15 @@ export function RichDocEditor({
       event.preventDefault();
       event.stopPropagation();
       copyCurrent();
+      return true;
+    }
+    if (event.key.toLowerCase() === "x") {
+      const inEditor =
+        event.target instanceof HTMLElement && event.target.closest("[data-inline-editor]");
+      if (inEditor) return false;
+      event.preventDefault();
+      event.stopPropagation();
+      cutCurrent();
       return true;
     }
     if (event.key.toLowerCase() === "v") {
@@ -821,6 +861,7 @@ export function RichDocEditor({
           <ToolButton label="Annuler (Ctrl+Z)" text="Annuler" disabled={!canUndo} onClick={undo} />
           <ToolButton label="Rétablir (Ctrl+Y)" text="Rétablir" disabled={!canRedo} onClick={redo} />
           <ToolButton label="Copier le bloc (Ctrl+C)" text="Copier" onClick={copyCurrent} />
+          <ToolButton label="Couper le bloc (Ctrl+X)" text="Couper" onClick={cutCurrent} />
           <ToolButton label="Coller (Ctrl+V)" text="Coller" onClick={() => pasteCurrent()} />
         </div>
         <div className="rich-doc-tool-group" role="group" aria-label="Texte">
@@ -1023,6 +1064,13 @@ export function RichDocEditor({
                     storeClip(clip);
                     event.clipboardData.setData("text/plain", encodeRichClip(clip));
                   }}
+                  onCut={(event) => {
+                    const clip = buildClip();
+                    if (!clip) return;
+                    event.preventDefault();
+                    event.clipboardData.setData("text/plain", encodeRichClip(clip));
+                    cutCurrent();
+                  }}
                   onPaste={(event) => {
                     event.preventDefault();
                     ingestPastedText(event.clipboardData.getData("text/plain"), line, event.currentTarget);
@@ -1035,9 +1083,9 @@ export function RichDocEditor({
       </div>
 
       <p className="rich-doc-hint">
-        Entrée crée une ligne. Maj + Entrée va à la ligne dans le bloc. Ctrl+C copie le bloc (ou la
-        sélection). Ctrl+V colle — même si le curseur n’est plus dans la ligne. Gras, couleur et lien : sur la
-        sélection, ou sur le texte tapé ensuite. Ctrl+Z annule.
+        Entrée crée une ligne. Maj + Entrée va à la ligne dans le bloc. Ctrl+C copie, Ctrl+X coupe,
+        Ctrl+V colle. Suppr efface la ligne en surbrillance dans la vue semaine. Gras, couleur et lien :
+        sur la sélection, ou sur le texte tapé ensuite. Ctrl+Z annule.
       </p>
     </div>
   );

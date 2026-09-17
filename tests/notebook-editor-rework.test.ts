@@ -14,6 +14,7 @@ import {
   emptyRichDocHistory,
   extractLine,
   copyLineToDoc,
+  deleteLine,
   inlinesPlainText,
   insertBlockAt,
   insertQuickBlock,
@@ -59,7 +60,7 @@ function lineText(doc: CampusRichDoc, blockIndex: number, itemIndex: number | nu
 
 test("version 2.56.0 — éditeur Carnet reconstruit sur le modèle, sans execCommand", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.58.1");
+  assert.equal(APP_VERSION, "2.59.0");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(editor, /execCommand/);
   assert.doesNotMatch(editor, /window\.prompt/);
@@ -329,7 +330,7 @@ test("vue compacte — résumé lisible, sans cases décalées ni cadres", async
 
 test("version 2.57.0 — curseur, menus notes, déplacement d’une ligne", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.58.1");
+  assert.equal(APP_VERSION, "2.59.0");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.match(editor, /Le DOM n'est réécrit que sur syncToken/);
   assert.match(editor, /snapCaretToClick/);
@@ -527,7 +528,7 @@ test("copier une ligne à un emplacement précis", () => {
 
 test("version 2.58.0 — couleur sur la sélection, Annuler / Rétablir", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.58.1");
+  assert.equal(APP_VERSION, "2.59.0");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.match(editor, /Annuler \(Ctrl\+Z\)/);
   assert.match(editor, /Rétablir \(Ctrl\+Y\)/);
@@ -539,13 +540,19 @@ test("version 2.58.0 — couleur sur la sélection, Annuler / Rétablir", async 
   assert.match(editor, /data-padding/);
   assert.match(editor, /insertSoftBreak/);
   assert.match(editor, /Copier le bloc \(Ctrl\+C\)/);
+  assert.match(editor, /Couper le bloc \(Ctrl\+X\)/);
   assert.match(editor, /Coller \(Ctrl\+V\)/);
   assert.match(editor, /pasteRichClip/);
   assert.match(editor, /insertFromPaste/);
   assert.match(editor, /fallbackSelection/);
+  assert.match(editor, /cutCurrent/);
+  assert.match(editor, /onCut/);
   assert.doesNotMatch(editor, /disabled=\{!canPaste\}/);
   const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
   assert.match(panel, /if \(editor\) return;/);
+  assert.match(panel, /deleteCarnetLine/);
+  assert.match(panel, /cutCarnetLine/);
+  assert.match(panel, /key === "delete"/);
 });
 
 test("couleur — seulement la plage choisie, pas le début de la ligne", () => {
@@ -659,4 +666,33 @@ test("copier-coller — bloc sous le curseur, sélection colorée, sans HTML ét
     visibleRichDocLines(same!).map((entry) => inlinesPlainText(entry.inlines)),
     ["Alpha", "Alpha"],
   );
+});
+
+test("couper / supprimer — retire n’importe quelle ligne, y compris la première", () => {
+  const two = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [
+      { type: "paragraph", inlines: [{ text: "Premier" }] },
+      { type: "paragraph", inlines: [{ text: "Second" }] },
+    ],
+  });
+  const deletedFirst = deleteLine(two, 0, null);
+  assert.ok(deletedFirst);
+  assert.deepEqual(
+    visibleRichDocLines(deletedFirst!.doc).map((line) => inlinesPlainText(line.inlines)),
+    ["Second"],
+  );
+
+  const deletedLast = deleteLine(two, 1, null);
+  assert.ok(deletedLast);
+  assert.deepEqual(
+    visibleRichDocLines(deletedLast!.doc).map((line) => inlinesPlainText(line.inlines)),
+    ["Premier"],
+  );
+
+  const only = paragraphDoc("Seul");
+  const emptied = deleteLine(only, 0, null);
+  assert.ok(emptied);
+  assert.equal(visibleRichDocLines(emptied!.doc).length, 0);
+  assert.equal(inlinesPlainText(richDocLines(emptied!.doc)[0]!.inlines), "");
 });
