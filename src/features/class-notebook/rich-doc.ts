@@ -167,7 +167,11 @@ export function sanitizeRichDoc(input: unknown): CampusRichDoc {
 }
 
 function clippedText(value: string): string {
-  return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").slice(0, MAX_TEXT_LENGTH);
+  return value
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+    .slice(0, MAX_TEXT_LENGTH);
 }
 
 function sanitizeMarks(raw: unknown): RichMarks | undefined {
@@ -362,7 +366,7 @@ export function parseInlinesFromHtml(html: string): RichInline[] {
     const attrs = match[2] ?? "";
     const closing = match[0]!.startsWith("</");
     if (tag === "br") {
-      inlines.push({ text: " " });
+      inlines.push({ text: "\n" });
       continue;
     }
     if (tag === "script" || tag === "iframe" || tag === "object" || tag === "embed") continue;
@@ -552,6 +556,21 @@ export function marksInRange(
   return common;
 }
 
+/** Insère du texte (y compris un saut de ligne) à une position de caractères. */
+export function insertTextAt(
+  inlines: readonly RichInline[],
+  offset: number,
+  text: string,
+): RichInline[] {
+  const piece = clippedText(text);
+  if (!piece) return normalizeInlines(inlines);
+  const [before, after] = splitInlinesAt(inlines, offset);
+  if (!before.length) return normalizeInlines([{ text: piece }, ...after]);
+  const last = before[before.length - 1]!;
+  before[before.length - 1] = { ...last, text: last.text + piece };
+  return normalizeInlines([...before, ...after]);
+}
+
 export function splitInlinesAt(
   inlines: readonly RichInline[],
   offset: number,
@@ -729,6 +748,57 @@ export function splitLine(
     doc: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: blocks.slice(0, MAX_BLOCKS) }),
     caret: { blockIndex: blockIndex + 1, itemIndex: null, offset: 0 },
   };
+}
+
+/**
+ * Colle du texte brut : les sauts simples restent dans le bloc,
+ * une ligne vide crée un nouveau bloc.
+ */
+export function pastePlainText(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+  offset: number,
+  raw: string,
+): { doc: CampusRichDoc; caret: RichLinePosition } {
+  const paragraphs = clippedText(raw).split(/\n{2,}/);
+  const inlines = lineInlines(doc, blockIndex, itemIndex);
+  if (paragraphs.length <= 1) {
+    const piece = paragraphs[0] ?? "";
+    const next = insertTextAt(inlines, offset, piece);
+    return {
+      doc: setLineInlines(doc, blockIndex, itemIndex, next),
+      caret: { blockIndex, itemIndex, offset: offset + piece.length },
+    };
+  }
+
+  const [before, after] = splitInlinesAt(inlines, offset);
+  let nextDoc = setLineInlines(
+    doc,
+    blockIndex,
+    itemIndex,
+    normalizeInlines([...before, { text: paragraphs[0]! }]),
+  );
+  let caret: RichLinePosition = {
+    blockIndex,
+    itemIndex,
+    offset: inlinesPlainText(before).length + paragraphs[0]!.length,
+  };
+
+  for (let index = 1; index < paragraphs.length; index += 1) {
+    const split = splitLine(nextDoc, caret.blockIndex, caret.itemIndex, caret.offset);
+    nextDoc = split.doc;
+    caret = split.caret;
+    const chunk = paragraphs[index]!;
+    const isLast = index === paragraphs.length - 1;
+    const combined = isLast
+      ? normalizeInlines([{ text: chunk }, ...after])
+      : [{ text: chunk }];
+    nextDoc = setLineInlines(nextDoc, caret.blockIndex, caret.itemIndex, combined);
+    caret = { ...caret, offset: chunk.length };
+  }
+
+  return { doc: nextDoc, caret };
 }
 
 /**

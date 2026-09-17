@@ -13,11 +13,14 @@ import {
   inlinesPlainText,
   insertBlockAt,
   insertQuickBlock,
+  insertTextAt,
   lineIndexAfterMove,
   marksInRange,
   moveLineToDoc,
   moveLineWithinDoc,
   normalizeInlines,
+  parseInlinesFromHtml,
+  pastePlainText,
   removeLine,
   richDocLines,
   sanitizeRichDoc,
@@ -325,6 +328,10 @@ test("version 2.57.0 — curseur, menus notes, déplacement d’une ligne", asyn
   assert.match(editor, /Blocs de la semaine/);
   assert.match(editor, /label="Titre"/);
   assert.match(editor, /Insérer un lien/);
+  assert.match(editor, /event\.shiftKey/);
+  assert.match(editor, /insertTextAt/);
+  assert.match(editor, /Maj \+ Entrée va à la ligne dans le bloc/);
+  assert.match(editor, /pastePlainText/);
   const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
   assert.match(panel, /selectAndCopyLine/);
   assert.match(panel, /Supprimer/);
@@ -505,4 +512,27 @@ test("copier une ligne à un emplacement précis", () => {
     ["avant", "copie", "après"],
   );
   assert.equal(source.blocks.length, 1);
+});
+
+test("Maj+Entrée — un <br> devient un saut de ligne dans le même bloc", () => {
+  const parsed = parseInlinesFromHtml("Bonjour<br>tout le monde");
+  assert.equal(inlinesPlainText(parsed), "Bonjour\ntout le monde");
+
+  const inserted = insertTextAt([{ text: "Devoirinjection" }], 6, "\n");
+  assert.equal(inlinesPlainText(inserted), "Devoir\ninjection");
+});
+
+test("coller — saut simple dans le bloc, ligne vide = nouveau bloc", () => {
+  const doc = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [{ type: "paragraph", inlines: [{ text: "AvantAprès" }] }],
+  });
+  const same = pastePlainText(doc, 0, null, 5, "milieu\nsuite");
+  assert.equal(same.doc.blocks.length, 1);
+  assert.equal(inlinesPlainText(richDocLines(same.doc)[0]!.inlines), "Avantmilieu\nsuiteAprès");
+
+  const split = pastePlainText(doc, 0, null, 5, "un\n\ndeux");
+  assert.equal(split.doc.blocks.length, 2);
+  assert.equal(inlinesPlainText(richDocLines(split.doc)[0]!.inlines), "Avantun");
+  assert.equal(inlinesPlainText(richDocLines(split.doc)[1]!.inlines), "deuxAprès");
 });
