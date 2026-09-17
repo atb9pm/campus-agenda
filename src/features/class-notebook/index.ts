@@ -125,6 +125,8 @@ export {
   setChecklistChecked,
   setLineInlines,
   splitInlinesAt,
+  sliceInlines,
+  insertInlinesAt,
   splitLine,
   type RichDocLine,
   type RichLinePosition,
@@ -142,6 +144,17 @@ export {
   type RichDocHistoryEntry,
   type RichDocHistoryKind,
 } from "./rich-doc-history.ts";
+export {
+  CAMPUS_RICH_CLIP_PREFIX,
+  copyLineAsClip,
+  decodeRichClip,
+  encodeRichClip,
+  lastRememberedRichClip,
+  pasteRichClip,
+  rememberRichClip,
+  richClipPlainText,
+  type RichClip,
+} from "./rich-doc-clip.ts";
 export {
   buildPublicationPayload,
   cloneRichDoc,

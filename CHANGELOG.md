@@ -13,6 +13,7 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 ### Ajouté
 
 - **Annuler** et **Rétablir** dans la barre de l’éditeur (**Ctrl+Z**, **Ctrl+Y** ou **Ctrl+Maj+Z**). Les lettres d’un même mot sont regroupées.
+- **Copier / Coller** (**Ctrl+C**, **Ctrl+V**) : copie le bloc (ou la sélection, avec mise en forme) et le colle dans l’éditeur — y compris vers les notes ou une autre semaine. Boutons dans la barre pour le téléphone.
 
 ### Conservé
 

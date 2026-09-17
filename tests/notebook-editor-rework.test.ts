@@ -5,8 +5,11 @@ import test from "node:test";
 import {
   applyMarkToRange,
   applyStructureToLine,
+  copyLineAsClip,
   encodeRichDetail,
+  decodeRichClip,
   decodeRichDetail,
+  encodeRichClip,
   emptyRichDoc,
   emptyRichDocHistory,
   extractLine,
@@ -23,6 +26,9 @@ import {
   normalizeInlines,
   parseInlinesFromHtml,
   pastePlainText,
+  pasteRichClip,
+  rememberRichClip,
+  sliceInlines,
   pushRichDocHistory,
   redoRichDocHistory,
   removeLine,
@@ -532,6 +538,9 @@ test("version 2.58.0 — couleur sur la sélection, Annuler / Rétablir", async 
   assert.doesNotMatch(editor, /collapsed \? \{ \.\.\.current, start: 0, end: length \}/);
   assert.match(editor, /data-padding/);
   assert.match(editor, /insertSoftBreak/);
+  assert.match(editor, /Copier le bloc \(Ctrl\+C\)/);
+  assert.match(editor, /Coller \(Ctrl\+V\)/);
+  assert.match(editor, /pasteRichClip/);
 });
 
 test("couleur — seulement la plage choisie, pas le début de la ligne", () => {
@@ -606,4 +615,36 @@ test("coller — saut simple dans le bloc, ligne vide = nouveau bloc", () => {
   assert.equal(split.doc.blocks.length, 2);
   assert.equal(inlinesPlainText(richDocLines(split.doc)[0]!.inlines), "Avantun");
   assert.equal(inlinesPlainText(richDocLines(split.doc)[1]!.inlines), "deuxAprès");
+});
+
+test("copier-coller — bloc sous le curseur, sélection colorée, sans HTML étranger", () => {
+  rememberRichClip(null);
+  const source = paragraphDoc("Alpha");
+  const clip = copyLineAsClip(source, 0, null);
+  assert.equal(clip?.kind, "block");
+  const encoded = encodeRichClip(clip!);
+  assert.match(encoded, /^CAMPUS_RICH_CLIP_V1:/);
+  assert.deepEqual(decodeRichClip(encoded)?.kind, "block");
+  assert.equal(decodeRichClip("texte Word sans préfixe"), null);
+
+  const target = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [
+      { type: "paragraph", inlines: [{ text: "Alpha" }] },
+      { type: "paragraph", inlines: [{ text: "Beta" }] },
+    ],
+  });
+  const pasted = pasteRichClip(target, 0, null, 5, clip!);
+  assert.ok(pasted);
+  const texts = richDocLines(pasted!.doc).map((line) => inlinesPlainText(line.inlines));
+  assert.deepEqual(texts, ["Alpha", "Alpha", "Beta"]);
+
+  const colored = applyMarkToRange([{ text: "Alpha" }], 0, 5, "color", "red");
+  const sliced = sliceInlines(colored, 0, 5);
+  const into = pasteRichClip(paragraphDoc("X"), 0, null, 1, { kind: "inlines", inlines: sliced });
+  assert.ok(into);
+  const line = richDocLines(into!.doc)[0]!.inlines;
+  assert.equal(inlinesPlainText(line), "XAlpha");
+  assert.equal(marksInRange(line, 1, 6).color, "red");
+  assert.equal(marksInRange(line, 0, 1).color, undefined);
 });
