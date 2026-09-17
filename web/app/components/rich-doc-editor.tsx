@@ -268,7 +268,6 @@ export function RichDocEditor({
   const [syncToken, setSyncToken] = useState(0);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
-  const [canPaste, setCanPaste] = useState(() => lastRememberedRichClip() != null);
 
   const docRef = useRef(doc);
   const lineRefs = useRef(new Map<string, HTMLElement>());
@@ -279,6 +278,9 @@ export function RichDocEditor({
   const typingMarksRef = useRef<RichMarks>({});
   const pendingTyping = useRef(false);
   const softBreakLock = useRef(false);
+  const pasteLock = useRef(false);
+  const copyCurrentRef = useRef<() => void>(() => undefined);
+  const pasteCurrentRef = useRef<(line?: RichDocLine, element?: HTMLElement) => void>(() => undefined);
 
   function setTypingMarksBoth(marks: RichMarks) {
     typingMarksRef.current = marks;
@@ -311,6 +313,7 @@ export function RichDocEditor({
       return;
     }
     const clean = sanitizeRichDoc(value);
+    if (JSON.stringify(clean) === JSON.stringify(docRef.current)) return;
     docRef.current = clean;
     historyRef.current = emptyRichDocHistory();
     pendingTyping.current = false;
@@ -345,6 +348,29 @@ export function RichDocEditor({
       end: caret.offset,
     });
   }, [syncToken]);
+
+  useEffect(() => {
+    function onDocKey(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest("input, textarea")) return;
+      const inLine = target instanceof HTMLElement && target.closest("[data-inline-editor]");
+      const key = event.key.toLowerCase();
+      if (key === "c" && !inLine) {
+        event.preventDefault();
+        event.stopPropagation();
+        copyCurrentRef.current();
+        return;
+      }
+      if (key === "v" && !inLine) {
+        event.preventDefault();
+        event.stopPropagation();
+        pasteCurrentRef.current();
+      }
+    }
+    document.addEventListener("keydown", onDocKey, true);
+    return () => document.removeEventListener("keydown", onDocKey, true);
+  }, []);
 
   const commit = useCallback(
     (
@@ -515,9 +541,16 @@ export function RichDocEditor({
     restoreHistoryEntry(result.entry);
   }
 
+  function fallbackSelection(): EditorSelection | null {
+    if (selectionRef.current) return selectionRef.current;
+    const line = richDocLines(docRef.current)[0];
+    if (!line) return null;
+    return { blockIndex: line.blockIndex, itemIndex: line.itemIndex, start: 0, end: 0 };
+  }
+
   function buildClip(): RichClip | null {
     const target = liveTarget();
-    const current = target?.selection ?? selectionRef.current;
+    const current = target?.selection ?? fallbackSelection();
     if (!current) return null;
     const inlines = target?.inlines ?? lineFromSelection(current)?.inlines;
     if (!inlines) return null;
@@ -538,13 +571,9 @@ export function RichDocEditor({
 
   function storeClip(clip: RichClip) {
     rememberRichClip(clip);
-    setCanPaste(true);
     const encoded = encodeRichClip(clip);
-    try {
-      void navigator.clipboard.writeText(encoded);
-    } catch {
-      /* le presse-papiers système peut être refusé ; la mémoire interne suffit */
-    }
+    const clipboard = typeof navigator !== "undefined" ? navigator.clipboard : undefined;
+    if (clipboard?.writeText) void clipboard.writeText(encoded).catch(() => undefined);
   }
 
   function copyCurrent() {
@@ -558,7 +587,8 @@ export function RichDocEditor({
     line?: RichDocLine,
     element?: HTMLElement,
   ) {
-    const current = element && line ? readSelection(line, element) : selectionRef.current;
+    const current =
+      element && line ? (readSelection(line, element) ?? fallbackSelection()) : fallbackSelection();
     if (!current) return;
     let base = docRef.current;
     let offset = current.start;
@@ -576,19 +606,7 @@ export function RichDocEditor({
     if (result) commit(result.doc, result.caret);
   }
 
-  async function pasteCurrent(line?: RichDocLine, element?: HTMLElement) {
-    let raw = "";
-    try {
-      raw = await navigator.clipboard.readText();
-    } catch {
-      raw = "";
-    }
-    const clip = decodeRichClip(raw) ?? lastRememberedRichClip();
-    if (clip) {
-      applyClip(clip, line, element);
-      return;
-    }
-    if (!raw || !line || !element) return;
+  function pastePlainIntoLine(line: RichDocLine, element: HTMLElement, raw: string) {
     const current = readSelection(line, element);
     let inlines = parseInlinesFromHtml(element.innerHTML);
     let offset = current?.start ?? inlinesPlainText(inlines).length;
@@ -603,6 +621,32 @@ export function RichDocEditor({
     const result = pastePlainText(base, line.blockIndex, line.itemIndex, offset, raw);
     commit(result.doc, result.caret);
   }
+
+  function ingestPastedText(raw: string, line?: RichDocLine, element?: HTMLElement) {
+    if (pasteLock.current) return;
+    pasteLock.current = true;
+    queueMicrotask(() => {
+      pasteLock.current = false;
+    });
+    const clip = decodeRichClip(raw) ?? lastRememberedRichClip();
+    if (clip) {
+      applyClip(clip, line, element);
+      return;
+    }
+    if (!raw || !line || !element) return;
+    pastePlainIntoLine(line, element, raw);
+  }
+
+  function pasteCurrent(line?: RichDocLine, element?: HTMLElement) {
+    const clip = lastRememberedRichClip();
+    if (!clip) return;
+    applyClip(clip, line, element);
+  }
+
+  useEffect(() => {
+    copyCurrentRef.current = copyCurrent;
+    pasteCurrentRef.current = pasteCurrent;
+  });
 
   function handleHistoryKeys(event: React.KeyboardEvent) {
     const target = event.target;
@@ -727,6 +771,16 @@ export function RichDocEditor({
       insertSoftBreak(line, element);
       return;
     }
+    if (
+      native.inputType === "insertFromPaste" ||
+      native.inputType === "insertFromPasteAsQuotation" ||
+      native.inputType === "insertFromDrop"
+    ) {
+      event.preventDefault();
+      const raw = native.dataTransfer?.getData("text/plain") || native.data || "";
+      ingestPastedText(raw, line, element);
+      return;
+    }
     if (native.inputType === "insertParagraph") {
       event.preventDefault();
       return;
@@ -767,7 +821,7 @@ export function RichDocEditor({
           <ToolButton label="Annuler (Ctrl+Z)" text="Annuler" disabled={!canUndo} onClick={undo} />
           <ToolButton label="Rétablir (Ctrl+Y)" text="Rétablir" disabled={!canRedo} onClick={redo} />
           <ToolButton label="Copier le bloc (Ctrl+C)" text="Copier" onClick={copyCurrent} />
-          <ToolButton label="Coller (Ctrl+V)" text="Coller" disabled={!canPaste} onClick={() => void pasteCurrent()} />
+          <ToolButton label="Coller (Ctrl+V)" text="Coller" onClick={() => pasteCurrent()} />
         </div>
         <div className="rich-doc-tool-group" role="group" aria-label="Texte">
           <ToolButton label="Gras" active={Boolean(activeMarks.bold)} onClick={() => applyMark("bold", !activeMarks.bold)}>
@@ -971,25 +1025,7 @@ export function RichDocEditor({
                   }}
                   onPaste={(event) => {
                     event.preventDefault();
-                    const raw = event.clipboardData.getData("text/plain");
-                    const clip = decodeRichClip(raw) ?? lastRememberedRichClip();
-                    if (clip) {
-                      applyClip(clip, line, event.currentTarget);
-                      return;
-                    }
-                    const current = readSelection(line, event.currentTarget);
-                    let inlines = parseInlinesFromHtml(event.currentTarget.innerHTML);
-                    let offset = current?.start ?? inlinesPlainText(inlines).length;
-                    let base = setLineInlines(docRef.current, line.blockIndex, line.itemIndex, inlines);
-                    if (current && current.end > current.start) {
-                      const [before] = splitInlinesAt(inlines, current.start);
-                      const [, after] = splitInlinesAt(inlines, current.end);
-                      inlines = [...before, ...after];
-                      base = setLineInlines(docRef.current, line.blockIndex, line.itemIndex, inlines);
-                      offset = current.start;
-                    }
-                    const result = pastePlainText(base, line.blockIndex, line.itemIndex, offset, raw);
-                    commit(result.doc, result.caret);
+                    ingestPastedText(event.clipboardData.getData("text/plain"), line, event.currentTarget);
                   }}
                 />
               </div>
@@ -1000,8 +1036,8 @@ export function RichDocEditor({
 
       <p className="rich-doc-hint">
         Entrée crée une ligne. Maj + Entrée va à la ligne dans le bloc. Ctrl+C copie le bloc (ou la
-        sélection). Ctrl+V colle. Gras, couleur et lien : sur la sélection, ou sur le texte tapé ensuite.
-        Ctrl+Z annule.
+        sélection). Ctrl+V colle — même si le curseur n’est plus dans la ligne. Gras, couleur et lien : sur la
+        sélection, ou sur le texte tapé ensuite. Ctrl+Z annule.
       </p>
     </div>
   );

@@ -2,6 +2,19 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.58.1] — Copier / coller fiable dans le Carnet
+
+### Corrigé
+
+- **Ctrl+C / Ctrl+V** dans l’éditeur ne sont plus interceptés par la vue semaine (y compris si le curseur n’est plus dans la ligne).
+- **Coller** reste cliquable : plus besoin d’autoriser le presse-papiers du navigateur ; la copie interne du Carnet suffit.
+- Un collage ne dépose plus le code interne `CAMPUS_RICH_CLIP_V1` dans le texte.
+- **Ctrl+V** sur une ligne déjà copiée dans la **même semaine** la duplique (au lieu de ne rien faire).
+
+### Conservé
+
+Format `campus-rich-v1`, brouillon / publié, notes. Aucune migration SQL.
+
 ## [2.58.0] — Couleur sur la sélection, Annuler / Rétablir
 
 ### Corrigé

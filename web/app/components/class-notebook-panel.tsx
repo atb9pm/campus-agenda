@@ -266,6 +266,30 @@ export function ClassNotebookPanel({
         clipboard.lineSource &&
         clipboard.blockIndex != null
       ) {
+        if (clipboard.sourceWeekNumber === targetWeekNumber) {
+          const source = clipboard.lineSource;
+          const doc = weekSourceDoc(source, targetWeekNumber);
+          const from = visibleRichDocLines(doc).findIndex(
+            (line) =>
+              line.blockIndex === clipboard.blockIndex &&
+              line.itemIndex === (clipboard.itemIndex ?? null),
+          );
+          const copied = copyLineToDoc(
+            doc,
+            doc,
+            clipboard.blockIndex,
+            clipboard.itemIndex ?? null,
+            from < 0 ? undefined : from + 1,
+          );
+          if (!copied) return;
+          if (source === "publication") {
+            if (!canPublish) return;
+            await onSaveWeekPublication(targetWeekNumber, copied);
+            return;
+          }
+          onNotesChange(setWeekRichNote(notesDocument, weekNotesKey(classSetup.id, targetWeekNumber), copied));
+          return;
+        }
         await copyCarnetLine(
           clipboard.lineSource,
           clipboard.sourceWeekNumber,
@@ -276,6 +300,7 @@ export function ClassNotebookPanel({
       }
     },
     [
+      canPublish,
       clipboard,
       classSetup.id,
       copyCarnetLine,
@@ -284,12 +309,14 @@ export function ClassNotebookPanel({
       onCreatePublication,
       onMovePublication,
       onNotesChange,
+      onSaveWeekPublication,
+      weekSourceDoc,
     ],
   );
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (!selection) return;
+      if (editor) return;
       const target = event.target;
       if (
         target instanceof HTMLElement &&
@@ -301,7 +328,7 @@ export function ClassNotebookPanel({
       const withCommand = event.ctrlKey || event.metaKey;
       if (!withCommand) return;
 
-      if (key === "x") {
+      if (key === "x" && selection) {
         event.preventDefault();
         if (selection.kind === "publication") {
           setClipboard({
@@ -325,25 +352,41 @@ export function ClassNotebookPanel({
         }
       }
 
-      if (key === "c" && selection.kind === "publication") {
-        event.preventDefault();
-        setClipboard({
-          kind: "publication",
-          mode: "copy",
-          sourceWeekNumber: selection.weekNumber,
-          publicationId: selection.itemId,
-        });
+      if (key === "c") {
+        if (selectedLine) {
+          event.preventDefault();
+          setClipboard({
+            kind: "line",
+            mode: "copy",
+            sourceWeekNumber: selectedLine.weekNumber,
+            lineSource: selectedLine.source,
+            blockIndex: selectedLine.blockIndex,
+            itemIndex: selectedLine.itemIndex,
+          });
+          return;
+        }
+        if (selection?.kind === "publication") {
+          event.preventDefault();
+          setClipboard({
+            kind: "publication",
+            mode: "copy",
+            sourceWeekNumber: selection.weekNumber,
+            publicationId: selection.itemId,
+          });
+        }
       }
 
       if (key === "v") {
+        const weekNumber = selectedLine?.weekNumber ?? selection?.weekNumber;
+        if (weekNumber == null) return;
         event.preventDefault();
-        void handlePaste(selection.weekNumber);
+        void handlePaste(weekNumber);
       }
     }
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [classSetup.id, handlePaste, notesDocument, selection]);
+  }, [classSetup.id, editor, handlePaste, notesDocument, selectedLine, selection]);
 
   useEffect(() => {
     if (moveMenuWeek == null) return;
