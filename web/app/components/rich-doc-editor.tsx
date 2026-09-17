@@ -12,12 +12,17 @@ import {
   applyMarkToRange,
   applyStructureToLine,
   emptyRichDoc,
+  emptyRichDocHistory,
   inlinesPlainText,
   insertQuickBlock,
   insertTextAt,
+  marksAtOffset,
+  marksEqual,
   marksInRange,
   parseInlinesFromHtml,
   pastePlainText,
+  pushRichDocHistory,
+  redoRichDocHistory,
   removeLine,
   richDocLines,
   sanitizeHref,
@@ -26,8 +31,12 @@ import {
   setLineInlines,
   splitInlinesAt,
   splitLine,
+  undoRichDocHistory,
+  withMark,
   type CampusRichDoc,
   type QuickBlockKind,
+  type RichDocHistory,
+  type RichDocHistoryEntry,
   type RichDocLine,
   type RichInline,
   type RichLinePosition,
@@ -237,13 +246,45 @@ export function RichDocEditor({
 }) {
   const [doc, setDoc] = useState<CampusRichDoc>(() => sanitizeRichDoc(value));
   const [selection, setSelection] = useState<EditorSelection | null>(null);
+  const [typingMarks, setTypingMarks] = useState<RichMarks>({});
   const [linkDraft, setLinkDraft] = useState<string | null>(null);
   const [syncToken, setSyncToken] = useState(0);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
 
   const docRef = useRef(doc);
   const lineRefs = useRef(new Map<string, HTMLElement>());
   const pendingCaret = useRef<RichLinePosition | null>(null);
   const localEdit = useRef(false);
+  const historyRef = useRef<RichDocHistory>(emptyRichDocHistory());
+  const selectionRef = useRef<EditorSelection | null>(null);
+  const typingMarksRef = useRef<RichMarks>({});
+  const pendingTyping = useRef(false);
+
+  function setTypingMarksBoth(marks: RichMarks) {
+    typingMarksRef.current = marks;
+    setTypingMarks(marks);
+  }
+
+  function rememberSelection(next: EditorSelection | null) {
+    selectionRef.current = next;
+    setSelection(next);
+  }
+
+  function syncHistoryButtons() {
+    setCanUndo(historyRef.current.undo.length > 0);
+    setCanRedo(historyRef.current.redo.length > 0);
+  }
+
+  function currentHistoryEntry(): RichDocHistoryEntry {
+    const current = selectionRef.current;
+    return {
+      doc: docRef.current,
+      caret: current
+        ? { blockIndex: current.blockIndex, itemIndex: current.itemIndex, offset: current.start }
+        : null,
+    };
+  }
 
   useEffect(() => {
     if (localEdit.current) {
@@ -252,6 +293,11 @@ export function RichDocEditor({
     }
     const clean = sanitizeRichDoc(value);
     docRef.current = clean;
+    historyRef.current = emptyRichDocHistory();
+    pendingTyping.current = false;
+    setTypingMarksBoth({});
+    rememberSelection(null);
+    syncHistoryButtons();
     setDoc(clean);
     setSyncToken((token) => token + 1);
   }, [value]);
@@ -273,7 +319,7 @@ export function RichDocEditor({
     if (!element) return;
     element.focus({ preventScroll: true });
     setCharacterSelection(element, caret.offset, caret.offset);
-    setSelection({
+    rememberSelection({
       blockIndex: caret.blockIndex,
       itemIndex: caret.itemIndex,
       start: caret.offset,
@@ -282,7 +328,16 @@ export function RichDocEditor({
   }, [syncToken]);
 
   const commit = useCallback(
-    (next: CampusRichDoc, caret?: RichLinePosition, options?: { rewriteDom?: boolean }) => {
+    (
+      next: CampusRichDoc,
+      caret?: RichLinePosition,
+      options?: { rewriteDom?: boolean; history?: "typing" | "action" | false },
+    ) => {
+      const historyKind = options?.history === undefined ? "action" : options.history;
+      if (historyKind) {
+        historyRef.current = pushRichDocHistory(historyRef.current, currentHistoryEntry(), historyKind);
+        syncHistoryButtons();
+      }
       const clean = sanitizeRichDoc(next);
       const result = clean.blocks.length ? clean : emptyRichDoc();
       localEdit.current = true;
@@ -315,64 +370,152 @@ export function RichDocEditor({
     };
   }
 
+  function syncCaretFromLine(line: RichDocLine, element: HTMLElement) {
+    const sel = readSelection(line, element);
+    if (!sel) return;
+    const previous = selectionRef.current;
+    const moved =
+      !previous ||
+      previous.blockIndex !== sel.blockIndex ||
+      previous.itemIndex !== sel.itemIndex ||
+      previous.start !== sel.start ||
+      previous.end !== sel.end;
+    rememberSelection(sel);
+    if (pendingTyping.current && !moved) return;
+    pendingTyping.current = false;
+    const inlines = parseInlinesFromHtml(element.innerHTML);
+    const marks =
+      sel.start === sel.end
+        ? marksAtOffset(inlines, sel.start)
+        : marksInRange(inlines, sel.start, sel.end);
+    setTypingMarksBoth(marks);
+  }
+
   function handleLineInput(line: RichDocLine, element: HTMLElement) {
     const inlines = parseInlinesFromHtml(element.innerHTML);
     const next = setLineInlines(docRef.current, line.blockIndex, line.itemIndex, inlines);
     const caret = readSelection(line, element);
-    commit(next, undefined, { rewriteDom: false });
-    if (caret) setSelection(caret);
+    commit(next, undefined, { rewriteDom: false, history: "typing" });
+    if (caret) rememberSelection(caret);
   }
 
-  /** Sélection courante, ou la ligne entière si rien n'est sélectionné. */
-  function targetRange(): { selection: EditorSelection; inlines: RichInline[] } | null {
-    const current = selection ?? (lines[0] ? { blockIndex: lines[0].blockIndex, itemIndex: lines[0].itemIndex, start: 0, end: 0 } : null);
+  function liveTarget(): { selection: EditorSelection; inlines: RichInline[] } | null {
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && focused.hasAttribute("data-inline-editor")) {
+      const blockIndex = Number(focused.dataset.blockIndex);
+      const itemRaw = focused.dataset.itemIndex;
+      const itemIndex = itemRaw === undefined || itemRaw === "" ? null : Number(itemRaw);
+      const line = lines.find(
+        (entry) => entry.blockIndex === blockIndex && entry.itemIndex === itemIndex,
+      );
+      if (line) {
+        const sel = readSelection(line, focused);
+        if (sel) return { selection: sel, inlines: parseInlinesFromHtml(focused.innerHTML) };
+      }
+    }
+    const current = selectionRef.current;
     if (!current) return null;
     const line = lines.find(
       (entry) => entry.blockIndex === current.blockIndex && entry.itemIndex === current.itemIndex,
     );
     if (!line) return null;
     const element = lineRefs.current.get(lineKey(line.blockIndex, line.itemIndex));
-    const inlines = element ? parseInlinesFromHtml(element.innerHTML) : line.inlines;
-    const length = inlinesPlainText(inlines).length;
-    const collapsed = current.start === current.end;
     return {
-      selection: collapsed ? { ...current, start: 0, end: length } : current,
-      inlines,
+      selection: current,
+      inlines: element ? parseInlinesFromHtml(element.innerHTML) : line.inlines,
     };
   }
 
   function applyMark(mark: RichMarkName, value: boolean | RichTextColorId | string | undefined) {
-    const target = targetRange();
-    if (!target) return;
+    const target = liveTarget();
+    if (!target) {
+      pendingTyping.current = true;
+      setTypingMarksBoth(withMark(typingMarksRef.current, mark, value) ?? {});
+      return;
+    }
     const { selection: range, inlines } = target;
+    if (range.start === range.end) {
+      pendingTyping.current = true;
+      rememberSelection(range);
+      setTypingMarksBoth(withMark(typingMarksRef.current, mark, value) ?? {});
+      return;
+    }
+    pendingTyping.current = false;
     const next = applyMarkToRange(inlines, range.start, range.end, mark, value);
-    const nextDoc = setLineInlines(docRef.current, range.blockIndex, range.itemIndex, next);
-    const clean = sanitizeRichDoc(nextDoc);
-    localEdit.current = true;
-    docRef.current = clean;
-    setDoc(clean);
-    setSyncToken((token) => token + 1);
-    onChange(clean);
+    commit(setLineInlines(docRef.current, range.blockIndex, range.itemIndex, next), undefined, {
+      history: "action",
+    });
+    setTypingMarksBoth(marksInRange(next, range.start, range.end));
     requestAnimationFrame(() => {
       const element = lineRefs.current.get(lineKey(range.blockIndex, range.itemIndex));
       if (!element) return;
       element.focus({ preventScroll: true });
       setCharacterSelection(element, range.start, range.end);
-      setSelection(range);
+      rememberSelection(range);
     });
   }
 
   const activeMarks: RichMarks = useMemo(() => {
-    if (!selection) return {};
-    const line = lines.find(
-      (entry) => entry.blockIndex === selection.blockIndex && entry.itemIndex === selection.itemIndex,
-    );
-    if (!line) return {};
-    const length = inlinesPlainText(line.inlines).length;
-    const start = selection.start === selection.end ? 0 : selection.start;
-    const end = selection.start === selection.end ? length : selection.end;
-    return marksInRange(line.inlines, start, end);
-  }, [lines, selection]);
+    if (selection && selection.start !== selection.end) {
+      const line = lines.find(
+        (entry) => entry.blockIndex === selection.blockIndex && entry.itemIndex === selection.itemIndex,
+      );
+      if (!line) return typingMarks;
+      return marksInRange(line.inlines, selection.start, selection.end);
+    }
+    return typingMarks;
+  }, [lines, selection, typingMarks]);
+
+  function restoreHistoryEntry(entry: RichDocHistoryEntry) {
+    pendingTyping.current = false;
+    const caret = entry.caret
+      ? { blockIndex: entry.caret.blockIndex, itemIndex: entry.caret.itemIndex, offset: entry.caret.offset }
+      : undefined;
+    const line = caret
+      ? richDocLines(entry.doc).find(
+          (item) => item.blockIndex === caret.blockIndex && item.itemIndex === caret.itemIndex,
+        )
+      : undefined;
+    setTypingMarksBoth(line ? marksAtOffset(line.inlines, caret?.offset ?? 0) : {});
+    commit(entry.doc, caret, { history: false });
+  }
+
+  function undo() {
+    const result = undoRichDocHistory(historyRef.current, currentHistoryEntry());
+    if (!result) return;
+    historyRef.current = result.history;
+    syncHistoryButtons();
+    restoreHistoryEntry(result.entry);
+  }
+
+  function redo() {
+    const result = redoRichDocHistory(historyRef.current, currentHistoryEntry());
+    if (!result) return;
+    historyRef.current = result.history;
+    syncHistoryButtons();
+    restoreHistoryEntry(result.entry);
+  }
+
+  function handleHistoryKeys(event: React.KeyboardEvent) {
+    const target = event.target;
+    if (target instanceof HTMLElement && target.closest("input, textarea")) return false;
+    const modifier = event.ctrlKey || event.metaKey;
+    if (!modifier) return false;
+    if (event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.shiftKey) redo();
+      else undo();
+      return true;
+    }
+    if (event.key.toLowerCase() === "y") {
+      event.preventDefault();
+      event.stopPropagation();
+      redo();
+      return true;
+    }
+    return false;
+  }
 
   const activeLine = selection
     ? lines.find((entry) => entry.blockIndex === selection.blockIndex && entry.itemIndex === selection.itemIndex)
@@ -399,6 +542,7 @@ export function RichDocEditor({
   }
 
   function handleKeyDown(line: RichDocLine, element: HTMLElement, event: React.KeyboardEvent<HTMLDivElement>) {
+    if (handleHistoryKeys(event)) return;
     if (event.key === "Enter" && event.shiftKey) {
       event.preventDefault();
       const current = readSelection(line, element);
@@ -409,7 +553,8 @@ export function RichDocEditor({
         const [, after] = splitInlinesAt(inlines, current.end);
         inlines = [...before, ...after];
       }
-      const next = insertTextAt(inlines, offset, "\n");
+      const marks = pendingTyping.current ? typingMarksRef.current : undefined;
+      const next = insertTextAt(inlines, offset, "\n", marks);
       commit(setLineInlines(docRef.current, line.blockIndex, line.itemIndex, next), {
         blockIndex: line.blockIndex,
         itemIndex: line.itemIndex,
@@ -439,9 +584,44 @@ export function RichDocEditor({
     }
   }
 
+  function handleBeforeInput(line: RichDocLine, element: HTMLElement, event: React.FormEvent<HTMLDivElement>) {
+    const native = event.nativeEvent;
+    if (!(native instanceof InputEvent) || native.inputType !== "insertText" || !native.data) return;
+    const current = readSelection(line, element);
+    const inlines = parseInlinesFromHtml(element.innerHTML);
+    const offset = current?.start ?? inlinesPlainText(inlines).length;
+    const around = marksAtOffset(inlines, offset);
+    if (marksEqual(typingMarksRef.current, around)) return;
+    event.preventDefault();
+    let nextInlines = inlines;
+    let at = offset;
+    if (current && current.end > current.start) {
+      const [before] = splitInlinesAt(inlines, current.start);
+      const [, after] = splitInlinesAt(inlines, current.end);
+      nextInlines = [...before, ...after];
+      at = current.start;
+    }
+    const next = insertTextAt(nextInlines, at, native.data, typingMarksRef.current);
+    pendingTyping.current = false;
+    commit(
+      setLineInlines(docRef.current, line.blockIndex, line.itemIndex, next),
+      { blockIndex: line.blockIndex, itemIndex: line.itemIndex, offset: at + native.data.length },
+      { history: "typing" },
+    );
+  }
+
   return (
     <div className={`rich-doc-editor is-${variant}`}>
-      <div className="rich-doc-toolbar" role="toolbar" aria-label="Mise en forme">
+      <div
+        className="rich-doc-toolbar"
+        role="toolbar"
+        aria-label="Mise en forme"
+        onKeyDown={(event) => handleHistoryKeys(event)}
+      >
+        <div className="rich-doc-tool-group" role="group" aria-label="Historique">
+          <ToolButton label="Annuler (Ctrl+Z)" text="Annuler" disabled={!canUndo} onClick={undo} />
+          <ToolButton label="Rétablir (Ctrl+Y)" text="Rétablir" disabled={!canRedo} onClick={redo} />
+        </div>
         <div className="rich-doc-tool-group" role="group" aria-label="Texte">
           <ToolButton label="Gras" active={Boolean(activeMarks.bold)} onClick={() => applyMark("bold", !activeMarks.bold)}>
             <strong>B</strong>
@@ -624,12 +804,16 @@ export function RichDocEditor({
                   data-item-index={line.itemIndex ?? undefined}
                   ref={(element) => registerLine(key, element)}
                   onInput={(event) => handleLineInput(line, event.currentTarget)}
-                  onKeyUp={(event) => setSelection(readSelection(line, event.currentTarget))}
+                  onBeforeInput={(event) => handleBeforeInput(line, event.currentTarget, event)}
+                  onKeyUp={(event) => syncCaretFromLine(line, event.currentTarget)}
                   onMouseUp={(event) => {
-                    snapCaretToClick(event.currentTarget, event.clientX, event.clientY);
-                    setSelection(readSelection(line, event.currentTarget));
+                    const dom = window.getSelection();
+                    if (!dom || dom.isCollapsed) {
+                      snapCaretToClick(event.currentTarget, event.clientX, event.clientY);
+                    }
+                    syncCaretFromLine(line, event.currentTarget);
                   }}
-                  onFocus={(event) => setSelection(readSelection(line, event.currentTarget))}
+                  onFocus={(event) => syncCaretFromLine(line, event.currentTarget)}
                   onKeyDown={(event) => handleKeyDown(line, event.currentTarget, event)}
                   onPaste={(event) => {
                     event.preventDefault();
@@ -656,7 +840,8 @@ export function RichDocEditor({
       </div>
 
       <p className="rich-doc-hint">
-        Entrée crée une ligne. Maj + Entrée va à la ligne dans le bloc. Sans sélection, un outil s’applique à toute la ligne.
+        Entrée crée une ligne. Maj + Entrée va à la ligne dans le bloc. Gras, couleur et lien : sur la
+        sélection, ou sur le texte tapé ensuite. Ctrl+Z annule.
       </p>
     </div>
   );
@@ -666,12 +851,14 @@ function ToolButton({
   label,
   text,
   active = false,
+  disabled = false,
   onClick,
   children,
 }: {
   label: string;
   text?: string;
   active?: boolean;
+  disabled?: boolean;
   onClick: () => void;
   children?: ReactNode;
 }) {
@@ -682,6 +869,7 @@ function ToolButton({
       title={label}
       aria-label={label}
       aria-pressed={active}
+      disabled={disabled}
       onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
     >

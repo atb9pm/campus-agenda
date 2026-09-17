@@ -425,7 +425,7 @@ export function inlinesPlainText(inlines: readonly RichInline[]): string {
   return inlines.map((entry) => entry.text).join("");
 }
 
-function marksEqual(left?: RichMarks, right?: RichMarks): boolean {
+export function marksEqual(left?: RichMarks, right?: RichMarks): boolean {
   const a = left ?? {};
   const b = right ?? {};
   return (
@@ -470,7 +470,7 @@ export function normalizeInlines(inlines: readonly RichInline[]): RichInline[] {
 
 export type RichMarkName = "bold" | "italic" | "underline" | "highlight" | "color" | "href";
 
-function withMark(
+export function withMark(
   marks: RichMarks | undefined,
   mark: RichMarkName,
   value: boolean | RichTextColorId | string | undefined,
@@ -527,6 +527,14 @@ export function applyMarkToRange(
   return normalizeInlines(result);
 }
 
+/** Marques du caractère à gauche du curseur (ou du premier caractère en début de ligne). */
+export function marksAtOffset(inlines: readonly RichInline[], offset: number): RichMarks {
+  const length = inlinesPlainText(inlines).length;
+  if (!length) return {};
+  const index = offset <= 0 ? 0 : Math.min(offset, length) - 1;
+  return marksInRange(inlines, index, index + 1);
+}
+
 /** Mise en forme commune à tout l'intervalle — sert à l'état actif de la barre d'outils. */
 export function marksInRange(
   inlines: readonly RichInline[],
@@ -561,10 +569,16 @@ export function insertTextAt(
   inlines: readonly RichInline[],
   offset: number,
   text: string,
+  marks?: RichMarks,
 ): RichInline[] {
   const piece = clippedText(text);
   if (!piece) return normalizeInlines(inlines);
   const [before, after] = splitInlinesAt(inlines, offset);
+  if (marks !== undefined) {
+    const cleaned = cleanMarks(marks);
+    const insert: RichInline = cleaned ? { text: piece, marks: cleaned } : { text: piece };
+    return normalizeInlines([...before, insert, ...after]);
+  }
   if (!before.length) return normalizeInlines([{ text: piece }, ...after]);
   const last = before[before.length - 1]!;
   before[before.length - 1] = { ...last, text: last.text + piece };

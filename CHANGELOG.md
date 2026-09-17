@@ -2,6 +2,21 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.58.0] — Couleur sur la sélection, Annuler / Rétablir
+
+### Corrigé
+
+- **Gras, couleur, surlignage, lien** : s’appliquent **seulement au texte sélectionné**. Sans sélection, ils s’appliquent au **texte tapé ensuite** (comme Word), plus à toute la ligne.
+- Sélectionner jusqu’à la dernière lettre ne perd plus la plage au relâchement de la souris.
+
+### Ajouté
+
+- **Annuler** et **Rétablir** dans la barre de l’éditeur (**Ctrl+Z**, **Ctrl+Y** ou **Ctrl+Maj+Z**). Les lettres d’un même mot sont regroupées.
+
+### Conservé
+
+Format `campus-rich-v1`, brouillon / publié, notes, vue semaine. Aucune migration SQL.
+
 ## [2.57.0] — Curseur, menus notes, déplacement par ligne
 
 ### Corrigé

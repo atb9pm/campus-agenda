@@ -111,7 +111,10 @@ export {
   insertTextAt,
   lineIndexAfterMove,
   lineInlines,
+  marksAtOffset,
+  marksEqual,
   marksInRange,
+  withMark,
   moveLineToDoc,
   moveLineWithinDoc,
   normalizeInlines,
@@ -127,6 +130,18 @@ export {
   type RichLinePosition,
   type RichMarkName,
 } from "./rich-doc.ts";
+export {
+  RICH_DOC_HISTORY_COALESCE_MS,
+  RICH_DOC_HISTORY_LIMIT,
+  emptyRichDocHistory,
+  pushRichDocHistory,
+  redoRichDocHistory,
+  undoRichDocHistory,
+  type RichDocHistory,
+  type RichDocHistoryCaret,
+  type RichDocHistoryEntry,
+  type RichDocHistoryKind,
+} from "./rich-doc-history.ts";
 export {
   buildPublicationPayload,
   cloneRichDoc,

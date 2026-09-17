@@ -8,6 +8,7 @@ import {
   encodeRichDetail,
   decodeRichDetail,
   emptyRichDoc,
+  emptyRichDocHistory,
   extractLine,
   copyLineToDoc,
   inlinesPlainText,
@@ -15,12 +16,15 @@ import {
   insertQuickBlock,
   insertTextAt,
   lineIndexAfterMove,
+  marksAtOffset,
   marksInRange,
   moveLineToDoc,
   moveLineWithinDoc,
   normalizeInlines,
   parseInlinesFromHtml,
   pastePlainText,
+  pushRichDocHistory,
+  redoRichDocHistory,
   removeLine,
   richDocLines,
   sanitizeRichDoc,
@@ -28,6 +32,7 @@ import {
   setLineInlines,
   splitInlinesAt,
   splitLine,
+  undoRichDocHistory,
   visibleRichDocLines,
   type CampusRichDoc,
 } from "../src/features/class-notebook/index.ts";
@@ -48,7 +53,7 @@ function lineText(doc: CampusRichDoc, blockIndex: number, itemIndex: number | nu
 
 test("version 2.56.0 — éditeur Carnet reconstruit sur le modèle, sans execCommand", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.57.0");
+  assert.equal(APP_VERSION, "2.58.0");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(editor, /execCommand/);
   assert.doesNotMatch(editor, /window\.prompt/);
@@ -318,7 +323,7 @@ test("vue compacte — résumé lisible, sans cases décalées ni cadres", async
 
 test("version 2.57.0 — curseur, menus notes, déplacement d’une ligne", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.57.0");
+  assert.equal(APP_VERSION, "2.58.0");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.match(editor, /Le DOM n'est réécrit que sur syncToken/);
   assert.match(editor, /snapCaretToClick/);
@@ -512,6 +517,64 @@ test("copier une ligne à un emplacement précis", () => {
     ["avant", "copie", "après"],
   );
   assert.equal(source.blocks.length, 1);
+});
+
+test("version 2.58.0 — couleur sur la sélection, Annuler / Rétablir", async () => {
+  const { APP_VERSION } = await import("../src/lib/app-version.ts");
+  assert.equal(APP_VERSION, "2.58.0");
+  const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
+  assert.match(editor, /Annuler \(Ctrl\+Z\)/);
+  assert.match(editor, /Rétablir \(Ctrl\+Y\)/);
+  assert.match(editor, /pushRichDocHistory/);
+  assert.match(editor, /onBeforeInput/);
+  assert.match(editor, /liveTarget/);
+  assert.doesNotMatch(editor, /Sans sélection, un outil s’applique à toute la ligne/);
+  assert.doesNotMatch(editor, /collapsed \? \{ \.\.\.current, start: 0, end: length \}/);
+});
+
+test("couleur — seulement la plage choisie, pas le début de la ligne", () => {
+  const text = '4.7.06-5 "Principe", à terminer jusqu\'à la question N°30';
+  const start = text.indexOf("à terminer");
+  const inlines = applyMarkToRange([{ text }], start, text.length, "color", "red");
+  assert.ok(start > 0);
+  assert.equal(marksInRange(inlines, 0, start).color, undefined);
+  assert.equal(marksInRange(inlines, start, text.length).color, "red");
+  assert.equal(inlinesPlainText(inlines), text);
+});
+
+test("frappe suivante — insertTextAt applique les marques du curseur", () => {
+  const around = [{ text: "Climatisation : " }];
+  assert.deepEqual(marksAtOffset(around, 16), {});
+  const typed = insertTextAt(around, 16, "alerte", { color: "red" });
+  assert.equal(inlinesPlainText(typed), "Climatisation : alerte");
+  assert.equal(marksInRange(typed, 0, 16).color, undefined);
+  assert.equal(marksInRange(typed, 16, 22).color, "red");
+});
+
+test("historique — frappe regroupée, Ctrl+Z puis rétablir", () => {
+  const empty = paragraphDoc("");
+  const typed = paragraphDoc("abc");
+  const colored = setLineInlines(
+    typed,
+    0,
+    null,
+    applyMarkToRange([{ text: "abc" }], 0, 3, "color", "red"),
+  );
+  let history = emptyRichDocHistory();
+  history = pushRichDocHistory(history, { doc: empty, caret: { blockIndex: 0, itemIndex: null, offset: 0 } }, "typing", 1000);
+  history = pushRichDocHistory(history, { doc: paragraphDoc("a"), caret: { blockIndex: 0, itemIndex: null, offset: 1 } }, "typing", 1100);
+  history = pushRichDocHistory(history, { doc: paragraphDoc("ab"), caret: { blockIndex: 0, itemIndex: null, offset: 2 } }, "typing", 1200);
+  assert.equal(history.undo.length, 1);
+
+  history = pushRichDocHistory(history, { doc: typed, caret: { blockIndex: 0, itemIndex: null, offset: 3 } }, "action", 3000);
+  const undone = undoRichDocHistory(history, { doc: colored, caret: { blockIndex: 0, itemIndex: null, offset: 3 } });
+  assert.ok(undone);
+  assert.equal(inlinesPlainText(richDocLines(undone!.entry.doc)[0]!.inlines), "abc");
+  assert.equal(undone!.history.redo.length, 1);
+
+  const redone = redoRichDocHistory(undone!.history, undone!.entry);
+  assert.ok(redone);
+  assert.equal(marksInRange(richDocLines(redone!.entry.doc)[0]!.inlines, 0, 3).color, "red");
 });
 
 test("Maj+Entrée — un <br> devient un saut de ligne dans le même bloc", () => {
