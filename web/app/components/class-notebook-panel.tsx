@@ -290,6 +290,13 @@ export function ClassNotebookPanel({
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (!selection) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        target.closest(".rich-doc-editor, input, textarea, [contenteditable='true']")
+      ) {
+        return;
+      }
       const key = event.key.toLowerCase();
       const withCommand = event.ctrlKey || event.metaKey;
       if (!withCommand) return;

@@ -1952,6 +1952,11 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   background: #1d3557;
   color: #fff;
 }
+.rich-doc-toolbar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+  box-shadow: none;
+}
 .rich-doc-swatches { display: flex; align-items: center; gap: 4px; padding: 0 4px; }
 .rich-doc-toolbar .rich-doc-swatch {
   width: 18px;
