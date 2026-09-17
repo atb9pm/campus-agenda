@@ -283,6 +283,7 @@ export function RichDocEditor({
   const softBreakLock = useRef(false);
   const pasteLock = useRef(false);
   const linkTargetRef = useRef<EditorSelection | null>(null);
+  const linkInputRef = useRef<HTMLInputElement | null>(null);
   const copyCurrentRef = useRef<() => void>(() => undefined);
   const cutCurrentRef = useRef<() => void>(() => undefined);
   const pasteCurrentRef = useRef<(line?: RichDocLine, element?: HTMLElement) => void>(() => undefined);
@@ -328,6 +329,12 @@ export function RichDocEditor({
     setDoc(clean);
     setSyncToken((token) => token + 1);
   }, [value]);
+
+  const linkBarOpen = linkDraft != null;
+  useEffect(() => {
+    if (!linkBarOpen) return;
+    linkInputRef.current?.focus();
+  }, [linkBarOpen]);
 
   const lines = useMemo(() => richDocLines(doc), [doc]);
 
@@ -1019,7 +1026,7 @@ export function RichDocEditor({
               type="text"
               inputMode="url"
               autoComplete="url"
-              autoFocus
+              ref={linkInputRef}
               value={linkDraft}
               placeholder="campusagenda.ch"
               onChange={(event) => {

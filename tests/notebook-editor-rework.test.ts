@@ -713,6 +713,7 @@ test("version 2.59.1 — souligné ≠ lien, Lien visible sur le mot", async () 
   assert.match(editor, /Souligné n’est pas un[\s\S]*lien/);
   assert.match(editor, /Adresse invalide/);
   assert.doesNotMatch(editor, /type="url"/);
+  assert.doesNotMatch(editor, /autoFocus/);
   assert.doesNotMatch(editor, /element\?\.focus\(\)/);
   assert.match(view, /navigateLinks/);
   assert.match(view, /rich-doc-hyperlink/);
