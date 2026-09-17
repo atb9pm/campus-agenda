@@ -218,8 +218,6 @@ export function RichDocView({
         {shown.map((line, index) => {
           const key = lineViewKey(line);
           const selected = selectedLineKey === key;
-          const canMoveUp = selected && Boolean(onMoveLine) && index > 0;
-          const canMoveDown = selected && Boolean(onMoveLine) && index < shown.length - 1;
           return (
             <Fragment key={key}>
               <div
@@ -260,30 +258,30 @@ export function RichDocView({
                 <SummaryLineBody line={line} />
                 {selected && onMoveLine ? (
                   <div className="rich-doc-line-nudge">
-                    <button
-                      type="button"
-                      aria-label="Monter d’une ligne"
-                      disabled={!canMoveUp}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (!canMoveUp) return;
-                        onMoveLine(line, -1);
-                      }}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Descendre d’une ligne"
-                      disabled={!canMoveDown}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (!canMoveDown) return;
-                        onMoveLine(line, 1);
-                      }}
-                    >
-                      ↓
-                    </button>
+                    {index > 0 ? (
+                      <button
+                        type="button"
+                        aria-label="Monter d’une ligne"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onMoveLine(line, -1);
+                        }}
+                      >
+                        ↑
+                      </button>
+                    ) : null}
+                    {index < shown.length - 1 ? (
+                      <button
+                        type="button"
+                        aria-label="Descendre d’une ligne"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onMoveLine(line, 1);
+                        }}
+                      >
+                        ↓
+                      </button>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
