@@ -13,7 +13,7 @@ import {
 
 const COMPACT_LINE_LIMIT = 6;
 
-function InlineView({ inline }: { inline: RichInline }) {
+function InlineView({ inline, navigateLinks }: { inline: RichInline; navigateLinks: boolean }) {
   const marks = inline.marks;
   let node: ReactNode = inline.text;
   if (marks?.bold) node = <strong>{node}</strong>;
@@ -26,27 +26,35 @@ function InlineView({ inline }: { inline: RichInline }) {
     node = <span style={{ color: RICH_TEXT_COLOR_HEX[marks.color] }}>{node}</span>;
   }
   if (marks?.href) {
-    node = (
-      <a href={marks.href} target="_blank" rel="noreferrer">
+    node = navigateLinks ? (
+      <a className="rich-doc-hyperlink" href={marks.href} target="_blank" rel="noreferrer">
         {node}
       </a>
+    ) : (
+      <span className="rich-doc-hyperlink" title={marks.href}>
+        {node}
+      </span>
     );
   }
   return <>{node}</>;
 }
 
-function Inlines({ inlines }: { inlines: RichInline[] }) {
+function Inlines({ inlines, navigateLinks }: { inlines: RichInline[]; navigateLinks: boolean }) {
   if (!inlines.length) return null;
   return (
     <>
       {inlines.map((inline, index) => (
-        <InlineView key={`${index}-${inline.text.slice(0, 12)}`} inline={inline} />
+        <InlineView
+          key={`${index}-${inline.text.slice(0, 12)}`}
+          inline={inline}
+          navigateLinks={navigateLinks}
+        />
       ))}
     </>
   );
 }
 
-function SummaryLineBody({ line }: { line: RichDocLine }) {
+function SummaryLineBody({ line, navigateLinks }: { line: RichDocLine; navigateLinks: boolean }) {
   return (
     <>
       {line.kind === "callout" && line.calloutKind ? (
@@ -62,7 +70,7 @@ function SummaryLineBody({ line }: { line: RichDocLine }) {
         <span className="rich-doc-summary-marker">{line.checked ? "☑" : "☐"}</span>
       ) : null}
       <span className="rich-doc-summary-text">
-        <Inlines inlines={line.inlines} />
+        <Inlines inlines={line.inlines} navigateLinks={navigateLinks} />
       </span>
     </>
   );
@@ -255,7 +263,7 @@ export function RichDocView({
                 }
                 onDragEnd={onLineDragEnd}
               >
-                <SummaryLineBody line={line} />
+                <SummaryLineBody line={line} navigateLinks={!interactive} />
                 {selected && onMoveLine ? (
                   <div className="rich-doc-line-nudge">
                     {index > 0 ? (
@@ -304,14 +312,14 @@ export function RichDocView({
         if (block.type === "heading") {
           return (
             <h4 key={index}>
-              <Inlines inlines={block.inlines} />
+              <Inlines inlines={block.inlines} navigateLinks={!interactive} />
             </h4>
           );
         }
         if (block.type === "paragraph") {
           return (
             <p key={index}>
-              <Inlines inlines={block.inlines} />
+              <Inlines inlines={block.inlines} navigateLinks={!interactive} />
             </p>
           );
         }
@@ -320,7 +328,7 @@ export function RichDocView({
             <ul key={index}>
               {block.items.map((item, itemIndex) => (
                 <li key={itemIndex}>
-                  <Inlines inlines={item} />
+                  <Inlines inlines={item} navigateLinks={!interactive} />
                 </li>
               ))}
             </ul>
@@ -331,7 +339,7 @@ export function RichDocView({
             <ol key={index}>
               {block.items.map((item, itemIndex) => (
                 <li key={itemIndex}>
-                  <Inlines inlines={item} />
+                  <Inlines inlines={item} navigateLinks={!interactive} />
                 </li>
               ))}
             </ol>
@@ -344,7 +352,7 @@ export function RichDocView({
                 <li key={itemIndex}>
                   <input type="checkbox" checked={item.checked} readOnly />
                   <span>
-                    <Inlines inlines={item.inlines} />
+                    <Inlines inlines={item.inlines} navigateLinks={!interactive} />
                   </span>
                 </li>
               ))}
@@ -355,7 +363,7 @@ export function RichDocView({
           <aside key={index} className={`rich-doc-callout is-${block.kind}`}>
             <strong>{QUICK_BLOCK_LABELS[block.kind]}</strong>
             <p>
-              <Inlines inlines={block.inlines} />
+              <Inlines inlines={block.inlines} navigateLinks={!interactive} />
             </p>
           </aside>
         );

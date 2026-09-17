@@ -1874,7 +1874,25 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   overflow-wrap: anywhere;
 }
 .rich-doc-view ul, .rich-doc-view ol { padding-left: 1.1em; }
-.rich-doc-view a { color: var(--blue); }
+.rich-doc-view a,
+.rich-doc-hyperlink {
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.rich-doc-view u,
+.rich-doc-summary u,
+.rich-doc-line-input u {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.rich-doc-line-input a {
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: text;
+}
 .rich-doc-empty, .rich-doc-more { margin: 0; color: #8793a9; font-size: 11px; font-style: italic; }
 .rich-doc-checklist { list-style: none; padding-left: 0; display: grid; gap: 4px; }
 .rich-doc-checklist li { display: flex; align-items: flex-start; gap: 8px; }
@@ -2070,6 +2088,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .rich-doc-link-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
 .rich-doc-link-bar label { display: grid; gap: 4px; flex: 1; min-width: 220px; color: #8793a9; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .rich-doc-link-bar input { padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 8px; font-size: 12px; }
+.rich-doc-link-error { flex: 1 0 100%; margin: 0; color: #b42318; font-size: 11px; }
 .rich-doc-hint { margin: 0; color: #8793a9; font-size: 10px; }
 .rich-doc-swatch.is-active { box-shadow: 0 0 0 2px #1d3557; }
 .rich-doc-editor.is-notes .rich-doc-canvas { background: #fafafa; }

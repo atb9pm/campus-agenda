@@ -2,6 +2,19 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.59.1] — Souligné ≠ lien, et Lien visible
+
+### Corrigé
+
+- **Souligné** (bouton **S**) n’est plus confondu avec un lien : le texte reste de la même couleur, sans ouvrir d’onglet.
+- **Lien** s’applique au texte sélectionné, ou au mot sous le curseur. Le champ d’adresse ne vole plus la sélection (plus d’application invisible).
+- Adresse acceptée même avec un espace (`https:// exemple.ch`) ou sans `https://` (`exemple.ch`). Un message s’affiche si l’adresse est vide ou invalide.
+- Dans la **vue semaine** enseignant, un clic sur un lien **sélectionne la ligne** (Suppr / copie) au lieu d’ouvrir un onglet. Les élèves gardent un vrai lien cliquable.
+
+### Conservé
+
+Format `campus-rich-v1`, Couper / Suppr, brouillon / publié, notes. Aucune migration SQL.
+
 ## [2.59.0] — Couper, coller, et Suppr sur la ligne en surbrillance
 
 ### Ajouté

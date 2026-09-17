@@ -144,12 +144,77 @@ export function insertQuickBlock(
   return { format: CAMPUS_RICH_FORMAT, blocks: blocks.slice(0, MAX_BLOCKS) };
 }
 
+const BARE_DOMAIN_HREF =
+  /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+([/?#].*)?$/i;
+const WORD_CHAR = /[^\s.,;:!?()[\]{}"'«»]/;
+
 export function sanitizeHref(raw: string | null | undefined): string | undefined {
-  const value = raw?.trim() ?? "";
+  let value = (raw ?? "").trim().replace(/\s+/g, "");
   if (!value) return undefined;
-  if (/^https:\/\//i.test(value) || /^mailto:/i.test(value)) return value.slice(0, 2000);
-  if (/^http:\/\//i.test(value)) return value.slice(0, 2000);
+  if (/^(javascript|data|vbscript):/i.test(value)) return undefined;
+
+  if (!/^(https?:\/\/|mailto:)/i.test(value)) {
+    if (!BARE_DOMAIN_HREF.test(value)) return undefined;
+    value = `https://${value}`;
+  }
+
+  if (/^https?:\/\/$/i.test(value) || /^mailto:$/i.test(value)) return undefined;
+
+  try {
+    const url = new URL(value);
+    if (url.protocol === "https:" || url.protocol === "http:") {
+      if (!url.hostname) return undefined;
+      return value.slice(0, 2000);
+    }
+    if (url.protocol === "mailto:") {
+      if (!url.pathname && !url.search) return undefined;
+      return value.slice(0, 2000);
+    }
+  } catch {
+    return undefined;
+  }
   return undefined;
+}
+
+/** Mot sous le curseur — pour lier sans sélection explicite. */
+export function wordRangeAtOffset(text: string, offset: number): { start: number; end: number } | null {
+  if (!text) return null;
+  let pos = Math.max(0, Math.min(offset, text.length));
+  if (
+    pos > 0 &&
+    (pos === text.length || !WORD_CHAR.test(text[pos] ?? "")) &&
+    WORD_CHAR.test(text[pos - 1] ?? "")
+  ) {
+    pos -= 1;
+  }
+  if (!WORD_CHAR.test(text[pos] ?? "")) return null;
+  let start = pos;
+  let end = pos + 1;
+  while (start > 0 && WORD_CHAR.test(text[start - 1] ?? "")) start -= 1;
+  while (end < text.length && WORD_CHAR.test(text[end] ?? "")) end += 1;
+  return { start, end };
+}
+
+/**
+ * Plage à lier : la sélection, sinon le mot sous le curseur, sinon toute la ligne.
+ * Jamais une plage vide — un lien doit s’afficher sur du texte existant.
+ */
+export function resolveLinkRange(
+  text: string,
+  start: number,
+  end: number,
+): { start: number; end: number } | null {
+  const from = Math.max(0, Math.min(start, end, text.length));
+  const to = Math.max(0, Math.min(Math.max(start, end), text.length));
+  if (to > from) return { start: from, end: to };
+  const word = wordRangeAtOffset(text, from);
+  if (word) return word;
+  const first = text.search(/\S/);
+  if (first < 0) return null;
+  let last = text.length;
+  while (last > 0 && /\s/.test(text[last - 1] ?? "")) last -= 1;
+  if (last <= first) return null;
+  return { start: first, end: last };
 }
 
 export function sanitizeRichDoc(input: unknown): CampusRichDoc {
