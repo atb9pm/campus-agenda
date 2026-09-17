@@ -22,10 +22,13 @@ import {
   isCarnetOwnedPublication,
   isEmptyRichDoc,
   isPublicationLine,
+  lineIndexAfterMove,
   listWeekNotes,
   moveLineToDoc,
+  moveLineWithinDoc,
   moveWeekNote,
   setWeekRichNote,
+  visibleRichDocLines,
   weekCarnetVisibility,
   type CampusRichDoc,
   type ClassNotesDocument,
@@ -142,6 +145,9 @@ export function ClassNotebookPanel({
   const [moveMenuWeek, setMoveMenuWeek] = useState<number | null>(null);
   const [selectedLine, setSelectedLine] = useState<SelectedLine | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [dropSlot, setDropSlot] = useState<{ source: LineSource; weekNumber: number; atLineIndex: number } | null>(
+    null,
+  );
 
   const visibleWeeks = useMemo(
     () => visibleSchoolWeeks(schoolWeeks, centerWeekNumber, weekDisplayCount),
@@ -158,6 +164,38 @@ export function ClassNotebookPanel({
 
   const branchLabel = selectedBranchLabel?.trim() || classSetup.branchNames[0] || "Branche";
 
+  const weekSourceDoc = useCallback(
+    (source: LineSource, weekNumber: number): CampusRichDoc => {
+      if (source === "publication") {
+        return composeWeekPublicationDoc(items.filter((item) => item.schoolWeekNumber === weekNumber));
+      }
+      return composeWeekNotesDoc(listWeekNotes(notesDocument, weekNotesKey(classSetup.id, weekNumber)));
+    },
+    [classSetup.id, items, notesDocument],
+  );
+
+  const rememberLine = useCallback((source: LineSource, weekNumber: number, doc: CampusRichDoc, lineIndex: number) => {
+    const line = visibleRichDocLines(doc)[lineIndex];
+    if (!line) {
+      setSelectedLine(null);
+      return;
+    }
+    setSelectedLine({
+      source,
+      weekNumber,
+      blockIndex: line.blockIndex,
+      itemIndex: line.itemIndex,
+    });
+    setClipboard({
+      kind: "line",
+      mode: "copy",
+      sourceWeekNumber: weekNumber,
+      lineSource: source,
+      blockIndex: line.blockIndex,
+      itemIndex: line.itemIndex,
+    });
+  }, []);
+
   const copyCarnetLine = useCallback(
     async (
       source: LineSource,
@@ -165,32 +203,33 @@ export function ClassNotebookPanel({
       toWeek: number,
       blockIndex: number,
       itemIndex: number | null,
+      atLineIndex?: number,
     ) => {
       if (fromWeek === toWeek) return;
       if (source === "publication") {
         if (!canPublish) return;
         const copied = copyLineToDoc(
-          composeWeekPublicationDoc(items.filter((item) => item.schoolWeekNumber === fromWeek)),
-          composeWeekPublicationDoc(items.filter((item) => item.schoolWeekNumber === toWeek)),
+          weekSourceDoc(source, fromWeek),
+          weekSourceDoc(source, toWeek),
           blockIndex,
           itemIndex,
+          atLineIndex,
         );
         if (!copied) return;
         await onSaveWeekPublication(toWeek, copied);
         return;
       }
-      const fromKey = weekNotesKey(classSetup.id, fromWeek);
-      const toKey = weekNotesKey(classSetup.id, toWeek);
       const copied = copyLineToDoc(
-        composeWeekNotesDoc(listWeekNotes(notesDocument, fromKey)),
-        composeWeekNotesDoc(listWeekNotes(notesDocument, toKey)),
+        weekSourceDoc(source, fromWeek),
+        weekSourceDoc(source, toWeek),
         blockIndex,
         itemIndex,
+        atLineIndex,
       );
       if (!copied) return;
-      onNotesChange(setWeekRichNote(notesDocument, toKey, copied));
+      onNotesChange(setWeekRichNote(notesDocument, weekNotesKey(classSetup.id, toWeek), copied));
     },
-    [canPublish, classSetup.id, items, notesDocument, onNotesChange, onSaveWeekPublication],
+    [canPublish, classSetup.id, notesDocument, onNotesChange, onSaveWeekPublication, weekSourceDoc],
   );
 
   const handlePaste = useCallback(
@@ -359,47 +398,89 @@ export function ClassNotebookPanel({
     toWeek: number,
     blockIndex: number,
     itemIndex: number | null,
+    atLineIndex?: number,
   ) {
-    if (fromWeek === toWeek) return;
-    if (source === "publication") {
-      if (!canPublish) return;
-      const moved = moveLineToDoc(
-        composeWeekPublicationDoc(items.filter((item) => item.schoolWeekNumber === fromWeek)),
-        composeWeekPublicationDoc(items.filter((item) => item.schoolWeekNumber === toWeek)),
-        blockIndex,
-        itemIndex,
+    if (source === "publication" && !canPublish) return;
+    const fromDoc = weekSourceDoc(source, fromWeek);
+
+    if (fromWeek === toWeek) {
+      if (atLineIndex == null) return;
+      const fromIndex = visibleRichDocLines(fromDoc).findIndex(
+        (line) => line.blockIndex === blockIndex && line.itemIndex === itemIndex,
       );
-      if (!moved) return;
-      await onSaveWeekPublication(toWeek, moved.target);
-      await onSaveWeekPublication(fromWeek, moved.source);
+      const next = moveLineWithinDoc(fromDoc, blockIndex, itemIndex, atLineIndex);
+      if (!next || next === fromDoc) return;
+      if (source === "publication") {
+        await onSaveWeekPublication(toWeek, next);
+      } else {
+        onNotesChange(setWeekRichNote(notesDocument, weekNotesKey(classSetup.id, toWeek), next));
+      }
+      if (fromIndex >= 0) {
+        rememberLine(source, toWeek, next, lineIndexAfterMove(fromIndex, atLineIndex));
+      }
       return;
     }
-    const fromKey = weekNotesKey(classSetup.id, fromWeek);
-    const toKey = weekNotesKey(classSetup.id, toWeek);
+
     const moved = moveLineToDoc(
-      composeWeekNotesDoc(listWeekNotes(notesDocument, fromKey)),
-      composeWeekNotesDoc(listWeekNotes(notesDocument, toKey)),
+      fromDoc,
+      weekSourceDoc(source, toWeek),
       blockIndex,
       itemIndex,
+      atLineIndex,
     );
     if (!moved) return;
-    onNotesChange(
-      setWeekRichNote(setWeekRichNote(notesDocument, fromKey, moved.source), toKey, moved.target),
-    );
+    if (source === "publication") {
+      await onSaveWeekPublication(toWeek, moved.target);
+      await onSaveWeekPublication(fromWeek, moved.source);
+    } else {
+      const fromKey = weekNotesKey(classSetup.id, fromWeek);
+      const toKey = weekNotesKey(classSetup.id, toWeek);
+      onNotesChange(setWeekRichNote(setWeekRichNote(notesDocument, fromKey, moved.source), toKey, moved.target));
+    }
   }
 
   async function handleDropOnWeek(event: DragEvent<HTMLElement>, weekNumber: number) {
     event.preventDefault();
     const payload = decodeCarnetMove(event.dataTransfer.getData("text/plain"), dragPayload);
     setDragPayload(null);
-    if (!payload || payload.weekNumber === weekNumber) return;
+    setDropSlot(null);
+    if (!payload) return;
     if (payload.kind === "week") {
+      if (payload.weekNumber === weekNumber) return;
       const source = items.find((item) => item.id === payload.itemId);
       if (!source || source.schoolWeekNumber === weekNumber) return;
       await onMovePublication(payload.itemId, weekNumber);
       return;
     }
-    await moveCarnetLine(payload.source, payload.weekNumber, weekNumber, payload.blockIndex, payload.itemIndex);
+    const atLineIndex = visibleRichDocLines(weekSourceDoc(payload.source, weekNumber)).length;
+    await moveCarnetLine(
+      payload.source,
+      payload.weekNumber,
+      weekNumber,
+      payload.blockIndex,
+      payload.itemIndex,
+      atLineIndex,
+    );
+  }
+
+  function handleDropOnSlot(
+    event: DragEvent<HTMLDivElement>,
+    source: LineSource,
+    weekNumber: number,
+    atLineIndex: number,
+  ) {
+    const payload = decodeCarnetMove(event.dataTransfer.getData("text/plain"), dragPayload);
+    setDragPayload(null);
+    setDropSlot(null);
+    if (!payload || payload.kind !== "line" || payload.source !== source) return;
+    void moveCarnetLine(
+      payload.source,
+      payload.weekNumber,
+      weekNumber,
+      payload.blockIndex,
+      payload.itemIndex,
+      atLineIndex,
+    );
   }
 
   function startLineDrag(
@@ -437,26 +518,71 @@ export function ClassNotebookPanel({
     });
   }
 
-  function pasteCopiedLine(weekNumber: number, source: LineSource) {
+  function placeCopiedLine(weekNumber: number, source: LineSource, atLineIndex: number) {
     if (!clipboard || clipboard.kind !== "line" || clipboard.lineSource !== source) return;
     if (clipboard.blockIndex == null) return;
-    if (clipboard.sourceWeekNumber === weekNumber) return;
+    if (clipboard.sourceWeekNumber === weekNumber) {
+      void moveCarnetLine(
+        clipboard.lineSource,
+        clipboard.sourceWeekNumber,
+        weekNumber,
+        clipboard.blockIndex,
+        clipboard.itemIndex ?? null,
+        atLineIndex,
+      );
+      return;
+    }
     void copyCarnetLine(
       clipboard.lineSource,
       clipboard.sourceWeekNumber,
       weekNumber,
       clipboard.blockIndex,
       clipboard.itemIndex ?? null,
+      atLineIndex,
     );
   }
 
-  function canPasteCopiedLine(weekNumber: number, source: LineSource): boolean {
-    return (
-      clipboard?.kind === "line" &&
-      clipboard.lineSource === source &&
-      clipboard.blockIndex != null &&
-      clipboard.sourceWeekNumber !== weekNumber
+  function nudgeSelectedLine(source: LineSource, weekNumber: number, line: RichDocLine, direction: -1 | 1) {
+    const fromIndex = visibleRichDocLines(weekSourceDoc(source, weekNumber)).findIndex(
+      (entry) => entry.blockIndex === line.blockIndex && entry.itemIndex === line.itemIndex,
     );
+    if (fromIndex < 0) return;
+    const atLineIndex = direction < 0 ? fromIndex - 1 : fromIndex + 2;
+    void moveCarnetLine(source, weekNumber, weekNumber, line.blockIndex, line.itemIndex, atLineIndex);
+  }
+
+  function lineSlotState(source: LineSource, weekNumber: number, canEdit: boolean) {
+    const dragging =
+      dragPayload?.kind === "line" && dragPayload.source === source ? dragPayload : null;
+    const copied =
+      clipboard?.kind === "line" && clipboard.lineSource === source && clipboard.blockIndex != null
+        ? clipboard
+        : null;
+    const showInsertSlots = canEdit && (dragging != null || copied != null);
+    const fromThisWeek = dragging
+      ? dragging.weekNumber === weekNumber
+      : copied?.sourceWeekNumber === weekNumber;
+    const origin = dragging
+      ? { blockIndex: dragging.blockIndex, itemIndex: dragging.itemIndex }
+      : copied
+        ? { blockIndex: copied.blockIndex, itemIndex: copied.itemIndex ?? null }
+        : null;
+    const hiddenInsertSlots = new Set<number>();
+    if (showInsertSlots && fromThisWeek && origin) {
+      const fromIndex = visibleRichDocLines(weekSourceDoc(source, weekNumber)).findIndex(
+        (line) => line.blockIndex === origin.blockIndex && line.itemIndex === origin.itemIndex,
+      );
+      if (fromIndex >= 0) {
+        hiddenInsertSlots.add(fromIndex);
+        hiddenInsertSlots.add(fromIndex + 1);
+      }
+    }
+    return {
+      showInsertSlots,
+      hiddenInsertSlots,
+      activeInsertSlot:
+        dropSlot?.source === source && dropSlot.weekNumber === weekNumber ? dropSlot.atLineIndex : null,
+    };
   }
 
   async function confirmDelete() {
@@ -551,15 +677,18 @@ export function ClassNotebookPanel({
           );
           const isActive = week.number === centerWeekNumber;
           const visibility = weekCarnetVisibility(weekCarnetPublications);
-          const pastePublication = canPasteCopiedLine(week.number, "publication");
-          const pasteNotes = canPasteCopiedLine(week.number, "notes");
+          const publicationSlots = lineSlotState("publication", week.number, canPublish);
+          const notesSlots = lineSlotState("notes", week.number, true);
+          const lineDropActive =
+            (dragPayload?.kind === "line" && dragPayload.weekNumber !== week.number) ||
+            (clipboard?.kind === "line" && clipboard.sourceWeekNumber !== week.number);
 
           return (
             <article
               key={week.number}
               className={`class-notebook-column${isActive ? " active" : ""}${
-                (dragPayload !== null && dragPayload.weekNumber !== week.number) ||
-                (clipboard?.kind === "line" && clipboard.sourceWeekNumber !== week.number)
+                (dragPayload !== null && dragPayload.kind === "week" && dragPayload.weekNumber !== week.number) ||
+                lineDropActive
                   ? " is-drop-target"
                   : ""
               }`}
@@ -638,7 +767,10 @@ export function ClassNotebookPanel({
                           // Chrome annule un drag sans données : l'identifiant sert aussi de repli au drop.
                           event.dataTransfer.setData("text/plain", encodeCarnetMove(payload));
                         }}
-                        onDragEnd={() => setDragPayload(null)}
+                        onDragEnd={() => {
+                          setDragPayload(null);
+                          setDropSlot(null);
+                        }}
                         onClick={() =>
                           setMoveMenuWeek((current) => (current === week.number ? null : week.number))
                         }
@@ -677,22 +809,7 @@ export function ClassNotebookPanel({
                 {visibility === "draft" ? (
                   <p className="class-notebook-visibility-hint">Les élèves ne voient pas encore ce texte.</p>
                 ) : null}
-                <div
-                  className="class-notebook-lines"
-                  role={pastePublication ? "button" : undefined}
-                  tabIndex={pastePublication ? 0 : undefined}
-                  aria-label={pastePublication ? "Coller la ligne copiée dans cette semaine" : undefined}
-                  onClick={pastePublication ? () => pasteCopiedLine(week.number, "publication") : undefined}
-                  onKeyDown={
-                    pastePublication
-                      ? (event) => {
-                          if (event.key !== "Enter" && event.key !== " ") return;
-                          event.preventDefault();
-                          pasteCopiedLine(week.number, "publication");
-                        }
-                      : undefined
-                  }
-                >
+                <div className="class-notebook-lines">
                   <RichDocView
                     doc={composeWeekPublicationDoc(weekCarnetPublications)}
                     compact
@@ -703,6 +820,9 @@ export function ClassNotebookPanel({
                         ? lineViewKey(selectedLine)
                         : undefined
                     }
+                    showInsertSlots={publicationSlots.showInsertSlots}
+                    activeInsertSlot={publicationSlots.activeInsertSlot}
+                    hiddenInsertSlots={publicationSlots.hiddenInsertSlots}
                     emptyLabel="Aucune publication pour cette semaine."
                     onLineClick={
                       canPublish
@@ -714,7 +834,28 @@ export function ClassNotebookPanel({
                         ? (line, event) => startLineDrag(event, "publication", week.number, line)
                         : undefined
                     }
-                    onLineDragEnd={() => setDragPayload(null)}
+                    onLineDragEnd={() => {
+                      setDragPayload(null);
+                      setDropSlot(null);
+                    }}
+                    onInsertSlot={
+                      canPublish ? (at) => placeCopiedLine(week.number, "publication", at) : undefined
+                    }
+                    onInsertSlotDragOver={
+                      canPublish
+                        ? (at) => setDropSlot({ source: "publication", weekNumber: week.number, atLineIndex: at })
+                        : undefined
+                    }
+                    onInsertSlotDrop={
+                      canPublish
+                        ? (at, event) => handleDropOnSlot(event, "publication", week.number, at)
+                        : undefined
+                    }
+                    onMoveLine={
+                      canPublish
+                        ? (line, direction) => nudgeSelectedLine("publication", week.number, line, direction)
+                        : undefined
+                    }
                   />
                 </div>
                 {weekStructuredPublications.map((item) => (
@@ -763,22 +904,7 @@ export function ClassNotebookPanel({
 
               <section className="class-notebook-zone class-notebook-zone-notes" aria-label="Notes prof">
                 <h3>Notes prof</h3>
-                <div
-                  className="class-notebook-lines"
-                  role={pasteNotes ? "button" : undefined}
-                  tabIndex={pasteNotes ? 0 : undefined}
-                  aria-label={pasteNotes ? "Coller la ligne copiée dans cette semaine" : undefined}
-                  onClick={pasteNotes ? () => pasteCopiedLine(week.number, "notes") : undefined}
-                  onKeyDown={
-                    pasteNotes
-                      ? (event) => {
-                          if (event.key !== "Enter" && event.key !== " ") return;
-                          event.preventDefault();
-                          pasteCopiedLine(week.number, "notes");
-                        }
-                      : undefined
-                  }
-                >
+                <div className="class-notebook-lines">
                   <RichDocView
                     doc={composeWeekNotesDoc(weekNotes)}
                     compact
@@ -789,10 +915,22 @@ export function ClassNotebookPanel({
                         ? lineViewKey(selectedLine)
                         : undefined
                     }
+                    showInsertSlots={notesSlots.showInsertSlots}
+                    activeInsertSlot={notesSlots.activeInsertSlot}
+                    hiddenInsertSlots={notesSlots.hiddenInsertSlots}
                     emptyLabel="Aucune note privée."
                     onLineClick={(line) => selectAndCopyLine("notes", week.number, line)}
                     onLineDragStart={(line, event) => startLineDrag(event, "notes", week.number, line)}
-                    onLineDragEnd={() => setDragPayload(null)}
+                    onLineDragEnd={() => {
+                      setDragPayload(null);
+                      setDropSlot(null);
+                    }}
+                    onInsertSlot={(at) => placeCopiedLine(week.number, "notes", at)}
+                    onInsertSlotDragOver={(at) =>
+                      setDropSlot({ source: "notes", weekNumber: week.number, atLineIndex: at })
+                    }
+                    onInsertSlotDrop={(at, event) => handleDropOnSlot(event, "notes", week.number, at)}
+                    onMoveLine={(line, direction) => nudgeSelectedLine("notes", week.number, line, direction)}
                   />
                 </div>
                 <div className="class-notebook-zone-actions">
@@ -822,7 +960,7 @@ export function ClassNotebookPanel({
       {clipboard ? (
         <p className="class-notebook-clipboard-hint" role="status">
           {clipboard.kind === "line"
-            ? "Ligne copiée — touchez une autre semaine pour la coller, ou glissez-la."
+            ? "Ligne sélectionnée — touchez une barre pour l’insérer, utilisez ↑ ↓, ou glissez-la."
             : "Élément en mémoire — sélectionnez une semaine et appuyez sur Ctrl+V, ou glissez-déposez."}
         </p>
       ) : null}

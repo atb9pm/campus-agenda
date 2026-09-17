@@ -11,7 +11,7 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 ### Changé
 
 - **Notes prof** : la barre d’outils est identique à **Publication élèves** (surlignage, couleurs, titre, lien, blocs de la semaine). Les notes restent privées : pas d’aperçu élève, pas de publier / brouillon.
-- **Vue semaine** : un clic sur une ligne la met en surbrillance et la copie (à coller dans une autre semaine, y compris au doigt). La ligne elle-même se glisse vers une autre colonne. Le `⠿` en tête de **Publication élèves** déplace toujours le bloc entier (glisser ou menu **Déplacer vers**).
+- **Vue semaine** : un clic sur une ligne la met en surbrillance et la copie. Des barres d’insertion apparaissent pour coller ou déposer **à l’endroit choisi** (même semaine ou une autre). Les flèches **↑ ↓** déplacent d’un cran. Glisser la ligne reste possible à la souris. Le `⠿` en tête de **Publication élèves** déplace toujours le bloc entier (glisser ou menu **Déplacer vers**).
 - **Supprimer** en bas de zone, avec confirmation, pour effacer tout le texte de la semaine (publication ou notes).
 
 ### Conservé

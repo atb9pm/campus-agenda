@@ -836,6 +836,50 @@ function mergeListBlocks(left: RichBlock, right: RichBlock): RichBlock | null {
   return null;
 }
 
+/** Lignes visibles dans la colonne semaine (texte non vide). */
+export function visibleRichDocLines(doc: CampusRichDoc): RichDocLine[] {
+  return richDocLines(doc).filter((line) => line.inlines.length > 0);
+}
+
+function isListBlock(block: RichBlock): boolean {
+  return block.type === "bulletList" || block.type === "orderedList" || block.type === "checklist";
+}
+
+function insertListItems(block: RichBlock, atItemIndex: number, incoming: RichBlock): RichBlock | null {
+  if (block.type === "checklist" && incoming.type === "checklist") {
+    const items = [...block.items];
+    items.splice(Math.max(0, atItemIndex), 0, ...incoming.items);
+    return { type: "checklist", items: items.slice(0, MAX_LIST_ITEMS) };
+  }
+  if ((block.type === "bulletList" || block.type === "orderedList") && incoming.type === block.type) {
+    const items = [...block.items];
+    items.splice(Math.max(0, atItemIndex), 0, ...incoming.items);
+    return { type: block.type, items: items.slice(0, MAX_LIST_ITEMS) };
+  }
+  return null;
+}
+
+function splitListBlock(
+  block: RichBlock,
+  itemIndex: number,
+): { before: RichBlock; after: RichBlock } | null {
+  if (block.type === "checklist") {
+    if (itemIndex <= 0 || itemIndex >= block.items.length) return null;
+    return {
+      before: { type: "checklist", items: block.items.slice(0, itemIndex) },
+      after: { type: "checklist", items: block.items.slice(itemIndex) },
+    };
+  }
+  if (block.type === "bulletList" || block.type === "orderedList") {
+    if (itemIndex <= 0 || itemIndex >= block.items.length) return null;
+    return {
+      before: { type: block.type, items: block.items.slice(0, itemIndex) },
+      after: { type: block.type, items: block.items.slice(itemIndex) },
+    };
+  }
+  return null;
+}
+
 /** Ajoute un bloc en fin de document. Fusionne avec la dernière liste si le type est le même. */
 export function appendBlock(doc: CampusRichDoc, block: RichBlock): CampusRichDoc {
   const incoming = cloneBlock(block);
@@ -848,31 +892,124 @@ export function appendBlock(doc: CampusRichDoc, block: RichBlock): CampusRichDoc
   return sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: blocks.slice(0, MAX_BLOCKS) });
 }
 
-/** Déplace une ligne d’un document vers la fin d’un autre. */
+function insertBeforeLine(doc: CampusRichDoc, incoming: RichBlock, next: RichDocLine): CampusRichDoc {
+  const blocks = [...sanitizeRichDoc(doc).blocks];
+  const nextBlock = blocks[next.blockIndex];
+  if (!nextBlock) return appendBlock(doc, incoming);
+
+  const lines = visibleRichDocLines({ format: CAMPUS_RICH_FORMAT, blocks });
+  const nextPos = lines.findIndex(
+    (line) => line.blockIndex === next.blockIndex && line.itemIndex === next.itemIndex,
+  );
+  const prev = nextPos > 0 ? lines[nextPos - 1] : undefined;
+  const incomingIsList = isListBlock(incoming);
+
+  if (incomingIsList && nextBlock.type === incoming.type && next.itemIndex != null) {
+    const merged = insertListItems(nextBlock, next.itemIndex, incoming);
+    if (merged) {
+      blocks[next.blockIndex] = merged;
+      return sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks });
+    }
+  }
+
+  if (incomingIsList && prev) {
+    const prevBlock = blocks[prev.blockIndex];
+    if (prevBlock && prevBlock.type === incoming.type && prev.itemIndex != null) {
+      const merged = insertListItems(prevBlock, prev.itemIndex + 1, incoming);
+      if (merged) {
+        blocks[prev.blockIndex] = merged;
+        return sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks });
+      }
+    }
+  }
+
+  if (isListBlock(nextBlock) && next.itemIndex != null && next.itemIndex > 0) {
+    const split = splitListBlock(nextBlock, next.itemIndex);
+    if (split) {
+      blocks.splice(next.blockIndex, 1, split.before, incoming, split.after);
+      return sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: blocks.slice(0, MAX_BLOCKS) });
+    }
+  }
+
+  blocks.splice(next.blockIndex, 0, incoming);
+  return sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: blocks.slice(0, MAX_BLOCKS) });
+}
+
+/**
+ * Insère un bloc à un emplacement de ligne (0 = début, lines.length = fin).
+ * Une puce déposée au milieu d’une liste du même type s’y fond.
+ */
+export function insertBlockAt(doc: CampusRichDoc, block: RichBlock, atLineIndex: number): CampusRichDoc {
+  const incoming = cloneBlock(block);
+  if (!blockHasText(incoming)) return sanitizeRichDoc(doc);
+  if (isEmptyRichDoc(doc)) {
+    return sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: [incoming] });
+  }
+  const sanitized = sanitizeRichDoc(doc);
+  const lines = visibleRichDocLines(sanitized);
+  const at = Math.max(0, Math.min(atLineIndex, lines.length));
+  if (at >= lines.length) return appendBlock(sanitized, incoming);
+  return insertBeforeLine(sanitized, incoming, lines[at]!);
+}
+
+function placeExtractedBlock(target: CampusRichDoc, extracted: RichBlock, atLineIndex?: number): CampusRichDoc {
+  if (atLineIndex == null) return appendBlock(target, extracted);
+  return insertBlockAt(target, extracted, atLineIndex);
+}
+
+/** Déplace une ligne d’un document vers un autre (fin, ou emplacement donné). */
 export function moveLineToDoc(
   source: CampusRichDoc,
   target: CampusRichDoc,
   blockIndex: number,
   itemIndex: number | null,
+  atLineIndex?: number,
 ): { source: CampusRichDoc; target: CampusRichDoc } | null {
   const extracted = extractLine(source, blockIndex, itemIndex);
   if (!extracted) return null;
   return {
     source: extracted.remaining,
-    target: appendBlock(target, extracted.extracted),
+    target: placeExtractedBlock(target, extracted.extracted, atLineIndex),
   };
 }
 
-/** Copie une ligne vers la fin d’un autre document, sans la retirer de la source. */
+/** Copie une ligne vers un autre document, sans la retirer de la source. */
 export function copyLineToDoc(
   source: CampusRichDoc,
   target: CampusRichDoc,
   blockIndex: number,
   itemIndex: number | null,
+  atLineIndex?: number,
 ): CampusRichDoc | null {
   const extracted = extractLine(source, blockIndex, itemIndex);
   if (!extracted) return null;
-  return appendBlock(target, extracted.extracted);
+  return placeExtractedBlock(target, extracted.extracted, atLineIndex);
+}
+
+/**
+ * Réordonne une ligne dans le même document.
+ * `atLineIndex` est l’emplacement parmi les lignes visibles avant le déplacement.
+ * Un dépôt juste avant ou juste après la ligne elle-même est un no-op (même référence).
+ */
+export function moveLineWithinDoc(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+  atLineIndex: number,
+): CampusRichDoc | null {
+  const lines = visibleRichDocLines(doc);
+  const from = lines.findIndex((line) => line.blockIndex === blockIndex && line.itemIndex === itemIndex);
+  if (from < 0) return null;
+  if (atLineIndex === from || atLineIndex === from + 1) return doc;
+  const extracted = extractLine(doc, blockIndex, itemIndex);
+  if (!extracted) return null;
+  const adjusted = from < atLineIndex ? atLineIndex - 1 : atLineIndex;
+  return insertBlockAt(extracted.remaining, extracted.extracted, adjusted);
+}
+
+/** Index de la ligne après un déplacement interne, pour garder la sélection. */
+export function lineIndexAfterMove(fromIndex: number, atLineIndex: number): number {
+  return atLineIndex <= fromIndex ? atLineIndex : atLineIndex - 1;
 }
 
 export function addStructuredListItem(block: RichBlock, afterIndex?: number): RichBlock {
