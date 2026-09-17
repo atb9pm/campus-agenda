@@ -8,6 +8,7 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
 - **Gras, couleur, surlignage, lien** : s’appliquent **seulement au texte sélectionné**. Sans sélection, ils s’appliquent au **texte tapé ensuite** (comme Word), plus à toute la ligne.
 - Sélectionner jusqu’à la dernière lettre ne perd plus la plage au relâchement de la souris.
+- **Maj + Entrée** : un seul appui va à la ligne, y compris en fin de paragraphe (le navigateur n’avale plus le premier saut).
 
 ### Ajouté
 

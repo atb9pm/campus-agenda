@@ -366,6 +366,7 @@ export function parseInlinesFromHtml(html: string): RichInline[] {
     const attrs = match[2] ?? "";
     const closing = match[0]!.startsWith("</");
     if (tag === "br") {
+      if (/\bdata-padding\s*=/.test(attrs)) continue;
       inlines.push({ text: "\n" });
       continue;
     }

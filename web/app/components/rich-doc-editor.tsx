@@ -54,9 +54,13 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function isPaddingBr(node: Node): boolean {
+  return node.nodeName === "BR" && node instanceof HTMLElement && node.dataset.padding === "1";
+}
+
 function inlinesToHtml(inlines: readonly RichInline[]): string {
   if (!inlines.length) return "";
-  return inlines
+  const html = inlines
     .map((inline) => {
       let html = escapeHtml(inline.text).replace(/\n/g, "<br>");
       const marks = inline.marks;
@@ -74,9 +78,14 @@ function inlinesToHtml(inlines: readonly RichInline[]): string {
       return html;
     })
     .join("");
+  // Un <br> final est avalé par contentEditable : sans ce br de calage, Maj+Entrée
+  // en fin de ligne n’affiche le saut qu’au deuxième appui.
+  if (html.endsWith("<br>")) return `${html}<br data-padding="1">`;
+  return html;
 }
 
 function nodeCharLength(node: Node): number {
+  if (isPaddingBr(node)) return 0;
   if (node.nodeName === "BR") return 1;
   if (node.nodeType === Node.TEXT_NODE) return (node as Text).data.length;
   let total = 0;
@@ -120,7 +129,7 @@ function characterOffset(root: HTMLElement, container: Node, domOffset: number):
         return true;
       }
       if (node.nodeName === "BR") {
-        offset += 1;
+        offset += isPaddingBr(node) ? 0 : 1;
         return false;
       }
       if (node.nodeType === Node.TEXT_NODE) {
@@ -145,7 +154,7 @@ function characterOffset(root: HTMLElement, container: Node, domOffset: number):
       return true;
     }
     if (node.nodeName === "BR") {
-      offset += 1;
+      offset += isPaddingBr(node) ? 0 : 1;
       return false;
     }
     if (node.nodeType === Node.TEXT_NODE) {
@@ -165,8 +174,8 @@ function caretPointAt(root: HTMLElement, target: number): { node: Node; offset: 
   const atoms: Array<{ kind: "text"; node: Text } | { kind: "br"; node: Element }> = [];
   function collect(node: Node) {
     if (node.nodeType === Node.TEXT_NODE) atoms.push({ kind: "text", node: node as Text });
-    else if (node.nodeName === "BR") atoms.push({ kind: "br", node: node as Element });
-    else for (const child of node.childNodes) collect(child);
+    else if (node.nodeName === "BR" && !isPaddingBr(node)) atoms.push({ kind: "br", node: node as Element });
+    else if (node.nodeName !== "BR") for (const child of node.childNodes) collect(child);
   }
   collect(root);
   if (!atoms.length) return { node: root, offset: 0 };
@@ -260,6 +269,7 @@ export function RichDocEditor({
   const selectionRef = useRef<EditorSelection | null>(null);
   const typingMarksRef = useRef<RichMarks>({});
   const pendingTyping = useRef(false);
+  const softBreakLock = useRef(false);
 
   function setTypingMarksBoth(marks: RichMarks) {
     typingMarksRef.current = marks;
@@ -541,25 +551,34 @@ export function RichDocEditor({
     applyMark("href", href);
   }
 
+  function insertSoftBreak(line: RichDocLine, element: HTMLElement) {
+    if (softBreakLock.current) return;
+    softBreakLock.current = true;
+    queueMicrotask(() => {
+      softBreakLock.current = false;
+    });
+    const current = readSelection(line, element);
+    let inlines = parseInlinesFromHtml(element.innerHTML);
+    const offset = current?.start ?? inlinesPlainText(inlines).length;
+    if (current && current.end > current.start) {
+      const [before] = splitInlinesAt(inlines, current.start);
+      const [, after] = splitInlinesAt(inlines, current.end);
+      inlines = [...before, ...after];
+    }
+    const marks = pendingTyping.current ? typingMarksRef.current : undefined;
+    const next = insertTextAt(inlines, offset, "\n", marks);
+    commit(setLineInlines(docRef.current, line.blockIndex, line.itemIndex, next), {
+      blockIndex: line.blockIndex,
+      itemIndex: line.itemIndex,
+      offset: offset + 1,
+    });
+  }
+
   function handleKeyDown(line: RichDocLine, element: HTMLElement, event: React.KeyboardEvent<HTMLDivElement>) {
     if (handleHistoryKeys(event)) return;
     if (event.key === "Enter" && event.shiftKey) {
       event.preventDefault();
-      const current = readSelection(line, element);
-      let inlines = parseInlinesFromHtml(element.innerHTML);
-      const offset = current?.start ?? inlinesPlainText(inlines).length;
-      if (current && current.end > current.start) {
-        const [before] = splitInlinesAt(inlines, current.start);
-        const [, after] = splitInlinesAt(inlines, current.end);
-        inlines = [...before, ...after];
-      }
-      const marks = pendingTyping.current ? typingMarksRef.current : undefined;
-      const next = insertTextAt(inlines, offset, "\n", marks);
-      commit(setLineInlines(docRef.current, line.blockIndex, line.itemIndex, next), {
-        blockIndex: line.blockIndex,
-        itemIndex: line.itemIndex,
-        offset: offset + 1,
-      });
+      insertSoftBreak(line, element);
       return;
     }
     if (event.key === "Enter" && !event.shiftKey) {
@@ -586,7 +605,17 @@ export function RichDocEditor({
 
   function handleBeforeInput(line: RichDocLine, element: HTMLElement, event: React.FormEvent<HTMLDivElement>) {
     const native = event.nativeEvent;
-    if (!(native instanceof InputEvent) || native.inputType !== "insertText" || !native.data) return;
+    if (!(native instanceof InputEvent)) return;
+    if (native.inputType === "insertLineBreak") {
+      event.preventDefault();
+      insertSoftBreak(line, element);
+      return;
+    }
+    if (native.inputType === "insertParagraph") {
+      event.preventDefault();
+      return;
+    }
+    if (native.inputType !== "insertText" || !native.data) return;
     const current = readSelection(line, element);
     const inlines = parseInlinesFromHtml(element.innerHTML);
     const offset = current?.start ?? inlinesPlainText(inlines).length;

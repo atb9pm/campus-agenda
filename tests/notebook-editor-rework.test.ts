@@ -530,6 +530,8 @@ test("version 2.58.0 — couleur sur la sélection, Annuler / Rétablir", async 
   assert.match(editor, /liveTarget/);
   assert.doesNotMatch(editor, /Sans sélection, un outil s’applique à toute la ligne/);
   assert.doesNotMatch(editor, /collapsed \? \{ \.\.\.current, start: 0, end: length \}/);
+  assert.match(editor, /data-padding/);
+  assert.match(editor, /insertSoftBreak/);
 });
 
 test("couleur — seulement la plage choisie, pas le début de la ligne", () => {
@@ -583,6 +585,12 @@ test("Maj+Entrée — un <br> devient un saut de ligne dans le même bloc", () =
 
   const inserted = insertTextAt([{ text: "Devoirinjection" }], 6, "\n");
   assert.equal(inlinesPlainText(inserted), "Devoir\ninjection");
+
+  const atEnd = insertTextAt([{ text: "Fin" }], 3, "\n");
+  assert.equal(inlinesPlainText(atEnd), "Fin\n");
+  const withPadding = parseInlinesFromHtml('Fin<br><br data-padding="1">');
+  assert.equal(inlinesPlainText(withPadding), "Fin\n");
+  assert.equal(inlinesPlainText(parseInlinesFromHtml("Fin<br><br>")), "Fin\n\n");
 });
 
 test("coller — saut simple dans le bloc, ligne vide = nouveau bloc", () => {
