@@ -751,6 +751,7 @@ export function ClassNotebookPanel({
     }
     return {
       showInsertSlots,
+      insertSlotsDragging: dragging != null,
       hiddenInsertSlots,
       activeInsertSlot:
         dropSlot?.source === source && dropSlot.weekNumber === weekNumber ? dropSlot.atLineIndex : null,
@@ -993,6 +994,7 @@ export function ClassNotebookPanel({
                         : undefined
                     }
                     showInsertSlots={publicationSlots.showInsertSlots}
+                    insertSlotsDragging={publicationSlots.insertSlotsDragging}
                     activeInsertSlot={publicationSlots.activeInsertSlot}
                     hiddenInsertSlots={publicationSlots.hiddenInsertSlots}
                     emptyLabel="Aucune publication pour cette semaine."
@@ -1088,6 +1090,7 @@ export function ClassNotebookPanel({
                         : undefined
                     }
                     showInsertSlots={notesSlots.showInsertSlots}
+                    insertSlotsDragging={notesSlots.insertSlotsDragging}
                     activeInsertSlot={notesSlots.activeInsertSlot}
                     hiddenInsertSlots={notesSlots.hiddenInsertSlots}
                     emptyLabel="Aucune note privée."
@@ -1132,7 +1135,7 @@ export function ClassNotebookPanel({
       {clipboard ? (
         <p className="class-notebook-clipboard-hint" role="status">
           {clipboard.kind === "line"
-            ? "Ligne sélectionnée — Suppr l’efface, Ctrl+X la coupe, touchez une barre pour l’insérer, ou ↑ ↓."
+            ? "Ligne sélectionnée — Suppr l’efface, Ctrl+X la coupe, survolez entre les blocs pour coller, ou ↑ ↓."
             : "Élément en mémoire — sélectionnez une semaine et appuyez sur Ctrl+V, ou glissez-déposez."}
         </p>
       ) : null}
