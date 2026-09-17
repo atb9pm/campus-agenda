@@ -29,6 +29,8 @@ import {
   pastePlainText,
   pasteRichClip,
   rememberRichClip,
+  resolveLinkRange,
+  sanitizeHref,
   sliceInlines,
   pushRichDocHistory,
   redoRichDocHistory,
@@ -41,6 +43,7 @@ import {
   splitLine,
   undoRichDocHistory,
   visibleRichDocLines,
+  wordRangeAtOffset,
   type CampusRichDoc,
 } from "../src/features/class-notebook/index.ts";
 
@@ -60,7 +63,7 @@ function lineText(doc: CampusRichDoc, blockIndex: number, itemIndex: number | nu
 
 test("version 2.56.0 — éditeur Carnet reconstruit sur le modèle, sans execCommand", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.59.0");
+  assert.equal(APP_VERSION, "2.59.1");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(editor, /execCommand/);
   assert.doesNotMatch(editor, /window\.prompt/);
@@ -330,7 +333,7 @@ test("vue compacte — résumé lisible, sans cases décalées ni cadres", async
 
 test("version 2.57.0 — curseur, menus notes, déplacement d’une ligne", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.59.0");
+  assert.equal(APP_VERSION, "2.59.1");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.match(editor, /Le DOM n'est réécrit que sur syncToken/);
   assert.match(editor, /snapCaretToClick/);
@@ -528,7 +531,7 @@ test("copier une ligne à un emplacement précis", () => {
 
 test("version 2.58.0 — couleur sur la sélection, Annuler / Rétablir", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.59.0");
+  assert.equal(APP_VERSION, "2.59.1");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.match(editor, /Annuler \(Ctrl\+Z\)/);
   assert.match(editor, /Rétablir \(Ctrl\+Y\)/);
@@ -695,4 +698,58 @@ test("couper / supprimer — retire n’importe quelle ligne, y compris la premi
   assert.ok(emptied);
   assert.equal(visibleRichDocLines(emptied!.doc).length, 0);
   assert.equal(inlinesPlainText(richDocLines(emptied!.doc)[0]!.inlines), "");
+});
+
+test("version 2.59.1 — souligné ≠ lien, Lien visible sur le mot", async () => {
+  const { APP_VERSION } = await import("../src/lib/app-version.ts");
+  assert.equal(APP_VERSION, "2.59.1");
+  const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
+  const view = await readFile(new URL("../web/app/components/rich-doc-view.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
+  assert.match(editor, /linkTargetRef/);
+  assert.match(editor, /applyHrefToFrozenTarget/);
+  assert.match(editor, /resolveLinkRange/);
+  assert.match(editor, /openLinkBar/);
+  assert.match(editor, /Souligné n’est pas un[\s\S]*lien/);
+  assert.match(editor, /Adresse invalide/);
+  assert.doesNotMatch(editor, /type="url"/);
+  assert.doesNotMatch(editor, /element\?\.focus\(\)/);
+  assert.match(view, /navigateLinks/);
+  assert.match(view, /rich-doc-hyperlink/);
+  assert.match(view, /<span className="rich-doc-hyperlink"/);
+  assert.match(css, /rich-doc-hyperlink/);
+  assert.match(css, /rich-doc-link-error/);
+  assert.match(css, /\.rich-doc-line-input u/);
+});
+
+test("souligné HTML n’est jamais un href", () => {
+  const parsed = parseInlinesFromHtml("<u>sadfad</u>");
+  assert.equal(parsed[0]?.text, "sadfad");
+  assert.equal(parsed[0]?.marks?.underline, true);
+  assert.equal(parsed[0]?.marks?.href, undefined);
+
+  const linked = parseInlinesFromHtml('<a href="https://campusagenda.ch">dossier</a>');
+  assert.equal(linked[0]?.marks?.href, "https://campusagenda.ch");
+  assert.equal(linked[0]?.marks?.underline, undefined);
+});
+
+test("Lien — adresse normalisée, plage au mot si curseur seul", () => {
+  assert.equal(sanitizeHref("https://"), undefined);
+  assert.equal(sanitizeHref("https:// ddsfafafs.ch"), "https://ddsfafafs.ch");
+  assert.equal(sanitizeHref("ddsfafafs.ch"), "https://ddsfafafs.ch");
+  assert.equal(wordRangeAtOffset("asdfasdf", 3)?.start, 0);
+  assert.equal(wordRangeAtOffset("asdfasdf", 3)?.end, 8);
+  assert.deepEqual(resolveLinkRange("asdfasdf", 3, 3), { start: 0, end: 8 });
+  assert.deepEqual(resolveLinkRange("voir le dossier ici", 8, 15), { start: 8, end: 15 });
+
+  const inlines = [{ text: "asdfasdf" }];
+  const range = resolveLinkRange(inlinesPlainText(inlines), 4, 4);
+  assert.ok(range);
+  const linked = applyMarkToRange(inlines, range.start, range.end, "href", "https://ddsfafafs.ch");
+  assert.equal(marksInRange(linked, 0, 8).href, "https://ddsfafafs.ch");
+  assert.equal(marksInRange(linked, 0, 8).underline, undefined);
+
+  const underlined = applyMarkToRange(inlines, 0, 8, "underline", true);
+  assert.equal(marksInRange(underlined, 0, 8).underline, true);
+  assert.equal(marksInRange(underlined, 0, 8).href, undefined);
 });

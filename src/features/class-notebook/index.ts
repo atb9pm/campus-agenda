@@ -93,6 +93,8 @@ export {
   publicationTitleForDoc,
   rejectDangerousRichPayload,
   sanitizeHref,
+  resolveLinkRange,
+  wordRangeAtOffset,
   sanitizeRichDoc,
   type CampusRichDoc,
   type QuickBlockKind,

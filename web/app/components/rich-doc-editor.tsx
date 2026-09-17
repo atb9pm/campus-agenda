@@ -31,6 +31,7 @@ import {
   rememberRichClip,
   removeLine,
   deleteLine,
+  resolveLinkRange,
   richDocLines,
   sanitizeHref,
   sanitizeRichDoc,
@@ -269,6 +270,7 @@ export function RichDocEditor({
   const [syncToken, setSyncToken] = useState(0);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   const docRef = useRef(doc);
   const lineRefs = useRef(new Map<string, HTMLElement>());
@@ -280,6 +282,7 @@ export function RichDocEditor({
   const pendingTyping = useRef(false);
   const softBreakLock = useRef(false);
   const pasteLock = useRef(false);
+  const linkTargetRef = useRef<EditorSelection | null>(null);
   const copyCurrentRef = useRef<() => void>(() => undefined);
   const cutCurrentRef = useRef<() => void>(() => undefined);
   const pasteCurrentRef = useRef<(line?: RichDocLine, element?: HTMLElement) => void>(() => undefined);
@@ -744,11 +747,58 @@ export function RichDocEditor({
     commit(next, { blockIndex: at + 1, itemIndex: null, offset: 0 });
   }
 
+  function openLinkBar() {
+    const target = liveTarget();
+    linkTargetRef.current = target?.selection ?? selectionRef.current;
+    setLinkError(null);
+    setLinkDraft(activeMarks.href ?? "");
+  }
+
+  function applyHrefToFrozenTarget(href: string | undefined): boolean {
+    const frozen = linkTargetRef.current ?? liveTarget()?.selection ?? selectionRef.current;
+    const live = liveTarget();
+    const inlines =
+      live &&
+      frozen &&
+      live.selection.blockIndex === frozen.blockIndex &&
+      live.selection.itemIndex === frozen.itemIndex
+        ? live.inlines
+        : frozen
+          ? lineFromSelection(frozen)?.inlines
+          : undefined;
+    if (!frozen || !inlines) return false;
+    const range = resolveLinkRange(inlinesPlainText(inlines), frozen.start, frozen.end);
+    if (!range) return false;
+    const next = applyMarkToRange(inlines, range.start, range.end, "href", href);
+    commit(setLineInlines(docRef.current, frozen.blockIndex, frozen.itemIndex, next), undefined, {
+      history: "action",
+    });
+    const applied = { ...frozen, start: range.start, end: range.end };
+    linkTargetRef.current = applied;
+    rememberSelection(applied);
+    setTypingMarksBoth(marksInRange(next, range.start, range.end));
+    requestAnimationFrame(() => {
+      const element = lineRefs.current.get(lineKey(frozen.blockIndex, frozen.itemIndex));
+      if (!element) return;
+      element.focus({ preventScroll: true });
+      setCharacterSelection(element, range.start, range.end);
+      rememberSelection(applied);
+    });
+    return true;
+  }
+
   function confirmLink() {
     const href = sanitizeHref(linkDraft);
+    if (!href) {
+      setLinkError("Adresse invalide. Exemple : campusagenda.ch");
+      return;
+    }
+    if (!applyHrefToFrozenTarget(href)) {
+      setLinkError("Sélectionne le texte à lier, ou place le curseur dans un mot.");
+      return;
+    }
+    setLinkError(null);
     setLinkDraft(null);
-    if (!href) return;
-    applyMark("href", href);
   }
 
   function insertSoftBreak(line: RichDocLine, element: HTMLElement) {
@@ -946,10 +996,17 @@ export function RichDocEditor({
             label="Insérer un lien"
             text="Lien"
             active={Boolean(activeMarks.href)}
-            onClick={() => setLinkDraft(activeMarks.href ?? "https://")}
+            onClick={openLinkBar}
           />
           {activeMarks.href ? (
-            <ToolButton label="Retirer le lien" text="Sans lien" onClick={() => applyMark("href", undefined)} />
+            <ToolButton
+              label="Retirer le lien"
+              text="Sans lien"
+              onClick={() => {
+                linkTargetRef.current = liveTarget()?.selection ?? selectionRef.current;
+                if (!applyHrefToFrozenTarget(undefined)) applyMark("href", undefined);
+              }}
+            />
           ) : null}
         </div>
       </div>
@@ -959,26 +1016,48 @@ export function RichDocEditor({
           <label>
             Adresse du lien
             <input
-              type="url"
-              ref={(element) => element?.focus()}
+              type="text"
+              inputMode="url"
+              autoComplete="url"
+              autoFocus
               value={linkDraft}
-              placeholder="https://"
-              onChange={(event) => setLinkDraft(event.target.value)}
+              placeholder="campusagenda.ch"
+              onChange={(event) => {
+                setLinkDraft(event.target.value);
+                if (linkError) setLinkError(null);
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
                   confirmLink();
                 }
-                if (event.key === "Escape") setLinkDraft(null);
+                if (event.key === "Escape") {
+                  setLinkDraft(null);
+                  setLinkError(null);
+                }
               }}
             />
           </label>
-          <button type="button" className="workspace-action" onClick={confirmLink}>
+          <button
+            type="button"
+            className="workspace-action"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={confirmLink}
+          >
             Appliquer
           </button>
-          <button type="button" className="workspace-action secondary" onClick={() => setLinkDraft(null)}>
+          <button
+            type="button"
+            className="workspace-action secondary"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              setLinkDraft(null);
+              setLinkError(null);
+            }}
+          >
             Annuler
           </button>
+          {linkError ? <p className="rich-doc-link-error">{linkError}</p> : null}
         </div>
       ) : null}
 
@@ -1048,6 +1127,10 @@ export function RichDocEditor({
                   onInput={(event) => handleLineInput(line, event.currentTarget)}
                   onBeforeInput={(event) => handleBeforeInput(line, event.currentTarget, event)}
                   onKeyUp={(event) => syncCaretFromLine(line, event.currentTarget)}
+                  onClick={(event) => {
+                    const target = event.target;
+                    if (target instanceof Element && target.closest("a")) event.preventDefault();
+                  }}
                   onMouseUp={(event) => {
                     const dom = window.getSelection();
                     if (!dom || dom.isCollapsed) {
@@ -1084,8 +1167,8 @@ export function RichDocEditor({
 
       <p className="rich-doc-hint">
         Entrée crée une ligne. Maj + Entrée va à la ligne dans le bloc. Ctrl+C copie, Ctrl+X coupe,
-        Ctrl+V colle. Suppr efface la ligne en surbrillance dans la vue semaine. Gras, couleur et lien :
-        sur la sélection, ou sur le texte tapé ensuite. Ctrl+Z annule.
+        Ctrl+V colle. Suppr efface la ligne en surbrillance dans la vue semaine. Souligné n’est pas un
+        lien. Lien : sur la sélection, ou sur le mot sous le curseur. Ctrl+Z annule.
       </p>
     </div>
   );

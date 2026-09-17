@@ -84,7 +84,7 @@ function sampleDoc(): CampusRichDoc {
 }
 
 test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async () => {
-  assert.equal(APP_VERSION, "2.59.0");
+  assert.equal(APP_VERSION, "2.59.1");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
   const [panel, notesApi, studentPage] = await Promise.all([
     readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8"),
@@ -244,6 +244,10 @@ test("cloneRichDoc — copie indépendante, sans contrôle ni notes", () => {
 test("protection XSS / contenu dangereux", () => {
   assert.equal(sanitizeHref("javascript:alert(1)"), undefined);
   assert.equal(sanitizeHref("https://ok.example"), "https://ok.example");
+  assert.equal(sanitizeHref("https://"), undefined);
+  assert.equal(sanitizeHref("https:// ddsfafafs.ch"), "https://ddsfafafs.ch");
+  assert.equal(sanitizeHref("campusagenda.ch"), "https://campusagenda.ch");
+  assert.equal(sanitizeHref("not a link"), undefined);
   const dirty = sanitizeRichDoc({
     format: "campus-rich-v1",
     blocks: [
