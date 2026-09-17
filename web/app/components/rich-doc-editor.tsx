@@ -14,14 +14,17 @@ import {
   emptyRichDoc,
   inlinesPlainText,
   insertQuickBlock,
+  insertTextAt,
   marksInRange,
   parseInlinesFromHtml,
+  pastePlainText,
   removeLine,
   richDocLines,
   sanitizeHref,
   sanitizeRichDoc,
   setChecklistChecked,
   setLineInlines,
+  splitInlinesAt,
   splitLine,
   type CampusRichDoc,
   type QuickBlockKind,
@@ -46,7 +49,7 @@ function inlinesToHtml(inlines: readonly RichInline[]): string {
   if (!inlines.length) return "";
   return inlines
     .map((inline) => {
-      let html = escapeHtml(inline.text);
+      let html = escapeHtml(inline.text).replace(/\n/g, "<br>");
       const marks = inline.marks;
       if (!marks) return html;
       if (marks.bold) html = `<strong>${html}</strong>`;
@@ -62,6 +65,14 @@ function inlinesToHtml(inlines: readonly RichInline[]): string {
       return html;
     })
     .join("");
+}
+
+function nodeCharLength(node: Node): number {
+  if (node.nodeName === "BR") return 1;
+  if (node.nodeType === Node.TEXT_NODE) return (node as Text).data.length;
+  let total = 0;
+  for (const child of node.childNodes) total += nodeCharLength(child);
+  return total;
 }
 
 function lineKey(blockIndex: number, itemIndex: number | null): string {
@@ -84,55 +95,101 @@ function characterOffset(root: HTMLElement, container: Node, domOffset: number):
   if (container === root) {
     let total = 0;
     for (let index = 0; index < domOffset && index < root.childNodes.length; index += 1) {
-      total += root.childNodes[index]!.textContent?.length ?? 0;
+      total += nodeCharLength(root.childNodes[index]!);
     }
     return total;
   }
   if (!root.contains(container)) return null;
-  let offset = 0;
-  for (const node of textNodesOf(root)) {
-    if (node === container) return offset + domOffset;
-    offset += node.data.length;
+
+  if (container.nodeType === Node.TEXT_NODE) {
+    let offset = 0;
+    let found = false;
+    function walk(node: Node): boolean {
+      if (node === container) {
+        offset += domOffset;
+        found = true;
+        return true;
+      }
+      if (node.nodeName === "BR") {
+        offset += 1;
+        return false;
+      }
+      if (node.nodeType === Node.TEXT_NODE) {
+        offset += (node as Text).data.length;
+        return false;
+      }
+      for (const child of node.childNodes) {
+        if (walk(child)) return true;
+      }
+      return false;
+    }
+    walk(root);
+    return found ? offset : null;
   }
-  return offset;
+
+  let offset = 0;
+  function walk(node: Node): boolean {
+    if (node === container) {
+      for (let index = 0; index < domOffset && index < node.childNodes.length; index += 1) {
+        offset += nodeCharLength(node.childNodes[index]!);
+      }
+      return true;
+    }
+    if (node.nodeName === "BR") {
+      offset += 1;
+      return false;
+    }
+    if (node.nodeType === Node.TEXT_NODE) {
+      offset += (node as Text).data.length;
+      return false;
+    }
+    for (const child of node.childNodes) {
+      if (walk(child)) return true;
+    }
+    return false;
+  }
+  return walk(root) ? offset : null;
+}
+
+function caretPointAt(root: HTMLElement, target: number): { node: Node; offset: number } {
+  let pos = 0;
+  const atoms: Array<{ kind: "text"; node: Text } | { kind: "br"; node: Element }> = [];
+  function collect(node: Node) {
+    if (node.nodeType === Node.TEXT_NODE) atoms.push({ kind: "text", node: node as Text });
+    else if (node.nodeName === "BR") atoms.push({ kind: "br", node: node as Element });
+    else for (const child of node.childNodes) collect(child);
+  }
+  collect(root);
+  if (!atoms.length) return { node: root, offset: 0 };
+
+  for (const atom of atoms) {
+    const length = atom.kind === "br" ? 1 : atom.node.data.length;
+    if (target <= pos + length) {
+      const local = target - pos;
+      if (atom.kind === "text") {
+        return { node: atom.node, offset: Math.max(0, Math.min(atom.node.data.length, local)) };
+      }
+      const parent = atom.node.parentNode ?? root;
+      const index = Array.prototype.indexOf.call(parent.childNodes, atom.node);
+      return { node: parent, offset: local <= 0 ? index : index + 1 };
+    }
+    pos += length;
+  }
+
+  const last = atoms[atoms.length - 1]!;
+  if (last.kind === "text") return { node: last.node, offset: last.node.data.length };
+  const parent = last.node.parentNode ?? root;
+  return { node: parent, offset: Array.prototype.indexOf.call(parent.childNodes, last.node) + 1 };
 }
 
 function setCharacterSelection(root: HTMLElement, start: number, end: number): void {
-  const nodes = textNodesOf(root).filter((node) => node.data.length > 0);
   const selection = window.getSelection();
   if (!selection) return;
   const range = document.createRange();
-
-  if (!nodes.length) {
-    range.setStart(root, 0);
-    range.setEnd(root, 0);
-    selection.removeAllRanges();
-    selection.addRange(range);
-    return;
-  }
-
-  let placedStart = false;
-  let offset = 0;
-  for (let index = 0; index < nodes.length; index += 1) {
-    const node = nodes[index]!;
-    const nodeEnd = offset + node.data.length;
-    const isLast = index === nodes.length - 1;
-    if (!placedStart && (start < nodeEnd || (start === nodeEnd && isLast))) {
-      range.setStart(node, Math.max(0, Math.min(node.data.length, start - offset)));
-      placedStart = true;
-    }
-    if (end < nodeEnd || (end === nodeEnd && isLast)) {
-      range.setEnd(node, Math.max(0, Math.min(node.data.length, end - offset)));
-      selection.removeAllRanges();
-      selection.addRange(range);
-      return;
-    }
-    offset = nodeEnd;
-  }
-
-  const last = nodes[nodes.length - 1]!;
-  if (!placedStart) range.setStart(last, last.data.length);
-  range.setEnd(last, last.data.length);
+  const from = caretPointAt(root, Math.max(0, Math.min(start, end)));
+  const to = caretPointAt(root, Math.max(start, end));
+  range.setStart(from.node, from.offset);
+  range.setEnd(to.node, to.offset);
   selection.removeAllRanges();
   selection.addRange(range);
 }
@@ -140,12 +197,16 @@ function setCharacterSelection(root: HTMLElement, start: number, end: number): v
 /** Clic à droite du texte : placer le curseur après la dernière lettre, pas au début du premier nœud. */
 function snapCaretToClick(root: HTMLElement, clientX: number, clientY: number): void {
   const nodes = textNodesOf(root).filter((node) => node.data.length > 0);
-  const length = nodes.reduce((sum, node) => sum + node.data.length, 0);
+  const length = nodeCharLength(root);
   if (!length) {
     setCharacterSelection(root, 0, 0);
     return;
   }
-  const last = nodes[nodes.length - 1]!;
+  const last = nodes[nodes.length - 1];
+  if (!last) {
+    setCharacterSelection(root, length, length);
+    return;
+  }
   const probe = document.createRange();
   probe.setStart(last, Math.max(0, last.data.length - 1));
   probe.setEnd(last, last.data.length);
@@ -338,6 +399,24 @@ export function RichDocEditor({
   }
 
   function handleKeyDown(line: RichDocLine, element: HTMLElement, event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Enter" && event.shiftKey) {
+      event.preventDefault();
+      const current = readSelection(line, element);
+      let inlines = parseInlinesFromHtml(element.innerHTML);
+      const offset = current?.start ?? inlinesPlainText(inlines).length;
+      if (current && current.end > current.start) {
+        const [before] = splitInlinesAt(inlines, current.start);
+        const [, after] = splitInlinesAt(inlines, current.end);
+        inlines = [...before, ...after];
+      }
+      const next = insertTextAt(inlines, offset, "\n");
+      commit(setLineInlines(docRef.current, line.blockIndex, line.itemIndex, next), {
+        blockIndex: line.blockIndex,
+        itemIndex: line.itemIndex,
+        offset: offset + 1,
+      });
+      return;
+    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       const current = readSelection(line, element);
@@ -536,7 +615,7 @@ export function RichDocEditor({
                 <div
                   className="rich-doc-line-input"
                   role="textbox"
-                  aria-multiline="false"
+                  aria-multiline="true"
                   tabIndex={0}
                   contentEditable
                   suppressContentEditableWarning
@@ -554,13 +633,20 @@ export function RichDocEditor({
                   onKeyDown={(event) => handleKeyDown(line, event.currentTarget, event)}
                   onPaste={(event) => {
                     event.preventDefault();
-                    const text = event.clipboardData.getData("text/plain").replace(/\s*\n\s*/g, " ");
-                    const domSelection = window.getSelection();
-                    if (!domSelection || domSelection.rangeCount === 0) return;
-                    domSelection.deleteFromDocument();
-                    domSelection.getRangeAt(0).insertNode(document.createTextNode(text));
-                    domSelection.collapseToEnd();
-                    handleLineInput(line, event.currentTarget);
+                    const raw = event.clipboardData.getData("text/plain");
+                    const current = readSelection(line, event.currentTarget);
+                    let inlines = parseInlinesFromHtml(event.currentTarget.innerHTML);
+                    let offset = current?.start ?? inlinesPlainText(inlines).length;
+                    let base = setLineInlines(docRef.current, line.blockIndex, line.itemIndex, inlines);
+                    if (current && current.end > current.start) {
+                      const [before] = splitInlinesAt(inlines, current.start);
+                      const [, after] = splitInlinesAt(inlines, current.end);
+                      inlines = [...before, ...after];
+                      base = setLineInlines(docRef.current, line.blockIndex, line.itemIndex, inlines);
+                      offset = current.start;
+                    }
+                    const result = pastePlainText(base, line.blockIndex, line.itemIndex, offset, raw);
+                    commit(result.doc, result.caret);
                   }}
                 />
               </div>
@@ -570,7 +656,7 @@ export function RichDocEditor({
       </div>
 
       <p className="rich-doc-hint">
-        Entrée crée une ligne. Sans sélection, un outil s’applique à toute la ligne.
+        Entrée crée une ligne. Maj + Entrée va à la ligne dans le bloc. Sans sélection, un outil s’applique à toute la ligne.
       </p>
     </div>
   );

@@ -1,11 +1,11 @@
-import type { ReactNode } from "react";
+import { Fragment, type DragEvent, type ReactNode } from "react";
 
 import {
   QUICK_BLOCK_LABELS,
   RICH_HIGHLIGHT_HEX,
   RICH_TEXT_COLOR_HEX,
   isEmptyRichDoc,
-  richDocLines,
+  visibleRichDocLines,
   type CampusRichDoc,
   type RichDocLine,
   type RichInline,
@@ -68,37 +68,227 @@ function SummaryLineBody({ line }: { line: RichDocLine }) {
   );
 }
 
+export function lineViewKey(line: Pick<RichDocLine, "blockIndex" | "itemIndex">): string {
+  return `${line.blockIndex}-${line.itemIndex ?? "x"}`;
+}
+
+function InsertSlot({
+  at,
+  active = false,
+  interactive = false,
+  emptyLabel,
+  onInsert,
+  onDragOver,
+  onDrop,
+}: {
+  at: number;
+  active?: boolean;
+  interactive?: boolean;
+  emptyLabel?: string;
+  onInsert?: (at: number) => void;
+  onDragOver?: (at: number, event: DragEvent<HTMLDivElement>) => void;
+  onDrop?: (at: number, event: DragEvent<HTMLDivElement>) => void;
+}) {
+  return (
+    <div
+      className={`rich-doc-insert-slot${active ? " is-active" : ""}${interactive ? " is-interactive" : ""}${emptyLabel ? " is-empty" : ""}`}
+      data-carnet-insert={String(at)}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-label={interactive ? "Insérer à cet endroit" : undefined}
+      onClick={
+        interactive && onInsert
+          ? (event) => {
+              event.stopPropagation();
+              onInsert(at);
+            }
+          : undefined
+      }
+      onKeyDown={
+        interactive && onInsert
+          ? (event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              event.stopPropagation();
+              onInsert(at);
+            }
+          : undefined
+      }
+      onDragOver={
+        onDragOver
+          ? (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              event.dataTransfer.dropEffect = "move";
+              onDragOver(at, event);
+            }
+          : undefined
+      }
+      onDrop={
+        onDrop
+          ? (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onDrop(at, event);
+            }
+          : undefined
+      }
+    >
+      {emptyLabel ? <p className="rich-doc-empty">{emptyLabel}</p> : <span className="rich-doc-insert-slot-bar" />}
+    </div>
+  );
+}
+
 export function RichDocView({
   doc,
   compact = false,
   emptyLabel = "Aucun contenu",
-  renderLineLeading,
+  interactive = false,
+  selectedLineKey,
+  lineDraggable = false,
+  showInsertSlots = false,
+  activeInsertSlot,
+  hiddenInsertSlots,
+  onLineClick,
+  onLineDragStart,
+  onLineDragEnd,
+  onInsertSlot,
+  onInsertSlotDragOver,
+  onInsertSlotDrop,
+  onMoveLine,
 }: {
   doc: CampusRichDoc;
   compact?: boolean;
   emptyLabel?: string;
-  renderLineLeading?: (line: RichDocLine) => ReactNode;
+  interactive?: boolean;
+  selectedLineKey?: string;
+  lineDraggable?: boolean;
+  showInsertSlots?: boolean;
+  activeInsertSlot?: number | null;
+  hiddenInsertSlots?: ReadonlySet<number>;
+  onLineClick?: (line: RichDocLine) => void;
+  onLineDragStart?: (line: RichDocLine, event: DragEvent<HTMLDivElement>) => void;
+  onLineDragEnd?: () => void;
+  onInsertSlot?: (atLineIndex: number) => void;
+  onInsertSlotDragOver?: (atLineIndex: number, event: DragEvent<HTMLDivElement>) => void;
+  onInsertSlotDrop?: (atLineIndex: number, event: DragEvent<HTMLDivElement>) => void;
+  onMoveLine?: (line: RichDocLine, direction: -1 | 1) => void;
 }) {
   if (isEmptyRichDoc(doc)) {
+    if (showInsertSlots) {
+      return (
+        <div className="rich-doc-summary">
+          <InsertSlot
+            at={0}
+            active={activeInsertSlot === 0}
+            interactive={Boolean(onInsertSlot)}
+            emptyLabel={emptyLabel}
+            onInsert={onInsertSlot}
+            onDragOver={onInsertSlotDragOver}
+            onDrop={onInsertSlotDrop}
+          />
+        </div>
+      );
+    }
     return <p className="rich-doc-empty">{emptyLabel}</p>;
   }
 
   if (compact) {
-    const lines = richDocLines(doc).filter((line) => line.inlines.length > 0);
-    const showAll = Boolean(renderLineLeading);
-    const shown = showAll ? lines : lines.slice(0, COMPACT_LINE_LIMIT);
+    const lines = visibleRichDocLines(doc);
+    const shown = interactive ? lines : lines.slice(0, COMPACT_LINE_LIMIT);
     const hidden = lines.length - shown.length;
+
+    const renderSlot = (at: number) => {
+      if (!showInsertSlots || hiddenInsertSlots?.has(at)) return null;
+      return (
+        <InsertSlot
+          at={at}
+          active={activeInsertSlot === at}
+          interactive={Boolean(onInsertSlot)}
+          onInsert={onInsertSlot}
+          onDragOver={onInsertSlotDragOver}
+          onDrop={onInsertSlotDrop}
+        />
+      );
+    };
+
     return (
       <div className="rich-doc-summary">
-        {shown.map((line) => (
-          <div
-            key={`${line.blockIndex}-${line.itemIndex ?? "x"}`}
-            className={`rich-doc-summary-line is-${line.kind}`}
-          >
-            {renderLineLeading ? renderLineLeading(line) : null}
-            <SummaryLineBody line={line} />
-          </div>
-        ))}
+        {renderSlot(0)}
+        {shown.map((line, index) => {
+          const key = lineViewKey(line);
+          const selected = selectedLineKey === key;
+          return (
+            <Fragment key={key}>
+              <div
+                className={`rich-doc-summary-line is-${line.kind}${interactive ? " is-interactive" : ""}${selected ? " is-selected" : ""}`}
+                data-carnet-line={interactive ? "" : undefined}
+                draggable={lineDraggable}
+                role={interactive ? "button" : undefined}
+                tabIndex={interactive ? 0 : undefined}
+                aria-pressed={interactive ? selected : undefined}
+                onClick={
+                  onLineClick
+                    ? (event) => {
+                        if ((event.target as HTMLElement).closest("a, .rich-doc-line-nudge")) return;
+                        event.stopPropagation();
+                        onLineClick(line);
+                      }
+                    : undefined
+                }
+                onKeyDown={
+                  onLineClick
+                    ? (event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        if ((event.target as HTMLElement).closest(".rich-doc-line-nudge")) return;
+                        event.preventDefault();
+                        onLineClick(line);
+                      }
+                    : undefined
+                }
+                onDragStart={
+                  onLineDragStart
+                    ? (event) => {
+                        onLineDragStart(line, event);
+                      }
+                    : undefined
+                }
+                onDragEnd={onLineDragEnd}
+              >
+                <SummaryLineBody line={line} />
+                {selected && onMoveLine ? (
+                  <div className="rich-doc-line-nudge">
+                    {index > 0 ? (
+                      <button
+                        type="button"
+                        aria-label="Monter d’une ligne"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onMoveLine(line, -1);
+                        }}
+                      >
+                        ↑
+                      </button>
+                    ) : null}
+                    {index < shown.length - 1 ? (
+                      <button
+                        type="button"
+                        aria-label="Descendre d’une ligne"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onMoveLine(line, 1);
+                        }}
+                      >
+                        ↓
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+              {renderSlot(index + 1)}
+            </Fragment>
+          );
+        })}
         {hidden > 0 ? (
           <p className="rich-doc-more">+ {hidden} ligne{hidden > 1 ? "s" : ""}</p>
         ) : null}

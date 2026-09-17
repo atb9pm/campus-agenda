@@ -9,11 +9,18 @@ import {
   decodeRichDetail,
   emptyRichDoc,
   extractLine,
+  copyLineToDoc,
   inlinesPlainText,
+  insertBlockAt,
   insertQuickBlock,
+  insertTextAt,
+  lineIndexAfterMove,
   marksInRange,
   moveLineToDoc,
+  moveLineWithinDoc,
   normalizeInlines,
+  parseInlinesFromHtml,
+  pastePlainText,
   removeLine,
   richDocLines,
   sanitizeRichDoc,
@@ -21,6 +28,7 @@ import {
   setLineInlines,
   splitInlinesAt,
   splitLine,
+  visibleRichDocLines,
   type CampusRichDoc,
 } from "../src/features/class-notebook/index.ts";
 
@@ -269,25 +277,39 @@ test("document vide — aucune opération ne casse l’éditeur", () => {
 test("vue compacte — résumé lisible, sans cases décalées ni cadres", async () => {
   const view = await readFile(new URL("../web/app/components/rich-doc-view.tsx", import.meta.url), "utf8");
   assert.match(view, /rich-doc-summary/);
-  assert.match(view, /richDocLines/);
+  assert.match(view, /visibleRichDocLines/);
   assert.match(view, /COMPACT_LINE_LIMIT/);
-  assert.match(view, /renderLineLeading/);
+  assert.match(view, /data-carnet-line/);
+  assert.match(view, /is-interactive/);
   assert.doesNotMatch(view, /is-compact/);
+  assert.doesNotMatch(view, /renderLineLeading/);
 
   const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
   assert.match(css, /\.rich-doc-summary-line/);
   assert.match(css, /\.rich-doc-line-marker/);
-  assert.match(css, /\.class-notebook-line-handle/);
+  assert.match(css, /\.is-selected/);
+  assert.doesNotMatch(css, /class-notebook-line-handle/);
   assert.doesNotMatch(css, /rich-doc-view\.is-compact/);
 
   const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
   assert.match(panel, /class-notebook-drag-handle/);
-  assert.match(panel, /class-notebook-line-handle/);
-  assert.match(panel, /data-line-handle/);
+  assert.doesNotMatch(panel, /class-notebook-line-handle/);
+  assert.doesNotMatch(panel, /data-line-handle/);
+  assert.match(panel, /selectAndCopyLine/);
+  assert.match(panel, /copyLineToDoc/);
   assert.match(panel, /onDragStart/);
   assert.match(panel, /moveLineToDoc/);
   assert.match(panel, /encodeCarnetMove/);
-  // Le glisser HTML5 ne suffit pas (tactile, drags synthétiques) : menu explicite en repli.
+  assert.match(panel, /Supprimer/);
+  assert.match(panel, /placeCopiedLine/);
+  assert.match(panel, /nudgeSelectedLine/);
+  assert.match(panel, /insertBlockAt|moveLineWithinDoc/);
+  assert.match(panel, /Insérer à cet endroit|showInsertSlots/);
+  assert.match(view, /Monter d’une ligne/);
+  assert.match(view, /Descendre d’une ligne/);
+  assert.match(view, /rich-doc-insert-slot/);
+  assert.match(css, /rich-doc-insert-slot/);
+  assert.match(css, /rich-doc-line-nudge/);
   assert.match(panel, /class-notebook-move-menu/);
   assert.match(panel, /Déplacer vers/);
   assert.match(panel, /setData\("text\/plain"/);
@@ -306,6 +328,13 @@ test("version 2.57.0 — curseur, menus notes, déplacement d’une ligne", asyn
   assert.match(editor, /Blocs de la semaine/);
   assert.match(editor, /label="Titre"/);
   assert.match(editor, /Insérer un lien/);
+  assert.match(editor, /event\.shiftKey/);
+  assert.match(editor, /insertTextAt/);
+  assert.match(editor, /Maj \+ Entrée va à la ligne dans le bloc/);
+  assert.match(editor, /pastePlainText/);
+  const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
+  assert.match(panel, /selectAndCopyLine/);
+  assert.match(panel, /Supprimer/);
 });
 
 test("extraire une puce ne déplace pas le reste de la liste", () => {
@@ -369,4 +398,141 @@ test("déplacer une ligne vers un autre document — fusion des puces, dernière
   assert.ok(emptied);
   assert.equal(emptied!.source.blocks.length, 0);
   assert.equal(emptied!.target.blocks[0]?.type, "paragraph");
+});
+
+test("copier une ligne laisse la source intacte", () => {
+  const source = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [
+      { type: "paragraph", inlines: [{ text: "à copier" }] },
+      { type: "paragraph", inlines: [{ text: "reste" }] },
+    ],
+  });
+  const copied = copyLineToDoc(source, emptyRichDoc(), 0, null);
+  assert.ok(copied);
+  assert.equal(copied!.blocks[0]?.type, "paragraph");
+  assert.equal(inlinesPlainText(richDocLines(copied!)[0]?.inlines ?? []), "à copier");
+  assert.equal(source.blocks.length, 2);
+  assert.equal(inlinesPlainText(richDocLines(source)[0]?.inlines ?? []), "à copier");
+});
+
+test("insérer un bloc au début, au milieu et à la fin", () => {
+  const doc = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [
+      { type: "paragraph", inlines: [{ text: "alpha" }] },
+      { type: "paragraph", inlines: [{ text: "gamma" }] },
+    ],
+  });
+  const atStart = insertBlockAt(doc, { type: "paragraph", inlines: [{ text: "début" }] }, 0);
+  assert.deepEqual(
+    visibleRichDocLines(atStart).map((line) => inlinesPlainText(line.inlines)),
+    ["début", "alpha", "gamma"],
+  );
+  const atMiddle = insertBlockAt(doc, { type: "paragraph", inlines: [{ text: "beta" }] }, 1);
+  assert.deepEqual(
+    visibleRichDocLines(atMiddle).map((line) => inlinesPlainText(line.inlines)),
+    ["alpha", "beta", "gamma"],
+  );
+  const atEnd = insertBlockAt(doc, { type: "paragraph", inlines: [{ text: "omega" }] }, 2);
+  assert.deepEqual(
+    visibleRichDocLines(atEnd).map((line) => inlinesPlainText(line.inlines)),
+    ["alpha", "gamma", "omega"],
+  );
+});
+
+test("insérer une puce au milieu d’une liste la fusionne ; un paragraphe la coupe", () => {
+  const list = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [{ type: "bulletList", items: [[{ text: "alpha" }], [{ text: "gamma" }]] }],
+  });
+  const merged = insertBlockAt(list, { type: "bulletList", items: [[{ text: "beta" }]] }, 1);
+  const bullets = merged.blocks[0];
+  assert.ok(bullets && bullets.type === "bulletList");
+  if (bullets && bullets.type === "bulletList") {
+    assert.equal(bullets.items.length, 3);
+    assert.equal(inlinesPlainText(bullets.items[1] ?? []), "beta");
+  }
+
+  const split = insertBlockAt(list, { type: "paragraph", inlines: [{ text: "note" }] }, 1);
+  assert.equal(split.blocks.length, 3);
+  assert.equal(split.blocks[0]?.type, "bulletList");
+  assert.equal(split.blocks[1]?.type, "paragraph");
+  assert.equal(split.blocks[2]?.type, "bulletList");
+  assert.equal(inlinesPlainText(visibleRichDocLines(split)[1]!.inlines), "note");
+});
+
+test("réordonner une ligne dans le même document, no-op à la même place", () => {
+  const doc = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [
+      { type: "paragraph", inlines: [{ text: "A" }] },
+      { type: "paragraph", inlines: [{ text: "B" }] },
+      { type: "paragraph", inlines: [{ text: "C" }] },
+    ],
+  });
+  const unchanged = moveLineWithinDoc(doc, 1, null, 1);
+  assert.equal(unchanged, doc);
+  const alsoUnchanged = moveLineWithinDoc(doc, 1, null, 2);
+  assert.equal(alsoUnchanged, doc);
+
+  const toStart = moveLineWithinDoc(doc, 1, null, 0);
+  assert.ok(toStart);
+  assert.deepEqual(
+    visibleRichDocLines(toStart!).map((line) => inlinesPlainText(line.inlines)),
+    ["B", "A", "C"],
+  );
+  assert.equal(lineIndexAfterMove(1, 0), 0);
+
+  const toEnd = moveLineWithinDoc(doc, 1, null, 3);
+  assert.ok(toEnd);
+  assert.deepEqual(
+    visibleRichDocLines(toEnd!).map((line) => inlinesPlainText(line.inlines)),
+    ["A", "C", "B"],
+  );
+  assert.equal(lineIndexAfterMove(1, 3), 2);
+});
+
+test("copier une ligne à un emplacement précis", () => {
+  const source = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [{ type: "paragraph", inlines: [{ text: "copie" }] }],
+  });
+  const target = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [
+      { type: "paragraph", inlines: [{ text: "avant" }] },
+      { type: "paragraph", inlines: [{ text: "après" }] },
+    ],
+  });
+  const copied = copyLineToDoc(source, target, 0, null, 1);
+  assert.ok(copied);
+  assert.deepEqual(
+    visibleRichDocLines(copied!).map((line) => inlinesPlainText(line.inlines)),
+    ["avant", "copie", "après"],
+  );
+  assert.equal(source.blocks.length, 1);
+});
+
+test("Maj+Entrée — un <br> devient un saut de ligne dans le même bloc", () => {
+  const parsed = parseInlinesFromHtml("Bonjour<br>tout le monde");
+  assert.equal(inlinesPlainText(parsed), "Bonjour\ntout le monde");
+
+  const inserted = insertTextAt([{ text: "Devoirinjection" }], 6, "\n");
+  assert.equal(inlinesPlainText(inserted), "Devoir\ninjection");
+});
+
+test("coller — saut simple dans le bloc, ligne vide = nouveau bloc", () => {
+  const doc = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [{ type: "paragraph", inlines: [{ text: "AvantAprès" }] }],
+  });
+  const same = pastePlainText(doc, 0, null, 5, "milieu\nsuite");
+  assert.equal(same.doc.blocks.length, 1);
+  assert.equal(inlinesPlainText(richDocLines(same.doc)[0]!.inlines), "Avantmilieu\nsuiteAprès");
+
+  const split = pastePlainText(doc, 0, null, 5, "un\n\ndeux");
+  assert.equal(split.doc.blocks.length, 2);
+  assert.equal(inlinesPlainText(richDocLines(split.doc)[0]!.inlines), "Avantun");
+  assert.equal(inlinesPlainText(richDocLines(split.doc)[1]!.inlines), "deuxAprès");
 });
