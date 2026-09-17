@@ -120,6 +120,7 @@ export {
   normalizeInlines,
   pastePlainText,
   removeLine,
+  deleteLine,
   richDocLines,
   visibleRichDocLines,
   setChecklistChecked,

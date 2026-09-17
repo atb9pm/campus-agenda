@@ -16,9 +16,12 @@ import {
   composeWeekNotesDoc,
   composeWeekPublicationDoc,
   copyLineToDoc,
+  deleteLine,
   emptyRichDoc,
+  extractLine,
   formatWeekColumnLabel,
   formatWeekColumnSubtitle,
+  insertBlockAt,
   isCarnetOwnedPublication,
   isEmptyRichDoc,
   isPublicationLine,
@@ -27,6 +30,7 @@ import {
   moveLineToDoc,
   moveLineWithinDoc,
   moveWeekNote,
+  rememberRichClip,
   setWeekRichNote,
   visibleRichDocLines,
   weekCarnetVisibility,
@@ -174,6 +178,19 @@ export function ClassNotebookPanel({
     [classSetup.id, items, notesDocument],
   );
 
+  const saveSourceDoc = useCallback(
+    async (source: LineSource, weekNumber: number, doc: CampusRichDoc) => {
+      if (source === "publication") {
+        if (!canPublish) return false;
+        await onSaveWeekPublication(weekNumber, doc);
+        return true;
+      }
+      onNotesChange(setWeekRichNote(notesDocument, weekNotesKey(classSetup.id, weekNumber), doc));
+      return true;
+    },
+    [canPublish, classSetup.id, notesDocument, onNotesChange, onSaveWeekPublication],
+  );
+
   const rememberLine = useCallback((source: LineSource, weekNumber: number, doc: CampusRichDoc, lineIndex: number) => {
     const line = visibleRichDocLines(doc)[lineIndex];
     if (!line) {
@@ -186,6 +203,8 @@ export function ClassNotebookPanel({
       blockIndex: line.blockIndex,
       itemIndex: line.itemIndex,
     });
+    const extracted = extractLine(doc, line.blockIndex, line.itemIndex);
+    if (extracted) rememberRichClip({ kind: "block", block: extracted.extracted });
     setClipboard({
       kind: "line",
       mode: "copy",
@@ -193,6 +212,7 @@ export function ClassNotebookPanel({
       lineSource: source,
       blockIndex: line.blockIndex,
       itemIndex: line.itemIndex,
+      block: extracted?.extracted,
     });
   }, []);
 
@@ -232,6 +252,45 @@ export function ClassNotebookPanel({
     [canPublish, classSetup.id, notesDocument, onNotesChange, onSaveWeekPublication, weekSourceDoc],
   );
 
+  const deleteCarnetLine = useCallback(
+    async (source: LineSource, weekNumber: number, blockIndex: number, itemIndex: number | null) => {
+      if (source === "publication" && !canPublish) return;
+      const result = deleteLine(weekSourceDoc(source, weekNumber), blockIndex, itemIndex);
+      if (!result) return;
+      await saveSourceDoc(source, weekNumber, result.doc);
+      setSelectedLine((current) =>
+        current?.source === source &&
+        current.weekNumber === weekNumber &&
+        current.blockIndex === blockIndex &&
+        current.itemIndex === itemIndex
+          ? null
+          : current,
+      );
+    },
+    [canPublish, saveSourceDoc, weekSourceDoc],
+  );
+
+  const cutCarnetLine = useCallback(
+    async (source: LineSource, weekNumber: number, blockIndex: number, itemIndex: number | null) => {
+      if (source === "publication" && !canPublish) return;
+      const extracted = extractLine(weekSourceDoc(source, weekNumber), blockIndex, itemIndex);
+      if (!extracted) return;
+      rememberRichClip({ kind: "block", block: extracted.extracted });
+      setClipboard({
+        kind: "line",
+        mode: "cut",
+        sourceWeekNumber: weekNumber,
+        lineSource: source,
+        blockIndex,
+        itemIndex,
+        block: extracted.extracted,
+      });
+      await saveSourceDoc(source, weekNumber, extracted.remaining);
+      setSelectedLine(null);
+    },
+    [canPublish, saveSourceDoc, weekSourceDoc],
+  );
+
   const handlePaste = useCallback(
     async (targetWeekNumber: number) => {
       if (!clipboard) return;
@@ -264,10 +323,27 @@ export function ClassNotebookPanel({
       if (
         clipboard.kind === "line" &&
         clipboard.lineSource &&
-        clipboard.blockIndex != null
+        (clipboard.block || clipboard.blockIndex != null)
       ) {
+        const source = clipboard.lineSource;
+        if (clipboard.block) {
+          const target = weekSourceDoc(source, targetWeekNumber);
+          let at = visibleRichDocLines(target).length;
+          if (clipboard.mode === "copy" && clipboard.sourceWeekNumber === targetWeekNumber) {
+            const from = visibleRichDocLines(target).findIndex(
+              (line) =>
+                line.blockIndex === clipboard.blockIndex &&
+                line.itemIndex === (clipboard.itemIndex ?? null),
+            );
+            if (from >= 0) at = from + 1;
+          }
+          await saveSourceDoc(source, targetWeekNumber, insertBlockAt(target, clipboard.block, at));
+          if (clipboard.mode === "cut") {
+            setClipboard({ ...clipboard, mode: "copy" });
+          }
+          return;
+        }
         if (clipboard.sourceWeekNumber === targetWeekNumber) {
-          const source = clipboard.lineSource;
           const doc = weekSourceDoc(source, targetWeekNumber);
           const from = visibleRichDocLines(doc).findIndex(
             (line) =>
@@ -277,39 +353,33 @@ export function ClassNotebookPanel({
           const copied = copyLineToDoc(
             doc,
             doc,
-            clipboard.blockIndex,
+            clipboard.blockIndex!,
             clipboard.itemIndex ?? null,
             from < 0 ? undefined : from + 1,
           );
           if (!copied) return;
-          if (source === "publication") {
-            if (!canPublish) return;
-            await onSaveWeekPublication(targetWeekNumber, copied);
-            return;
-          }
-          onNotesChange(setWeekRichNote(notesDocument, weekNotesKey(classSetup.id, targetWeekNumber), copied));
+          await saveSourceDoc(source, targetWeekNumber, copied);
           return;
         }
         await copyCarnetLine(
           clipboard.lineSource,
           clipboard.sourceWeekNumber,
           targetWeekNumber,
-          clipboard.blockIndex,
+          clipboard.blockIndex!,
           clipboard.itemIndex ?? null,
         );
       }
     },
     [
-      canPublish,
-      clipboard,
       classSetup.id,
+      clipboard,
       copyCarnetLine,
       items,
       notesDocument,
       onCreatePublication,
       onMovePublication,
       onNotesChange,
-      onSaveWeekPublication,
+      saveSourceDoc,
       weekSourceDoc,
     ],
   );
@@ -326,9 +396,32 @@ export function ClassNotebookPanel({
       }
       const key = event.key.toLowerCase();
       const withCommand = event.ctrlKey || event.metaKey;
+
+      if (!withCommand && (key === "delete" || key === "backspace") && selectedLine) {
+        event.preventDefault();
+        void deleteCarnetLine(
+          selectedLine.source,
+          selectedLine.weekNumber,
+          selectedLine.blockIndex,
+          selectedLine.itemIndex,
+        );
+        return;
+      }
+
       if (!withCommand) return;
 
-      if (key === "x" && selection) {
+      if (key === "x") {
+        if (selectedLine) {
+          event.preventDefault();
+          void cutCarnetLine(
+            selectedLine.source,
+            selectedLine.weekNumber,
+            selectedLine.blockIndex,
+            selectedLine.itemIndex,
+          );
+          return;
+        }
+        if (!selection) return;
         event.preventDefault();
         if (selection.kind === "publication") {
           setClipboard({
@@ -350,11 +443,18 @@ export function ClassNotebookPanel({
             });
           }
         }
+        return;
       }
 
       if (key === "c") {
         if (selectedLine) {
           event.preventDefault();
+          const extracted = extractLine(
+            weekSourceDoc(selectedLine.source, selectedLine.weekNumber),
+            selectedLine.blockIndex,
+            selectedLine.itemIndex,
+          );
+          if (extracted) rememberRichClip({ kind: "block", block: extracted.extracted });
           setClipboard({
             kind: "line",
             mode: "copy",
@@ -362,6 +462,7 @@ export function ClassNotebookPanel({
             lineSource: selectedLine.source,
             blockIndex: selectedLine.blockIndex,
             itemIndex: selectedLine.itemIndex,
+            block: extracted?.extracted,
           });
           return;
         }
@@ -386,7 +487,17 @@ export function ClassNotebookPanel({
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [classSetup.id, editor, handlePaste, notesDocument, selectedLine, selection]);
+  }, [
+    classSetup.id,
+    cutCarnetLine,
+    deleteCarnetLine,
+    editor,
+    handlePaste,
+    notesDocument,
+    selectedLine,
+    selection,
+    weekSourceDoc,
+  ]);
 
   useEffect(() => {
     if (moveMenuWeek == null) return;
@@ -558,6 +669,8 @@ export function ClassNotebookPanel({
       blockIndex: line.blockIndex,
       itemIndex: line.itemIndex,
     });
+    const extracted = extractLine(weekSourceDoc(source, weekNumber), line.blockIndex, line.itemIndex);
+    if (extracted) rememberRichClip({ kind: "block", block: extracted.extracted });
     setClipboard({
       kind: "line",
       mode: "copy",
@@ -565,11 +678,20 @@ export function ClassNotebookPanel({
       lineSource: source,
       blockIndex: line.blockIndex,
       itemIndex: line.itemIndex,
+      block: extracted?.extracted,
     });
   }
 
   function placeCopiedLine(weekNumber: number, source: LineSource, atLineIndex: number) {
     if (!clipboard || clipboard.kind !== "line" || clipboard.lineSource !== source) return;
+    if (clipboard.mode === "cut" && clipboard.block) {
+      void saveSourceDoc(
+        source,
+        weekNumber,
+        insertBlockAt(weekSourceDoc(source, weekNumber), clipboard.block, atLineIndex),
+      ).then(() => setClipboard({ ...clipboard, mode: "copy" }));
+      return;
+    }
     if (clipboard.blockIndex == null) return;
     if (clipboard.sourceWeekNumber === weekNumber) {
       void moveCarnetLine(
@@ -1010,7 +1132,7 @@ export function ClassNotebookPanel({
       {clipboard ? (
         <p className="class-notebook-clipboard-hint" role="status">
           {clipboard.kind === "line"
-            ? "Ligne sélectionnée — touchez une barre pour l’insérer, utilisez ↑ ↓, ou glissez-la."
+            ? "Ligne sélectionnée — Suppr l’efface, Ctrl+X la coupe, touchez une barre pour l’insérer, ou ↑ ↓."
             : "Élément en mémoire — sélectionnez une semaine et appuyez sur Ctrl+V, ou glissez-déposez."}
         </p>
       ) : null}
