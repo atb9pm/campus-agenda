@@ -59,7 +59,7 @@ function lineText(doc: CampusRichDoc, blockIndex: number, itemIndex: number | nu
 
 test("version 2.56.0 — éditeur Carnet reconstruit sur le modèle, sans execCommand", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.58.0");
+  assert.equal(APP_VERSION, "2.58.1");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(editor, /execCommand/);
   assert.doesNotMatch(editor, /window\.prompt/);
@@ -329,7 +329,7 @@ test("vue compacte — résumé lisible, sans cases décalées ni cadres", async
 
 test("version 2.57.0 — curseur, menus notes, déplacement d’une ligne", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.58.0");
+  assert.equal(APP_VERSION, "2.58.1");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.match(editor, /Le DOM n'est réécrit que sur syncToken/);
   assert.match(editor, /snapCaretToClick/);
@@ -527,7 +527,7 @@ test("copier une ligne à un emplacement précis", () => {
 
 test("version 2.58.0 — couleur sur la sélection, Annuler / Rétablir", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.58.0");
+  assert.equal(APP_VERSION, "2.58.1");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.match(editor, /Annuler \(Ctrl\+Z\)/);
   assert.match(editor, /Rétablir \(Ctrl\+Y\)/);
@@ -541,6 +541,11 @@ test("version 2.58.0 — couleur sur la sélection, Annuler / Rétablir", async 
   assert.match(editor, /Copier le bloc \(Ctrl\+C\)/);
   assert.match(editor, /Coller \(Ctrl\+V\)/);
   assert.match(editor, /pasteRichClip/);
+  assert.match(editor, /insertFromPaste/);
+  assert.match(editor, /fallbackSelection/);
+  assert.doesNotMatch(editor, /disabled=\{!canPaste\}/);
+  const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
+  assert.match(panel, /if \(editor\) return;/);
 });
 
 test("couleur — seulement la plage choisie, pas le début de la ligne", () => {
@@ -647,4 +652,11 @@ test("copier-coller — bloc sous le curseur, sélection colorée, sans HTML ét
   assert.equal(inlinesPlainText(line), "XAlpha");
   assert.equal(marksInRange(line, 1, 6).color, "red");
   assert.equal(marksInRange(line, 0, 1).color, undefined);
+
+  const same = copyLineToDoc(source, source, 0, null, 1);
+  assert.ok(same);
+  assert.deepEqual(
+    visibleRichDocLines(same!).map((entry) => inlinesPlainText(entry.inlines)),
+    ["Alpha", "Alpha"],
+  );
 });
