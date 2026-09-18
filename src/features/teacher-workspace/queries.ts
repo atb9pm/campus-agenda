@@ -14,8 +14,6 @@ import type {
   TeacherCourseWorkspaceResult,
 } from "./types.ts";
 
-const CLASS_ICONS = ["🔧", "⚙️", "🛠️", "🔩", "⚡", "📐", "🎓", "📋"];
-
 export interface BuildTeacherCourseWorkspaceInput {
   teacherId: string;
   at?: string;
@@ -120,6 +118,7 @@ export function buildTeacherCourseWorkspace(
       classSortOrder: schoolClass.sortOrder,
       professionId: schoolClass.professionId,
       professionLabel: classDisplayProfessionLabel(schoolClass, profession),
+      professionClassCodePrefix: profession?.classCodePrefix ?? null,
       trainingYear: schoolClass.trainingYear,
       parallelCode: schoolClass.parallelCode,
       contextId: context.id,
@@ -219,7 +218,8 @@ function buildDisplayClassSetup(
     programLabel: matched?.programLabel.trim() || first.professionLabel || first.classLabel,
     dayOfWeek: matched?.dayOfWeek ?? (((index % 5) + 1) as WeekdayIndex),
     branchNames: assignedBranchNames(courses),
-    icon: matched?.icon?.trim() || CLASS_ICONS[index % CLASS_ICONS.length]!,
+    icon: matched?.icon?.trim() ?? "",
+    professionPrefix: first.professionClassCodePrefix,
   };
 }
 
@@ -247,7 +247,7 @@ export function displaySetupsFromAssignedCourses(
 export function upsertSetupPreferenceForCourse(
   setup: TeacherSetupConfig,
   entry: TeacherCourseWorkspaceEntry,
-  patch: Partial<Pick<TeacherClassSetup, "dayOfWeek" | "icon">>,
+  patch: Partial<Pick<TeacherClassSetup, "dayOfWeek">>,
 ): TeacherSetupConfig {
   const matched = matchSetupPreference(entry, setup);
   if (matched) {

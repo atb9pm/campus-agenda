@@ -4,6 +4,8 @@ import { useMemo } from "react";
 
 import type { SchoolWeek } from "@campus/features/calendar";
 import { formatPedagogicalWeekLabel } from "@campus/features/school-year/official-course-weeks.ts";
+import { listProfessionColorLegend, resolveProfessionColorTheme } from "@campus/features/school-catalog";
+import { professionColorStyle } from "../../lib/profession-color-style.ts";
 import {
   formatWeekdayLabel,
   groupClassesByWeekday,
@@ -89,37 +91,53 @@ export function MaSemainePanel({
                 <small>{group.classes.length} classe{group.classes.length > 1 ? "s" : ""}</small>
               </header>
               <div className="ma-semaine-class-grid">
-                {group.classes.map((entry) => (
-                  <button
-                    type="button"
-                    className="ma-semaine-class-card"
-                    key={entry.id}
-                    onClick={() => onOpenClass(entry)}
-                  >
-                    <div className="ma-semaine-class-icon" aria-hidden="true">
-                      {entry.icon}
-                    </div>
-                    <div className="ma-semaine-class-body">
-                      <span className="eyebrow">{entry.programLabel}</span>
-                      <h3>{entry.name}</h3>
-                      <p className="ma-semaine-class-day">{formatWeekdayLabel(entry.dayOfWeek)}</p>
+                {group.classes.map((entry) => {
+                  const theme = resolveProfessionColorTheme(entry.professionPrefix, entry.name);
+                  return (
+                    <button
+                      type="button"
+                      className="ma-semaine-class-card"
+                      key={entry.id}
+                      style={professionColorStyle(theme)}
+                      title={entry.programLabel || theme.legendLabel}
+                      onClick={() => onOpenClass(entry)}
+                    >
+                      <span className="ma-semaine-class-code">{entry.name}</span>
                       {entry.branchNames.length ? (
-                        <ul className="branch-tags">
-                          {entry.branchNames.map((branch) => (
-                            <li key={`${entry.id}-${branch}`}>{branch}</li>
+                        <span className="ma-semaine-class-branches">
+                          {entry.branchNames.map((branch, index) => (
+                            <span className="ma-semaine-branch-label" key={`${entry.id}-${branch}`}>
+                              {index > 0 ? " · " : null}
+                              {branch}
+                            </span>
                           ))}
-                        </ul>
+                        </span>
                       ) : (
-                        <p className="ma-semaine-no-branches">Branche du cours attribué</p>
+                        <span className="ma-semaine-no-branches">Branche du cours attribué</span>
                       )}
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             </section>
           ))}
         </div>
       )}
+
+      {activeClasses.length > 0 ? (
+        <aside className="ma-semaine-profession-legend" aria-label="Code couleur par profession">
+          {listProfessionColorLegend().map((theme) => (
+            <span
+              className="ma-semaine-legend-item"
+              key={theme.prefix}
+              style={professionColorStyle(theme)}
+            >
+              <span className="ma-semaine-legend-swatch" aria-hidden="true" />
+              {theme.legendLabel}
+            </span>
+          ))}
+        </aside>
+      ) : null}
 
       {selectedWeek && (
         <aside className="ma-semaine-plan-hint" aria-label="Rappel semaine A ou B">

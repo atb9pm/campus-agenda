@@ -34,6 +34,7 @@ export interface TeacherCourseWorkspaceEntry {
   classSortOrder: number;
   professionId: string | null;
   professionLabel: string | null;
+  professionClassCodePrefix: string | null;
   trainingYear: number | null;
   parallelCode: string | null;
   contextId: string;

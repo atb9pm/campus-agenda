@@ -80,6 +80,15 @@ export {
   formatProfessionPrefixBadge,
 } from "./class-display.ts";
 export {
+  DEFAULT_PROFESSION_COLOR,
+  inferProfessionPrefixFromClassCode,
+  listProfessionColorLegend,
+  professionColorStyleVars,
+  PROFESSION_COLOR_THEMES,
+  resolveProfessionColorTheme,
+  type ProfessionColorTheme,
+} from "./profession-colors.ts";
+export {
   agendaItemBlocksClassDeletion,
   classDeleteBlockerCounts,
   classDeleteBlockers,

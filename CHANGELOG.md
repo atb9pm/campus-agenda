@@ -2,6 +2,18 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.61.4] — Préférences épurées et code couleur par profession
+
+### Changé
+
+- **Préférences** : suppression de l’icône personnalisable ; seul le **jour d’affichage** reste configurable.
+- **Ma semaine** : carte simplifiée — code classe à gauche, branches alignées à droite, sans pastille emoji ni jour répété.
+- **Code couleur par profession** (MECAUTO bleu, MECMA orange, AMA vert, CONDVL ardoise, MACAM ocre) dans **Ma semaine**, **Préférences** et **Administration** (Professions et Classes).
+
+### Conservé
+
+Attributions officielles inchangées. Les icônes legacy restent en sauvegarde mais ne s’affichent plus. Aucune migration SQL.
+
 ## [2.61.3] — Menu Classe visible dans Attributions des cours
 
 ### Changé

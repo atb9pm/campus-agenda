@@ -2,6 +2,8 @@
 
 import { useMemo } from "react";
 
+import { resolveProfessionColorTheme } from "@campus/features/school-catalog";
+import { professionColorStyle } from "../../lib/profession-color-style.ts";
 import {
   WEEKDAY_LABELS,
   type TeacherSetupConfig,
@@ -33,11 +35,8 @@ export function ConfigurationPanel({
     return courses.filter((course) => matchSetupPreference(course, config)).length;
   }, [config, courses]);
 
-  function patchCourse(
-    course: TeacherCourseWorkspaceEntry,
-    patch: { dayOfWeek?: WeekdayIndex; icon?: string },
-  ) {
-    onChange(upsertSetupPreferenceForCourse(config, course, patch));
+  function patchCourse(course: TeacherCourseWorkspaceEntry, dayOfWeek: WeekdayIndex) {
+    onChange(upsertSetupPreferenceForCourse(config, course, { dayOfWeek }));
   }
 
   return (
@@ -46,8 +45,8 @@ export function ConfigurationPanel({
         <p className="eyebrow">PARAMÈTRES PERSONNELS</p>
         <h2>Préférences</h2>
         <p>
-          Personnalisez l’affichage de vos cours attribués : jour visible dans Ma semaine et icône.
-          Vous ne pouvez pas vous attribuer une classe ou une branche.
+          Personnalisez le jour d’affichage de vos cours attribués dans Ma semaine. Vous ne pouvez
+          pas vous attribuer une classe ou une branche.
         </p>
         <div className="config-summary-row">
           <span>
@@ -71,13 +70,22 @@ export function ConfigurationPanel({
           <div className="config-class-list">
             {courses.map((course) => {
               const preference = matchSetupPreference(course, config);
+              const theme = resolveProfessionColorTheme(
+                course.professionClassCodePrefix,
+                course.classCode,
+              );
               return (
                 <article className="config-class-row config-class-row-simple" key={course.annualCourseId}>
                   <div className="config-field">
                     <span>Cours attribué</span>
-                    <strong>
-                      {course.classCode} — {course.branchLabel}
+                    <strong
+                      className="config-class-code"
+                      style={professionColorStyle(theme)}
+                      title={course.professionLabel ?? theme.legendLabel}
+                    >
+                      {course.classCode}
                     </strong>
+                    <span className="config-class-branch">{course.branchLabel}</span>
                     <small className="mes-cours-role">
                       {WORKSPACE_ASSIGNMENT_ROLE_LABELS[course.role]}
                     </small>
@@ -88,7 +96,7 @@ export function ConfigurationPanel({
                     <select
                       value={preference?.dayOfWeek ?? 1}
                       onChange={(event) =>
-                        patchCourse(course, { dayOfWeek: Number(event.target.value) as WeekdayIndex })
+                        patchCourse(course, Number(event.target.value) as WeekdayIndex)
                       }
                     >
                       {(Object.entries(WEEKDAY_LABELS) as Array<[string, string]>).map(([value, label]) => (
@@ -97,15 +105,6 @@ export function ConfigurationPanel({
                         </option>
                       ))}
                     </select>
-                  </label>
-
-                  <label className="config-field">
-                    <span>Icône</span>
-                    <input
-                      value={preference?.icon ?? "•"}
-                      maxLength={4}
-                      onChange={(event) => patchCourse(course, { icon: event.target.value || "•" })}
-                    />
                   </label>
                 </article>
               );

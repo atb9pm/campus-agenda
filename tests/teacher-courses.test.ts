@@ -715,6 +715,7 @@ function workspaceEntry(
     classSortOrder: 1,
     professionId: null,
     professionLabel: "Mécanicien en maintenance d’automobiles",
+    professionClassCodePrefix: null,
     trainingYear: 1,
     parallelCode: "A",
     contextId: `ctx-${patch.branchId}`,
