@@ -2,6 +2,17 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.60.0] — Blocs séparés par l’espace, barres d’insertion au survol
+
+### Changé
+
+- **Vue semaine** : plus de traits gris entre les blocs. Chaque ligne est une **carte blanche** sur fond bleuté, avec un peu plus d’air.
+- Les **barres d’insertion** n’apparaissent qu’au **survol** de l’espace entre les cartes, ou pendant un **glisser**. Un clic au même endroit colle toujours le bloc.
+
+### Conservé
+
+Format `campus-rich-v1`, Lien / souligné, Couper / Suppr, brouillon / publié, notes. Aucune migration SQL.
+
 ## [2.59.1] — Souligné ≠ lien, et Lien visible
 
 ### Corrigé
