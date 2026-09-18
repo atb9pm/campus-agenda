@@ -7,6 +7,7 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 ### Changé
 
 - **Identité visuelle** : le logo officiel Campus Agenda (emblème 3D horizontal + « Campus Agenda ») remplace le cercle « CA » et le texte CAMPUS AGENDA dans la barre latérale enseignant, la connexion, la double authentification et la vue élève.
+- **Parcours d’accès** : fond mécanique (`campus-agenda-access-bg.jpg`) sur connexion, changement de mot de passe et MFA.
 
 ### Conservé
 
