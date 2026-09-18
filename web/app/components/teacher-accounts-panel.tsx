@@ -229,7 +229,7 @@ export function TeacherAccountsPanel({ currentTeacherId, onNotice }: TeacherAcco
           <input
             value={displayName}
             onChange={(event) => setDisplayName(event.target.value)}
-            placeholder="François Dupont"
+            autoComplete="off"
             required
           />
         </label>
@@ -238,7 +238,7 @@ export function TeacherAccountsPanel({ currentTeacherId, onNotice }: TeacherAcco
           <input
             value={initials}
             onChange={(event) => setInitials(event.target.value)}
-            placeholder="FD"
+            autoComplete="off"
             autoCapitalize="none"
             spellCheck={false}
             required
