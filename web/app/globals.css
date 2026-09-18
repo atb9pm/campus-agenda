@@ -236,7 +236,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .technical-modal form footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 5px; }
 .technical-modal form footer button { padding: 9px 12px; border: 1px solid var(--line-strong); border-radius: 6px; color: #4b5f7e; background: #fff; font-size: 9px; font-weight: 800; cursor: pointer; }.technical-modal form footer button[type="submit"] { border-color: var(--navy); color: #fff; background: var(--navy); }
 
-.teacher-login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--canvas); }
+.teacher-login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; background-color: #f4f7fb; background-image: url("/campus-agenda-access-bg.jpg"); background-repeat: no-repeat; background-size: cover; background-position: center; }
 .teacher-login-loading { display: grid; justify-items: center; gap: 10px; color: var(--navy); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .teacher-login { width: min(440px, 100%); display: grid; gap: 18px; }
 .teacher-login-brand { display: flex; align-items: center; justify-content: center; color: var(--navy); }
@@ -260,7 +260,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .login-tabs button:not(.active):hover { color: var(--navy); background: #eef2f7; }
 .login-remember { display: flex !important; align-items: center; gap: 8px; color: #445a7c; font-size: 10px; font-weight: 700; letter-spacing: 0; text-transform: none; }
 .login-remember input[type="checkbox"] { width: auto; margin: 0; padding: 0; }
-.teacher-login-shell .prototype-label { margin: 0; text-align: center; }
+.teacher-login-shell .prototype-label { margin: 0; text-align: center; color: #687b9b; text-shadow: 0 1px 10px rgba(255,255,255,.95); }
 .teacher-login-card input.totp-code-input { font-size: 28px; letter-spacing: .28em; text-align: center; font-variant-numeric: tabular-nums; }
 .mfa-qr { display: grid; justify-items: center; gap: 10px; margin-bottom: 16px; }
 .mfa-qr img { width: 220px; height: 220px; border: 1px solid var(--line); border-radius: 8px; }
