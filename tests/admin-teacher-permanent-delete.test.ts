@@ -230,7 +230,7 @@ async function publish(
 }
 
 test("version 2.48.0 — auteur nullable, confirmation exacte", () => {
-  assert.equal(APP_VERSION, "2.61.0");
+  assert.equal(APP_VERSION, "2.61.1");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
   assert.equal(confirmationMatches("ChF", "ChF"), true);
   assert.equal(confirmationMatches("ChF", "chf"), false);
@@ -775,6 +775,8 @@ test("UI — modal danger, publications conservées, confirmation serveur", asyn
   assert.match(panel, /className="is-danger"/);
   assert.match(panel, /Supprimer/);
   assert.match(panel, /fetchTeacherDeletePreview/);
+  assert.doesNotMatch(panel, /placeholder="François Dupont"/);
+  assert.doesNotMatch(panel, /placeholder="FD"/);
   const client = await readFile(new URL("../web/lib/api-client.ts", import.meta.url), "utf8");
   assert.match(client, /delete-preview/);
   assert.match(client, /JSON\.stringify\(\{ confirmationText \}\)/);
@@ -798,4 +800,17 @@ test("UI — modal danger, publications conservées, confirmation serveur", asyn
   );
   assert.match(route, /deleteTeacherPermanently/);
   assert.match(route, /confirmationText/);
+});
+
+test("version 2.61.1 — création enseignant : Nom et Initiales vides", async () => {
+  assert.equal(APP_VERSION, "2.61.1");
+  const panel = await readFile(
+    new URL("../web/app/components/teacher-accounts-panel.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(panel, /const \[displayName, setDisplayName\] = useState\(""\)/);
+  assert.match(panel, /const \[initials, setInitials\] = useState\(""\)/);
+  assert.doesNotMatch(panel, /placeholder="François Dupont"/);
+  assert.doesNotMatch(panel, /placeholder="FD"/);
+  assert.doesNotMatch(panel, /François Dupont/);
 });

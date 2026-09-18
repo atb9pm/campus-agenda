@@ -2,6 +2,16 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.61.1] — Création enseignant : Nom et Initiales vides
+
+### Changé
+
+- **Administration → Enseignants** : les champs **Nom** et **Initiales** s’ouvrent **vides**. Plus d’exemple « François Dupont » / « FD ».
+
+### Conservé
+
+Type d’enseignement, case Administrateur, création de compte. Aucune migration SQL.
+
 ## [2.61.0] — Cadre semaine en trait plein
 
 ### Changé
