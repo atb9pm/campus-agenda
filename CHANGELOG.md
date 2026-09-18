@@ -2,6 +2,16 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.61.3] — Menu Classe visible dans Attributions des cours
+
+### Changé
+
+- **Administration → Attributions des cours** : le menu **Classe** a un cadre permanent (comme Année de travail), une flèche ▼ et le rappel *« Choisissez la classe à attribuer »*.
+
+### Conservé
+
+Une classe à la fois, tableau d’attribution inchangé. Aucune migration SQL.
+
 ## [2.61.2] — Années scolaires dans l’ordre chronologique
 
 ### Changé

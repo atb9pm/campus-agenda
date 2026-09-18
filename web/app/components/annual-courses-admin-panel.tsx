@@ -421,19 +421,24 @@ export function AnnualCoursesAdminPanel({
 
       {view === "class" || !canAssignTeachers ? (
         <>
-          <label className="annual-course-class-select">
-            Classe
-            <select
-              value={currentClass?.id ?? ""}
-              onChange={(event) => setSelectedClassId(event.target.value)}
-            >
-              {structuredClasses.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.label} — {entry.schoolYearLabel ?? entry.schoolYearId}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="annual-course-class-select">
+            <label htmlFor="annual-course-class-picker">
+              <span className="eyebrow">Classe</span>
+              <select
+                id="annual-course-class-picker"
+                className="annual-course-class-select-control"
+                value={currentClass?.id ?? ""}
+                onChange={(event) => setSelectedClassId(event.target.value)}
+              >
+                {structuredClasses.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.label} — {entry.schoolYearLabel ?? entry.schoolYearId}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="school-year-hint">Choisissez la classe à attribuer.</p>
+          </div>
 
           {currentClass ? (
             <p className="admin-teacher-login-meta">

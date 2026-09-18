@@ -674,7 +674,33 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .annual-course-teachers { margin: 0; padding-left: 18px; }
 .annual-course-teachers li.is-operational { color: var(--navy); }
 .annual-course-teachers li.is-historical { color: #667085; opacity: .78; }
-.annual-course-class-select { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; max-width: 420px; }
+.annual-course-class-select {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 14px;
+  max-width: 420px;
+}
+.annual-course-class-select label { display: grid; gap: 6px; }
+.annual-course-class-select-control,
+.annual-course-class-select select {
+  width: 100%;
+  min-width: 220px;
+  padding: 8px 36px 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--navy);
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23516582' d='M1.5 1.5 6 6l4.5-4.5'/%3E%3C/svg%3E") no-repeat right 12px center;
+  font-size: 12px;
+  appearance: none;
+  cursor: pointer;
+}
+.annual-course-class-select-control:focus,
+.annual-course-class-select select:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(7, 93, 255, .08);
+  outline: none;
+}
+.annual-course-class-select .school-year-hint { margin: 0; font-size: 10px; }
 .annual-course-dialog { margin-top: 18px; padding: 16px; border: 1px solid var(--line-strong); border-radius: 10px; background: #f8fafc; }
 .annual-course-dialog fieldset { display: flex; flex-direction: column; gap: 8px; border: 0; padding: 0; }
 .annual-course-dates { display: flex; gap: 12px; flex-wrap: wrap; }
