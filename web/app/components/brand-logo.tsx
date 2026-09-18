@@ -7,13 +7,13 @@ type BrandLogoProps = {
 export function BrandLogo({ compact = false, className }: BrandLogoProps) {
   return (
     <img
-      src="/campus-agenda-logo.png"
+      src="/campus-agenda-logo.jpg"
       alt="Campus Agenda"
       className={["brand-logo", compact ? "brand-logo-compact" : undefined, className]
         .filter(Boolean)
         .join(" ")}
-      width={460}
-      height={680}
+      width={2244}
+      height={701}
     />
   );
 }
