@@ -10,6 +10,7 @@ import {
   schoolYearAlreadyExistsMessage,
   validateOfficialPlanPreview,
 } from "../../features/school-year/official-plan-logic.ts";
+import { sortSchoolYearsChronologically } from "../../features/school-year/admin-working-year.ts";
 import {
   assertGeneratedWeeksMatchOfficialTotal,
   generateOfficialCourseWeeks,
@@ -30,7 +31,9 @@ let memoryDayExceptions = new Map<string, SchoolDayException[]>();
 
 export class MemorySchoolYearStore implements SchoolYearStore {
   async listSchoolYears(): Promise<SchoolYearRecord[]> {
-    return memorySchoolYears.map(({ weeks: _weeks, ...record }) => record);
+    return sortSchoolYearsChronologically(
+      memorySchoolYears.map(({ weeks: _weeks, ...record }) => record),
+    );
   }
 
   async getActiveSchoolYear(): Promise<SchoolYearWithWeeks | null> {

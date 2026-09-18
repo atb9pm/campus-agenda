@@ -23,6 +23,7 @@ import {
   formatAdminWorkingSectionTitle,
   formatAdminWorkingYearOption,
   schoolYearStatusesAfterAdminWorkingYearChange,
+  sortSchoolYearsChronologically,
   writeAdminWorkingYearId,
 } from "../src/features/school-year/index.ts";
 import { SQL_MIGRATION_FILES, applyMigrations } from "../src/lib/persistence/sql/migrate.ts";
@@ -131,7 +132,7 @@ async function memoryWorld() {
 }
 
 test("version 2.50.0 — préparation classes/cours année future, sans migration", () => {
-  assert.equal(APP_VERSION, "2.61.1");
+  assert.equal(APP_VERSION, "2.61.2");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
 });
 
@@ -450,4 +451,19 @@ test("affectation professeur refusée sur une année DRAFT", async () => {
   if (!assigned.ok) {
     assert.equal(assigned.reason, DRAFT_YEAR_ASSIGNMENT_REASON);
   }
+});
+
+test("version 2.61.2 — liste mémoire des années en ordre chronologique", async () => {
+  assert.equal(APP_VERSION, "2.61.2");
+  const world = await memoryWorld();
+  const years = await world.years.listSchoolYears();
+  assert.deepEqual(years.map((year) => year.label), ["2025-2026", "2026-2027", "2028-2029"]);
+  assert.deepEqual(
+    sortSchoolYearsChronologically([
+      { id: "n", label: "2027-2028" },
+      { id: "a", label: "2026-2027" },
+      { id: "f", label: "2028-2029" },
+    ]).map((year) => year.label),
+    ["2026-2027", "2027-2028", "2028-2029"],
+  );
 });

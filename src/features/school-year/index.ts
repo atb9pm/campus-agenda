@@ -28,7 +28,9 @@ export {
   filterBySchoolYearId,
   readAdminWorkingYearId,
   resolveAdminWorkingYearId,
+  schoolYearChronologyKey,
   schoolYearStatusesAfterAdminWorkingYearChange,
+  sortSchoolYearsChronologically,
   writeAdminWorkingYearId,
 } from "./admin-working-year.ts";
 export type { AdminWorkingYearRef } from "./admin-working-year.ts";

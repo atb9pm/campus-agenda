@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
 import {
   formatAdminWorkingYearOption,
   readAdminWorkingYearId,
   resolveAdminWorkingYearId,
+  sortSchoolYearsChronologically,
   writeAdminWorkingYearId,
 } from "@campus/features/school-year/admin-working-year.ts";
 import {
@@ -104,6 +105,7 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
 
   const activeYear = years.find((year) => year.status === "active") ?? null;
   const workingYear = years.find((year) => year.id === workingYearId) ?? null;
+  const orderedYears = useMemo(() => sortSchoolYearsChronologically(years), [years]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -267,7 +269,7 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
                 disabled={years.length === 0}
                 onChange={(event) => handleWorkingYearChange(event.target.value)}
               >
-                {years.map((year) => (
+                {orderedYears.map((year) => (
                   <option key={year.id} value={year.id}>
                     {formatAdminWorkingYearOption({
                       ...year,
@@ -403,7 +405,7 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
             <h3>Années enregistrées</h3>
           </header>
           <ul className="school-year-history">
-            {years.map((year) => (
+            {orderedYears.map((year) => (
               <li key={year.id}>
                 <div>
                   <strong>{formatSchoolYearLabelFr(year.label)}</strong>

@@ -1,9 +1,32 @@
-import { formatSchoolYearLabelFr } from "./official-plan-logic.ts";
+import { formatSchoolYearLabelFr, normalizeSchoolYearLabel } from "./official-plan-logic.ts";
 import type { SchoolYearRecord } from "./types.ts";
 
 export const ADMIN_WORKING_YEAR_STORAGE_KEY = "campus.adminWorkingSchoolYearId";
 
 export type AdminWorkingYearRef = Pick<SchoolYearRecord, "id" | "label" | "status">;
+
+export type SchoolYearChronologyRef = {
+  label: string;
+  startsOn?: string | null;
+};
+
+/** Clé de tri : date de début, sinon année de départ du libellé (2026-2027). */
+export function schoolYearChronologyKey(year: SchoolYearChronologyRef): string {
+  const start = year.startsOn?.trim().slice(0, 10) ?? "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(start)) return start;
+  const normalized = normalizeSchoolYearLabel(year.label);
+  if (normalized) return `${normalized.slice(0, 4)}-08-01`;
+  return year.label;
+}
+
+/** Du plus ancien au plus récent (2026-2027, puis 2027-2028, puis 2028-2029). */
+export function sortSchoolYearsChronologically<T extends SchoolYearChronologyRef>(years: readonly T[]): T[] {
+  return [...years].sort((left, right) => {
+    const byDate = schoolYearChronologyKey(left).localeCompare(schoolYearChronologyKey(right));
+    if (byDate !== 0) return byDate;
+    return left.label.localeCompare(right.label, "fr");
+  });
+}
 
 export const ADMIN_WORKING_YEAR_BADGE_LABELS: Record<AdminWorkingYearRef["status"], string> = {
   active: "Active",
