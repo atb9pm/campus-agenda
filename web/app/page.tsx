@@ -228,7 +228,7 @@ function sectionDescription(activeSection: TeacherNavSection, isStudentView: boo
   if (activeSection === "administration") {
     return "Référentiel école : classes, branches, accès et année scolaire.";
   }
-  return "Préférences d’affichage : jour visible et icône. Ce n’est pas une attribution.";
+  return "Préférences d’affichage : jour visible dans Ma semaine. Ce n’est pas une attribution.";
 }
 
 export default function Home() {

@@ -470,7 +470,9 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .config-classes-editor, .config-week-plan { margin: 0 38px 24px; padding: 22px 24px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .config-class-list { display: grid; gap: 12px; }
 .config-class-row { display: grid; grid-template-columns: 72px repeat(3, minmax(120px, 1fr)) minmax(220px, 2fr) auto; gap: 10px; align-items: end; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #f8fbff; }
-.config-class-row-simple { grid-template-columns: repeat(3, minmax(140px, 1fr)) auto; background: #fff; }
+.config-class-row-simple { grid-template-columns: minmax(220px, 2fr) minmax(160px, 1fr); background: #fff; }
+.config-class-code { display: inline-flex; align-items: center; width: fit-content; padding: 4px 10px; border-left: 3px solid var(--profession-accent, var(--line-strong)); border-radius: 6px; color: var(--profession-fg, var(--navy)); background: var(--profession-bg, #eef4fd); font-size: 13px; }
+.config-class-branch { display: block; margin-top: 4px; color: #516582; font-size: 11px; font-weight: 600; line-height: 1.4; text-transform: none; letter-spacing: normal; }
 .config-field { display: grid; gap: 4px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8793a9; }
 .config-field input, .config-field select { padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); background: #fff; font-size: 11px; }
 .config-field-icon input { text-align: center; font-size: 18px; }
@@ -1693,12 +1695,17 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .ma-semaine-day-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-bottom: 6px; border-bottom: 2px solid var(--navy); color: var(--navy); font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .ma-semaine-day-heading small { color: #8793a9; font-size: 9px; font-weight: 700; }
 .ma-semaine-class-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-.ma-semaine-class-card { display: grid; grid-template-columns: 56px 1fr; gap: 12px; width: 100%; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 8px 24px rgba(18, 38, 63, .05); color: inherit; text-align: left; cursor: pointer; }
+.ma-semaine-class-card { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; width: 100%; padding: 14px 16px; border: 1px solid var(--line); border-left: 4px solid var(--profession-accent, var(--line-strong)); border-radius: 12px; background: #fff; box-shadow: 0 8px 24px rgba(18, 38, 63, .05); color: inherit; text-align: left; cursor: pointer; }
 .ma-semaine-class-card:hover { border-color: #b8cce8; background: #fbfdff; }
-.ma-semaine-class-icon { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 12px; background: #eef4fd; font-size: 26px; }
-.ma-semaine-class-body h3 { margin: 4px 0 0; color: var(--navy); font-size: 18px; }
-.ma-semaine-class-day { margin: 4px 0 10px; color: #6d7f9b; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-.ma-semaine-no-branches { margin: 0; color: #8793a9; font-size: 10px; font-style: italic; }
+.ma-semaine-class-code { flex: 0 0 auto; color: var(--navy); font-size: 18px; font-weight: 800; letter-spacing: -.02em; }
+.ma-semaine-class-branches { flex: 1 1 auto; min-width: 0; color: #516582; font-size: 11px; font-weight: 600; line-height: 1.45; text-align: right; }
+.ma-semaine-branch-label { white-space: nowrap; }
+.ma-semaine-no-branches { flex: 1 1 auto; margin: 0; color: #8793a9; font-size: 10px; font-style: italic; text-align: right; }
+.ma-semaine-profession-legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin: 0 38px 16px; padding: 12px 14px; border-radius: 10px; background: #f8fafc; color: #516582; font-size: 10px; }
+.ma-semaine-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.ma-semaine-legend-swatch { width: 10px; height: 10px; border-radius: 999px; background: var(--profession-accent, #64748b); }
+.admin-teacher-initials.is-profession-colored { color: var(--profession-fg, var(--navy)); background: var(--profession-bg, #eef4fd); }
+.admin-profession-card.has-profession-accent, .admin-teacher-card.has-profession-accent { border-left: 4px solid var(--profession-accent, var(--line)); }
 .ma-semaine-plan-hint { margin: 0 38px 24px; padding: 14px 16px; border-radius: 10px; background: #f4f7fb; color: #516582; font-size: 11px; }
 .class-notebook-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin: 0 38px 18px; }
 .class-notebook-title h2 { margin: 4px 0 0; color: var(--navy); font-size: 22px; }

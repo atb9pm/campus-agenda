@@ -5,6 +5,8 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { CatalogDeletePreview } from "@campus/features/admin-catalog-delete/index.ts";
 import {
   formatProfessionPrefixBadge,
+  professionColorStyleVars,
+  resolveProfessionColorTheme,
   type SchoolClassRecord,
   type SchoolProfessionRecord,
 } from "@campus/features/school-catalog";
@@ -331,10 +333,18 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
             const linkedClassCount = classes.filter(
               (schoolClass) => schoolClass.professionId === entry.id,
             ).length;
+            const theme = resolveProfessionColorTheme(entry.classCodePrefix);
             return (
-              <li key={entry.id} className={`${professionCardClass(entry)} admin-profession-card`}>
+              <li
+                key={entry.id}
+                className={`${professionCardClass(entry)} admin-profession-card has-profession-accent`}
+                style={professionColorStyleVars(theme)}
+              >
                 <div className="admin-teacher-identity">
-                  <strong className="admin-teacher-initials is-class-prefix">
+                  <strong
+                    className="admin-teacher-initials is-class-prefix is-profession-colored"
+                    style={professionColorStyleVars(theme)}
+                  >
                     {formatProfessionPrefixBadge(entry.classCodePrefix, entry.label)}
                   </strong>
                   {editing && editDraft ? (

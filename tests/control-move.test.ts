@@ -411,7 +411,7 @@ async function publishTest(
 }
 
 test("version 2.38.0 — déplacement structuré, pas de migration 0025", async () => {
-  assert.equal(APP_VERSION, "2.61.3");
+  assert.equal(APP_VERSION, "2.61.4");
   assert.equal(TEST_ALERT_THRESHOLD, 3);
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
 

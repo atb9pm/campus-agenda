@@ -19,6 +19,8 @@ import {
   formatTrainingYearLabel,
   groupSchoolClasses,
   listPlannedBranchesForClass,
+  professionColorStyleVars,
+  resolveProfessionColorTheme,
   trainingYearsForDuration,
   type ClassGroupBy,
   type ClassStatusFilter,
@@ -572,10 +574,23 @@ export function ClassesAdminPanel({
                 ) {
                   selectableProfessions.unshift(draftProfession);
                 }
+                const professionPrefix =
+                  professions.find((profession) => profession.id === entry.professionId)?.classCodePrefix ??
+                  null;
+                const theme = resolveProfessionColorTheme(professionPrefix, entry.code);
                 return (
-                  <li key={entry.id} className={classCardClassName(status)}>
+                  <li
+                    key={entry.id}
+                    className={`${classCardClassName(status)} has-profession-accent`}
+                    style={professionColorStyleVars(theme)}
+                  >
                     <div className="admin-teacher-identity">
-                      <strong className="admin-teacher-initials is-class-prefix">{entry.code}</strong>
+                      <strong
+                        className="admin-teacher-initials is-class-prefix is-profession-colored"
+                        style={professionColorStyleVars(theme)}
+                      >
+                        {entry.code}
+                      </strong>
                       {editing && classDraft ? (
                         <form
                           className="admin-teacher-edit-form"

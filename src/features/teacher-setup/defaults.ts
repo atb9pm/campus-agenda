@@ -34,6 +34,7 @@ export function buildDefaultTeacherSetup(
       (subject) => subject.name,
     ),
     icon: iconForClassroom(classroom.id, index),
+    professionPrefix: null,
   }));
 
   return { version: 1, classes };
@@ -51,5 +52,6 @@ export function createEmptyClassSetup(index = 0): TeacherClassSetup {
     dayOfWeek: 1,
     branchNames: [],
     icon: CLASS_ICONS[index % CLASS_ICONS.length],
+    professionPrefix: null,
   };
 }

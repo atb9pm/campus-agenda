@@ -7,7 +7,10 @@ export interface TeacherClassSetup {
   programLabel: string;
   dayOfWeek: WeekdayIndex;
   branchNames: string[];
+  /** Legacy — conservé en sauvegarde, plus affiché dans l’UI. */
   icon: string;
+  /** Abréviation profession (MECAUTO, CONDVL…) pour le code couleur. */
+  professionPrefix: string | null;
 }
 
 /**
