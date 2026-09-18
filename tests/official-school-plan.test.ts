@@ -253,7 +253,7 @@ function normalizeEventLabel(label: string): string {
 }
 
 test("version 2.49.0 — semaines de cours, kind nullable", () => {
-  assert.equal(APP_VERSION, "2.61.2");
+  assert.equal(APP_VERSION, "2.61.3");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
 });
 
@@ -560,8 +560,8 @@ test("interface 2.48.0 : aucun import A/B exposé", () => {
   assert.equal(panel.includes("Enregistrer le plan A/B en brouillon"), false);
 });
 
-test("version 2.61.2 — années scolaires triées du plus ancien au plus récent", async () => {
-  assert.equal(APP_VERSION, "2.61.2");
+test("version 2.61.3 — années scolaires triées du plus ancien au plus récent", async () => {
+  assert.equal(APP_VERSION, "2.61.3");
   const shuffled = [
     { id: "y-28", label: "2028-2029", startsOn: "2028-08-21" },
     { id: "y-26", label: "2026-2027", startsOn: "2026-08-17" },

@@ -79,16 +79,23 @@ function yearsStub(): SchoolYearStore {
 }
 
 test("version 2.40.0 — attributions : enseignants compatibles uniquement, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.61.2");
+  assert.equal(APP_VERSION, "2.61.3");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
-  const [panel, helper] = await Promise.all([
+  const [panel, css, helper] = await Promise.all([
     readFile(new URL("../web/app/components/annual-courses-admin-panel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../src/features/annual-courses/assignments.ts", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(panel, /Afficher les enseignants non correspondants/);
   assert.doesNotMatch(panel, /includeMismatched/);
   assert.match(panel, /listAssignmentCandidateTeachers/);
   assert.match(panel, /NO_COMPATIBLE_TEACHER_MESSAGE/);
+  assert.match(panel, /annual-course-class-select/);
+  assert.match(panel, /annual-course-class-select-control/);
+  assert.match(panel, /Choisissez la classe à attribuer/);
+  assert.match(css, /\.annual-course-class-select-control[\s\S]{0,120}border: 1px solid var\(--line-strong\)/);
+  assert.match(css, /\.annual-course-class-select-control:focus[\s\S]{0,80}border-color: var\(--blue\)/);
+  assert.match(css, /appearance: none/);
   assert.match(helper, /evaluateTeachingTypeGuard/);
   assert.match(helper, /forceIncompatible/);
   assert.doesNotMatch(helper, /includeMismatched/);
