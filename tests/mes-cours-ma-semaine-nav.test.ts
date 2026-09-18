@@ -172,7 +172,7 @@ function subjectFor(course: TeacherCourseWorkspaceEntry): string {
 }
 
 test("PR80 — version 2.44.1 sans nouvelle migration SQL", () => {
-  assert.equal(APP_VERSION, "2.60.0");
+  assert.equal(APP_VERSION, "2.61.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
 });
 
