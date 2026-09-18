@@ -2,6 +2,16 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.61.5] — Halo et badge branche dans Ma semaine
+
+### Changé
+
+- **Ma semaine** : carte avec **halo** de la couleur profession ; code classe + **badge branche** (cadre coloré, ombre légère). Plus de légende.
+
+### Conservé
+
+Préférences (jour seulement), couleurs Administration. Aucune migration SQL.
+
 ## [2.61.4] — Préférences épurées et code couleur par profession
 
 ### Changé
