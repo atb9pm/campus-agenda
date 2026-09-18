@@ -61,7 +61,7 @@ function weekHasOpenSchoolDay(
 }
 
 test("version 2.49.0", () => {
-  assert.equal(APP_VERSION, "2.60.0");
+  assert.equal(APP_VERSION, "2.61.0");
 });
 
 test("2028-2029 : exactement 38 semaines A/B pédagogiques, 1→38", async () => {

@@ -2,6 +2,18 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.61.0] — Cadre semaine en trait plein
+
+### Changé
+
+- **Vue semaine** : le cadre de chaque colonne est un **trait plein** (plus de tiretés), avec une ombre légère et des coins arrondis nets.
+- La cible de dépôt (glisser / coller depuis une autre semaine) reste un **halo bleu plein**, sans pointillés qui cassaient les coins.
+- Séparations internes Contrôle / Publication en trait plein, comme le cadre.
+
+### Conservé
+
+Cartes sans trait, barres d’insertion au survol, format `campus-rich-v1`, Lien / souligné, Couper / Suppr. Aucune migration SQL.
+
 ## [2.60.0] — Blocs séparés par l’espace, barres d’insertion au survol
 
 ### Changé
