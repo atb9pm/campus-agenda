@@ -80,7 +80,7 @@ test("keeps the validated teacher essentials and social preview", async () => {
   assert.match(page, /changeTeacherPasswordApi/);
   assert.doesNotMatch(page, /DEMO_TEACHER_PASSWORD/);
   assert.match(page, /DEMO_CATALOG/);
-  assert.match(page, /brand-emblem-image/);
+  assert.match(page, /BrandLogo/);
 
   // Publication et coordination passent uniquement par le carnet de classe.
   assert.match(page, /notebookCreatePublication/);
@@ -99,4 +99,5 @@ test("keeps the validated teacher essentials and social preview", async () => {
   assert.match(layout, /\/og-v3\.png/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   await access(new URL("../public/og-v3.png", import.meta.url));
+  await access(new URL("../public/campus-agenda-logo.png", import.meta.url));
 });

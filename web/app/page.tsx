@@ -121,6 +121,7 @@ import {
 import { RichDocView } from "./components/rich-doc-view.tsx";
 import { ConfigurationPanel } from "./components/configuration-panel.tsx";
 import { AdministrationPanel } from "./components/administration-panel.tsx";
+import { BrandLogo } from "./components/brand-logo.tsx";
 import { LoginPanel } from "./components/login-panel.tsx";
 import { PasswordChangePanel } from "./components/password-change-panel.tsx";
 import { MfaChallengePanel } from "./components/mfa-challenge-panel.tsx";
@@ -184,10 +185,6 @@ async function loadTeacherAgendaItems(classroomIds: string[]): Promise<Prototype
     for (const item of batch) merged.set(item.id, item);
   }
   return [...merged.values()].sort((left, right) => left.id - right.id);
-}
-
-function BrandEmblem() {
-  return <span className="brand-emblem-image" aria-hidden="true">CA</span>;
 }
 
 function formatTeacherYearHeading(label: string): string {
@@ -1397,8 +1394,7 @@ export default function Home() {
         <main className="student-course-day-main" id="main-content">
           <header className="student-course-day-header">
             <div className="student-course-day-brand">
-              <BrandEmblem />
-              <span><strong>CAMPUS</strong><small>AGENDA</small></span>
+              <BrandLogo />
             </div>
             <div className="student-course-day-actions desktop-only">
               <div className="student-history-anchor">
@@ -1601,8 +1597,7 @@ export default function Home() {
     <div className="mechanical-app has-mobile-tabs">
       <aside className="technical-sidebar">
         <div className="brand-lockup">
-          <BrandEmblem />
-          <span><strong>CAMPUS</strong><small>AGENDA</small></span>
+          <BrandLogo />
         </div>
 
         <nav aria-label="Navigation principale">
@@ -1628,7 +1623,7 @@ export default function Home() {
 
       <main className="technical-main" id="main-content">
         <header className="technical-header">
-          <div className="mobile-lockup"><BrandEmblem /><strong>CAMPUS AGENDA</strong></div>
+          <div className="mobile-lockup"><BrandLogo compact /></div>
           <div className="class-identity">
             <span className="eyebrow">Espace enseignant</span>
             <h1>{sectionTitle(activeSection, false, openNotebookClass?.name, teacherCoursesYearLabel)}</h1>

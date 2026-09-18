@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 
+import { BrandLogo } from "./brand-logo";
 import {
   DEFAULT_LOGIN_TAB,
   LAST_TEACHER_INITIALS_KEY,
@@ -56,8 +57,7 @@ export function LoginPanel({
     <div className="teacher-login-shell">
       <main className="teacher-login" id="main-content">
         <div className="teacher-login-brand">
-          <span className="brand-emblem-image" aria-hidden="true">CA</span>
-          <span><strong>CAMPUS</strong><small>AGENDA</small></span>
+          <BrandLogo />
         </div>
 
         <section className="teacher-login-card" aria-labelledby="login-title">
