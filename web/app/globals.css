@@ -264,21 +264,28 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .teacher-login-card input.totp-code-input { font-size: 28px; letter-spacing: .28em; text-align: center; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 760px) {
-  .teacher-login-shell { padding: 20px 28px; background-position: center 32%; }
-  .teacher-login { width: min(272px, 84vw); gap: 12px; }
-  .teacher-login-brand .brand-logo { width: min(180px, 64vw); }
-  .teacher-login-card {
-    padding: 18px 16px;
-    border: 1px solid rgba(255,255,255,.55);
-    background: rgba(255,255,255,.78);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    box-shadow: 0 16px 40px rgba(6,24,61,.15);
+  /* cover recadre le panorama : pistons et voiture disparaissent. On affiche
+     presque toute la largeur du visuel autour d’une carte plus étroite. */
+  .teacher-login-shell {
+    min-height: 100dvh;
+    padding: 28px 44px 36px;
+    background-size: 118% auto;
+    background-position: 62% 38%;
   }
-  .teacher-login-card h1 { font-size: 21px; }
-  .teacher-login-card > p { margin-bottom: 12px; font-size: 10px; line-height: 1.45; }
-  .teacher-login-hint { font-size: 9px; line-height: 1.4; }
-  .login-tabs { margin-bottom: 14px; }
+  .teacher-login { width: min(236px, 68vw); gap: 10px; }
+  .teacher-login-brand .brand-logo { width: min(168px, 58vw); }
+  .teacher-login-card {
+    padding: 16px 14px;
+    border: 1px solid rgba(255,255,255,.5);
+    background: rgba(255,255,255,.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 14px 36px rgba(6,24,61,.16);
+  }
+  .teacher-login-card h1 { font-size: 20px; }
+  .teacher-login-card > p { margin-bottom: 10px; font-size: 10px; line-height: 1.4; }
+  .teacher-login-hint { font-size: 9px; line-height: 1.35; }
+  .login-tabs { margin-bottom: 12px; }
   .mfa-qr img { width: min(220px, 100%); height: auto; }
 }
 .mfa-qr { display: grid; justify-items: center; gap: 10px; margin-bottom: 16px; }
