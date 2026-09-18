@@ -29,6 +29,7 @@ import {
 import {
   readAdminWorkingYearId,
   resolveAdminWorkingYearId,
+  sortSchoolYearsChronologically,
   writeAdminWorkingYearId,
 } from "@campus/features/school-year/admin-working-year.ts";
 
@@ -155,7 +156,7 @@ export function AdministrationPanel({
       setBranches(catalog.branches);
       setProfessions(catalog.professions);
       setContexts(catalog.contexts);
-      setSchoolYears(years);
+      setSchoolYears(sortSchoolYearsChronologically(years));
       const stored = typeof window === "undefined" ? null : readAdminWorkingYearId(window.localStorage);
       setWorkingYearId((current) => resolveAdminWorkingYearId(years, current ?? stored));
     } catch (loadError) {

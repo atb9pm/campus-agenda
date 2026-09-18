@@ -1,4 +1,5 @@
 import type { PedagogyMutationResult } from "./profession-types.ts";
+import { sortSchoolYearsChronologically } from "../school-year/admin-working-year.ts";
 
 export const ARCHIVED_YEAR_MUTATION_REASON =
   "Cette année scolaire est archivée. Les créations et modifications sont refusées.";
@@ -94,7 +95,9 @@ export function findUniqueSchoolYearIdForLabel(
 
 /** Années proposées pour une nouvelle classe : brouillon et active uniquement. */
 export function listSelectableSchoolYearsForNewClass(years: SchoolYearRef[]): SchoolYearRef[] {
-  return years.filter((entry) => entry.status === "draft" || entry.status === "active");
+  return sortSchoolYearsChronologically(
+    years.filter((entry) => entry.status === "draft" || entry.status === "active"),
+  );
 }
 
 /**
@@ -109,5 +112,5 @@ export function listSelectableSchoolYearsForClassEdit(
   if (!currentSchoolYearId) return selectable;
   if (selectable.some((entry) => entry.id === currentSchoolYearId)) return selectable;
   const current = years.find((entry) => entry.id === currentSchoolYearId);
-  return current ? [current, ...selectable] : selectable;
+  return current ? sortSchoolYearsChronologically([current, ...selectable]) : selectable;
 }

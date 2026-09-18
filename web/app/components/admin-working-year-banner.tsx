@@ -4,6 +4,7 @@ import {
   ADMIN_WORKING_YEAR_BADGE_LABELS,
   formatAdminWorkingSectionTitle,
   formatAdminWorkingYearOption,
+  sortSchoolYearsChronologically,
   type AdminWorkingYearRef,
 } from "@campus/features/school-year/admin-working-year.ts";
 import { formatSchoolYearLabelFr } from "@campus/features/school-year/official-plan-logic.ts";
@@ -22,6 +23,7 @@ export function AdminWorkingYearBanner({
   onChange,
 }: AdminWorkingYearBannerProps) {
   const workingYear = years.find((year) => year.id === workingYearId) ?? null;
+  const orderedYears = sortSchoolYearsChronologically(years);
   const selectId = section === "classes" ? "admin-working-year-classes" : "admin-working-year-courses";
 
   return (
@@ -49,7 +51,7 @@ export function AdminWorkingYearBanner({
             disabled={years.length === 0}
             onChange={(event) => onChange(event.target.value)}
           >
-            {years.map((year) => (
+            {orderedYears.map((year) => (
               <option key={year.id} value={year.id}>
                 {formatAdminWorkingYearOption(year)}
               </option>

@@ -85,7 +85,7 @@ export class SqlSchoolYearStore implements SchoolYearStore {
 
   async listSchoolYears(): Promise<SchoolYearRecord[]> {
     const { results } = await this.db
-      .prepare("SELECT * FROM school_years ORDER BY created_at DESC")
+      .prepare("SELECT * FROM school_years ORDER BY starts_on ASC, label ASC")
       .bind()
       .all<SchoolYearRow>();
     return results.map(rowToRecord);

@@ -21,6 +21,7 @@ import {
   resolveAdminWorkingYearId,
   schoolYearAlreadyExistsMessage,
   schoolYearStatusesAfterAdminWorkingYearChange,
+  sortSchoolYearsChronologically,
   writeAdminWorkingYearId,
 } from "../src/features/school-year/index.ts";
 import { createNodeSqliteDatabase } from "../src/lib/persistence/sql/adapters.ts";
@@ -252,7 +253,7 @@ function normalizeEventLabel(label: string): string {
 }
 
 test("version 2.49.0 — semaines de cours, kind nullable", () => {
-  assert.equal(APP_VERSION, "2.61.1");
+  assert.equal(APP_VERSION, "2.61.2");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
 });
 
@@ -557,4 +558,56 @@ test("interface 2.48.0 : aucun import A/B exposé", () => {
   assert.equal(panel.includes("WeekPlanComplement"), false);
   assert.equal(panel.includes("Choisir le PDF des semaines A/B"), false);
   assert.equal(panel.includes("Enregistrer le plan A/B en brouillon"), false);
+});
+
+test("version 2.61.2 — années scolaires triées du plus ancien au plus récent", async () => {
+  assert.equal(APP_VERSION, "2.61.2");
+  const shuffled = [
+    { id: "y-28", label: "2028-2029", startsOn: "2028-08-21" },
+    { id: "y-26", label: "2026-2027", startsOn: "2026-08-17" },
+    { id: "y-27", label: "2027-2028", startsOn: "2027-08-23" },
+  ];
+  assert.deepEqual(
+    sortSchoolYearsChronologically(shuffled).map((year) => year.label),
+    ["2026-2027", "2027-2028", "2028-2029"],
+  );
+  assert.deepEqual(
+    sortSchoolYearsChronologically([
+      { id: "b", label: "2028-2029" },
+      { id: "c", label: "2026-2027" },
+      { id: "a", label: "2027-2028" },
+    ]).map((year) => year.label),
+    ["2026-2027", "2027-2028", "2028-2029"],
+  );
+
+  const { db, store } = await sqliteStore();
+  try {
+    await store.seedDefaultActiveYearIfEmpty();
+    const parsed = await parseOfficialPlanPdf(new Uint8Array(readFileSync(fixturePath)));
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) return;
+    await store.importOfficialCalendarDraft(parsed.preview, "Plan-scolarite-2028-2029.pdf");
+    const years = await store.listSchoolYears();
+    assert.deepEqual(years.map((year) => year.label), ["2026-2027", "2028-2029"]);
+  } finally {
+    db.close();
+  }
+
+  const panel = readFileSync(
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../web/app/components/school-year-admin-panel.tsx"),
+    "utf8",
+  );
+  const banner = readFileSync(
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../web/app/components/admin-working-year-banner.tsx"),
+    "utf8",
+  );
+  const sql = readFileSync(
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../src/lib/persistence/sql/sql-school-year-store.ts"),
+    "utf8",
+  );
+  assert.match(panel, /sortSchoolYearsChronologically/);
+  assert.match(panel, /orderedYears\.map/);
+  assert.match(banner, /sortSchoolYearsChronologically/);
+  assert.match(sql, /ORDER BY starts_on ASC, label ASC/);
+  assert.doesNotMatch(sql, /ORDER BY created_at DESC/);
 });

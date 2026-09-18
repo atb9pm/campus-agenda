@@ -2,6 +2,16 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.61.2] — Années scolaires dans l’ordre chronologique
+
+### Changé
+
+- **Administration → Année scolaire** : la liste **Années enregistrées** et le menu **Année de travail** suivent le calendrier (2026-2027, puis 2027-2028, puis 2028-2029). Plus d’ordre selon la date de création.
+
+### Conservé
+
+Statuts Active / Préparation / Archivée, année de travail administrateur. Aucune migration SQL.
+
 ## [2.61.1] — Création enseignant : Nom et Initiales vides
 
 ### Changé
