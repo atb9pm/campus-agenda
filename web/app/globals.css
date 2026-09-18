@@ -42,11 +42,8 @@ button { color: inherit; }
 
 .mechanical-app { min-height: 100vh; display: flex; background: #fff; }
 .technical-sidebar { position: fixed; inset: 0 auto 0 0; z-index: 20; width: 222px; display: flex; flex-direction: column; padding: 28px 18px 22px; border-right: 1px solid var(--line); background: #fff; }
-.brand-lockup, .mobile-lockup { display: flex; align-items: center; gap: 12px; padding: 0 8px 34px; }
-.brand-lockup > span:last-child strong, .brand-lockup > span:last-child small { display: block; color: var(--navy); font-size: 13px; font-weight: 900; letter-spacing: .22em; line-height: 1.35; }
-.brand-lockup > span:last-child small { font-size: 9px; letter-spacing: .38em; }
-
-.brand-emblem-image { width: 56px; height: 56px; flex: 0 0 56px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line-strong); color: var(--navy); background: #fff; font-size: 11px; font-weight: 900; letter-spacing: .08em; }
+.brand-lockup, .mobile-lockup { display: flex; align-items: center; padding: 0 4px 28px; }
+.brand-logo { display: block; width: 100%; max-width: 186px; height: auto; }
 
 .technical-sidebar nav { display: grid; gap: 7px; }
 .technical-sidebar nav button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 13px; border: 0; border-radius: 8px; color: #32466b; background: transparent; font-size: 11px; font-weight: 700; text-align: left; cursor: pointer; }
@@ -93,9 +90,7 @@ button { color: inherit; }
 .showcase-copy { position: relative; z-index: 2; display: flex; flex-direction: column; justify-content: center; padding: 34px 32px; background: #fff; }
 .showcase-copy::after { content: ""; position: absolute; right: -1px; top: 8%; bottom: 8%; width: 1px; background: #dce4ef; }
 .showcase-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 25px; }
-.showcase-brand .brand-emblem-image { width: 68px; height: 68px; flex-basis: 68px; font-size: 13px; }
-.showcase-brand > span:last-child strong, .showcase-brand > span:last-child small { display: block; color: var(--navy); font-size: 14px; font-weight: 900; letter-spacing: .25em; line-height: 1.4; }
-.showcase-brand > span:last-child small { font-size: 9px; letter-spacing: .44em; }
+.showcase-brand .brand-logo { max-width: 220px; }
 .showcase-overline { margin: 0 0 9px; color: #62779a; font-size: 7px; font-weight: 850; letter-spacing: .13em; }
 .showcase-copy h2 { margin: 0; color: var(--navy); font-size: clamp(26px, 3.1vw, 39px); line-height: 1.08; letter-spacing: -.055em; }
 .showcase-text { max-width: 390px; margin: 17px 0 0; color: #61718b; font-size: 10px; line-height: 1.65; }
@@ -243,10 +238,8 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .teacher-login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--canvas); }
 .teacher-login-loading { display: grid; justify-items: center; gap: 10px; color: var(--navy); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .teacher-login { width: min(440px, 100%); display: grid; gap: 18px; }
-.teacher-login-brand { display: flex; align-items: center; gap: 12px; color: var(--navy); }
-.teacher-login-brand > span { display: grid; line-height: 1; }
-.teacher-login-brand strong { font-size: 14px; letter-spacing: .18em; }
-.teacher-login-brand small { margin-top: 4px; color: #7b8aa5; font-size: 8px; font-weight: 800; letter-spacing: .24em; }
+.teacher-login-brand { display: flex; align-items: center; color: var(--navy); }
+.teacher-login-brand .brand-logo { max-width: 280px; }
 .teacher-login-card { padding: 28px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: var(--shadow); }
 .teacher-login-card h1 { margin: 8px 0 6px; color: var(--navy); font-size: 28px; letter-spacing: -.03em; }
 .teacher-login-card > p { margin: 0 0 18px; color: var(--muted); font-size: 11px; line-height: 1.5; }
@@ -292,10 +285,8 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .student-course-day-app { min-height: 100vh; background: var(--canvas); }
 .student-course-day-main { width: min(720px, 100%); margin: 0 auto; padding: 28px 20px 36px; }
 .student-course-day-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
-.student-course-day-brand { display: flex; align-items: center; gap: 12px; color: var(--navy); }
-.student-course-day-brand > span { display: grid; line-height: 1; }
-.student-course-day-brand strong { font-size: 14px; letter-spacing: .18em; }
-.student-course-day-brand small { margin-top: 4px; color: #7b879c; font-size: 8px; font-weight: 800; letter-spacing: .24em; }
+.student-course-day-brand { display: flex; align-items: center; color: var(--navy); }
+.student-course-day-brand .brand-logo { max-width: 240px; }
 .student-course-day-actions { display: flex; align-items: center; gap: 10px; }
 .student-history-anchor { position: relative; }
 .student-history-toggle, .student-signout { padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: #fff; color: var(--navy); font-size: 10px; font-weight: 800; cursor: pointer; }
@@ -2207,7 +2198,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 
 @media (max-width: 760px) {
   .technical-sidebar { display: none; }.technical-main { width: 100%; margin-left: 0; }
-  .technical-header { min-height: auto; align-items: flex-start; flex-wrap: wrap; padding: 16px; }.mobile-lockup { width: 100%; display: flex; padding: 0 0 15px; border-bottom: 1px solid var(--line); }.mobile-lockup .brand-emblem-image { width: 42px; height: 42px; flex-basis: 42px; background-size: 198px auto; background-position: -25px -24px; }.mobile-lockup > strong { color: var(--navy); font-size: 10px; letter-spacing: .18em; }
+  .technical-header { min-height: auto; align-items: flex-start; flex-wrap: wrap; padding: 16px; }.mobile-lockup { width: 100%; display: flex; padding: 0 0 15px; border-bottom: 1px solid var(--line); }.mobile-lockup .brand-logo { max-width: 168px; }
   .class-identity { flex: 1; min-width: 190px; }.class-identity p { max-width: 260px; }.header-actions { margin-left: auto; }.round-action, .profile-disc { display: none; }.navy-add { width: 38px; padding: 0; justify-content: center; }.navy-add > span, .navy-add > span + * { display: none; }
   .technical-add-menu { position: fixed; top: auto; right: 14px; bottom: 14px; left: 14px; width: auto; }
   .class-tabs { gap: 20px; overflow-x: auto; padding: 0 16px; }.class-tabs button { white-space: nowrap; }

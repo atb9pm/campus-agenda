@@ -2,6 +2,16 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.61.6] — Nouveau logo Campus Agenda
+
+### Changé
+
+- **Logo** : le cercle « CA » + texte CAMPUS AGENDA est remplacé par le **logo officiel** (piston / disque / engrenage + Campus Agenda) sur la barre latérale, le mobile, la connexion, le MFA et l’espace élève.
+
+### Conservé
+
+Navigation et écrans inchangés. Aucune migration SQL.
+
 ## [2.61.5] — Halo et badge branche dans Ma semaine
 
 ### Changé

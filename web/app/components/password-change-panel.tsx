@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 
 import { MIN_PASSWORD_LENGTH } from "@campus/features/teacher-accounts";
+import { BrandLogo } from "./brand-logo.tsx";
 
 interface PasswordChangePanelProps {
   appVersion: string;
@@ -42,8 +43,7 @@ export function PasswordChangePanel({
     <div className="teacher-login-shell">
       <main className="teacher-login" id="main-content">
         <div className="teacher-login-brand">
-          <span className="brand-emblem-image" aria-hidden="true">CA</span>
-          <span><strong>CAMPUS</strong><small>AGENDA</small></span>
+          <BrandLogo />
         </div>
 
         <section className="teacher-login-card" aria-labelledby="password-change-title">

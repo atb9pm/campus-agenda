@@ -80,7 +80,10 @@ test("keeps the validated teacher essentials and social preview", async () => {
   assert.match(page, /changeTeacherPasswordApi/);
   assert.doesNotMatch(page, /DEMO_TEACHER_PASSWORD/);
   assert.match(page, /DEMO_CATALOG/);
-  assert.match(page, /brand-emblem-image/);
+  assert.match(page, /BrandLogo/);
+  assert.match(page, /campus-agenda-logo\.png/);
+  assert.doesNotMatch(page, /brand-emblem-image/);
+  assert.doesNotMatch(page, />CA</);
 
   // Publication et coordination passent uniquement par le carnet de classe.
   assert.match(page, /notebookCreatePublication/);
