@@ -41,8 +41,9 @@ test("version 2.61.6 — logo Campus Agenda dans sidebar, login, MFA et vue él�
   assert.doesNotMatch(css, /brand-emblem-image/);
   assert.match(css, /campus-agenda-access-bg\.jpg/);
   assert.match(css, /background-size: cover/);
-  assert.match(css, /backdrop-filter: blur\(6px\)/);
-  assert.match(css, /teacher-login-brand \.brand-logo \{ width: min\(200px, 72vw\)/);
+  assert.match(css, /backdrop-filter: blur\(10px\)/);
+  assert.match(css, /teacher-login-brand \.brand-logo \{ width: min\(180px, 64vw\)/);
+  assert.match(css, /teacher-login \{ width: min\(272px, 84vw\)/);
 
   for (const source of [loginPanel, mfaSetup, mfaChallenge, passwordChange]) {
     assert.match(source, /teacher-login-shell/);
