@@ -5,11 +5,11 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { CatalogDeletePreview } from "@campus/features/admin-catalog-delete/index.ts";
 import {
   formatProfessionPrefixBadge,
-  professionColorStyleVars,
   resolveProfessionColorTheme,
   type SchoolClassRecord,
   type SchoolProfessionRecord,
 } from "@campus/features/school-catalog";
+import { professionColorStyle } from "../../lib/profession-color-style.ts";
 import { DestructiveConfirmDialog } from "./destructive-confirm-dialog.tsx";
 
 interface ProfessionsAdminPanelProps {
@@ -338,12 +338,12 @@ export function ProfessionsAdminPanel({ onNotice }: ProfessionsAdminPanelProps) 
               <li
                 key={entry.id}
                 className={`${professionCardClass(entry)} admin-profession-card has-profession-accent`}
-                style={professionColorStyleVars(theme)}
+                style={professionColorStyle(theme)}
               >
                 <div className="admin-teacher-identity">
                   <strong
                     className="admin-teacher-initials is-class-prefix is-profession-colored"
-                    style={professionColorStyleVars(theme)}
+                    style={professionColorStyle(theme)}
                   >
                     {formatProfessionPrefixBadge(entry.classCodePrefix, entry.label)}
                   </strong>

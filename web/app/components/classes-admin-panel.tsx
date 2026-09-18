@@ -19,7 +19,6 @@ import {
   formatTrainingYearLabel,
   groupSchoolClasses,
   listPlannedBranchesForClass,
-  professionColorStyleVars,
   resolveProfessionColorTheme,
   trainingYearsForDuration,
   type ClassGroupBy,
@@ -34,6 +33,7 @@ import type { CatalogDeletePreview } from "@campus/features/admin-catalog-delete
 import { ConfirmDialog } from "./confirm-dialog.tsx";
 import { DestructiveConfirmDialog } from "./destructive-confirm-dialog.tsx";
 import { StudentAccessAdminBlock } from "./student-access-admin.tsx";
+import { professionColorStyle } from "../../lib/profession-color-style.ts";
 
 type ClassConfirmAction =
   | { kind: "regenerate"; entry: SchoolClassRecord }
@@ -582,12 +582,12 @@ export function ClassesAdminPanel({
                   <li
                     key={entry.id}
                     className={`${classCardClassName(status)} has-profession-accent`}
-                    style={professionColorStyleVars(theme)}
+                    style={professionColorStyle(theme)}
                   >
                     <div className="admin-teacher-identity">
                       <strong
                         className="admin-teacher-initials is-class-prefix is-profession-colored"
-                        style={professionColorStyleVars(theme)}
+                        style={professionColorStyle(theme)}
                       >
                         {entry.code}
                       </strong>

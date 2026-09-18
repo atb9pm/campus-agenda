@@ -4,11 +4,8 @@ import { useMemo } from "react";
 
 import type { SchoolWeek } from "@campus/features/calendar";
 import { formatPedagogicalWeekLabel } from "@campus/features/school-year/official-course-weeks.ts";
-import {
-  listProfessionColorLegend,
-  professionColorStyleVars,
-  resolveProfessionColorTheme,
-} from "@campus/features/school-catalog";
+import { listProfessionColorLegend, resolveProfessionColorTheme } from "@campus/features/school-catalog";
+import { professionColorStyle } from "../../lib/profession-color-style.ts";
 import {
   formatWeekdayLabel,
   groupClassesByWeekday,
@@ -101,7 +98,7 @@ export function MaSemainePanel({
                       type="button"
                       className="ma-semaine-class-card"
                       key={entry.id}
-                      style={professionColorStyleVars(theme)}
+                      style={professionColorStyle(theme)}
                       title={entry.programLabel || theme.legendLabel}
                       onClick={() => onOpenClass(entry)}
                     >
@@ -133,7 +130,7 @@ export function MaSemainePanel({
             <span
               className="ma-semaine-legend-item"
               key={theme.prefix}
-              style={professionColorStyleVars(theme)}
+              style={professionColorStyle(theme)}
             >
               <span className="ma-semaine-legend-swatch" aria-hidden="true" />
               {theme.legendLabel}

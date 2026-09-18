@@ -2,10 +2,8 @@
 
 import { useMemo } from "react";
 
-import {
-  professionColorStyleVars,
-  resolveProfessionColorTheme,
-} from "@campus/features/school-catalog";
+import { resolveProfessionColorTheme } from "@campus/features/school-catalog";
+import { professionColorStyle } from "../../lib/profession-color-style.ts";
 import {
   WEEKDAY_LABELS,
   type TeacherSetupConfig,
@@ -82,7 +80,7 @@ export function ConfigurationPanel({
                     <span>Cours attribué</span>
                     <strong
                       className="config-class-code"
-                      style={professionColorStyleVars(theme)}
+                      style={professionColorStyle(theme)}
                       title={course.professionLabel ?? theme.legendLabel}
                     >
                       {course.classCode}
