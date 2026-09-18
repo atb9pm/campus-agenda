@@ -4,7 +4,7 @@ import { useMemo } from "react";
 
 import type { SchoolWeek } from "@campus/features/calendar";
 import { formatPedagogicalWeekLabel } from "@campus/features/school-year/official-course-weeks.ts";
-import { listProfessionColorLegend, resolveProfessionColorTheme } from "@campus/features/school-catalog";
+import { resolveProfessionColorTheme } from "@campus/features/school-catalog";
 import { professionColorStyle } from "../../lib/profession-color-style.ts";
 import {
   formatWeekdayLabel,
@@ -105,9 +105,8 @@ export function MaSemainePanel({
                       <span className="ma-semaine-class-code">{entry.name}</span>
                       {entry.branchNames.length ? (
                         <span className="ma-semaine-class-branches">
-                          {entry.branchNames.map((branch, index) => (
-                            <span className="ma-semaine-branch-label" key={`${entry.id}-${branch}`}>
-                              {index > 0 ? " · " : null}
+                          {entry.branchNames.map((branch) => (
+                            <span className="ma-semaine-branch-badge" key={`${entry.id}-${branch}`}>
                               {branch}
                             </span>
                           ))}
@@ -123,21 +122,6 @@ export function MaSemainePanel({
           ))}
         </div>
       )}
-
-      {activeClasses.length > 0 ? (
-        <aside className="ma-semaine-profession-legend" aria-label="Code couleur par profession">
-          {listProfessionColorLegend().map((theme) => (
-            <span
-              className="ma-semaine-legend-item"
-              key={theme.prefix}
-              style={professionColorStyle(theme)}
-            >
-              <span className="ma-semaine-legend-swatch" aria-hidden="true" />
-              {theme.legendLabel}
-            </span>
-          ))}
-        </aside>
-      ) : null}
 
       {selectedWeek && (
         <aside className="ma-semaine-plan-hint" aria-label="Rappel semaine A ou B">

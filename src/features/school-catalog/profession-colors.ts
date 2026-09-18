@@ -89,13 +89,30 @@ export function resolveProfessionColorTheme(
   return DEFAULT_PROFESSION_COLOR;
 }
 
-export function professionColorStyleVars(
-  theme: ProfessionColorTheme,
-): Record<"--profession-accent" | "--profession-bg" | "--profession-fg", string> {
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = hex.replace("#", "");
+  const value = Number.parseInt(normalized, 16);
+  return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+}
+
+export function professionColorStyleVars(theme: ProfessionColorTheme): Record<
+  | "--profession-accent"
+  | "--profession-bg"
+  | "--profession-fg"
+  | "--profession-halo"
+  | "--profession-halo-strong"
+  | "--profession-ring"
+  | "--profession-wash",
+  string
+> {
   return {
     "--profession-accent": theme.accent,
     "--profession-bg": theme.background,
     "--profession-fg": theme.foreground,
+    "--profession-halo": hexToRgba(theme.accent, 0.22),
+    "--profession-halo-strong": hexToRgba(theme.accent, 0.34),
+    "--profession-ring": hexToRgba(theme.accent, 0.3),
+    "--profession-wash": hexToRgba(theme.accent, 0.06),
   };
 }
 
