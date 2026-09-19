@@ -9,7 +9,7 @@ export function BrandLogo({ compact = false, className }: BrandLogoProps) {
     // Asset statique local : pas de loader Next/Image dans ce projet Vinext.
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src="/branding/campus-agenda-logo.png"
+      src="/branding/campus-agenda-logo-transparent.png"
       alt="Campus Agenda"
       className={["brand-logo", compact ? "brand-logo-compact" : undefined, className]
         .filter(Boolean)
