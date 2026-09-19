@@ -99,6 +99,6 @@ test("keeps the validated teacher essentials and social preview", async () => {
   assert.match(layout, /\/og-v3\.png/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   await access(new URL("../public/og-v3.png", import.meta.url));
-  await access(new URL("../public/campus-agenda-logo.jpg", import.meta.url));
+  await access(new URL("../public/branding/campus-agenda-logo.png", import.meta.url));
   await access(new URL("../public/campus-agenda-access-bg.jpg", import.meta.url));
 });

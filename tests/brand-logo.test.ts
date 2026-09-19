@@ -27,7 +27,7 @@ test("version 2.61.6 — logo Campus Agenda dans sidebar, login, MFA et vue él�
     readFile(new URL("../web/app/globals.css", import.meta.url), "utf8"),
   ]);
 
-  assert.match(brandLogo, /campus-agenda-logo\.jpg/);
+  assert.match(brandLogo, /\/branding\/campus-agenda-logo\.png/);
   assert.match(brandLogo, /alt="Campus Agenda"/);
 
   for (const source of [loginPanel, mfaSetup, mfaChallenge, passwordChange, page]) {
@@ -38,6 +38,7 @@ test("version 2.61.6 — logo Campus Agenda dans sidebar, login, MFA et vue él�
   }
 
   assert.match(css, /\.brand-logo/);
+  assert.match(css, /object-fit: contain/);
   assert.doesNotMatch(css, /brand-emblem-image/);
   assert.match(css, /campus-agenda-access-bg\.jpg/);
   assert.match(css, /background-size: cover/);
@@ -50,6 +51,6 @@ test("version 2.61.6 — logo Campus Agenda dans sidebar, login, MFA et vue él�
     assert.match(source, /teacher-login-shell/);
   }
 
-  await access(new URL("../web/public/campus-agenda-logo.jpg", import.meta.url));
+  await access(new URL("../web/public/branding/campus-agenda-logo.png", import.meta.url));
   await access(new URL("../web/public/campus-agenda-access-bg.jpg", import.meta.url));
 });
