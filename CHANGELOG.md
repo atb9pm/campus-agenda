@@ -7,13 +7,15 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 ### Changé
 
 - **MFA admin** : une session `mfaPending` n’ouvre plus les API enseignant (notes, agenda, contrôles). Seuls le changement de mot de passe et l’enrôlement / le défi 2FA restent possibles.
-- **Sessions** : un cookie émis avant un changement de mot de passe ou une (re)configuration MFA est refusé. Le changement de mot de passe délivre un nouveau cookie.
+- **Sessions** : un cookie émis avant un changement de mot de passe ou une (re)configuration MFA est refusé. Le changement de mot de passe délivre un nouveau cookie. Une date `passwordUpdatedAt` / MFA `confirmedAt` **présente mais invalide** refuse la session (fail closed).
 - **Restauration** : `POST /api/admin/restore` exige le jeton `RESTAURER` côté serveur.
-- **En-têtes HTTP** : CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` ; HSTS en production. Cookie de déconnexion aussi `Secure` en prod.
+- **En-têtes HTTP** : CSP avec **nonce** (`script-src 'self' 'nonce-…' 'strict-dynamic'`, plus de `unsafe-inline` / `unsafe-eval` sur les scripts), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` ; HSTS en production. Cookie de déconnexion aussi `Secure` en prod.
+- **CSRF** : écritures authentifiées et lectures admin sensibles (backup) refusent une `Origin` externe ou `Sec-Fetch-Site: cross-site`.
+- **Rate limit** : `cf-connecting-ip` n’est crédible que derrière Cloudflare ; `X-Forwarded-For` utilise le dernier saut (anti-spoof).
 
 ### Conservé
 
-Aucune migration SQL.
+Aucune migration SQL. Session « Rester connecté » toujours 60 jours. `style-src` garde `unsafe-inline` (CSS Tailwind / Google Fonts).
 
 ## [2.61.7] — Carnet : IBM Plex Sans 18 px
 

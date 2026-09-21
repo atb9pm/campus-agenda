@@ -81,7 +81,7 @@ Les tentatives de connexion (`POST /api/auth/teacher`, `POST /api/auth/student`)
 
 | Environnement | Mécanisme | Limite |
 |---|---|---|
-| Production Infomaniak | Compteur mémoire par processus Node.js | 10 enseignant, 20 élève / min |
+| Production Infomaniak | Compteur mémoire par processus Node.js | 10 enseignant, 20 élève, 10 mot de passe, 8 MFA / min |
 | Tests / aperçu local | Idem, ou `CAMPUS_DISABLE_RATE_LIMIT=1` | — |
 
 Réponse en cas de dépassement :

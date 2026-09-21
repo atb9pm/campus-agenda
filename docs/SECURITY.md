@@ -21,6 +21,42 @@ Sont interdits dans le dépôt :
 - Journalisation sans contenu scolaire sensible.
 - Suppression et rotation possibles des codes d'accès.
 
+## Sessions longues (« Rester connecté »)
+
+Le cookie `campus_session` « rester connecté » dure **60 jours**. Ce délai est conservé :
+
+- cookie `HttpOnly` + `SameSite=Lax` + `Secure` en production ;
+- un changement de mot de passe ou de MFA révoque les cookies plus anciens ;
+- la session courte (poste partagé, case décochée) reste **8 heures**.
+
+Une réduction à 30 jours améliorerait un peu le risque sur un poste partagé où un enseignant aurait coché « rester connecté ». L’impact UX est réel pour les enseignants qui se connectent rarement. **Non modifié** dans cette version : les enseignants sur poste partagé doivent laisser la case décochée.
+
+## CSRF
+
+Pas de jeton CSRF dédié. Politique retenue :
+
+- cookie `SameSite=Lax` : un POST cross-site n’envoie pas le cookie ;
+- API JSON same-origin, pas de CORS credentialed ;
+- écritures authentifiées : `Origin` doit correspondre à `Host` si elle est présente ; `Sec-Fetch-Site: cross-site` est refusé ;
+- `GET /api/admin/backup` et autres lectures admin : même contrôle `Sec-Fetch-Site` (Lax enverrait le cookie sur une navigation GET).
+
+Les tests et `curl` sans `Origin` restent acceptés.
+
+## Rate limiting
+
+| Route | Portée | Défaut |
+|---|---|---|
+| `POST /api/auth/teacher` | IP / min | 10 |
+| `POST /api/auth/student` | IP / min | 20 |
+| `POST /api/auth/teacher/password` | IP / min | 10 |
+| MFA / codes de récupération | IP+compte / min | 8 |
+
+20 tentatives élève / min sur une IP partagée restent compatibles avec une classe qui se connecte en même temps. Le secret du code fait 8 caractères d’un alphabet 32 symboles : le plafond empêche un balayage automatique, pas une recherche exhaustive. `cf-connecting-ip` n’est utilisé que si `cf-ray` est présent (Infomaniak n’est pas Cloudflare).
+
+## CSP
+
+`script-src` n’autorise plus `unsafe-inline`. vinext pose un nonce par requête (`web/proxy.ts` + worker). `style-src` conserve `unsafe-inline` pour Tailwind et IBM Plex (Google Fonts). Pas de `unsafe-eval`.
+
 ## Avant chaque publication
 
 1. Examiner les fichiers ajoutés et modifiés.

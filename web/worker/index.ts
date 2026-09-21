@@ -1,7 +1,7 @@
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
-import { withSecurityHeaders } from "@campus/lib/security/http-headers.ts";
+import { buildSecurityCsp, createRequestNonce, withSecurityHeaders } from "@campus/lib/security/http-headers.ts";
 
 type Fetcher = { fetch(input: Request | URL, init?: RequestInit): Promise<Response> };
 
@@ -42,7 +42,11 @@ const worker = {
       }, allowedWidths);
     }
 
-    return withSecurityHeaders(await handler.fetch(request, env, ctx));
+    const scriptNonce = createRequestNonce();
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("Content-Security-Policy", buildSecurityCsp({ scriptNonce }));
+    const forwarded = new Request(request, { headers: requestHeaders });
+    return withSecurityHeaders(await handler.fetch(forwarded, env, ctx), { scriptNonce });
   },
 };
 

@@ -1685,4 +1685,86 @@ test("2.52.0 — E2E surlignage, couleur et listes persistés après enregistrem
   assert.match(afterSave.detail, /case un/);
 });
 
+test("audit — Origin externe refusée sur écriture authentifiée et backup cross-site", async () => {
+  const teacherCookie = await loginTeacher("teacher-demo-current");
+  const adminCookie = await loginAdmin();
+
+  const evilNotes = await request("/api/teacher/notes", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      cookie: teacherCookie,
+      origin: "https://evil.example",
+      host: "localhost",
+    },
+    body: JSON.stringify({ notes: { version: 1, weeks: {} } }),
+  });
+  assert.equal(evilNotes.status, 403);
+  const evilBody = await evilNotes.json();
+  assert.match(evilBody.reason ?? "", /Origine/);
+
+  const sameOrigin = await request("/api/teacher/notes", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      cookie: teacherCookie,
+      origin: "http://localhost",
+      host: "localhost",
+    },
+    body: JSON.stringify({ notes: { version: 1, weeks: {} } }),
+  });
+  assert.ok(sameOrigin.status < 400, await sameOrigin.text());
+
+  const crossBackup = await request("/api/admin/backup", {
+    headers: {
+      cookie: adminCookie,
+      "sec-fetch-site": "cross-site",
+      host: "localhost",
+    },
+  });
+  assert.equal(crossBackup.status, 403);
+});
+
+test("audit — professeur B ne peut pas modifier ni supprimer l'agenda de A", async () => {
+  const ownerCookie = await loginTeacher("teacher-demo-current");
+  const otherCookie = await loginTeacher("teacher-demo-martin");
+
+  const created = await jsonRequest("/api/agenda", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: ownerCookie },
+    body: JSON.stringify({
+      classroomId: "classe-demo-tma-2a",
+      subjectId: "subject-demo-moteur-2a",
+      day: 2,
+      hour: 9,
+      weekOffset: 0,
+      schoolWeekNumber: 12,
+      type: "INFORMATION",
+      title: "Note de A",
+      detail: "Privée",
+    }),
+  });
+  assert.equal(created.response.status, 201, created.payload.reason);
+  const itemId = created.payload.item.id;
+
+  const stolenPatch = await jsonRequest(`/api/agenda/${itemId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", cookie: otherCookie },
+    body: JSON.stringify({ title: "Usurpé par B" }),
+  });
+  assert.equal(stolenPatch.response.status, 403);
+
+  const stolenDelete = await jsonRequest(`/api/agenda/${itemId}`, {
+    method: "DELETE",
+    headers: { cookie: otherCookie },
+  });
+  assert.equal(stolenDelete.response.status, 403);
+
+  const removed = await jsonRequest(`/api/agenda/${itemId}`, {
+    method: "DELETE",
+    headers: { cookie: ownerCookie },
+  });
+  assert.equal(removed.response.status, 200, removed.payload.reason);
+});
+
 

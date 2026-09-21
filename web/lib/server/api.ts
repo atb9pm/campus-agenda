@@ -35,6 +35,11 @@ import type { AppSession } from "@campus/lib/persistence/types.ts";
 import { evaluateAdminMfaAccess } from "@campus/features/admin-mfa/index.ts";
 import { getAdminMfaStore } from "@campus/lib/persistence/store-factory.ts";
 import { applySecurityHeaders } from "@campus/lib/security/http-headers.ts";
+import {
+  UNTRUSTED_ORIGIN_REASON,
+  isTrustedSensitiveRead,
+  isTrustedWriteOrigin,
+} from "@campus/lib/security/csrf.ts";
 
 export async function getRequestSession(request: Request): Promise<AppSession | null> {
   const parsed = await parseSessionToken(readSessionTokenFromRequest(request));
@@ -559,8 +564,20 @@ export async function reconcileRuntimeStructuredClassrooms(): Promise<void> {
   await reconcileStructuredClassrooms(adapters, classes);
 }
 
+function rejectUntrustedWrite(request: Request): { error: Response } | null {
+  if (isTrustedWriteOrigin(request)) return null;
+  return { error: jsonResponse({ ok: false, reason: UNTRUSTED_ORIGIN_REASON }, { status: 403 }) };
+}
+
+function rejectUntrustedAdminRead(request: Request): { error: Response } | null {
+  if (isTrustedSensitiveRead(request)) return null;
+  return { error: jsonResponse({ ok: false, reason: UNTRUSTED_ORIGIN_REASON }, { status: 403 }) };
+}
+
 /** Session enseignant sans contrôle du mot de passe provisoire. */
 async function requireTeacherIdentity(request: Request) {
+  const originGuard = rejectUntrustedWrite(request);
+  if (originGuard) return originGuard;
   const session = await getRequestSession(request);
   if (!canMutateAgenda(session)) {
     return { error: unauthorizedResponse() };
@@ -623,6 +640,8 @@ export async function requireTeacherSessionAllowingPasswordChange(request: Reque
 export async function requireAdminSession(request: Request) {
   const auth = await requireTeacherSession(request);
   if ("error" in auth && auth.error) return auth;
+  const readGuard = rejectUntrustedAdminRead(request);
+  if (readGuard) return readGuard;
   const isAdmin = await auth.store!.teacherIsAdmin(auth.session!.teacherId);
   const record = await (await getAdminMfaStore()).get(auth.session!.teacherId);
   const gate = evaluateAdminMfaAccess({
