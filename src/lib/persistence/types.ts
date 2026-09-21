@@ -8,7 +8,7 @@ export interface TeacherSession {
   kind: "teacher";
   teacherId: string;
   issuedAt: number;
-  /** Mot de passe vérifié, MFA administrateur non validée. Aucun accès admin. */
+  /** Mot de passe vérifié, MFA administrateur non validée. Aucun accès enseignant ni admin. */
   mfaPending?: boolean;
   /** Horodatage (ms) d’une validation recovery dans cette session signée. */
   mfaRecoveryVerifiedAt?: number;

@@ -46,7 +46,7 @@ const RAW_V3 = {
 };
 
 test("version 2.44.0 — restauration admin sécurisée", async () => {
-  assert.equal(APP_VERSION, "2.61.7");
+  assert.equal(APP_VERSION, "2.61.8");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
   assert.deepEqual([...COMPATIBLE_BACKUP_VERSIONS], [1, 2, 3, 4]);
 
@@ -70,6 +70,7 @@ test("version 2.44.0 — restauration admin sécurisée", async () => {
   assert.doesNotMatch(admin, /Référentiel pédagogique/);
   assert.match(backupRoute, /requireAdminSession/);
   assert.match(restoreRoute, /requireAdminSession/);
+  assert.match(restoreRoute, /isRestoreConfirmToken/);
   assert.match(restoreRoute, /restoreStoreSnapshot/);
   assert.match(restoreRoute, /export const POST/);
   assert.match(e2e, /restoreAnon[\s\S]*401/);
@@ -245,7 +246,8 @@ test("backup automatique avant restore — POST seulement après succès", async
   if (ok.ok) assert.equal(ok.safetyFilename, "campus-agenda-before-restore-2026-09-08-0915.json");
   assert.deepEqual(saved, ["campus-agenda-before-restore-2026-09-08-0915.json"]);
   assert.deepEqual(posts, [restoreRequestBody(snapshot)]);
-  assert.equal(Object.keys(posts[0] as object).join(), "snapshot");
+  assert.equal(Object.keys(posts[0] as object).join(), "snapshot,confirmation");
+  assert.equal((posts[0] as { confirmation: string }).confirmation, RESTORE_CONFIRM_TOKEN);
 });
 
 test("restauration impossible si le backup préalable échoue", async () => {

@@ -125,7 +125,7 @@ Administration → onglet **Restaurer une sauvegarde** → **Choisir un fichier 
 5. Saisir exactement `RESTAURER`.
 6. Confirmer avec **Restaurer maintenant**.
 7. Campus Agenda crée automatiquement une sauvegarde de sécurité `campus-agenda-before-restore-YYYY-MM-DD-HHmm.json` (`GET /api/admin/backup`). Si cette étape échoue, **rien n’est restauré**.
-8. Restauration : `POST /api/admin/restore` avec `{ "snapshot": snapshot }`.
+8. Restauration : `POST /api/admin/restore` avec `{ "snapshot": snapshot, "confirmation": "RESTAURER" }`. Sans ce jeton, le serveur refuse (400).
 9. Succès : message, puis rechargement complet de la page.
 
 API : `POST /api/admin/restore`

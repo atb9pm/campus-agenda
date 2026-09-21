@@ -246,7 +246,7 @@ test("phase 0.8 — E2E restauration de sauvegarde", async () => {
   const restoreResponse = await request("/api/admin/restore", {
     method: "POST",
     headers: { "Content-Type": "application/json", cookie: adminCookie },
-    body: JSON.stringify({ snapshot: backupPayload.snapshot }),
+    body: JSON.stringify({ snapshot: backupPayload.snapshot, confirmation: "RESTAURER" }),
   });
   assert.equal(restoreResponse.status, 200);
   const restorePayload = await restoreResponse.json();
@@ -358,8 +358,13 @@ test("comptes enseignant — E2E création, mot de passe provisoire, première c
     body: JSON.stringify({ currentPassword: created.temporaryPassword, nextPassword: "Atelier-2027" }),
   });
   assert.equal(change.status, 200);
+  const changedCookie = extractCookie(change) || newCookie;
 
-  const sessionResponse = await request("/api/auth/session", { headers: { cookie: newCookie } });
+  const staleSession = await request("/api/auth/session", { headers: { cookie: newCookie } });
+  const stalePayload = await staleSession.json();
+  assert.equal(stalePayload.session, null);
+
+  const sessionResponse = await request("/api/auth/session", { headers: { cookie: changedCookie } });
   const sessionPayload = await sessionResponse.json();
   assert.equal(sessionPayload.session.mustChangePassword, false);
 
@@ -470,6 +475,10 @@ test("2.53.0 — admin MFA_PENDING : API admin refusée après le seul mot de pa
   const blockedBody = await blocked.json();
   assert.equal(blockedBody.ok, false);
   assert.ok(blockedBody.mfaPending || blockedBody.mfaSetupRequired);
+  const blockedNotes = await request("/api/teacher/notes", { headers: { cookie: pendingCookie } });
+  assert.equal(blockedNotes.status, 403);
+  const notesBody = await blockedNotes.json();
+  assert.ok(notesBody.mfaPending || notesBody.mfaSetupRequired);
 });
 
 test("2.26.0 — matrice admin : anonyme 401, enseignant 403, admin 200", async () => {

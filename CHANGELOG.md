@@ -2,6 +2,19 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.61.8] — Durcissement auth, sessions, backup et en-têtes
+
+### Changé
+
+- **MFA admin** : une session `mfaPending` n’ouvre plus les API enseignant (notes, agenda, contrôles). Seuls le changement de mot de passe et l’enrôlement / le défi 2FA restent possibles.
+- **Sessions** : un cookie émis avant un changement de mot de passe ou une (re)configuration MFA est refusé. Le changement de mot de passe délivre un nouveau cookie.
+- **Restauration** : `POST /api/admin/restore` exige le jeton `RESTAURER` côté serveur.
+- **En-têtes HTTP** : CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` ; HSTS en production. Cookie de déconnexion aussi `Secure` en prod.
+
+### Conservé
+
+Aucune migration SQL.
+
 ## [2.61.7] — Carnet : IBM Plex Sans 18 px
 
 ### Changé

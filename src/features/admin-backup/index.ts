@@ -23,6 +23,7 @@ export {
   type ParsedBackupFile,
 } from "./parse-backup-file.ts";
 export {
+  RESTORE_CONFIRM_REQUIRED_REASON,
   RESTORE_CONFIRM_TOKEN,
   RESTORE_FAILED_MESSAGE,
   RESTORE_LOSS_WARNING,

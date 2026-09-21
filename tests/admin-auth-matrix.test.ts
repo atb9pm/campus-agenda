@@ -90,6 +90,28 @@ test("session élève révoquée après suppression de l'accès", async () => {
   assert.equal(await revalidateLiveSession(session, lookup), null);
 });
 
+test("session enseignant révoquée après changement de mot de passe", async () => {
+  resetAuthWorld();
+  const accounts = getMemoryTeacherAccountStore();
+  const created = await accounts.createAccount({
+    displayName: "Revoc",
+    initials: "RV",
+    teachingType: "GENERAL",
+  });
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+  const session = {
+    kind: "teacher" as const,
+    teacherId: created.account.id,
+    issuedAt: Date.now(),
+  };
+  const lookup = { findAccount: (id: string) => accounts.findAccount(id) };
+  assert.ok(await revalidateLiveSession(session, lookup));
+  await new Promise((resolve) => setTimeout(resolve, 15));
+  await accounts.setPassword(created.account.id, "Atelier-2027", false);
+  assert.equal(await revalidateLiveSession(session, lookup), null);
+});
+
 test("un administrateur actif reste revalidé", async () => {
   resetAuthWorld();
   const session = {

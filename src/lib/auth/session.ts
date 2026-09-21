@@ -142,5 +142,6 @@ export function buildSessionCookie(token: string, remember = false): string {
 }
 
 export function clearSessionCookie(): string {
-  return `${getSessionCookieName()}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  return `${getSessionCookieName()}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`;
 }

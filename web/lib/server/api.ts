@@ -34,6 +34,7 @@ import { revalidateStructuredStudentSession } from "@campus/features/student-acc
 import type { AppSession } from "@campus/lib/persistence/types.ts";
 import { evaluateAdminMfaAccess } from "@campus/features/admin-mfa/index.ts";
 import { getAdminMfaStore } from "@campus/lib/persistence/store-factory.ts";
+import { applySecurityHeaders } from "@campus/lib/security/http-headers.ts";
 
 export async function getRequestSession(request: Request): Promise<AppSession | null> {
   const parsed = await parseSessionToken(readSessionTokenFromRequest(request));
@@ -47,6 +48,10 @@ export async function getRequestSession(request: Request): Promise<AppSession | 
   ]);
   return revalidateLiveSession(parsed, {
     findAccount: (teacherId) => accounts.findAccount(teacherId),
+    findMfaConfirmedAt: async (teacherId) => {
+      const record = await (await getAdminMfaStore()).get(teacherId);
+      return record?.confirmedAt ?? null;
+    },
     revalidateStudent: (session) =>
       revalidateStructuredStudentSession(session, {
         getAccessById: (accessId) => accesses.getById(accessId),
@@ -70,18 +75,21 @@ export async function jsonWithSession(
   const headers = new Headers(init.headers);
   headers.append("Set-Cookie", buildSessionCookie(token, remember));
   headers.set("Content-Type", "application/json");
+  applySecurityHeaders(headers);
   return new Response(JSON.stringify(body), { ...init, headers });
 }
 
 export function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
+  applySecurityHeaders(headers);
   return new Response(JSON.stringify(body), { ...init, headers });
 }
 
 export function logoutResponse(): Response {
   const headers = new Headers({ "Content-Type": "application/json" });
   headers.append("Set-Cookie", clearSessionCookie());
+  applySecurityHeaders(headers);
   return new Response(JSON.stringify({ ok: true }), { headers });
 }
 
@@ -527,11 +535,15 @@ export async function requireClassroomReadAccess(request: Request, classroomId: 
       if (!allowed) {
         return { error: unauthorizedResponse("Accès à cette classe non autorisé.") };
       }
+      const mfa = await rejectIncompleteAdminMfa(session, store);
+      if (mfa) return mfa;
       return { session, store };
     }
     if (!(await canReadClassroomAgenda(session, classroomId, store))) {
       return { error: unauthorizedResponse("Accès à cette classe non autorisé.") };
     }
+    const mfa = await rejectIncompleteAdminMfa(session, store);
+    if (mfa) return mfa;
     return { session, store };
   }
   return { error: unauthorizedResponse("Accès à cette classe non autorisé.") };
@@ -556,6 +568,33 @@ async function requireTeacherIdentity(request: Request) {
   return { session, store: await getStore() };
 }
 
+async function rejectIncompleteAdminMfa(
+  session: AppSession,
+  store: Awaited<ReturnType<typeof getStore>>,
+) {
+  if (session.kind !== "teacher") return null;
+  const isAdmin = await store.teacherIsAdmin(session.teacherId);
+  if (!isAdmin) return null;
+  const record = await (await getAdminMfaStore()).get(session.teacherId);
+  const gate = evaluateAdminMfaAccess({
+    isAdmin: true,
+    mfaPending: Boolean(session.mfaPending),
+    status: record?.status,
+  });
+  if (gate.ok) return null;
+  return {
+    error: jsonResponse(
+      {
+        ok: false,
+        reason: gate.reason,
+        ...(gate.mfaPending ? { mfaPending: true } : {}),
+        ...(gate.mfaSetupRequired ? { mfaSetupRequired: true } : {}),
+      },
+      { status: gate.status },
+    ),
+  };
+}
+
 export async function requireTeacherSession(request: Request) {
   const auth = await requireTeacherIdentity(request);
   if ("error" in auth && auth.error) return auth;
@@ -570,6 +609,9 @@ export async function requireTeacherSession(request: Request) {
       ),
     };
   }
+
+  const mfa = await rejectIncompleteAdminMfa(auth.session!, auth.store!);
+  if (mfa) return mfa;
   return auth;
 }
 

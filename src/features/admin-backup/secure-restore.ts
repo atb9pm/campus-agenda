@@ -22,8 +22,13 @@ export function isRestoreConfirmToken(value: string): boolean {
   return value === RESTORE_CONFIRM_TOKEN;
 }
 
-export function restoreRequestBody(snapshot: Record<string, unknown>): { snapshot: Record<string, unknown> } {
-  return { snapshot };
+export const RESTORE_CONFIRM_REQUIRED_REASON = "Saisissez RESTAURER pour confirmer.";
+
+export function restoreRequestBody(snapshot: Record<string, unknown>): {
+  snapshot: Record<string, unknown>;
+  confirmation: typeof RESTORE_CONFIRM_TOKEN;
+} {
+  return { snapshot, confirmation: RESTORE_CONFIRM_TOKEN };
 }
 
 export async function createSafetyBackupDownload(options: {
@@ -55,7 +60,10 @@ export async function runSecureRestore(options: {
   snapshot: Record<string, unknown>;
   fetchBackup: () => Promise<{ httpOk: boolean; payload: unknown }>;
   saveSafetyBackup: (filename: string, jsonText: string) => void;
-  postRestore: (body: { snapshot: Record<string, unknown> }) => Promise<{ httpOk: boolean; payload: unknown }>;
+  postRestore: (body: {
+    snapshot: Record<string, unknown>;
+    confirmation: typeof RESTORE_CONFIRM_TOKEN;
+  }) => Promise<{ httpOk: boolean; payload: unknown }>;
   now?: Date;
 }): Promise<SecureRestoreResult> {
   const safety = await createSafetyBackupDownload({

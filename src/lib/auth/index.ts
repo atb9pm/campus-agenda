@@ -66,3 +66,7 @@ export {
   unauthorizedResponse,
 } from "./permissions.ts";
 export { revalidateLiveSession, type LiveSessionLookup } from "./session-live.ts";
+export {
+  isSessionOlderThanCredential,
+  parseCredentialTimestamp,
+} from "./session-freshness.ts";
