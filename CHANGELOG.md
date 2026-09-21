@@ -2,6 +2,18 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.61.8] — IBM Plex Sans sur toute l’interface
+
+### Changé
+
+- **Police unique** : **IBM Plex Sans** pour menus, boutons, formulaires, administration, connexion et vues élève — plus seulement les devoirs et notes.
+- **Menu de gauche** : libellés **14 px** (Espace élève / Déconnexion 13 px) — 11 px était trop petit avec Plex.
+- Le carnet garde **18 px / interligne 1,7** (titres 22 px ; aperçu semaine 16 px).
+
+### Conservé
+
+Aucune migration SQL. Si Google Fonts est bloqué, repli Inter / system-ui.
+
 ## [2.61.7] — Carnet : IBM Plex Sans 18 px
 
 ### Changé

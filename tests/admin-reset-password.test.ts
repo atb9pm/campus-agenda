@@ -51,7 +51,7 @@ async function enrollAdmin() {
 }
 
 test("version 2.54.1 — reset mot de passe admin serveur", () => {
-  assert.equal(APP_VERSION, "2.61.7");
+  assert.equal(APP_VERSION, "2.61.8");
   assert.equal(isResetPasswordConfirmToken("reset-password"), false);
   assert.equal(isResetPasswordConfirmToken("RESET-PASSWORD "), true);
   assert.equal(isResetPasswordConfirmToken(RESET_PASSWORD_CONFIRM_TOKEN), true);
