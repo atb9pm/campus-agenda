@@ -17,6 +17,8 @@ test("version 2.61.8 — IBM Plex Sans sur toute l’interface, carnet 18 px, pa
   assert.match(css, /--carnet-title-size: 22px/);
   assert.match(css, /html[\s\S]{0,80}font-family: var\(--font-sans\)/);
   assert.match(css, /body[\s\S]{0,80}font-family: var\(--font-sans\)/);
+  assert.match(css, /\.technical-sidebar nav button[\s\S]{0,220}font-size: 14px/);
+  assert.match(css, /\.signout[\s\S]{0,180}font-size: 13px/);
   assert.match(css, /\.rich-doc-view[\s\S]{0,180}font-family: var\(--carnet-font\)/);
   assert.match(css, /\.rich-doc-line-input[\s\S]{0,280}font-size: var\(--carnet-size\)/);
   assert.match(css, /\.student-branch-item \.rich-doc-view[\s\S]{0,160}font-size: var\(--carnet-size\)/);
