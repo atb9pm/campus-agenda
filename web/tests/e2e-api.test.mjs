@@ -265,6 +265,7 @@ test("phase 1.0 — E2E rate limit sur connexion enseignant", async () => {
         headers: {
           "Content-Type": "application/json",
           "cf-connecting-ip": clientIp,
+          "cf-ray": `e2e-rate-${clientIp}`,
         },
         body: JSON.stringify({ teacherId: "teacher-demo-current", password: "wrong-password" }),
       });
@@ -276,6 +277,7 @@ test("phase 1.0 — E2E rate limit sur connexion enseignant", async () => {
       headers: {
         "Content-Type": "application/json",
         "cf-connecting-ip": clientIp,
+        "cf-ray": `e2e-rate-${clientIp}`,
       },
       body: JSON.stringify({ teacherId: "teacher-demo-current", password: "wrong-password" }),
     });
@@ -294,7 +296,7 @@ test("phase 1.0 — E2E rate limit sur connexion enseignant", async () => {
 
 test("comptes enseignant — E2E création, mot de passe provisoire, première connexion", async () => {
   const clientIp = "198.51.100.42";
-  const jsonHeaders = { "Content-Type": "application/json", "cf-connecting-ip": clientIp };
+  const jsonHeaders = { "Content-Type": "application/json", "cf-connecting-ip": clientIp, "cf-ray": "e2e-accounts" };
 
   const adminLogin = await request("/api/auth/teacher", {
     method: "POST",
@@ -347,14 +349,14 @@ test("comptes enseignant — E2E création, mot de passe provisoire, première c
 
   const weakChange = await request("/api/auth/teacher/password", {
     method: "POST",
-    headers: { "Content-Type": "application/json", cookie: newCookie, "cf-connecting-ip": clientIp },
+    headers: { "Content-Type": "application/json", cookie: newCookie, "cf-connecting-ip": clientIp, "cf-ray": "e2e-accounts" },
     body: JSON.stringify({ currentPassword: created.temporaryPassword, nextPassword: "court" }),
   });
   assert.equal(weakChange.status, 400);
 
   const change = await request("/api/auth/teacher/password", {
     method: "POST",
-    headers: { "Content-Type": "application/json", cookie: newCookie, "cf-connecting-ip": clientIp },
+    headers: { "Content-Type": "application/json", cookie: newCookie, "cf-connecting-ip": clientIp, "cf-ray": "e2e-accounts" },
     body: JSON.stringify({ currentPassword: created.temporaryPassword, nextPassword: "Atelier-2027" }),
   });
   assert.equal(change.status, 200);
@@ -1735,11 +1737,11 @@ test("audit — professeur B ne peut pas modifier ni supprimer l'agenda de A", a
     body: JSON.stringify({
       classroomId: "classe-demo-tma-2a",
       subjectId: "subject-demo-moteur-2a",
-      day: 2,
-      hour: 9,
+      day: 3,
+      hour: 10,
       weekOffset: 0,
       schoolWeekNumber: 12,
-      type: "INFORMATION",
+      type: "HOMEWORK",
       title: "Note de A",
       detail: "Privée",
     }),
