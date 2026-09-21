@@ -11,8 +11,8 @@ import {
 import { APP_VERSION } from "../src/lib/app-version.ts";
 import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 
-test("version 2.61.7 — halo et badge branche Ma semaine, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.61.7");
+test("version 2.61.8 — halo et badge branche Ma semaine, pas de migration", async () => {
+  assert.equal(APP_VERSION, "2.61.8");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
   const [configPanel, maSemaine, css, professionsPanel] = await Promise.all([
     readFile(new URL("../web/app/components/configuration-panel.tsx", import.meta.url), "utf8"),
