@@ -2,6 +2,17 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.61.7] — Carnet : IBM Plex Sans 18 px
+
+### Changé
+
+- **Devoirs publiés et notes professeur** : police **IBM Plex Sans**, **18 px**, interligne **1,7** (titres 22 px). Menus et barre d’outils restent en Inter.
+- Aperçu compact de la semaine : même police, 16 px, pour garder le tableau lisible.
+
+### Conservé
+
+Contenu et structure du carnet inchangés. Aucune migration SQL.
+
 ## [2.61.6] — Logo Campus Agenda dans l’interface
 
 ### Changé
