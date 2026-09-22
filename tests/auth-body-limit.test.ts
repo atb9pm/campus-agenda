@@ -40,3 +40,12 @@ test("corps d’auth — flux plus grand que 8 KiB refuse", async () => {
   assert.equal(parsed.ok, false);
   if (!parsed.ok) assert.equal(parsed.reason, "too-large");
 });
+
+test("RSC — 19.2.0–19.2.7 refusés, 19.2.8 accepté", async () => {
+  const { isVulnerableReactServerDom } = await import("../scripts/check-runtime-security-deps.mjs");
+  assert.equal(isVulnerableReactServerDom("19.2.0"), true);
+  assert.equal(isVulnerableReactServerDom("19.2.6"), true);
+  assert.equal(isVulnerableReactServerDom("19.2.7"), true);
+  assert.equal(isVulnerableReactServerDom("19.2.8"), false);
+  assert.equal(isVulnerableReactServerDom("19.2.9"), false);
+});

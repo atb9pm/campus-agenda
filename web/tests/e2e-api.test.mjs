@@ -414,6 +414,43 @@ test("audit — corps d’auth 8 KiB et rate limit IP avant parsing", async () =
   }
 });
 
+test("audit — MFA admin : bodies > 8 KiB → 413, JSON normal inchangé", async () => {
+  const cookie = await loginAdmin();
+  const huge = JSON.stringify({ password: "x".repeat(9000), totp: "000000", code: "000000" });
+  const routes = [
+    "/api/admin/security/mfa/reconfigure",
+    "/api/admin/security/mfa/reconfigure/confirm",
+    "/api/admin/security/mfa/recovery",
+  ];
+  for (const path of routes) {
+    const oversized = await request(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie },
+      body: huge,
+    });
+    assert.equal(oversized.status, 413, path);
+    const oversizedBody = await oversized.json();
+    assert.equal(oversizedBody.reason, "Requête trop volumineuse.");
+
+    const invalid = await request(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie },
+      body: "{",
+    });
+    assert.equal(invalid.status, 400, `${path} json invalide`);
+  }
+
+  const recovery = await request("/api/admin/security/mfa/recovery", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie },
+    body: JSON.stringify({ password: "mauvais-mot-de-passe", totp: "000000" }),
+  });
+  assert.equal(recovery.status, 401);
+  const recoveryBody = await recovery.json();
+  assert.notEqual(recoveryBody.reason, "Requête trop volumineuse.");
+  assert.notEqual(recoveryBody.reason, "Requête invalide.");
+});
+
 test("audit — timetable/branches refuse une classe non affectée", async () => {
   const ownerCookie = await loginTeacher("teacher-demo-current");
   const listResponse = await request("/api/teacher/classrooms", { headers: { cookie: ownerCookie } });

@@ -64,6 +64,22 @@ test("version 2.61.8 — durcissement MFA, sessions, restore, en-têtes, pas de 
   const studentPost = studentLogin.slice(studentLogin.indexOf("export async function POST"));
   assert.ok(studentPost.indexOf('layer: "ip"') < studentPost.indexOf("readBoundedJson"));
 
+  for (const relative of [
+    "../web/app/api/admin/security/mfa/reconfigure/route.ts",
+    "../web/app/api/admin/security/mfa/reconfigure/confirm/route.ts",
+    "../web/app/api/admin/security/mfa/recovery/route.ts",
+  ]) {
+    const source = await readFile(new URL(relative, import.meta.url), "utf8");
+    assert.match(source, /readBoundedJson/, relative);
+    assert.doesNotMatch(source, /request\.json\(/, relative);
+    const post = source.slice(source.indexOf("export async function POST"));
+    assert.ok(post.indexOf("enforceAuthRateLimit") < post.indexOf("readBoundedJson"), relative);
+  }
+
+  const ci = await readFile(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+  assert.match(ci, /check-runtime-security-deps\.mjs/);
+  assert.match(ci, /npm audit --omit=dev --audit-level=high/);
+
   const rateLimit = await readFile(new URL("../src/lib/security/rate-limit.ts", import.meta.url), "utf8");
   assert.match(rateLimit, /buildAuthIpRateLimitKey/);
   assert.match(rateLimit, /buildAuthTargetRateLimitKey/);

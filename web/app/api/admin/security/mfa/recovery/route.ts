@@ -4,6 +4,7 @@ import { getAdminMfaStore } from "@campus/lib/persistence/store-factory.ts";
 import { jsonResponse, requireAdminSession } from "../../../../../../lib/server/api.ts";
 import { getTeacherAccountsStore } from "../../../../../../lib/server/api.ts";
 import { enforceAuthRateLimit } from "../../../../../../lib/server/rate-limit.ts";
+import { readBoundedJson } from "../../../../../../lib/server/read-bounded-json.ts";
 
 export async function POST(request: Request) {
   const auth = await requireAdminSession(request);
@@ -12,7 +13,14 @@ export async function POST(request: Request) {
   const limited = await enforceAuthRateLimit(request, "teacher-mfa", auth.session!.teacherId);
   if (limited) return limited;
 
-  const body = await request.json() as { password?: string; totp?: string };
+  const parsed = await readBoundedJson<{ password?: string; totp?: string }>(request);
+  if (!parsed.ok) {
+    if (parsed.reason === "too-large") {
+      return jsonResponse({ ok: false, reason: "Requête trop volumineuse." }, { status: 413 });
+    }
+    return jsonResponse({ ok: false, reason: "Requête invalide." }, { status: 400 });
+  }
+  const body = parsed.value;
   const result = await regenerateAdminRecoveryCodesWithPassword(
     await getAdminMfaStore(),
     await getTeacherAccountsStore(),

@@ -40,6 +40,10 @@ jobs:
         working-directory: web
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Versions RSC runtime (react-server-dom-webpack)
+        working-directory: web
+        run: node ../scripts/check-runtime-security-deps.mjs
+
       - name: Typecheck
         working-directory: web
         run: npm run typecheck
