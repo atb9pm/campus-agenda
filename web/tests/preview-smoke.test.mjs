@@ -8,6 +8,9 @@ process.env.CAMPUS_STORE ??= "memory";
 process.env.AUTH_SECRET ??= "dev-secret";
 // L'aperçu utilise les comptes de démonstration : empreinte héritée autorisée.
 process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
+if (process.env.NODE_ENV === "production") {
+  process.env.NODE_ENV = "test";
+}
 
 const webRoot = fileURLToPath(new URL("..", import.meta.url));
 
