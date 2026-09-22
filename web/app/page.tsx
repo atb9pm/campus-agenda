@@ -745,14 +745,39 @@ export default function Home() {
     };
   }, [notebookClassroomId, teacherAuthenticated]);
 
+  const [studentToday, setStudentToday] = useState(() => new Date());
+
+  useEffect(() => {
+    function refreshIfNeeded() {
+      const now = new Date();
+      setStudentToday((current) => (studentCalendarDateNeedsRefresh(current, now) ? now : current));
+    }
+
+    function scheduleMidnight() {
+      return window.setTimeout(() => {
+        refreshIfNeeded();
+        timeoutId = scheduleMidnight();
+      }, msUntilNextLocalMidnight(new Date()));
+    }
+
+    window.addEventListener("focus", refreshIfNeeded);
+    document.addEventListener("visibilitychange", refreshIfNeeded);
+    let timeoutId = scheduleMidnight();
+    return () => {
+      window.removeEventListener("focus", refreshIfNeeded);
+      document.removeEventListener("visibilitychange", refreshIfNeeded);
+      window.clearTimeout(timeoutId);
+    };
+  }, []);
+
   const studentAutoCourseDay = useMemo(() => {
     if (!schoolWeeksMemo.length) return null;
     return (
       (attendanceDays.length
-        ? resolveDisplayCourseDayFromAttendance(new Date(), schoolWeeksMemo, attendanceDays)
-        : null) ?? resolveDisplayCourseDay(new Date(), schoolWeeksMemo)
+        ? resolveDisplayCourseDayFromAttendance(studentToday, schoolWeeksMemo, attendanceDays)
+        : null) ?? resolveDisplayCourseDay(studentToday, schoolWeeksMemo)
     );
-  }, [attendanceDays, schoolWeeksMemo]);
+  }, [attendanceDays, schoolWeeksMemo, studentToday]);
 
   const studentCourseDayCatalog = useMemo(() => {
     const unique = new Map<string, CourseDaySlot>();
@@ -823,31 +848,6 @@ export default function Home() {
       ? catalogFromRuntime(runtimeClassrooms)
       : DEMO_CATALOG;
   }, [studentSession, studentClassroomSubjects, studentClassroomName, runtimeClassrooms]);
-
-  const [studentToday, setStudentToday] = useState(() => new Date());
-
-  useEffect(() => {
-    function refreshIfNeeded() {
-      const now = new Date();
-      setStudentToday((current) => (studentCalendarDateNeedsRefresh(current, now) ? now : current));
-    }
-
-    function scheduleMidnight() {
-      return window.setTimeout(() => {
-        refreshIfNeeded();
-        timeoutId = scheduleMidnight();
-      }, msUntilNextLocalMidnight(new Date()));
-    }
-
-    window.addEventListener("focus", refreshIfNeeded);
-    document.addEventListener("visibilitychange", refreshIfNeeded);
-    let timeoutId = scheduleMidnight();
-    return () => {
-      window.removeEventListener("focus", refreshIfNeeded);
-      document.removeEventListener("visibilitychange", refreshIfNeeded);
-      window.clearTimeout(timeoutId);
-    };
-  }, []);
 
   const studentFutureTests = useMemo(() => {
     if (!studentSession || !schoolWeeksMemo.length) return [];

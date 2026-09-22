@@ -355,6 +355,15 @@ test("devoirs — HOMEWORK avant INFORMATION, ordre interne conservé", () => {
   assert.equal(compareStudentPublications(HOMEWORK_MOTEUR, HOMEWORK_CLIM), 0);
 });
 
+test("journée automatique Cours — suit studentToday, pas un new Date figé", async () => {
+  const page = await readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /resolveDisplayCourseDayFromAttendance\(studentToday,/);
+  assert.match(page, /resolveDisplayCourseDay\(studentToday, schoolWeeksMemo\)/);
+  assert.match(page, /\[attendanceDays, schoolWeeksMemo, studentToday\]/);
+  assert.doesNotMatch(page, /resolveDisplayCourseDayFromAttendance\(new Date\(\)/);
+  assert.doesNotMatch(page, /resolveDisplayCourseDay\(new Date\(\)/);
+});
+
 test("date élève — refresh au nouveau jour, pas de polling fréquent", () => {
   const morning = new Date(2026, 8, 28, 8, 15);
   const evening = new Date(2026, 8, 28, 22, 40);
