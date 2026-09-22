@@ -1875,7 +1875,7 @@ test("audit — IDOR API croisés contrôles, carnet et course-publication", asy
   assert.equal(createdControl.payload.item.authorTeacherId, "teacher-demo-current");
   const controlId = createdControl.payload.item.id;
 
-  const stolenControlPatch = await jsonRequest(`/api/teacher/controls/${controlId}`, {
+  const forgedControlPatch = await jsonRequest(`/api/teacher/controls/${controlId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", cookie: otherCookie },
     body: JSON.stringify({
@@ -1885,6 +1885,16 @@ test("audit — IDOR API croisés contrôles, carnet et course-publication", asy
       classroomId: createdControl.payload.item.classroomId,
       annualCourseId: createdControl.payload.item.annualCourseId,
     }),
+  });
+  assert.ok(
+    forgedControlPatch.response.status === 400 || forgedControlPatch.response.status === 403,
+    `PATCH forgé B ${forgedControlPatch.response.status}`,
+  );
+
+  const stolenControlPatch = await jsonRequest(`/api/teacher/controls/${controlId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", cookie: otherCookie },
+    body: JSON.stringify({ title: "Contrôle usurpé" }),
   });
   assert.equal(stolenControlPatch.response.status, 403);
 
