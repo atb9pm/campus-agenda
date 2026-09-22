@@ -640,8 +640,16 @@ export async function fetchAgendaItems(classroomId: string): Promise<PrototypeAg
   return view.items;
 }
 
+export type AgendaSubjectLabel = {
+  id: string;
+  name: string;
+  classroomId: string;
+  annualCourseId?: string | null;
+};
+
 export async function fetchAgendaView(classroomId: string): Promise<{
   items: PrototypeAgendaItem[];
+  subjects: AgendaSubjectLabel[];
   attendanceDays: Array<{ dayOfWeek: number; weekKind: "all" | "A" | "B"; role: string }>;
 }> {
   const response = await fetch(`/api/agenda?classroomId=${encodeURIComponent(classroomId)}`, {
@@ -650,13 +658,18 @@ export async function fetchAgendaView(classroomId: string): Promise<{
   const payload = await parseJson<{
     ok: boolean;
     items?: PrototypeAgendaItem[];
+    subjects?: AgendaSubjectLabel[];
     attendanceDays?: Array<{ dayOfWeek: number; weekKind: "all" | "A" | "B"; role: string }>;
     reason?: string;
   }>(response);
   if (!response.ok || !payload.ok || !payload.items) {
     throw new Error(payload.reason ?? "Impossible de charger l'agenda.");
   }
-  return { items: payload.items, attendanceDays: payload.attendanceDays ?? [] };
+  return {
+    items: payload.items,
+    subjects: payload.subjects ?? [],
+    attendanceDays: payload.attendanceDays ?? [],
+  };
 }
 
 export async function createNotebookPublicationApi(input: {

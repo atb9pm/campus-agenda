@@ -1,6 +1,7 @@
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
 import type { CourseDaySlot } from "../calendar/types.ts";
 import type { Subject } from "../../types/classroom.ts";
+import { UNDEFINED_BRANCH_LABEL, displayBranchLabel } from "../agenda-bridge/branch-label.ts";
 
 export interface SubjectAgendaGroup {
   subject: Subject;
@@ -28,7 +29,7 @@ export function groupItemsBySubject(
       subjectById.set(item.subjectId, {
         id: item.subjectId,
         classroomId: item.classroomId,
-        name: item.subjectId,
+        name: UNDEFINED_BRANCH_LABEL,
       });
     }
     const bucket = grouped.get(item.subjectId) ?? [];
@@ -43,7 +44,10 @@ export function groupItemsBySubject(
 
   return ordered
     .map((subject) => ({
-      subject,
+      subject: {
+        ...subject,
+        name: displayBranchLabel(subject.name),
+      },
       items: grouped.get(subject.id) ?? [],
     }))
     .filter((group) => group.items.length > 0);

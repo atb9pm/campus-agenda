@@ -1,4 +1,5 @@
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
+import { displayBranchLabel } from "../agenda-bridge/branch-label.ts";
 import type { ClassroomCatalog } from "../classes/queries.ts";
 import { getSubjectById, getTeacherById } from "../classes/queries.ts";
 import type { CourseDaySlot, SchoolWeek } from "../calendar/types.ts";
@@ -108,7 +109,7 @@ export function evaluateThirdTestAlert(
     existingTests: existing.map((item) => ({
       id: item.id,
       title: item.title,
-      subjectName: getSubjectById(catalog, item.subjectId)?.name ?? "Branche",
+      subjectName: displayBranchLabel(getSubjectById(catalog, item.subjectId)?.name),
       teacherName: getTeacherById(catalog, item.authorTeacherId)?.displayName ?? "Enseignant",
     })),
   };
@@ -272,7 +273,7 @@ export function listUpcomingTestsForClass(
     entries.push({
       item,
       slot,
-      subjectName: getSubjectById(catalog, item.subjectId)?.name ?? "Branche",
+      subjectName: displayBranchLabel(getSubjectById(catalog, item.subjectId)?.name),
       teacherName: getTeacherById(catalog, item.authorTeacherId)?.displayName ?? "Enseignant",
     });
   }
@@ -305,7 +306,7 @@ export function listUpcomingTestsForTeacher(
         entries.push({
           item,
           slot,
-          subjectName: getSubjectById(catalog, item.subjectId)?.name ?? "Branche",
+          subjectName: displayBranchLabel(getSubjectById(catalog, item.subjectId)?.name),
           teacherName: getTeacherById(catalog, item.authorTeacherId)?.displayName ?? "Enseignant",
         });
       }
@@ -337,7 +338,7 @@ export function listClassTestsForSchoolWeek(
       entries.push({
         item,
         slot,
-        subjectName: getSubjectById(catalog, item.subjectId)?.name ?? "Branche",
+        subjectName: displayBranchLabel(getSubjectById(catalog, item.subjectId)?.name),
         teacherName: getTeacherById(catalog, item.authorTeacherId)?.displayName ?? "Enseignant",
       });
     }
