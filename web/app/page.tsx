@@ -822,7 +822,7 @@ export default function Home() {
       : DEMO_CATALOG;
   }, [studentSession, studentClassroomSubjects, studentClassroomName, runtimeClassrooms]);
 
-  const studentToday = useMemo(() => new Date(), [items, studentSession, schoolWeeksMemo]);
+  const studentToday = useMemo(() => new Date(), []);
 
   const studentFutureTests = useMemo(() => {
     if (!studentSession || !schoolWeeksMemo.length) return [];
