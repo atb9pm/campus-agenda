@@ -76,10 +76,30 @@ test("mots de passe — empreinte démo refusée sans autorisation explicite", a
     process.env.CAMPUS_ALLOW_DEMO_PASSWORD = "0";
     assert.equal(demoPasswordAllowed(), false);
     assert.equal(await verifyPassword(DEMO_TEACHER_PASSWORD, legacy), false);
+
+    process.env.CAMPUS_ALLOW_DEMO_PASSWORD = "1";
+    assert.equal(demoPasswordAllowed(), false);
+    assert.equal(await verifyPassword(DEMO_TEACHER_PASSWORD, legacy), false);
   } finally {
     delete process.env.NODE_ENV;
     if (previous === undefined) delete process.env.CAMPUS_ALLOW_DEMO_PASSWORD;
     else process.env.CAMPUS_ALLOW_DEMO_PASSWORD = previous;
+  }
+});
+
+test("mots de passe — NODE_ENV=production + CAMPUS_ALLOW_DEMO_PASSWORD=1 refuse le hash demo", async () => {
+  const previousFlag = process.env.CAMPUS_ALLOW_DEMO_PASSWORD;
+  const previousEnv = process.env.NODE_ENV;
+  try {
+    process.env.NODE_ENV = "production";
+    process.env.CAMPUS_ALLOW_DEMO_PASSWORD = "1";
+    assert.equal(demoPasswordAllowed(), false);
+    assert.equal(await verifyPassword(DEMO_TEACHER_PASSWORD, legacyDemoPasswordHash()), false);
+  } finally {
+    if (previousEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousEnv;
+    if (previousFlag === undefined) delete process.env.CAMPUS_ALLOW_DEMO_PASSWORD;
+    else process.env.CAMPUS_ALLOW_DEMO_PASSWORD = previousFlag;
   }
 });
 

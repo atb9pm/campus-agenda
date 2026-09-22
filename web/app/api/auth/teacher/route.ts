@@ -1,3 +1,4 @@
+import { authRateLimitTargetFromTeacherIdentifier } from "@campus/lib/security/rate-limit.ts";
 import {
   getTeacherAccountsStore,
   jsonResponse,
@@ -8,19 +9,31 @@ import { buildTeacherClientSession } from "../../../../lib/server/teacher-sessio
 import { enforceAuthRateLimit } from "../../../../lib/server/rate-limit.ts";
 
 export async function POST(request: Request) {
-  const limited = await enforceAuthRateLimit(request, "teacher");
-  if (limited) return limited;
-
-  const body = await request.json() as {
+  let body: {
     teacherId?: string;
     initials?: string;
     password?: string;
     remember?: boolean;
   };
+  try {
+    body = await request.json() as typeof body;
+  } catch {
+    const limited = await enforceAuthRateLimit(request, "teacher", "empty");
+    if (limited) return limited;
+    return jsonResponse({ ok: false, reason: "Initiales ou mot de passe incorrect." }, { status: 401 });
+  }
+
   const password = String(body.password ?? "").trim();
 
   // Connexion par initiales (ChF) ; l'identifiant interne reste accepté pour les appels existants.
   const identifier = String(body.initials ?? "").trim() || String(body.teacherId ?? "").trim();
+  const limited = await enforceAuthRateLimit(
+    request,
+    "teacher",
+    authRateLimitTargetFromTeacherIdentifier(identifier),
+  );
+  if (limited) return limited;
+
   const accounts = await getTeacherAccountsStore();
   const outcome = await accounts.authenticate(identifier, password);
   if (!outcome.ok || !outcome.teacherId) {

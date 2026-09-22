@@ -11,7 +11,11 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 - **Restauration** : `POST /api/admin/restore` exige le jeton `RESTAURER` côté serveur.
 - **En-têtes HTTP** : CSP avec **nonce** (`script-src 'self' 'nonce-…' 'strict-dynamic'`, plus de `unsafe-inline` / `unsafe-eval` sur les scripts), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` ; HSTS en production. Cookie de déconnexion aussi `Secure` en prod.
 - **CSRF** : écritures authentifiées et lectures admin sensibles (backup) refusent une `Origin` externe ou `Sec-Fetch-Site: cross-site`.
-- **Rate limit** : `cf-connecting-ip` n’est crédible que derrière Cloudflare ; `X-Forwarded-For` utilise le dernier saut (anti-spoof).
+- **Rate limit** : `cf-connecting-ip` n’est crédible que derrière Cloudflare ; `X-Forwarded-For` utilise le dernier saut (anti-spoof). Seaux **indépendants** IP et cible (identifiant enseignant, préfixe de classe, compte MFA / mot de passe) — pas de concaténation `IP:compte`. Compteur mémoire **par processus** Infomaniak.
+- **AUTH_SECRET** : en production, secret ≥ 32 octets obligatoire (48/64 caractères aléatoires recommandés). Jamais logué.
+- **Démo** : hash `demo:` impossible en production, même avec `CAMPUS_ALLOW_DEMO_PASSWORD=1`.
+- **Sessions** : une chaîne d’horodatage vide ou blanche est **invalide** (fail closed). `null` / `undefined` restent une absence légitime.
+- **CSRF** : `DELETE /api/auth/session` refuse une `Origin` externe.
 
 ### Conservé
 

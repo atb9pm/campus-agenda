@@ -6,7 +6,17 @@ process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
 
 import { canReadClassroomAgenda } from "../src/lib/auth/permissions.ts";
 import { buildSessionCookie, createSessionToken, parseSessionToken, readSessionTokenFromRequest } from "../src/lib/auth/session.ts";
-import { DEMO_TEACHER_PASSWORD, isDemoTeacherPassword } from "../src/lib/auth/config.ts";
+import {
+  AUTH_SECRET_MIN_BYTES,
+  AUTH_SECRET_MISSING_PRODUCTION,
+  AUTH_SECRET_WEAK_PRODUCTION,
+  DEV_FALLBACK_AUTH_SECRET,
+  assertProductionAuthSecret,
+  authSecretByteLength,
+  DEMO_TEACHER_PASSWORD,
+  getAuthSecret,
+  isDemoTeacherPassword,
+} from "../src/lib/auth/config.ts";
 import { getMemoryAgendaStore, resetMemoryAgendaStore } from "../src/lib/persistence/memory-store.ts";
 import { DEMO_CURRENT_TEACHER_ID } from "../src/features/classes/index.ts";
 
@@ -20,6 +30,58 @@ test("phase 0.7 — session signée avec AUTH_SECRET de développement", async (
   const session = await parseSessionToken(token);
   assert.ok(session);
   assert.equal(session?.kind, "teacher");
+});
+
+test("AUTH_SECRET — production refuse l’absence, le secret trop court, accepte un secret fort", () => {
+  const previousSecret = process.env.AUTH_SECRET;
+  const previousEnv = process.env.NODE_ENV;
+  const strong = "a".repeat(AUTH_SECRET_MIN_BYTES);
+  try {
+    process.env.NODE_ENV = "production";
+    delete process.env.AUTH_SECRET;
+    assert.throws(() => getAuthSecret(), (error: Error) => {
+      assert.equal(error.message, AUTH_SECRET_MISSING_PRODUCTION);
+      assert.equal(error.message.includes("undefined"), false);
+      return true;
+    });
+    assert.throws(() => assertProductionAuthSecret(undefined), /requis en production/);
+
+    process.env.AUTH_SECRET = "1234";
+    assert.equal(authSecretByteLength("1234"), 4);
+    assert.throws(() => getAuthSecret(), (error: Error) => {
+      assert.equal(error.message, AUTH_SECRET_WEAK_PRODUCTION);
+      assert.equal(error.message.includes("1234"), false);
+      return true;
+    });
+
+    process.env.AUTH_SECRET = strong;
+    assert.equal(getAuthSecret(), strong);
+    assert.equal(assertProductionAuthSecret(strong), strong);
+  } finally {
+    if (previousSecret === undefined) delete process.env.AUTH_SECRET;
+    else process.env.AUTH_SECRET = previousSecret;
+    if (previousEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousEnv;
+  }
+});
+
+test("AUTH_SECRET — hors production conserve une valeur fictive si absent", () => {
+  const previousSecret = process.env.AUTH_SECRET;
+  const previousEnv = process.env.NODE_ENV;
+  try {
+    delete process.env.AUTH_SECRET;
+    process.env.NODE_ENV = "development";
+    assert.equal(getAuthSecret(), DEV_FALLBACK_AUTH_SECRET);
+    process.env.NODE_ENV = "test";
+    assert.equal(getAuthSecret(), DEV_FALLBACK_AUTH_SECRET);
+    process.env.AUTH_SECRET = "local-short";
+    assert.equal(getAuthSecret(), "local-short");
+  } finally {
+    if (previousSecret === undefined) delete process.env.AUTH_SECRET;
+    else process.env.AUTH_SECRET = previousSecret;
+    if (previousEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousEnv;
+  }
 });
 
 test("phase 0.7 — cookie de session extrait de la requête", async () => {

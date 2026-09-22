@@ -47,13 +47,24 @@ async function requireBuild() {
   process.exit(1);
 }
 
+const AUTH_SECRET_MIN_BYTES = 32;
+
 async function requireAuthSecret() {
-  if (process.env.AUTH_SECRET?.trim()) return;
-  console.error("\n❌ AUTH_SECRET manquant.");
-  console.error("   Infomaniak n'a pas d'UI variables pour Node.js.");
-  console.error("   Mettez-le dans la commande de lancement, ex. :");
-  console.error("   AUTH_SECRET=votre-secret-long CAMPUS_STORE=sqlite npm run start:infomaniak\n");
-  process.exit(1);
+  const secret = process.env.AUTH_SECRET?.trim() ?? "";
+  if (!secret) {
+    console.error("\n❌ AUTH_SECRET manquant.");
+    console.error("   Infomaniak n'a pas d'UI variables pour Node.js.");
+    console.error("   Mettez-le dans la commande de lancement, ex. :");
+    console.error("   AUTH_SECRET=$(openssl rand -base64 48) CAMPUS_STORE=sqlite npm run start:infomaniak\n");
+    process.exit(1);
+  }
+  if (Buffer.byteLength(secret, "utf8") < AUTH_SECRET_MIN_BYTES) {
+    console.error("\n❌ AUTH_SECRET trop faible.");
+    console.error(`   Minimum ${AUTH_SECRET_MIN_BYTES} octets de secret effectif (48 ou 64 caractères aléatoires recommandés).`);
+    console.error("   Exemple : openssl rand -base64 48");
+    console.error("   La valeur fournie n'est jamais affichée.\n");
+    process.exit(1);
+  }
 }
 
 await requireAuthSecret();

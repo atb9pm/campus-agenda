@@ -103,4 +103,14 @@ test("IDOR — les routes mutantes recalculent teacherId depuis la session", asy
 
   const courses = await readApi("../web/app/api/teacher/courses/route.ts");
   assert.match(courses, /teacherId fourni par le client est ignoré/);
+
+  const notebook = await readApi("../web/app/api/teacher/notebook-publications/route.ts");
+  assert.match(notebook, /teacherId = auth\.session!\.teacherId/);
+  assert.doesNotMatch(notebook, /body\.teacherId|parsed\.teacherId|body\.authorTeacherId/);
+
+  const publications = await readApi("../web/app/api/teacher/course-publications/route.ts");
+  assert.match(publications, /teacherId: auth\.session!\.teacherId/);
+
+  const controls = await readApi("../web/app/api/teacher/controls/[agendaItemId]/route.ts");
+  assert.match(controls, /teacherId: auth\.session!\.teacherId/);
 });

@@ -24,6 +24,13 @@ import {
 import { RESTORE_CONFIRM_REQUIRED_REASON, restoreRequestBody } from "../src/features/admin-backup/index.ts";
 import { getMemoryTeacherAccountStore, resetMemoryTeacherAccountStore } from "../src/lib/persistence/memory-teacher-account-store.ts";
 
+test("déconnexion — DELETE /api/auth/session applique Origin / Sec-Fetch-Site", async () => {
+  const sessionRoute = await readFile(new URL("../web/app/api/auth/session/route.ts", import.meta.url), "utf8");
+  assert.match(sessionRoute, /isTrustedWriteOrigin/);
+  assert.match(sessionRoute, /UNTRUSTED_ORIGIN_REASON/);
+  assert.match(sessionRoute, /export async function DELETE\(request: Request\)/);
+});
+
 test("version 2.61.8 — durcissement MFA, sessions, restore, en-têtes, pas de migration", async () => {
   assert.equal(APP_VERSION, "2.61.8");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
@@ -40,6 +47,19 @@ test("version 2.61.8 — durcissement MFA, sessions, restore, en-têtes, pas de 
   const password = await readFile(new URL("../web/app/api/auth/teacher/password/route.ts", import.meta.url), "utf8");
   assert.match(password, /jsonWithSession/);
   assert.match(password, /issuedAt: Date.now\(\)/);
+  assert.match(password, /layer: "ip"/);
+  assert.match(password, /layer: "target"/);
+
+  const rateLimit = await readFile(new URL("../src/lib/security/rate-limit.ts", import.meta.url), "utf8");
+  assert.match(rateLimit, /buildAuthIpRateLimitKey/);
+  assert.match(rateLimit, /buildAuthTargetRateLimitKey/);
+  assert.match(rateLimit, /authRateLimitTargetFromStudentCode/);
+  assert.doesNotMatch(rateLimit, /IP:compte/);
+
+  const operations = await readFile(new URL("../docs/OPERATIONS.md", import.meta.url), "utf8");
+  assert.match(operations, /mémoire par processus/);
+  assert.match(operations, /préfixe de classe/);
+  assert.match(operations, /32 octets/);
 
   const worker = await readFile(new URL("../web/worker/index.ts", import.meta.url), "utf8");
   assert.match(worker, /withSecurityHeaders/);
@@ -103,6 +123,17 @@ test("CSRF — Origin / Host et Sec-Fetch-Site", () => {
     headers: { host: "campusagenda.ch", "sec-fetch-site": "same-origin" },
   });
   assert.equal(isTrustedSensitiveRead(sameSiteGet), true);
+
+  const logoutCross = new Request("https://campusagenda.ch/api/auth/session", {
+    method: "DELETE",
+    headers: { origin: "https://evil.example", host: "campusagenda.ch" },
+  });
+  assert.equal(isTrustedWriteOrigin(logoutCross), false);
+  const logoutSame = new Request("https://campusagenda.ch/api/auth/session", {
+    method: "DELETE",
+    headers: { origin: "https://campusagenda.ch", host: "campusagenda.ch" },
+  });
+  assert.equal(isTrustedWriteOrigin(logoutSame), true);
   assert.equal(UNTRUSTED_ORIGIN_REASON.includes("Origine"), true);
 });
 
@@ -138,8 +169,8 @@ test("horodatage d’identifiants — fail closed sur date présente mais invali
   const issuedAt = Date.parse("2026-09-01T10:00:00.000Z");
   assert.equal(classifyCredentialTimestamp(null).kind, "absent");
   assert.equal(classifyCredentialTimestamp(undefined).kind, "absent");
-  assert.equal(classifyCredentialTimestamp("").kind, "absent");
-  assert.equal(classifyCredentialTimestamp("   ").kind, "absent");
+  assert.equal(classifyCredentialTimestamp("").kind, "invalid");
+  assert.equal(classifyCredentialTimestamp("   ").kind, "invalid");
   assert.equal(classifyCredentialTimestamp("2026-09-21T12:00:00.000Z").kind, "valid");
   assert.equal(classifyCredentialTimestamp("2026-09-21 12:00:00").kind, "valid");
   assert.equal(classifyCredentialTimestamp("not-a-date").kind, "invalid");
@@ -154,6 +185,8 @@ test("horodatage d’identifiants — fail closed sur date présente mais invali
   assert.equal(isSessionOlderThanCredential(issuedAt, "not-a-date"), true);
   assert.equal(isSessionOlderThanCredential(issuedAt, "%%%corrompu%%%"), true);
   assert.equal(isSessionOlderThanCredential(issuedAt, "2026-99-99"), true);
+  assert.equal(isSessionOlderThanCredential(issuedAt, ""), true);
+  assert.equal(isSessionOlderThanCredential(issuedAt, "   "), true);
 });
 
 test("session enseignant refusée si passwordUpdatedAt est corrompu", async () => {
@@ -186,6 +219,22 @@ test("session enseignant refusée si passwordUpdatedAt est corrompu", async () =
     },
   });
   assert.equal(corrupted, null);
+
+  const emptyStamp = await revalidateLiveSession(session!, {
+    findAccount: async (id: string) => {
+      const account = await accounts.findAccount(id);
+      return account ? { ...account, passwordUpdatedAt: "" } : null;
+    },
+  });
+  assert.equal(emptyStamp, null);
+
+  const blankStamp = await revalidateLiveSession(session!, {
+    findAccount: async (id: string) => {
+      const account = await accounts.findAccount(id);
+      return account ? { ...account, passwordUpdatedAt: "   " } : null;
+    },
+  });
+  assert.equal(blankStamp, null);
 
   const badMfa = await revalidateLiveSession(session!, {
     findAccount: (id: string) => accounts.findAccount(id),

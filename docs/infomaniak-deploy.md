@@ -111,12 +111,12 @@ enseignants** (mot de passe provisoire affiché à l'écran, à transmettre de v
 
 | Variable | Rôle |
 |---|---|
-| `AUTH_SECRET` | Signature des sessions (obligatoire) |
+| `AUTH_SECRET` | Signature des sessions (obligatoire, ≥ 32 octets ; 48 ou 64 caractères aléatoires recommandés) |
 | `CAMPUS_STORE=sqlite` | Persistance sur disque |
 | `CAMPUS_ADMIN_INITIALS` | Compte administrateur visé par l'amorçage (`ChF` par défaut) |
 | `CAMPUS_ADMIN_DISPLAY_NAME` | Nom affiché du premier admin (base vide) |
 | `CAMPUS_ADMIN_PASSWORD` | Mot de passe d'amorçage ; **obligatoire** si la table `teachers` est vide |
-| `CAMPUS_ALLOW_DEMO_PASSWORD` | **À ne pas définir en production** : rouvrirait `campus-demo` |
+| `CAMPUS_ALLOW_DEMO_PASSWORD` | Inopérant en production : un hash `demo:` est toujours refusé |
 | `CAMPUS_MFA_ENCRYPTION_KEY` | Clé AES-GCM 32 octets (hex 64) pour le secret TOTP admin — **obligatoire** |
 
 ## Déploiement manuel (première fois)
@@ -192,7 +192,7 @@ administrateur.
 |---|---|---|
 | `EROFS … corepack … /usr/local/bin/pnpm` | `corepack enable` interdit | Build/lancement **sans** corepack, avec **npm** |
 | `pnpm: command not found` | pnpm non installé globalement | Utiliser `npm` |
-| `AUTH_SECRET requis` | Secret absent | Mettre `AUTH_SECRET=…` dans la commande de lancement |
+| `AUTH_SECRET requis` / trop faible | Secret absent ou < 32 octets | `AUTH_SECRET=$(openssl rand -base64 48)` dans la commande de lancement |
 | « Initiales ou mot de passe incorrect » avec `campus-demo` | Comportement voulu : le mot de passe démo est refusé en production | Utiliser le mot de passe d'amorçage (voir « Premier mot de passe administrateur ») |
 | Site en maintenance | Mode maintenance ON | **Gérer** → désactiver maintenance |
 | Build OK mais Run échoue | Ancienne commande avec corepack | Remplacer la commande de lancement |

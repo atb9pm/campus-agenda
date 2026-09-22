@@ -12,13 +12,25 @@ import {
   authenticateStudentAccessCode,
   STUDENT_LOGIN_INVALID_REASON,
 } from "@campus/features/student-access/index.ts";
+import { authRateLimitTargetFromStudentCode } from "@campus/lib/security/rate-limit.ts";
 import { enforceAuthRateLimit } from "../../../../lib/server/rate-limit.ts";
 
 export async function POST(request: Request) {
-  const limited = await enforceAuthRateLimit(request, "student");
-  if (limited) return limited;
+  let body: { code?: string; remember?: boolean };
+  try {
+    body = await request.json() as { code?: string; remember?: boolean };
+  } catch {
+    const limited = await enforceAuthRateLimit(request, "student", authRateLimitTargetFromStudentCode(""));
+    if (limited) return limited;
+    return jsonResponse({ ok: false, reason: STUDENT_LOGIN_INVALID_REASON }, { status: 401 });
+  }
 
-  const body = await request.json() as { code?: string; remember?: boolean };
+  const limited = await enforceAuthRateLimit(
+    request,
+    "student",
+    authRateLimitTargetFromStudentCode(String(body.code ?? "")),
+  );
+  if (limited) return limited;
   const [accesses, catalog, years, adapters] = await Promise.all([
     getStudentAccessStore(),
     getSchoolCatalogStore(),

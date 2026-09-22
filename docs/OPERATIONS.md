@@ -61,7 +61,7 @@ Journaux JSON sur la sortie standard, sans contenu scolaire :
 
 | Variable | Rôle |
 |---|---|
-| `AUTH_SECRET` | Signature des cookies (obligatoire en production) |
+| `AUTH_SECRET` | Signature HMAC des sessions et dérivation des codes élèves. **Production : obligatoire, ≥ 32 octets** (48 ou 64 caractères aléatoires recommandés, ex. `openssl rand -base64 48`). Un secret faible refuse le démarrage. Jamais logué. Hors production, valeur fictive interne si absent. |
 | `CAMPUS_STORE` | Backend de persistance (`sqlite` en production) |
 | `CAMPUS_SQLITE_PATH` | Fichier SQLite |
 | `CAMPUS_ADMIN_INITIALS` | Initiales de l’administrateur bootstrap (`ChF` par défaut) |
@@ -70,19 +70,35 @@ Journaux JSON sur la sortie standard, sans contenu scolaire :
 | `CAMPUS_DEMO_SEED` | Seed de démonstration hors production uniquement (`false` pour le désactiver). **Ignoré en production.** |
 | `APP_ENV` | Contexte d'exécution |
 | `CAMPUS_DISABLE_RATE_LIMIT` | Désactive le rate limit (tests uniquement) |
-| `CAMPUS_AUTH_RATE_LIMIT_TEACHER` | Limite personnalisée connexion enseignant (défaut : 10/min) |
-| `CAMPUS_AUTH_RATE_LIMIT_STUDENT` | Limite personnalisée connexion élève (défaut : 20/min) |
-| `CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA` | Limite personnalisée codes TOTP / récupération (défaut : 8/min) |
+| `CAMPUS_AUTH_RATE_LIMIT_TEACHER` | Limite IP connexion enseignant (défaut : 10/min) |
+| `CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET` | Limite par identifiant / initiales enseignant (défaut : 10/min) |
+| `CAMPUS_AUTH_RATE_LIMIT_STUDENT` | Limite IP connexion élève (défaut : 20/min) |
+| `CAMPUS_AUTH_RATE_LIMIT_STUDENT_TARGET` | Limite par préfixe de classe (défaut : 20/min) |
+| `CAMPUS_AUTH_RATE_LIMIT_TEACHER_PASSWORD` | Limite IP changement de mot de passe (défaut : 10/min) |
+| `CAMPUS_AUTH_RATE_LIMIT_TEACHER_PASSWORD_TARGET` | Limite par compte enseignant (défaut : 10/min) |
+| `CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA` | Limite IP codes TOTP / récupération (défaut : 8/min) |
+| `CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA_TARGET` | Limite MFA par compte administrateur (défaut : 8/min) |
 | `CAMPUS_MFA_ENCRYPTION_KEY` | Clé AES-256-GCM du secret TOTP administrateur (**obligatoire en production**) |
 
 ## Rate limiting
 
-Les tentatives de connexion (`POST /api/auth/teacher`, `POST /api/auth/student`) sont limitées par adresse IP.
+Deux seaux **indépendants** (pas une concaténation `IP:compte`) :
+
+| Route | Seau IP | Seau cible |
+|---|---|---|
+| `POST /api/auth/teacher` | adresse IP | identifiant / initiales normalisés |
+| `POST /api/auth/student` | adresse IP | préfixe de classe uniquement (jamais le secret du code). Format invalide → seau générique `unparsed` |
+| `POST /api/auth/teacher/password` | adresse IP | compte enseignant (session) |
+| MFA / récupération | adresse IP | compte administrateur |
+
+Changer d’IP ne réinitialise pas la limite d’un compte ou d’une classe. Plusieurs comptes derrière la même IP restent utilisables tant que chaque cible et l’IP restent sous leur plafond.
 
 | Environnement | Mécanisme | Limite |
 |---|---|---|
-| Production Infomaniak | Compteur mémoire par processus Node.js | 10 enseignant, 20 élève, 10 mot de passe, 8 MFA / min |
+| Production Infomaniak | Compteur **mémoire par processus Node.js** | 10 enseignant, 20 élève, 10 mot de passe, 8 MFA / min, **par seau** (IP et cible séparés) |
 | Tests / aperçu local | Idem, ou `CAMPUS_DISABLE_RATE_LIMIT=1` | — |
+
+**Limite Infomaniak** : sans Redis, le compteur mémoire est **local à chaque processus**. Un redémarrage remet les compteurs à zéro. Plusieurs processus Node ne partagent pas les seaux. `x-real-ip` / dernier saut `X-Forwarded-For` restent un indice IP ; Infomaniak n’est pas garanti d’écraser ces en-têtes — d’où le seau cible indépendant. `cf-connecting-ip` n’est crédible que si `cf-ray` est présent.
 
 Réponse en cas de dépassement :
 

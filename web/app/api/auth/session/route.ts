@@ -1,3 +1,4 @@
+import { UNTRUSTED_ORIGIN_REASON, isTrustedWriteOrigin } from "@campus/lib/security/csrf.ts";
 import {
   getRequestSession,
   jsonResponse,
@@ -33,6 +34,9 @@ export async function GET(request: Request) {
   });
 }
 
-export async function DELETE() {
+export async function DELETE(request: Request) {
+  if (!isTrustedWriteOrigin(request)) {
+    return jsonResponse({ ok: false, reason: UNTRUSTED_ORIGIN_REASON }, { status: 403 });
+  }
   return logoutResponse();
 }

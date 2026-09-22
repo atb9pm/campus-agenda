@@ -253,12 +253,17 @@ test("16-17 — reconfiguration : nouveau TOTP, ancien invalide", async () => {
 
 test("18 — rate limiting MFA", () => {
   resetInMemoryRateLimits();
-  const key = "auth:teacher-mfa:203.0.113.8:teacher-chf";
+  const ipKey = "auth:teacher-mfa:ip:203.0.113.8";
+  const accountKey = "auth:teacher-mfa:target:TEACHER-CHF";
   assert.equal(resolveAuthRateLimit("teacher-mfa"), 8);
   for (let index = 0; index < 8; index += 1) {
-    assert.equal(checkInMemoryRateLimit(key, 8), true);
+    assert.equal(checkInMemoryRateLimit(ipKey, 8), true);
+    assert.equal(checkInMemoryRateLimit(accountKey, 8), true);
   }
-  assert.equal(checkInMemoryRateLimit(key, 8), false);
+  assert.equal(checkInMemoryRateLimit(ipKey, 8), false);
+  assert.equal(checkInMemoryRateLimit(accountKey, 8), false);
+  assert.equal(checkInMemoryRateLimit("auth:teacher-mfa:ip:198.51.100.9", 8), true);
+  assert.equal(checkInMemoryRateLimit(accountKey, 8), false);
 });
 
 test("19-20 — secret et recovery jamais en clair", async () => {

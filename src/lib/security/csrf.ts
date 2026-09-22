@@ -2,8 +2,9 @@
  * CSRF : cookie `SameSite=Lax` + JSON same-origin.
  *
  * Lax bloque déjà un POST cross-site avec cookie. On ajoute Origin / Host et
- * Sec-Fetch-Site pour les écritures authentifiées et les lectures admin
- * sensibles (sauvegarde), sans jeton CSRF dédié.
+ * Sec-Fetch-Site pour les écritures authentifiées (y compris
+ * `DELETE /api/auth/session`) et les lectures admin sensibles (sauvegarde),
+ * sans jeton CSRF dédié.
  */
 export const UNTRUSTED_ORIGIN_REASON = "Origine de la requête refusée.";
 

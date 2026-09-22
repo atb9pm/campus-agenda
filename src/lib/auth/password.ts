@@ -36,13 +36,14 @@ export function isUsablePasswordHash(hash: string | null | undefined): boolean {
 }
 
 /**
- * Le mot de passe de démonstration reste utile pour les tests et l'aperçu local,
- * mais il est refusé par défaut : il faut l'autoriser explicitement avec
- * `CAMPUS_ALLOW_DEMO_PASSWORD=1`. Le serveur de développement (`NODE_ENV=development`)
- * l'accepte pour ne pas gêner le travail local ; une production ne l'accepte jamais
- * sans la variable.
+ * Le mot de passe de démonstration reste utile pour les tests et l'aperçu local.
+ * En production, un hash `demo:` est TOUJOURS refusé : `CAMPUS_ALLOW_DEMO_PASSWORD=1`
+ * ne peut pas réactiver ce mécanisme.
+ * Hors production : `CAMPUS_ALLOW_DEMO_PASSWORD=1` l’autorise ; `=0` le refuse ;
+ * `NODE_ENV=development` l’accepte si la variable est absente.
  */
 export function demoPasswordAllowed(): boolean {
+  if (process.env.NODE_ENV === "production") return false;
   const flag = process.env.CAMPUS_ALLOW_DEMO_PASSWORD;
   if (flag === "1") return true;
   if (flag === "0") return false;
@@ -101,6 +102,7 @@ export async function verifyPassword(password: string, storedHash: string | null
   if (!candidate) return false;
 
   if (isLegacyDemoHash(storedHash)) {
+    if (process.env.NODE_ENV === "production") return false;
     if (!demoPasswordAllowed()) return false;
     return constantTimeEquals(candidate, storedHash.slice(LEGACY_DEMO_PREFIX.length));
   }

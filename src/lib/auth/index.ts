@@ -1,4 +1,12 @@
-export { getAuthSecret } from "./config.ts";
+export {
+  AUTH_SECRET_MIN_BYTES,
+  AUTH_SECRET_MISSING_PRODUCTION,
+  AUTH_SECRET_WEAK_PRODUCTION,
+  DEV_FALLBACK_AUTH_SECRET,
+  assertProductionAuthSecret,
+  authSecretByteLength,
+  getAuthSecret,
+} from "./config.ts";
 export {
   MFA_KEY_ENV,
   MFA_REQUIRE_KEY_ENV,

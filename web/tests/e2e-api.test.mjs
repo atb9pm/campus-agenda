@@ -10,6 +10,11 @@ process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
 process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER ??= "50";
 process.env.CAMPUS_AUTH_RATE_LIMIT_STUDENT ??= "50";
 process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA ??= "80";
+process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET ??= "50";
+process.env.CAMPUS_AUTH_RATE_LIMIT_STUDENT_TARGET ??= "50";
+process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA_TARGET ??= "80";
+process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_PASSWORD ??= "50";
+process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_PASSWORD_TARGET ??= "50";
 process.env.CAMPUS_MFA_ENCRYPTION_KEY ??= "a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00";
 
 const env = {
@@ -1725,6 +1730,180 @@ test("audit — Origin externe refusée sur écriture authentifiée et backup cr
     },
   });
   assert.equal(crossBackup.status, 403);
+});
+
+test("audit — DELETE /api/auth/session : Origin externe 403, même origine 200", async () => {
+  const teacherCookie = await loginTeacher("teacher-demo-current");
+  const crossSite = await request("/api/auth/session", {
+    method: "DELETE",
+    headers: {
+      cookie: teacherCookie,
+      origin: "https://evil.example",
+      host: "localhost",
+    },
+  });
+  assert.equal(crossSite.status, 403);
+  const crossBody = await crossSite.json();
+  assert.match(crossBody.reason ?? "", /Origine/);
+
+  const stillIn = await request("/api/auth/session", { headers: { cookie: teacherCookie } });
+  const stillPayload = await stillIn.json();
+  assert.ok(stillPayload.session, "la session reste après un logout cross-site");
+
+  const sameOrigin = await request("/api/auth/session", {
+    method: "DELETE",
+    headers: {
+      cookie: teacherCookie,
+      origin: "http://localhost",
+      host: "localhost",
+    },
+  });
+  assert.equal(sameOrigin.status, 200);
+  const sameBody = await sameOrigin.json();
+  assert.equal(sameBody.ok, true);
+});
+
+test("audit — IDOR API croisés contrôles, carnet et course-publication", async () => {
+  const ownerCookie = await loginTeacher("teacher-demo-current");
+  const otherCookie = await loginTeacher("teacher-demo-martin");
+  const adminCookie = await loginAdmin();
+
+  const ownerCourses = await jsonRequest("/api/teacher/courses", { headers: { cookie: ownerCookie } });
+  assert.equal(ownerCourses.response.status, 200, ownerCourses.payload.reason);
+  const ownerCourse = (ownerCourses.payload.courses ?? [])[0];
+  assert.ok(ownerCourse?.annualCourseId, "cours légitime de A");
+
+  const notebook = await jsonRequest("/api/teacher/notebook-publications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: ownerCookie },
+    body: JSON.stringify({
+      annualCourseId: ownerCourse.annualCourseId,
+      schoolWeekNumber: 5,
+      day: 1,
+      type: "HOMEWORK",
+      title: "Carnet de A",
+      detail: "Privé A",
+      teacherId: "teacher-demo-martin",
+      authorTeacherId: "teacher-demo-martin",
+      classroomId: "classe-inconnue",
+    }),
+  });
+  assert.equal(notebook.response.status, 201, notebook.payload.reason);
+  assert.equal(notebook.payload.item.authorTeacherId, "teacher-demo-current");
+  assert.notEqual(notebook.payload.item.classroomId, "classe-inconnue");
+  const notebookId = notebook.payload.item.id;
+
+  const stolenNotebookPatch = await jsonRequest(`/api/agenda/${notebookId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", cookie: otherCookie },
+    body: JSON.stringify({
+      title: "Usurpé carnet",
+      teacherId: "teacher-demo-current",
+      authorTeacherId: "teacher-demo-current",
+    }),
+  });
+  assert.equal(stolenNotebookPatch.response.status, 403);
+
+  const stolenNotebookDelete = await jsonRequest(`/api/agenda/${notebookId}`, {
+    method: "DELETE",
+    headers: { cookie: otherCookie },
+  });
+  assert.equal(stolenNotebookDelete.response.status, 403);
+
+  const stolenNotebookCreate = await jsonRequest("/api/teacher/notebook-publications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: otherCookie },
+    body: JSON.stringify({
+      annualCourseId: ownerCourse.annualCourseId,
+      schoolWeekNumber: 5,
+      day: 1,
+      type: "HOMEWORK",
+      title: "Carnet volé",
+      teacherId: "teacher-demo-current",
+      authorTeacherId: "teacher-demo-current",
+      classroomId: notebook.payload.item.classroomId,
+    }),
+  });
+  assert.ok(
+    stolenNotebookCreate.response.status === 403 || stolenNotebookCreate.response.status === 404,
+    `carnet B sur cours de A ${stolenNotebookCreate.response.status}`,
+  );
+
+  const stolenCoursePublish = await jsonRequest("/api/teacher/course-publications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: otherCookie },
+    body: JSON.stringify({
+      annualCourseId: ownerCourse.annualCourseId,
+      courseSessionKey: "year-x|owned-by-a|2026-09-01",
+      referenceItemId: "ref-a",
+      teacherId: "teacher-demo-current",
+      authorTeacherId: "teacher-demo-current",
+      classroomId: notebook.payload.item.classroomId,
+    }),
+  });
+  assert.ok(
+    stolenCoursePublish.response.status === 403 || stolenCoursePublish.response.status === 404,
+    `course-publication B sur cours de A ${stolenCoursePublish.response.status}`,
+  );
+
+  const seeded = await seedInteractiveControlCourse(adminCookie, "teacher-demo-current", "IDOR");
+  let controlOption;
+  for (let week = 1; week <= 8 && !controlOption; week += 1) {
+    const next = await jsonRequest(
+      `/api/teacher/controls/planning?week=${week}&schoolYearId=${encodeURIComponent(seeded.schoolYearId)}&view=week`,
+      { headers: { cookie: ownerCookie } },
+    );
+    if (next.response.status !== 200) continue;
+    for (const day of next.payload.week?.days ?? []) {
+      controlOption = (day.placementOptions ?? []).find((entry) => entry.annualCourseId === seeded.annualCourseId);
+      if (controlOption) break;
+    }
+  }
+  assert.ok(controlOption, "CourseSession de A requise");
+
+  const createdControl = await jsonRequest("/api/teacher/controls", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: ownerCookie },
+    body: JSON.stringify({
+      annualCourseId: controlOption.annualCourseId,
+      courseSessionKey: controlOption.courseSessionKey,
+      title: "Contrôle IDOR A",
+      teacherId: "teacher-demo-martin",
+      authorTeacherId: "teacher-demo-martin",
+      classroomId: "classe-inconnue",
+    }),
+  });
+  assert.equal(createdControl.response.status, 201, createdControl.payload.reason);
+  assert.equal(createdControl.payload.item.authorTeacherId, "teacher-demo-current");
+  const controlId = createdControl.payload.item.id;
+
+  const stolenControlPatch = await jsonRequest(`/api/teacher/controls/${controlId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", cookie: otherCookie },
+    body: JSON.stringify({
+      title: "Contrôle usurpé",
+      teacherId: "teacher-demo-current",
+      authorTeacherId: "teacher-demo-current",
+      classroomId: createdControl.payload.item.classroomId,
+      annualCourseId: createdControl.payload.item.annualCourseId,
+    }),
+  });
+  assert.equal(stolenControlPatch.response.status, 403);
+
+  const stolenControlDelete = await jsonRequest(`/api/teacher/controls/${controlId}`, {
+    method: "DELETE",
+    headers: {
+      cookie: otherCookie,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      teacherId: "teacher-demo-current",
+      authorTeacherId: "teacher-demo-current",
+      classroomId: createdControl.payload.item.classroomId,
+      annualCourseId: createdControl.payload.item.annualCourseId,
+    }),
+  });
+  assert.equal(stolenControlDelete.response.status, 403);
 });
 
 test("audit — professeur B ne peut pas modifier ni supprimer l'agenda de A", async () => {

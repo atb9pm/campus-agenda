@@ -61,3 +61,14 @@ test("build Infomaniak installe racine puis web, puis build — git inchangé", 
   );
   assert.doesNotMatch(build, /qrcode only|uniquement qrcode/);
 });
+
+test("démarrage Infomaniak — AUTH_SECRET absent ou trop court refusé, valeur jamais loguée", async () => {
+  const start = await readFile(new URL("../scripts/start-infomaniak.mjs", import.meta.url), "utf8");
+  assert.match(start, /AUTH_SECRET_MIN_BYTES = 32/);
+  assert.match(start, /Buffer\.byteLength\(secret, "utf8"\) < AUTH_SECRET_MIN_BYTES/);
+  assert.match(start, /AUTH_SECRET trop faible/);
+  assert.match(start, /openssl rand -base64 48/);
+  assert.match(start, /La valeur fournie n'est jamais affichée/);
+  assert.doesNotMatch(start, /console\.(error|log|warn)\([^)]*AUTH_SECRET\$\{/);
+  assert.doesNotMatch(start, /console\.(error|log|warn)\([^)]*secret\)/);
+});

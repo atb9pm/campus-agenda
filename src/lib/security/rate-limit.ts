@@ -1,12 +1,17 @@
+import { parseStudentAccessCode } from "../../features/student-access/code.ts";
+
 export const AUTH_RATE_LIMIT_WINDOW_MS = 60_000;
 export const AUTH_TEACHER_LIMIT = 10;
 /** 20/min : une classe sur IP partagée peut se connecter ; un script ne peut pas tester des milliers de codes. */
 export const AUTH_STUDENT_LIMIT = 20;
 export const AUTH_PASSWORD_CHANGE_LIMIT = 10;
 export const AUTH_MFA_LIMIT = 8;
+/** Cible partagée si le code élève n’est pas parsable — évite un contournement. */
+export const STUDENT_UNPARSED_RATE_LIMIT_TARGET = "unparsed";
 
 /** Portées limitées : connexion enseignant, connexion élève, changement de mot de passe, MFA. */
 export type AuthRateLimitScope = "teacher" | "student" | "teacher-password" | "teacher-mfa";
+export type AuthRateLimitLayer = "ip" | "target";
 
 const memoryBuckets = new Map<string, { count: number; resetAt: number }>();
 
@@ -37,8 +42,8 @@ function lastForwardedIp(header: string | null): string | null {
  * Identifiant de client pour le rate limit.
  * `cf-connecting-ip` n’est crédible que derrière Cloudflare (`cf-ray`).
  * Sinon : `x-real-ip`, puis le *dernier* saut `X-Forwarded-For` (ajouté par le proxy).
- * Un `X-Forwarded-For` forgé en tête de liste ne crée pas un nouveau seau.
- * Sans IP valide : seau partagé `unknown` (fail closed contre le spoof).
+ * Infomaniak n’est pas garanti d’écraser ces en-têtes : d’où le seau cible indépendant.
+ * Sans IP valide : seau partagé `unknown`.
  */
 export function readClientKey(request: Request): string {
   const cfRay = request.headers.get("cf-ray")?.trim();
@@ -53,8 +58,37 @@ export function readClientKey(request: Request): string {
   return "unknown";
 }
 
+/** Normalise une cible (identifiant, préfixe de classe) : jamais un secret. */
+export function sanitizeRateLimitTarget(value: string): string {
+  const compact = value.trim().toUpperCase().replace(/[^A-Z0-9._:-]/g, "").slice(0, 64);
+  return compact || "empty";
+}
+
 export function buildAuthRateLimitKey(scope: AuthRateLimitScope, clientKey: string): string {
   return `auth:${scope}:${clientKey}`;
+}
+
+export function buildAuthIpRateLimitKey(scope: AuthRateLimitScope, clientKey: string): string {
+  return `auth:${scope}:ip:${clientKey}`;
+}
+
+export function buildAuthTargetRateLimitKey(scope: AuthRateLimitScope, targetKey: string): string {
+  return `auth:${scope}:target:${sanitizeRateLimitTarget(targetKey)}`;
+}
+
+/** Identifiant enseignant / initiales — jamais le mot de passe. */
+export function authRateLimitTargetFromTeacherIdentifier(identifier: string): string {
+  return sanitizeRateLimitTarget(identifier);
+}
+
+/**
+ * Préfixe de classe uniquement. Le secret du code n’entre jamais dans la clé.
+ * Format invalide → seau générique `unparsed` (pas de bypass).
+ */
+export function authRateLimitTargetFromStudentCode(rawCode: string): string {
+  const parsed = parseStudentAccessCode(rawCode);
+  if (!parsed) return STUDENT_UNPARSED_RATE_LIMIT_TARGET;
+  return sanitizeRateLimitTarget(parsed.prefix);
 }
 
 const RATE_LIMIT_ENV_KEYS: Record<AuthRateLimitScope, string> = {
@@ -64,6 +98,13 @@ const RATE_LIMIT_ENV_KEYS: Record<AuthRateLimitScope, string> = {
   "teacher-mfa": "CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA",
 };
 
+const RATE_LIMIT_TARGET_ENV_KEYS: Record<AuthRateLimitScope, string> = {
+  teacher: "CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET",
+  student: "CAMPUS_AUTH_RATE_LIMIT_STUDENT_TARGET",
+  "teacher-password": "CAMPUS_AUTH_RATE_LIMIT_TEACHER_PASSWORD_TARGET",
+  "teacher-mfa": "CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA_TARGET",
+};
+
 const RATE_LIMIT_DEFAULTS: Record<AuthRateLimitScope, number> = {
   teacher: AUTH_TEACHER_LIMIT,
   student: AUTH_STUDENT_LIMIT,
@@ -71,12 +112,19 @@ const RATE_LIMIT_DEFAULTS: Record<AuthRateLimitScope, number> = {
   "teacher-mfa": AUTH_MFA_LIMIT,
 };
 
-export function resolveAuthRateLimit(scope: AuthRateLimitScope): number {
-  const configured = Number(process.env[RATE_LIMIT_ENV_KEYS[scope]]);
+function readPositiveLimit(envKey: string, fallback: number): number {
+  const configured = Number(process.env[envKey]);
   if (Number.isFinite(configured) && configured > 0) {
     return configured;
   }
-  return RATE_LIMIT_DEFAULTS[scope];
+  return fallback;
+}
+
+export function resolveAuthRateLimit(scope: AuthRateLimitScope, layer: AuthRateLimitLayer = "ip"): number {
+  if (layer === "target") {
+    return readPositiveLimit(RATE_LIMIT_TARGET_ENV_KEYS[scope], RATE_LIMIT_DEFAULTS[scope]);
+  }
+  return readPositiveLimit(RATE_LIMIT_ENV_KEYS[scope], RATE_LIMIT_DEFAULTS[scope]);
 }
 
 export function checkInMemoryRateLimit(
@@ -99,4 +147,15 @@ export function checkInMemoryRateLimit(
 
 export function resetInMemoryRateLimits(): void {
   memoryBuckets.clear();
+}
+
+export function rateLimitKeyLooksSensitive(key: string): boolean {
+  const payload = key.replace(/^auth:[a-z-]+:(?:ip|target):/i, "");
+  const upper = payload.toUpperCase();
+  return (
+    /[A-Z0-9]{4}-[A-Z0-9]{4}/.test(upper) ||
+    /\b\d{6}\b/.test(payload) ||
+    (upper.includes("PASSWORD") && payload.includes("=")) ||
+    /CAMPUS-DEMO|RECOVERY|TOTP/.test(upper)
+  );
 }

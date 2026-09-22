@@ -7,15 +7,15 @@ export interface CredentialTimestampClassification {
 
 /**
  * Distingue :
- * A. valeur absente légitime (null, undefined, chaîne vide) ;
+ * A. valeur absente légitime (null, undefined uniquement) ;
  * B. valeur présente et interprétable comme date ;
- * C. valeur présente mais invalide / corrompue.
+ * C. valeur présente mais invalide / corrompue (y compris "" et espaces).
  */
 export function classifyCredentialTimestamp(value: string | null | undefined): CredentialTimestampClassification {
   if (value == null) return { kind: "absent", ts: null };
   if (typeof value !== "string") return { kind: "invalid", ts: null };
   const trimmed = value.trim();
-  if (!trimmed) return { kind: "absent", ts: null };
+  if (!trimmed) return { kind: "invalid", ts: null };
 
   const normalized = trimmed.includes("T") ? trimmed : `${trimmed.replace(" ", "T")}Z`;
   const ts = Date.parse(normalized);

@@ -1,9 +1,11 @@
 import { attachRequestId, logApiEvent, readRequestId } from "@campus/lib/observability/index.ts";
 import {
-  buildAuthRateLimitKey,
+  buildAuthIpRateLimitKey,
+  buildAuthTargetRateLimitKey,
   checkInMemoryRateLimit,
   readClientKey,
   resolveAuthRateLimit,
+  sanitizeRateLimitTarget,
   type AuthRateLimitScope,
 } from "@campus/lib/security/rate-limit.ts";
 
@@ -49,26 +51,56 @@ function rateLimitResponse(request: Request, scope: AuthRateLimitScope): Respons
   );
 }
 
+async function consumeLimit(
+  binding: RateLimitBinding | null,
+  key: string,
+  limit: number,
+): Promise<boolean> {
+  if (binding) {
+    const { success } = await binding.limit({ key });
+    return success;
+  }
+  return checkInMemoryRateLimit(key, limit);
+}
+
+export interface EnforceAuthRateLimitOptions {
+  /** Identifiant / préfixe de classe — jamais un mot de passe, TOTP, recovery ou code élève. */
+  targetKey?: string;
+  /** `ip` : seau IP seulement. `target` : seau cible seulement. Défaut : les deux si targetKey. */
+  layer?: "ip" | "target" | "both";
+}
+
+/**
+ * Deux seaux indépendants : IP et cible.
+ * Concaténer `IP:compte` permettrait de contourner la limite compte en changeant d’IP.
+ */
 export async function enforceAuthRateLimit(
   request: Request,
   scope: AuthRateLimitScope,
-  accountKey?: string,
+  targetKeyOrOptions?: string | EnforceAuthRateLimitOptions,
 ): Promise<Response | null> {
   if (process.env.CAMPUS_DISABLE_RATE_LIMIT === "1") {
     return null;
   }
 
-  const clientKey = accountKey
-    ? `${readClientKey(request)}:${accountKey}`
-    : readClientKey(request);
-  const key = buildAuthRateLimitKey(scope, clientKey);
-  const limit = resolveAuthRateLimit(scope);
+  const options = typeof targetKeyOrOptions === "string"
+    ? { targetKey: targetKeyOrOptions }
+    : targetKeyOrOptions ?? {};
+  const targetKey = options.targetKey ? sanitizeRateLimitTarget(options.targetKey) : undefined;
+  const layer = options.layer ?? (targetKey ? "both" : "ip");
   const binding = await getAuthRateLimiter();
 
-  if (binding) {
-    const { success } = await binding.limit({ key });
-    return success ? null : rateLimitResponse(request, scope);
+  if (layer !== "target") {
+    const ipKey = buildAuthIpRateLimitKey(scope, readClientKey(request));
+    const allowed = await consumeLimit(binding, ipKey, resolveAuthRateLimit(scope, "ip"));
+    if (!allowed) return rateLimitResponse(request, scope);
   }
 
-  return checkInMemoryRateLimit(key, limit) ? null : rateLimitResponse(request, scope);
+  if (targetKey && layer !== "ip") {
+    const targetBucket = buildAuthTargetRateLimitKey(scope, targetKey);
+    const allowed = await consumeLimit(binding, targetBucket, resolveAuthRateLimit(scope, "target"));
+    if (!allowed) return rateLimitResponse(request, scope);
+  }
+
+  return null;
 }

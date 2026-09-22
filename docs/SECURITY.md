@@ -44,14 +44,24 @@ Les tests et `curl` sans `Origin` restent acceptés.
 
 ## Rate limiting
 
-| Route | Portée | Défaut |
-|---|---|---|
-| `POST /api/auth/teacher` | IP / min | 10 |
-| `POST /api/auth/student` | IP / min | 20 |
-| `POST /api/auth/teacher/password` | IP / min | 10 |
-| MFA / codes de récupération | IP+compte / min | 8 |
+Deux seaux indépendants (IP **et** cible). Concaténer `IP:compte` permettrait de contourner la cible en changeant d’IP.
 
-20 tentatives élève / min sur une IP partagée restent compatibles avec une classe qui se connecte en même temps. Le secret du code fait 8 caractères d’un alphabet 32 symboles : le plafond empêche un balayage automatique, pas une recherche exhaustive. `cf-connecting-ip` n’est utilisé que si `cf-ray` est présent (Infomaniak n’est pas Cloudflare).
+| Route | Seau IP | Seau cible | Défaut / min |
+|---|---|---|---|
+| `POST /api/auth/teacher` | IP | identifiant / initiales | 10 + 10 |
+| `POST /api/auth/student` | IP | préfixe de classe (ou `unparsed`) | 20 + 20 |
+| `POST /api/auth/teacher/password` | IP | compte enseignant | 10 + 10 |
+| MFA / codes de récupération | IP | compte administrateur | 8 + 8 |
+
+20 tentatives élève / min sur une IP partagée restent compatibles avec une classe qui se connecte en même temps. Le secret du code fait 8 caractères d’un alphabet de **32** symboles (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, I et O exclus) : le plafond empêche un balayage automatique, pas une recherche exhaustive. Le secret complet n’entre jamais dans une clé de rate limit ou de log. `cf-connecting-ip` n’est utilisé que si `cf-ray` est présent (Infomaniak n’est pas Cloudflare). Le fallback mémoire est **par processus** : redémarrage = compteurs à zéro.
+
+## AUTH_SECRET
+
+En production : au moins **32 octets**, 48 ou 64 caractères aléatoires recommandés. Pas d’exigence artificielle majuscule/chiffre. Valeur jamais loguée. Hors production, valeur fictive interne si la variable est absente.
+
+## Mot de passe démo
+
+Un hash `demo:` est **toujours refusé** si `NODE_ENV=production`. `CAMPUS_ALLOW_DEMO_PASSWORD=1` ne peut pas le réactiver en production.
 
 ## CSP
 
