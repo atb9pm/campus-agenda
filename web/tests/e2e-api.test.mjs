@@ -204,6 +204,7 @@ test("phase 0.8 — E2E enseignant publie puis élève consulte", async () => {
   const ownAgendaPayload = await ownAgenda.json();
   assert.ok(Array.isArray(ownAgendaPayload.subjects));
   assert.ok(ownAgendaPayload.subjects.every((subject) => !String(subject.name ?? "").startsWith("subject-course-")));
+  assert.ok(ownAgendaPayload.subjects.every((subject) => String(subject.name ?? "") !== "Branche non définie"));
 
   const studentMutation = await request("/api/agenda", {
     method: "POST",

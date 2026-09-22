@@ -141,12 +141,10 @@ const TYPE_LABELS: Record<AgendaItemType, string> = {
   INFORMATION: "Information",
 };
 
-function studentUpcomingHeadline(item: PrototypeAgendaItem): string {
-  const title = item.title.trim();
-  if (decodeRichDetail(item.detail) || isPlaceholderDetail(item.detail)) return title;
-  const detail = item.detail.trim().replace(/\s+/g, " ");
-  if (!detail || detail === title) return title;
-  return `${title} · ${detail}`;
+function studentUpcomingPlainDetail(item: PrototypeAgendaItem): string | null {
+  if (decodeRichDetail(item.detail) || isPlaceholderDetail(item.detail)) return null;
+  const detail = item.detail.trim();
+  return detail || null;
 }
 
 const EMPTY_CLASSROOM_CATALOG: ClassroomCatalog = {
@@ -1503,8 +1501,12 @@ export default function Home() {
                 {studentCourseDayGroups.length ? (
                   <div className="student-branch-list">
                     {studentCourseDayGroups.map((group) => (
-                      <section className="student-branch-block" key={group.subject.id} aria-label={group.subject.name}>
-                        <h2>{group.subject.name}</h2>
+                      <section
+                        className="student-branch-block"
+                        key={group.subject.id}
+                        aria-label={group.subject.name || undefined}
+                      >
+                        {group.subject.name ? <h2>{group.subject.name}</h2> : null}
                         <ul>
                           {group.items.map((item) => (
                             <li key={item.id} className={`student-branch-item ${item.type.toLowerCase()}`}>
@@ -1551,8 +1553,13 @@ export default function Home() {
                     <span className="student-upcoming-tests-date">
                       {formatSchoolWeekLabel(entry.slot)} · {formatCourseDayHeading(entry.slot)}
                     </span>
-                    <span className="student-upcoming-tests-branch">{entry.subjectName}</span>
-                    <strong>{studentUpcomingHeadline(entry.item)}</strong>
+                    {entry.subjectName ? (
+                      <span className="student-upcoming-tests-branch">{entry.subjectName}</span>
+                    ) : null}
+                    <strong>{entry.item.title}</strong>
+                    {studentUpcomingPlainDetail(entry.item) ? (
+                      <span className="student-upcoming-tests-detail">{studentUpcomingPlainDetail(entry.item)}</span>
+                    ) : null}
                   </li>
                 ))}
               </ol>
