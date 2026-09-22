@@ -302,6 +302,76 @@ test("phase 1.0 — E2E rate limit sur connexion enseignant", async () => {
   }
 });
 
+test("audit — rate limit enseignant : cible canonique et 401 identique", async () => {
+  const adminCookie = await loginAdmin();
+  const previousTarget = process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET;
+  const previousIp = process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER;
+  process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET = "2";
+  process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER = "50";
+  try {
+    const stamp = Date.now().toString(26).replace(/[^a-z]/g, "q").slice(-3);
+    const identityInitials = `V${stamp}`.slice(0, 4);
+    const bucketInitials = `W${stamp}`.slice(0, 4);
+    const identityCreated = await request("/api/admin/teachers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: adminCookie },
+      body: JSON.stringify({ displayName: "Rate Limit Identite", initials: identityInitials, teachingType: "TECHNICAL" }),
+    });
+    const identityPayload = await identityCreated.json();
+    assert.equal(identityCreated.status, 200, identityPayload.reason ?? "création enseignant identité");
+
+    const created = await request("/api/admin/teachers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: adminCookie },
+      body: JSON.stringify({ displayName: "Rate Limit Canon", initials: bucketInitials, teachingType: "TECHNICAL" }),
+    });
+    const createdPayload = await created.json();
+    assert.equal(created.status, 200, createdPayload.reason ?? "création enseignant");
+    const teacherId = createdPayload.teacher.id;
+
+    const missing = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": "203.0.113.201" },
+      body: JSON.stringify({ initials: "ZzQ", password: "mauvais-mot-de-passe" }),
+    });
+    const wrong = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": "203.0.113.202" },
+      body: JSON.stringify({ initials: identityInitials, password: "mauvais-mot-de-passe" }),
+    });
+    assert.equal(missing.status, 401);
+    assert.equal(wrong.status, 401);
+    const missingBody = await missing.json();
+    const wrongBody = await wrong.json();
+    assert.equal(missingBody.reason, wrongBody.reason);
+    assert.equal(missingBody.reason, "Initiales ou mot de passe incorrect.");
+
+    const first = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": "198.51.100.201" },
+      body: JSON.stringify({ initials: bucketInitials, password: "mauvais-mot-de-passe" }),
+    });
+    const second = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": "198.51.100.202" },
+      body: JSON.stringify({ teacherId, password: "mauvais-mot-de-passe" }),
+    });
+    const blocked = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": "198.51.100.203" },
+      body: JSON.stringify({ initials: bucketInitials.toLowerCase(), password: "mauvais-mot-de-passe" }),
+    });
+    assert.equal(first.status, 401);
+    assert.equal(second.status, 401);
+    assert.equal(blocked.status, 429);
+  } finally {
+    if (previousTarget === undefined) delete process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET;
+    else process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET = previousTarget;
+    if (previousIp === undefined) delete process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER;
+    else process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER = previousIp;
+  }
+});
+
 test("comptes enseignant — E2E création, mot de passe provisoire, première connexion", async () => {
   const clientIp = "198.51.100.42";
   const jsonHeaders = { "Content-Type": "application/json", "cf-connecting-ip": clientIp, "cf-ray": "e2e-accounts" };

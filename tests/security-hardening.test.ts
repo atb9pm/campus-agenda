@@ -50,6 +50,12 @@ test("version 2.61.8 — durcissement MFA, sessions, restore, en-têtes, pas de 
   assert.match(password, /layer: "ip"/);
   assert.match(password, /layer: "target"/);
 
+  const teacherLogin = await readFile(new URL("../web/app/api/auth/teacher/route.ts", import.meta.url), "utf8");
+  assert.match(teacherLogin, /resolveTeacherAuthRateLimitTarget/);
+  assert.match(teacherLogin, /layer: "ip"/);
+  assert.match(teacherLogin, /layer: "target"/);
+  assert.match(teacherLogin, /TEACHER_LOGIN_INVALID_REASON/);
+
   const rateLimit = await readFile(new URL("../src/lib/security/rate-limit.ts", import.meta.url), "utf8");
   assert.match(rateLimit, /buildAuthIpRateLimitKey/);
   assert.match(rateLimit, /buildAuthTargetRateLimitKey/);
@@ -60,6 +66,7 @@ test("version 2.61.8 — durcissement MFA, sessions, restore, en-têtes, pas de 
   assert.match(operations, /mémoire par processus/);
   assert.match(operations, /préfixe de classe/);
   assert.match(operations, /32 octets/);
+  assert.match(operations, /teacherId` interne canonique/);
 
   const worker = await readFile(new URL("../web/worker/index.ts", import.meta.url), "utf8");
   assert.match(worker, /withSecurityHeaders/);

@@ -9,6 +9,7 @@ import {
   STUDENT_UNPARSED_RATE_LIMIT_TARGET,
   authRateLimitTargetFromStudentCode,
   authRateLimitTargetFromTeacherIdentifier,
+  authRateLimitTargetFromUnknownTeacherIdentifier,
   buildAuthIpRateLimitKey,
   buildAuthRateLimitKey,
   buildAuthTargetRateLimitKey,
@@ -17,8 +18,11 @@ import {
   readClientKey,
   resetInMemoryRateLimits,
   resolveAuthRateLimit,
+  resolveTeacherAuthRateLimitTarget,
+  sanitizeRateLimitTarget,
 } from "../src/lib/security/rate-limit.ts";
 import { STUDENT_ACCESS_ALPHABET } from "../src/features/student-access/code.ts";
+import { initialsKey } from "../src/features/teacher-accounts/rules.ts";
 
 test("phase 1.0 — clé client et limite mémoire", () => {
   resetInMemoryRateLimits();
@@ -145,12 +149,13 @@ test("rate limit — clés sans mot de passe, TOTP, recovery ni code élève com
   assert.equal(authRateLimitTargetFromStudentCode(""), STUDENT_UNPARSED_RATE_LIMIT_TARGET);
 
   const teacherKey = buildAuthTargetRateLimitKey("teacher", authRateLimitTargetFromTeacherIdentifier("ChF"));
+  const canonicalTeacherKey = buildAuthTargetRateLimitKey("teacher", "teacher-123");
   const passwordKey = buildAuthTargetRateLimitKey("teacher-password", "teacher-chf");
   const mfaKey = buildAuthTargetRateLimitKey("teacher-mfa", "teacher-chf");
   const totp = "847291";
   const recovery = "ABCD-EFGH";
   const password = "Atelier-2027";
-  for (const key of [studentKey, teacherKey, passwordKey, mfaKey]) {
+  for (const key of [studentKey, teacherKey, canonicalTeacherKey, passwordKey, mfaKey]) {
     assert.equal(key.includes(totp), false);
     assert.equal(key.includes(recovery), false);
     assert.equal(key.includes(password), false);
@@ -161,6 +166,87 @@ test("rate limit — clés sans mot de passe, TOTP, recovery ni code élève com
   assert.equal(STUDENT_ACCESS_ALPHABET, "ABCDEFGHJKLMNPQRSTUVWXYZ23456789");
   assert.equal(rateLimitKeyLooksSensitive(`auth:student:target:${fullStudent}`), true);
   assert.equal(rateLimitKeyLooksSensitive("auth:teacher-mfa:target:847291"), true);
+});
+
+function teacherLookup(account: { id: string; initials: string }) {
+  return {
+    async findAccount(teacherId: string) {
+      return teacherId === account.id ? account : null;
+    },
+    async findAccountByInitials(initials: string) {
+      return initialsKey(initials) === initialsKey(account.initials) ? account : null;
+    },
+  };
+}
+
+test("rate limit enseignant — initiales et teacherId du même compte partagent le teacherId canonique", async () => {
+  const account = { id: "teacher-123", initials: "ChF" };
+  const lookup = teacherLookup(account);
+  const fromInitials = await resolveTeacherAuthRateLimitTarget("ChF", lookup);
+  const fromId = await resolveTeacherAuthRateLimitTarget("teacher-123", lookup);
+  const fromUpperId = await resolveTeacherAuthRateLimitTarget("TEACHER-123", lookup);
+  assert.equal(fromInitials, "teacher-123");
+  assert.equal(fromId, "teacher-123");
+  assert.equal(fromUpperId, "teacher-123");
+  assert.equal(
+    buildAuthTargetRateLimitKey("teacher", fromInitials),
+    buildAuthTargetRateLimitKey("teacher", fromId),
+  );
+  assert.equal(
+    buildAuthTargetRateLimitKey("teacher", fromInitials),
+    `auth:teacher:target:${sanitizeRateLimitTarget("teacher-123")}`,
+  );
+});
+
+test("rate limit enseignant — ChF / CHF / chf convergent vers la même cible", async () => {
+  const account = { id: "teacher-123", initials: "ChF" };
+  const lookup = teacherLookup(account);
+  const targets = await Promise.all([
+    resolveTeacherAuthRateLimitTarget("ChF", lookup),
+    resolveTeacherAuthRateLimitTarget("CHF", lookup),
+    resolveTeacherAuthRateLimitTarget("chf", lookup),
+    resolveTeacherAuthRateLimitTarget("  chf  ", lookup),
+  ]);
+  assert.ok(targets.every((target) => target === "teacher-123"));
+});
+
+test("rate limit enseignant — changer d’IP ne dépasse pas le plafond du teacherId canonique", async () => {
+  resetInMemoryRateLimits();
+  const target = buildAuthTargetRateLimitKey("teacher", "teacher-123");
+  const ipA = buildAuthIpRateLimitKey("teacher", "203.0.113.1");
+  const ipB = buildAuthIpRateLimitKey("teacher", "198.51.100.2");
+  const limit = 3;
+  for (let index = 0; index < limit; index += 1) {
+    assert.equal(checkInMemoryRateLimit(ipA, 50), true);
+    assert.equal(checkInMemoryRateLimit(target, limit), true);
+  }
+  assert.equal(checkInMemoryRateLimit(target, limit), false);
+  assert.equal(checkInMemoryRateLimit(ipB, 50), true);
+  assert.equal(checkInMemoryRateLimit(target, limit), false);
+});
+
+test("rate limit enseignant — identifiant inexistant limité, casse et espaces sans bypass", async () => {
+  const lookup = teacherLookup({ id: "teacher-123", initials: "ChF" });
+  const variants = ["ZzQ", "zzq", "ZZQ", "  zzq  ", "z-zq"];
+  const targets = await Promise.all(
+    variants.map((value) => resolveTeacherAuthRateLimitTarget(value, lookup)),
+  );
+  assert.ok(targets.every((target) => target === targets[0]));
+  assert.notEqual(targets[0], "teacher-123");
+  assert.equal(targets[0], authRateLimitTargetFromUnknownTeacherIdentifier("ZzQ"));
+
+  resetInMemoryRateLimits();
+  const unknownKey = buildAuthTargetRateLimitKey("teacher", targets[0]!);
+  const limit = 2;
+  assert.equal(checkInMemoryRateLimit(unknownKey, limit), true);
+  assert.equal(checkInMemoryRateLimit(unknownKey, limit), true);
+  assert.equal(checkInMemoryRateLimit(unknownKey, limit), false);
+  const sameAfterCase = buildAuthTargetRateLimitKey(
+    "teacher",
+    await resolveTeacherAuthRateLimitTarget("zzq", lookup),
+  );
+  assert.equal(sameAfterCase, unknownKey);
+  assert.equal(checkInMemoryRateLimit(sameAfterCase, limit), false);
 });
 
 test("phase 1.0 — limites configurables via variables d'environnement", () => {

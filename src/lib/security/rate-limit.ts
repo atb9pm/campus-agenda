@@ -1,3 +1,4 @@
+import { initialsKey } from "../../features/teacher-accounts/rules.ts";
 import { parseStudentAccessCode } from "../../features/student-access/code.ts";
 
 export const AUTH_RATE_LIMIT_WINDOW_MS = 60_000;
@@ -78,7 +79,54 @@ export function buildAuthTargetRateLimitKey(scope: AuthRateLimitScope, targetKey
 
 /** Identifiant enseignant / initiales — jamais le mot de passe. */
 export function authRateLimitTargetFromTeacherIdentifier(identifier: string): string {
-  return sanitizeRateLimitTarget(identifier);
+  return authRateLimitTargetFromUnknownTeacherIdentifier(identifier);
+}
+
+/**
+ * Cible si le compte n’existe pas : casse et espaces ne créent pas un nouveau seau.
+ * `teacher-…` reste un identifiant ; le reste est traité comme initiales.
+ */
+export function authRateLimitTargetFromUnknownTeacherIdentifier(identifier: string): string {
+  const trimmed = identifier.trim();
+  if (!trimmed) return "empty";
+  const compact = trimmed.toLowerCase().replace(/\s+/g, "");
+  if (compact.startsWith("teacher-")) {
+    return sanitizeRateLimitTarget(compact);
+  }
+  const key = initialsKey(trimmed);
+  if (key) return sanitizeRateLimitTarget(key);
+  return sanitizeRateLimitTarget(trimmed);
+}
+
+export interface TeacherRateLimitAccountLookup {
+  findAccount(teacherId: string): Promise<{ id: string } | null>;
+  findAccountByInitials(initials: string): Promise<{ id: string } | null>;
+}
+
+/**
+ * Compte existant → teacherId interne canonique.
+ * Inconnu → identifiant normalisé (anti-bypass casse / espaces).
+ * Ne consulte que l’annuaire : jamais le mot de passe.
+ */
+export async function resolveTeacherAuthRateLimitTarget(
+  identifier: string,
+  lookup: TeacherRateLimitAccountLookup,
+): Promise<string> {
+  const trimmed = identifier.trim();
+  if (!trimmed) return "empty";
+
+  const byInitials = await lookup.findAccountByInitials(trimmed);
+  if (byInitials?.id) return byInitials.id;
+
+  const compact = trimmed.toLowerCase().replace(/\s+/g, "");
+  const byId = (await lookup.findAccount(trimmed)) ?? (
+    compact.startsWith("teacher-") && compact !== trimmed
+      ? await lookup.findAccount(compact)
+      : null
+  );
+  if (byId?.id) return byId.id;
+
+  return authRateLimitTargetFromUnknownTeacherIdentifier(trimmed);
 }
 
 /**

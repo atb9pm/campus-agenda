@@ -48,7 +48,7 @@ Deux seaux indépendants (IP **et** cible). Concaténer `IP:compte` permettrait 
 
 | Route | Seau IP | Seau cible | Défaut / min |
 |---|---|---|---|
-| `POST /api/auth/teacher` | IP | identifiant / initiales | 10 + 10 |
+| `POST /api/auth/teacher` | IP d’abord | `teacherId` interne canonique (annuaire sans mot de passe) ; identifiant normalisé si inconnu | 10 + 10 |
 | `POST /api/auth/student` | IP | préfixe de classe (ou `unparsed`) | 20 + 20 |
 | `POST /api/auth/teacher/password` | IP | compte enseignant | 10 + 10 |
 | MFA / codes de récupération | IP | compte administrateur | 8 + 8 |

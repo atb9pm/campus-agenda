@@ -15,6 +15,7 @@ import {
   wouldRemoveLastAdmin,
   type TeacherAccountRecord,
 } from "../src/features/teacher-accounts/index.ts";
+import { resolveTeacherAuthRateLimitTarget } from "../src/lib/security/rate-limit.ts";
 import {
   demoPasswordAllowed,
   DEMO_TEACHER_PASSWORD,
@@ -162,6 +163,21 @@ test("comptes — création avec mot de passe provisoire à usage unique", async
   // Les mêmes initiales ne peuvent pas être réattribuées.
   const duplicate = await store.createAccount({ displayName: "Marc Dumas", initials: "dum", teachingType: "GENERAL" });
   assert.equal(duplicate.ok, false);
+
+  const missing = await store.authenticate("ZzQ", "mauvais-mot-de-passe");
+  const wrong = await store.authenticate("DuM", "mauvais-mot-de-passe");
+  assert.equal(missing.ok, false);
+  assert.equal(wrong.ok, false);
+  assert.equal(missing.reason, wrong.reason);
+  assert.equal(missing.reason, "Initiales ou mot de passe incorrect.");
+
+  const fromInitials = await resolveTeacherAuthRateLimitTarget("DuM", store);
+  const fromId = await resolveTeacherAuthRateLimitTarget(created.account.id, store);
+  const fromCase = await resolveTeacherAuthRateLimitTarget("dum", store);
+  assert.equal(fromInitials, created.account.id);
+  assert.equal(fromId, created.account.id);
+  assert.equal(fromCase, created.account.id);
+  assert.equal(typeof created.account.passwordHash, "undefined");
 });
 
 test("comptes — changement de mot de passe par l'enseignant", async () => {

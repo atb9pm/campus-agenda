@@ -71,7 +71,7 @@ Journaux JSON sur la sortie standard, sans contenu scolaire :
 | `APP_ENV` | Contexte d'exécution |
 | `CAMPUS_DISABLE_RATE_LIMIT` | Désactive le rate limit (tests uniquement) |
 | `CAMPUS_AUTH_RATE_LIMIT_TEACHER` | Limite IP connexion enseignant (défaut : 10/min) |
-| `CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET` | Limite par identifiant / initiales enseignant (défaut : 10/min) |
+| `CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET` | Limite par teacherId canonique (défaut : 10/min) ; identifiant normalisé si le compte n’existe pas |
 | `CAMPUS_AUTH_RATE_LIMIT_STUDENT` | Limite IP connexion élève (défaut : 20/min) |
 | `CAMPUS_AUTH_RATE_LIMIT_STUDENT_TARGET` | Limite par préfixe de classe (défaut : 20/min) |
 | `CAMPUS_AUTH_RATE_LIMIT_TEACHER_PASSWORD` | Limite IP changement de mot de passe (défaut : 10/min) |
@@ -86,7 +86,7 @@ Deux seaux **indépendants** (pas une concaténation `IP:compte`) :
 
 | Route | Seau IP | Seau cible |
 |---|---|---|
-| `POST /api/auth/teacher` | adresse IP | identifiant / initiales normalisés |
+| `POST /api/auth/teacher` | adresse IP (consommée en premier) | `teacherId` interne canonique après résolution d’annuaire **sans mot de passe**. Inconnu : identifiant normalisé (casse / espaces). Le mot de passe n’est vérifié qu’après les deux seaux. |
 | `POST /api/auth/student` | adresse IP | préfixe de classe uniquement (jamais le secret du code). Format invalide → seau générique `unparsed` |
 | `POST /api/auth/teacher/password` | adresse IP | compte enseignant (session) |
 | MFA / récupération | adresse IP | compte administrateur |
