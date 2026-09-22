@@ -50,10 +50,7 @@ export function compareStudentPublications(
   left: PrototypeAgendaItem,
   right: PrototypeAgendaItem,
 ): number {
-  return (
-    PUBLICATION_RANK[left.type] - PUBLICATION_RANK[right.type]
-    || left.title.localeCompare(right.title, "fr")
-  );
+  return PUBLICATION_RANK[left.type] - PUBLICATION_RANK[right.type];
 }
 
 export function nextControlsForSubject(
@@ -127,29 +124,32 @@ export function buildStudentCourseDaySections(
   dayItems: PrototypeAgendaItem[],
   subjects: Subject[],
   futureTests: UpcomingTestEntry[],
-  options: { includeOrphanNextControls?: boolean } = {},
+  options: { includeNextControls?: boolean } = {},
 ): StudentCourseDaySection[] {
+  const includeNextControls = options.includeNextControls !== false;
   const publications = sortPublications(dayItems);
   const groups: SubjectAgendaGroup[] = groupItemsBySubject(publications, subjects);
   const nextBySubject = new Map<string, UpcomingTestEntry[]>();
 
-  for (const entry of futureTests) {
-    const subjectId = entry.item.subjectId;
-    if (nextBySubject.has(subjectId)) continue;
-    const next = nextControlsForSubject(futureTests, subjectId);
-    if (next.length) nextBySubject.set(subjectId, next);
+  if (includeNextControls) {
+    for (const entry of futureTests) {
+      const subjectId = entry.item.subjectId;
+      if (nextBySubject.has(subjectId)) continue;
+      const next = nextControlsForSubject(futureTests, subjectId);
+      if (next.length) nextBySubject.set(subjectId, next);
+    }
   }
 
   const sections = new Map<string, StudentCourseDaySection>();
   for (const group of groups) {
     sections.set(group.subject.id, {
       subject: group.subject,
-      nextControls: nextBySubject.get(group.subject.id) ?? [],
+      nextControls: includeNextControls ? nextBySubject.get(group.subject.id) ?? [] : [],
       publications: group.items.slice().sort(compareStudentPublications),
     });
   }
 
-  if (options.includeOrphanNextControls !== false) {
+  if (includeNextControls) {
     for (const [subjectId, controls] of nextBySubject) {
       if (sections.has(subjectId)) continue;
       sections.set(subjectId, {

@@ -26,6 +26,10 @@ export {
   type StudentCourseDaySection,
 } from "./upcoming-controls.ts";
 export {
+  msUntilNextLocalMidnight,
+  studentCalendarDateNeedsRefresh,
+} from "./student-today.ts";
+export {
   STUDENT_AUTHOR_LABEL,
   anonymizeAuthorForStudent,
   buildStudentAgendaSummary,

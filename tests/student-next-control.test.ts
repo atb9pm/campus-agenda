@@ -15,10 +15,13 @@ import { APP_VERSION } from "../src/lib/app-version.ts";
 import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 import {
   buildStudentCourseDaySections,
+  compareStudentPublications,
   formatNextControlHeadline,
   groupControlPlanning,
+  msUntilNextLocalMidnight,
   nextControlHeadlineForEntries,
   nextControlsForSubject,
+  studentCalendarDateNeedsRefresh,
 } from "../src/features/student/index.ts";
 
 const CLASSROOM_ID = "classroom-school-cl-1";
@@ -143,7 +146,7 @@ test("version 2.61.8 — prochain contrôle élève, pas de migration", async ()
 test("1 — le contrôle apparaît avant les devoirs", () => {
   const today = monday("2026-09-28");
   const sections = buildStudentCourseDaySections(
-    [HOMEWORK_CLIM, HOMEWORK_MOTEUR, REVISION, INFO],
+    [HOMEWORK_MOTEUR, HOMEWORK_CLIM, REVISION, INFO],
     CATALOG.subjects,
     future(today),
   );
@@ -151,7 +154,7 @@ test("1 — le contrôle apparaît avant les devoirs", () => {
   assert.ok(injection);
   assert.equal(injection.nextControls[0]?.item.title, "Révision");
   assert.deepEqual(injection.publications.map((entry) => entry.type), ["HOMEWORK", "HOMEWORK", "INFORMATION"]);
-  assert.deepEqual(injection.publications.map((entry) => entry.title), ["Climatisation", "Moteur", "Salle changée"]);
+  assert.deepEqual(injection.publications.map((entry) => entry.title), ["Moteur", "Climatisation", "Salle changée"]);
 });
 
 test("2 — l’ordre de création n’influence pas l’affichage", () => {
@@ -323,16 +326,65 @@ test("jours calendaires — J-7 à partir de la date locale, pas de l’heure", 
   assert.equal(headline?.kicker, "⚠ CONTRÔLE DANS 7 JOURS");
 });
 
+test("Passés — un cours précédent n’affiche aucun prochain contrôle", () => {
+  const today = monday("2026-09-28");
+  const sections = buildStudentCourseDaySections(
+    [HOMEWORK_MOTEUR, REVISION],
+    CATALOG.subjects,
+    future(today),
+    { includeNextControls: false },
+  );
+  const injection = sections.find((section) => section.subject.id === INJECTION_ID);
+  assert.ok(injection);
+  assert.equal(injection.nextControls.length, 0);
+  assert.deepEqual(injection.publications.map((entry) => entry.title), ["Moteur"]);
+  assert.ok(!sections.some((section) => section.nextControls.length > 0));
+});
+
+test("devoirs — HOMEWORK avant INFORMATION, ordre interne conservé", () => {
+  const today = monday("2026-09-28");
+  const sections = buildStudentCourseDaySections(
+    [HOMEWORK_MOTEUR, INFO, HOMEWORK_CLIM],
+    CATALOG.subjects,
+    future(today),
+  );
+  const injection = sections.find((section) => section.subject.id === INJECTION_ID);
+  assert.ok(injection);
+  assert.deepEqual(injection.publications.map((entry) => entry.title), ["Moteur", "Climatisation", "Salle changée"]);
+  assert.ok(compareStudentPublications(HOMEWORK_MOTEUR, INFO) < 0);
+  assert.equal(compareStudentPublications(HOMEWORK_MOTEUR, HOMEWORK_CLIM), 0);
+});
+
+test("date élève — refresh au nouveau jour, pas de polling fréquent", () => {
+  const morning = new Date(2026, 8, 28, 8, 15);
+  const evening = new Date(2026, 8, 28, 22, 40);
+  const nextMorning = new Date(2026, 8, 29, 0, 0, 1);
+  assert.equal(studentCalendarDateNeedsRefresh(morning, evening), false);
+  assert.equal(studentCalendarDateNeedsRefresh(evening, nextMorning), true);
+  const delay = msUntilNextLocalMidnight(evening);
+  assert.ok(delay > 60 * 60 * 1000);
+  assert.ok(delay < 3 * 60 * 60 * 1000);
+});
+
 test("sources — Cours extrait le prochain contrôle, Planning réutilise les mêmes données", async () => {
-  const page = await readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8");
+  const [page, logic] = await Promise.all([
+    readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/student/upcoming-controls.ts", import.meta.url), "utf8"),
+  ]);
   assert.match(page, /listFutureTestsForClass/);
   assert.match(page, /buildStudentCourseDaySections/);
   assert.match(page, /groupControlPlanning/);
+  assert.match(page, /includeNextControls: studentFollowingCourseDay/);
+  assert.match(page, /studentCalendarDateNeedsRefresh/);
+  assert.match(page, /visibilitychange/);
+  assert.match(page, /msUntilNextLocalMidnight/);
   assert.match(page, /Planning des contrôles/);
   assert.match(page, /setStudentMobileTab\("controles"\)[\s\S]{0,120}Contrôles/);
   assert.match(page, /student-next-control/);
   assert.match(page, /studentUpcomingPlainDetail/);
+  assert.doesNotMatch(page, /useMemo\(\(\) => new Date\(\), \[\]\)/);
   assert.doesNotMatch(page, /studentUpcomingHeadline/);
   assert.doesNotMatch(page, /Branche non définie/);
   assert.doesNotMatch(page, /Aucun contrôle prévu/);
+  assert.doesNotMatch(logic, /title\.localeCompare\(right\.title, "fr"\)/);
 });

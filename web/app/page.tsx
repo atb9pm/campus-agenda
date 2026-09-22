@@ -22,8 +22,10 @@ import {
   getStudentAgendaItems,
   getStudentClassroom,
   groupControlPlanning,
+  msUntilNextLocalMidnight,
   nextControlHeadlineForEntries,
   studentAccessFromApiSession,
+  studentCalendarDateNeedsRefresh,
 } from "@campus/features/student";
 import type { StudentAccess, TeacherClassAccessView } from "@campus/types/student-access";
 import {
@@ -822,7 +824,30 @@ export default function Home() {
       : DEMO_CATALOG;
   }, [studentSession, studentClassroomSubjects, studentClassroomName, runtimeClassrooms]);
 
-  const studentToday = useMemo(() => new Date(), []);
+  const [studentToday, setStudentToday] = useState(() => new Date());
+
+  useEffect(() => {
+    function refreshIfNeeded() {
+      const now = new Date();
+      setStudentToday((current) => (studentCalendarDateNeedsRefresh(current, now) ? now : current));
+    }
+
+    function scheduleMidnight() {
+      return window.setTimeout(() => {
+        refreshIfNeeded();
+        timeoutId = scheduleMidnight();
+      }, msUntilNextLocalMidnight(new Date()));
+    }
+
+    window.addEventListener("focus", refreshIfNeeded);
+    document.addEventListener("visibilitychange", refreshIfNeeded);
+    let timeoutId = scheduleMidnight();
+    return () => {
+      window.removeEventListener("focus", refreshIfNeeded);
+      document.removeEventListener("visibilitychange", refreshIfNeeded);
+      window.clearTimeout(timeoutId);
+    };
+  }, []);
 
   const studentFutureTests = useMemo(() => {
     if (!studentSession || !schoolWeeksMemo.length) return [];
@@ -848,7 +873,7 @@ export default function Home() {
       dayItems,
       studentClassroomSubjects,
       studentFutureTests,
-      { includeOrphanNextControls: studentFollowingCourseDay },
+      { includeNextControls: studentFollowingCourseDay },
     );
   }, [
     studentSession,
