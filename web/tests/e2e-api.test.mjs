@@ -1832,12 +1832,13 @@ test("audit — IDOR API croisés contrôles, carnet et course-publication", asy
     `carnet B sur cours de A ${stolenNotebookCreate.response.status}`,
   );
 
+  const seeded = await seedInteractiveControlCourse(adminCookie, "teacher-demo-current", "IDOR");
   const stolenCoursePublish = await jsonRequest("/api/teacher/course-publications", {
     method: "POST",
     headers: { "Content-Type": "application/json", cookie: otherCookie },
     body: JSON.stringify({
-      annualCourseId: ownerCourse.annualCourseId,
-      courseSessionKey: "year-x|owned-by-a|2026-09-01",
+      annualCourseId: seeded.annualCourseId,
+      courseSessionKey: `${seeded.schoolYearId}|${seeded.annualCourseId}|2026-09-01`,
       referenceItemId: "ref-a",
       teacherId: "teacher-demo-current",
       authorTeacherId: "teacher-demo-current",
@@ -1846,10 +1847,8 @@ test("audit — IDOR API croisés contrôles, carnet et course-publication", asy
   });
   assert.ok(
     stolenCoursePublish.response.status === 403 || stolenCoursePublish.response.status === 404,
-    `course-publication B sur cours de A ${stolenCoursePublish.response.status}`,
+    `course-publication B sur cours exclusif de A ${stolenCoursePublish.response.status}`,
   );
-
-  const seeded = await seedInteractiveControlCourse(adminCookie, "teacher-demo-current", "IDOR");
   let controlOption;
   for (let week = 1; week <= 8 && !controlOption; week += 1) {
     const next = await jsonRequest(
