@@ -78,6 +78,11 @@ test("vue élève — un identifiant subject-course-* n’est jamais affiché", 
     }],
   );
 
-  assert.equal(groups[0]?.subject.name, UNDEFINED_BRANCH_LABEL);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0]?.items.length, 1);
+  assert.equal(groups[0]?.items[0]?.title, "Moteur");
+  assert.equal(groups[0]?.subject.name, "");
+  assert.notEqual(groups[0]?.subject.name, UNDEFINED_BRANCH_LABEL);
   assert.ok(!groups.some((group) => group.subject.name.startsWith("subject-course-")));
+  assert.ok(!groups.some((group) => group.subject.name === UNDEFINED_BRANCH_LABEL));
 });

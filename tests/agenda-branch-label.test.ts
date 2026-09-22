@@ -57,11 +57,12 @@ const course: AnnualCourse = {
 };
 
 test("libellé élève — refuse les identifiants techniques et le vide", () => {
-  assert.equal(displayBranchLabel(""), UNDEFINED_BRANCH_LABEL);
-  assert.equal(displayBranchLabel("   "), UNDEFINED_BRANCH_LABEL);
-  assert.equal(displayBranchLabel(null), UNDEFINED_BRANCH_LABEL);
-  assert.equal(displayBranchLabel(SUBJECT_ID), UNDEFINED_BRANCH_LABEL);
-  assert.equal(displayBranchLabel("subject-course-ac-1788201895481-a0fjgc6"), UNDEFINED_BRANCH_LABEL);
+  assert.equal(displayBranchLabel(""), "");
+  assert.equal(displayBranchLabel("   "), "");
+  assert.equal(displayBranchLabel(null), "");
+  assert.equal(displayBranchLabel(SUBJECT_ID), "");
+  assert.equal(displayBranchLabel("subject-course-ac-1788201895481-a0fjgc6"), "");
+  assert.equal(displayBranchLabel(UNDEFINED_BRANCH_LABEL), "");
   assert.equal(displayBranchLabel(MASTER_BRANCH_LABEL), MASTER_BRANCH_LABEL);
 });
 
@@ -103,7 +104,7 @@ test("libellé élève — un renommage maître se répercute immédiatement", (
   assert.equal(after, renamed);
 });
 
-test("libellé élève — fallback propre si la branche maître est introuvable", () => {
+test("libellé élève — fallback vide si la branche maître est introuvable", () => {
   const label = resolveAgendaBranchLabel({
     subjectId: SUBJECT_ID,
     subjects: [{ id: SUBJECT_ID, name: SUBJECT_ID }],
@@ -111,7 +112,9 @@ test("libellé élève — fallback propre si la branche maître est introuvable
     contexts: [],
     branches: [],
   });
-  assert.equal(label, UNDEFINED_BRANCH_LABEL);
+  assert.equal(label, "");
+  assert.notEqual(label, UNDEFINED_BRANCH_LABEL);
+  assert.ok(!label.startsWith("subject-course-"));
 });
 
 test("libellé élève — liste agenda jamais un ID technique", () => {
@@ -178,7 +181,7 @@ test("contrôles à venir — nom de branche réel, jamais « Branche — titre 
   assert.ok(!upcoming[0]?.subjectName.startsWith("subject-course-"));
 });
 
-test("contrôles à venir — identifiant technique remplacé par le fallback", () => {
+test("contrôles à venir — identifiant technique masqué, événement conservé", () => {
   const weeks = buildSchoolWeeks();
   const fromSlot = resolveDisplayCourseDay(new Date(2026, 8, 21, 12), weeks);
   const upcoming = listUpcomingTestsForClass(
@@ -215,7 +218,12 @@ test("contrôles à venir — identifiant technique remplacé par le fallback", 
     weeks,
   );
 
-  assert.equal(upcoming[0]?.subjectName, UNDEFINED_BRANCH_LABEL);
+  assert.equal(upcoming.length, 1);
+  assert.equal(upcoming[0]?.item.title, "Transmission");
+  assert.equal(upcoming[0]?.item.detail, "Révision 1re année");
+  assert.equal(upcoming[0]?.subjectName, "");
+  assert.notEqual(upcoming[0]?.subjectName, UNDEFINED_BRANCH_LABEL);
+  assert.ok(!upcoming[0]?.subjectName.startsWith("subject-course-"));
 });
 
 test("sources — GET /api/agenda expose les libellés résolus", async () => {
@@ -224,17 +232,22 @@ test("sources — GET /api/agenda expose les libellés résolus", async () => {
   assert.match(route, /subjects,/);
 });
 
-test("sources — vue élève affiche le nom résolu, jamais l’ID", async () => {
+test("sources — vue élève affiche le nom résolu, jamais l’ID ni le fallback", async () => {
   const [page, css] = await Promise.all([
     readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/globals.css", import.meta.url), "utf8"),
   ]);
   assert.match(page, /setAgendaSubjects\(view\.subjects\)/);
   assert.match(page, /student-upcoming-tests-branch/);
-  assert.match(page, /studentUpcomingHeadline/);
+  assert.match(page, /studentUpcomingPlainDetail/);
+  assert.match(page, /student-upcoming-tests-detail/);
+  assert.doesNotMatch(page, /studentUpcomingHeadline/);
+  assert.doesNotMatch(page, /Branche non définie/);
+  assert.doesNotMatch(page, /\$\{title\} · \$\{detail\}/);
   assert.doesNotMatch(page, /subjectName\} — \{entry\.item\.title/);
   assert.match(css, /\.student-course-day-app[\s\S]{0,80}font-family: var\(--carnet-font\)/);
   assert.match(css, /\.student-branch-block h2[\s\S]{0,160}text-transform: none/);
   assert.match(css, /\.student-upcoming-tests-branch/);
+  assert.match(css, /\.student-upcoming-tests-detail/);
   assert.doesNotMatch(css, /\.student-branch-block h2[^{]*\{[^}]*text-transform: uppercase/);
 });

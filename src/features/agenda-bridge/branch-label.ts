@@ -4,7 +4,7 @@ import type { SchoolBranchRecord } from "../school-catalog/types.ts";
 import { contextBranchForCourse } from "./reconcile.ts";
 import { annualCourseIdFromRuntimeSubjectId, looksLikeRuntimeSubjectId } from "./ids.ts";
 
-/** Affiché uniquement si le libellé maître est introuvable. Jamais un ID technique. */
+/** Ancien fallback élève : ne plus jamais l’afficher. */
 export const UNDEFINED_BRANCH_LABEL = "Branche non définie";
 
 export interface AgendaBranchSubjectHint {
@@ -22,14 +22,16 @@ export interface AgendaBranchLabelCatalog {
 
 export function displayBranchLabel(name: string | null | undefined): string {
   const trimmed = name?.trim() ?? "";
-  if (!trimmed || looksLikeRuntimeSubjectId(trimmed)) return UNDEFINED_BRANCH_LABEL;
+  if (!trimmed || looksLikeRuntimeSubjectId(trimmed) || trimmed === UNDEFINED_BRANCH_LABEL) {
+    return "";
+  }
   return trimmed;
 }
 
 /**
  * Libellé maître de la branche liée au subject / cours annuel.
  * Priorité : SchoolBranch.label via AnnualCourse → context → branche.
- * Repli : nom runtime s’il n’est pas un ID. Sinon « Branche non définie ».
+ * Repli : nom runtime s’il n’est pas un ID. Sinon chaîne vide (rien afficher).
  */
 export function resolveAgendaBranchLabel(
   options: {
@@ -52,7 +54,7 @@ export function resolveAgendaBranchLabel(
         branches: options.branches,
       });
       const label = displayBranchLabel(linked?.branch.label);
-      if (label !== UNDEFINED_BRANCH_LABEL) return label;
+      if (label) return label;
     }
   }
 

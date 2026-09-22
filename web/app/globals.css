@@ -358,6 +358,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .student-course-day-note { margin: 10px 0 0; color: #7b879c; font-size: 11px; }
 .student-branch-list { display: grid; gap: 18px; margin-top: 28px; }
 .student-branch-block h2 { margin: 0 0 10px; color: var(--navy); font-size: 13px; font-weight: 700; letter-spacing: .02em; text-transform: none; }
+.student-branch-block h2:empty { display: none; margin: 0; }
 .student-branch-block ul { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .student-branch-item { padding: 14px 16px; border: 1px solid var(--line); border-left: 4px solid var(--line-strong); border-radius: 10px; background: #fbfcfe; }
 .student-branch-item.homework { border-left-color: var(--blue); }
@@ -485,7 +486,9 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .student-upcoming-tests-list li { padding: 12px 14px; border: 1px solid var(--line); border-left: 4px solid var(--navy); border-radius: 8px; background: #fbfcfe; }
 .student-upcoming-tests-date { display: block; color: var(--blue); font-size: 10px; font-weight: 700; letter-spacing: .05em; }
 .student-upcoming-tests-branch { display: block; margin-top: 4px; color: var(--navy); font-size: 13px; font-weight: 600; }
+.student-upcoming-tests-branch:empty { display: none; }
 .student-upcoming-tests-list strong { display: block; margin-top: 2px; color: var(--navy); font-size: 13px; font-weight: 700; }
+.student-upcoming-tests-detail { display: block; margin-top: 2px; color: var(--navy); font-size: 13px; font-weight: 400; }
 .student-upcoming-tests-empty { margin: 0; color: #7b879c; font-size: 11px; }
 
 .library-panel { margin: 0 38px 28px; }
