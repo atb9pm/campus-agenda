@@ -1833,22 +1833,6 @@ test("audit — IDOR API croisés contrôles, carnet et course-publication", asy
   );
 
   const seeded = await seedInteractiveControlCourse(adminCookie, "teacher-demo-current", "IDOR");
-  const stolenCoursePublish = await jsonRequest("/api/teacher/course-publications", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", cookie: otherCookie },
-    body: JSON.stringify({
-      annualCourseId: seeded.annualCourseId,
-      courseSessionKey: `${seeded.schoolYearId}|${seeded.annualCourseId}|2026-09-01`,
-      referenceItemId: "ref-a",
-      teacherId: "teacher-demo-current",
-      authorTeacherId: "teacher-demo-current",
-      classroomId: notebook.payload.item.classroomId,
-    }),
-  });
-  assert.ok(
-    stolenCoursePublish.response.status === 403 || stolenCoursePublish.response.status === 404,
-    `course-publication B sur cours exclusif de A ${stolenCoursePublish.response.status}`,
-  );
   let controlOption;
   for (let week = 1; week <= 8 && !controlOption; week += 1) {
     const next = await jsonRequest(
@@ -1862,6 +1846,23 @@ test("audit — IDOR API croisés contrôles, carnet et course-publication", asy
     }
   }
   assert.ok(controlOption, "CourseSession de A requise");
+
+  const stolenCoursePublish = await jsonRequest("/api/teacher/course-publications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: otherCookie },
+    body: JSON.stringify({
+      annualCourseId: controlOption.annualCourseId,
+      courseSessionKey: controlOption.courseSessionKey,
+      referenceItemId: "ref-a",
+      teacherId: "teacher-demo-current",
+      authorTeacherId: "teacher-demo-current",
+      classroomId: notebook.payload.item.classroomId,
+    }),
+  });
+  assert.ok(
+    stolenCoursePublish.response.status === 403 || stolenCoursePublish.response.status === 404,
+    `course-publication B sur cours exclusif de A ${stolenCoursePublish.response.status}`,
+  );
 
   const createdControl = await jsonRequest("/api/teacher/controls", {
     method: "POST",
