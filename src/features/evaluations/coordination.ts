@@ -242,14 +242,74 @@ function slotTimestamp(slot: CourseDaySlot): number {
 }
 
 function slotFromWeekAndDay(week: SchoolWeek, dayIndex: number): CourseDaySlot {
-  const date = new Date(week.monday);
-  date.setDate(date.getDate() + dayIndex);
+  const monday = week.monday;
+  const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + dayIndex, 12);
   return {
     schoolWeekNumber: week.number,
     weekKind: week.kind,
     date,
     dayIndex,
   };
+}
+
+/** Date locale YYYY-MM-DD, sans heure — pour rester sur le même contrôle toute la journée. */
+export function calendarDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function calendarDaysBetween(from: Date, to: Date): number {
+  const start = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 12).getTime();
+  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 12).getTime();
+  return Math.round((end - start) / 86_400_000);
+}
+
+/** Tous les contrôles d’une classe, avec créneau calendaire. Pas de filtre de date. */
+export function collectClassTestEntries(
+  items: PrototypeAgendaItem[],
+  catalog: ClassroomCatalog,
+  classroomId: string,
+  weeks: SchoolWeek[],
+): UpcomingTestEntry[] {
+  const entries: UpcomingTestEntry[] = [];
+
+  for (const item of items) {
+    if (item.classroomId !== classroomId || item.type !== "TEST") continue;
+    const week = weeks.find((entry) => entry.number === item.schoolWeekNumber);
+    if (!week || !Number.isInteger(item.day) || item.day < 0 || item.day > 4) continue;
+    entries.push({
+      item,
+      slot: slotFromWeekAndDay(week, item.day),
+      subjectName: displayBranchLabel(getSubjectById(catalog, item.subjectId)?.name),
+      teacherName: getTeacherById(catalog, item.authorTeacherId)?.displayName ?? "Enseignant",
+    });
+  }
+
+  return entries;
+}
+
+function compareFutureTests(left: UpcomingTestEntry, right: UpcomingTestEntry): number {
+  return (
+    calendarDateKey(left.slot.date).localeCompare(calendarDateKey(right.slot.date))
+    || left.subjectName.localeCompare(right.subjectName, "fr")
+    || left.item.title.localeCompare(right.item.title, "fr")
+  );
+}
+
+/** Contrôles d’aujourd’hui et futurs, triés par date calendaire puis branche/titre. */
+export function listFutureTestsForClass(
+  items: PrototypeAgendaItem[],
+  catalog: ClassroomCatalog,
+  classroomId: string,
+  fromDate: Date,
+  weeks: SchoolWeek[],
+): UpcomingTestEntry[] {
+  const fromKey = calendarDateKey(fromDate);
+  return collectClassTestEntries(items, catalog, classroomId, weeks)
+    .filter((entry) => calendarDateKey(entry.slot.date) >= fromKey)
+    .sort(compareFutureTests);
 }
 
 export function listUpcomingTestsForClass(
@@ -261,24 +321,8 @@ export function listUpcomingTestsForClass(
   limit = STUDENT_UPCOMING_TESTS_LIMIT,
 ): UpcomingTestEntry[] {
   const fromTime = slotTimestamp(fromSlot);
-  const entries: UpcomingTestEntry[] = [];
-
-  for (const item of items) {
-    if (item.classroomId !== classroomId || item.type !== "TEST") continue;
-    const week = weeks.find((entry) => entry.number === item.schoolWeekNumber);
-    if (!week || !Number.isInteger(item.day) || item.day < 0 || item.day > 4) continue;
-    const slot = slotFromWeekAndDay(week, item.day);
-    if (slotTimestamp(slot) < fromTime) continue;
-
-    entries.push({
-      item,
-      slot,
-      subjectName: displayBranchLabel(getSubjectById(catalog, item.subjectId)?.name),
-      teacherName: getTeacherById(catalog, item.authorTeacherId)?.displayName ?? "Enseignant",
-    });
-  }
-
-  return entries
+  return collectClassTestEntries(items, catalog, classroomId, weeks)
+    .filter((entry) => slotTimestamp(entry.slot) >= fromTime)
     .sort((left, right) => slotTimestamp(left.slot) - slotTimestamp(right.slot) || left.item.id - right.item.id)
     .slice(0, limit);
 }

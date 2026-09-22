@@ -358,7 +358,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .student-course-day-card h1 { margin: 0; color: var(--navy); font-size: 34px; font-weight: 700; letter-spacing: -.03em; }
 .student-course-day-note { margin: 10px 0 0; color: #7b879c; font-size: 11px; }
 .student-branch-list { display: grid; gap: 18px; margin-top: 28px; }
-.student-branch-block h2 { margin: 0 0 10px; color: var(--navy); font-size: 13px; font-weight: 700; letter-spacing: .02em; text-transform: none; }
+.student-branch-block h2 { margin: 0 0 10px; color: var(--navy); font-size: 13px; font-weight: 700; letter-spacing: .02em; text-transform: none; overflow-wrap: anywhere; }
 .student-branch-block h2:empty { display: none; margin: 0; }
 .student-branch-block ul { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .student-branch-item { padding: 14px 16px; border: 1px solid var(--line); border-left: 4px solid var(--line-strong); border-radius: 10px; background: #fbfcfe; }
@@ -380,6 +380,86 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .student-branch-item .rich-doc-view h4 {
   font-size: var(--carnet-title-size);
 }
+.student-next-control {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--navy);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+.student-next-control-kicker {
+  margin: 0;
+  color: var(--navy);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+.student-next-control-warn {
+  display: inline-block;
+  margin-right: 5px;
+  color: #c2410c;
+  line-height: 1;
+}
+.student-next-control-date {
+  margin: 2px 0 0;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 600;
+}
+.student-next-control-titles {
+  display: grid;
+  gap: 2px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.student-next-control-titles strong {
+  display: block;
+  color: var(--navy);
+  font-size: 15px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.student-next-control-detail {
+  display: block;
+  margin-top: 1px;
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.student-next-control.urgency-week,
+.student-next-control.urgency-tomorrow {
+  background: #fff8ef;
+  border-left-color: #c2410c;
+}
+.student-next-control.urgency-today {
+  background: #eef4ff;
+}
+@keyframes student-control-warn-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .45; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .student-next-control-warn {
+    animation: student-control-warn-pulse 1.8s ease-in-out infinite;
+  }
+}
+.student-control-planning { display: grid; gap: 18px; }
+.student-control-planning-week { display: grid; gap: 10px; }
+.student-control-planning-day { display: grid; gap: 8px; }
+.student-control-planning-day h4 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 16px;
+  font-weight: 700;
+}
+.student-control-planning .student-upcoming-tests-list { gap: 8px; }
+.student-control-planning .student-upcoming-tests-branch { overflow-wrap: anywhere; }
+.student-control-planning .student-upcoming-tests-list strong { overflow-wrap: anywhere; }
 .student-course-day-empty { margin-top: 28px; padding: 28px; border: 1px dashed var(--line-strong); border-radius: 12px; text-align: center; }
 .student-course-day-empty strong { display: block; color: var(--navy); font-size: 14px; }
 .student-course-day-empty small { display: block; margin-top: 6px; color: #7b879c; font-size: 11px; }
@@ -2377,10 +2457,21 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   .student-course-day-card,
   .student-upcoming-tests,
   .student-history-panel { padding: 18px 16px; border-radius: 12px; }
+  .student-next-control { padding: 8px 10px; }
+  .student-next-control-titles strong { font-size: 14px; }
+  .student-branch-block h2,
+  .student-upcoming-tests-branch,
+  .student-upcoming-tests-list strong { overflow-wrap: anywhere; }
   .student-course-day-card h1 { font-size: 26px; }
 }
 
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}
 
 
 .admin-profession-context-actions { display: flex; flex-wrap: wrap; gap: 6px; }

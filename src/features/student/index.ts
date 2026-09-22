@@ -12,6 +12,24 @@ export {
   type SubjectAgendaGroup,
 } from "./course-day-view.ts";
 export {
+  buildStudentCourseDaySections,
+  compareStudentPublications,
+  formatNextControlHeadline,
+  groupControlPlanning,
+  listStudentControlPlanning,
+  nextControlHeadlineForEntries,
+  nextControlsForSubject,
+  type ControlPlanningDay,
+  type ControlPlanningWeek,
+  type ControlUrgency,
+  type NextControlHeadline,
+  type StudentCourseDaySection,
+} from "./upcoming-controls.ts";
+export {
+  msUntilNextLocalMidnight,
+  studentCalendarDateNeedsRefresh,
+} from "./student-today.ts";
+export {
   STUDENT_AUTHOR_LABEL,
   anonymizeAuthorForStudent,
   buildStudentAgendaSummary,

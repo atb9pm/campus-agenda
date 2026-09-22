@@ -16,12 +16,16 @@ import {
   type TeacherNavSection,
 } from "@campus/features/teacher";
 import {
+  buildStudentCourseDaySections,
   filterItemsForCourseDay,
   findStudentAccessForClassroom,
   getStudentAgendaItems,
   getStudentClassroom,
-  groupItemsBySubject,
+  groupControlPlanning,
+  msUntilNextLocalMidnight,
+  nextControlHeadlineForEntries,
   studentAccessFromApiSession,
+  studentCalendarDateNeedsRefresh,
 } from "@campus/features/student";
 import type { StudentAccess, TeacherClassAccessView } from "@campus/types/student-access";
 import {
@@ -40,7 +44,7 @@ import {
 } from "@campus/features/calendar";
 import {
   evaluateThirdTestAlert,
-  listUpcomingTestsForClass,
+  listFutureTestsForClass,
   type ThirdTestAlert,
 } from "@campus/features/evaluations";
 import type { AgendaItemType } from "@campus/types/agenda";
@@ -741,14 +745,39 @@ export default function Home() {
     };
   }, [notebookClassroomId, teacherAuthenticated]);
 
+  const [studentToday, setStudentToday] = useState(() => new Date());
+
+  useEffect(() => {
+    function refreshIfNeeded() {
+      const now = new Date();
+      setStudentToday((current) => (studentCalendarDateNeedsRefresh(current, now) ? now : current));
+    }
+
+    function scheduleMidnight() {
+      return window.setTimeout(() => {
+        refreshIfNeeded();
+        timeoutId = scheduleMidnight();
+      }, msUntilNextLocalMidnight(new Date()));
+    }
+
+    window.addEventListener("focus", refreshIfNeeded);
+    document.addEventListener("visibilitychange", refreshIfNeeded);
+    let timeoutId = scheduleMidnight();
+    return () => {
+      window.removeEventListener("focus", refreshIfNeeded);
+      document.removeEventListener("visibilitychange", refreshIfNeeded);
+      window.clearTimeout(timeoutId);
+    };
+  }, []);
+
   const studentAutoCourseDay = useMemo(() => {
     if (!schoolWeeksMemo.length) return null;
     return (
       (attendanceDays.length
-        ? resolveDisplayCourseDayFromAttendance(new Date(), schoolWeeksMemo, attendanceDays)
-        : null) ?? resolveDisplayCourseDay(new Date(), schoolWeeksMemo)
+        ? resolveDisplayCourseDayFromAttendance(studentToday, schoolWeeksMemo, attendanceDays)
+        : null) ?? resolveDisplayCourseDay(studentToday, schoolWeeksMemo)
     );
-  }, [attendanceDays, schoolWeeksMemo]);
+  }, [attendanceDays, schoolWeeksMemo, studentToday]);
 
   const studentCourseDayCatalog = useMemo(() => {
     const unique = new Map<string, CourseDaySlot>();
@@ -777,66 +806,88 @@ export default function Home() {
       : listPreviousCourseDays(studentDisplayCourseDay.date, 12, schoolWeeksMemo);
   }, [attendanceDays, studentDisplayCourseDay, schoolWeeksMemo]);
 
-  const studentCourseDayGroups = useMemo(() => {
-    if (!studentSession || !studentDisplayCourseDay) return [];
-    const classroomItems = getStudentAgendaItems(items, studentSession.classroomId);
-    const dayItems = filterItemsForCourseDay(classroomItems, studentDisplayCourseDay);
+  const studentClassroomSubjects = useMemo(() => {
+    if (!studentSession) return [];
     const labeled = agendaSubjects.filter((subject) => subject.classroomId === studentSession.classroomId);
     const runtimeSubjects = runtimeClassrooms.find((entry) => entry.id === studentSession.classroomId)?.subjects ?? [];
-    const subjects = labeled.length
-      ? labeled.map((subject) => ({
-          id: subject.id,
-          name: subject.name,
-          classroomId: studentSession.classroomId,
-          annualCourseId: subject.annualCourseId ?? null,
-        }))
-      : runtimeSubjects.length
-        ? runtimeSubjects.map((subject) => ({
-            id: subject.id,
-            name: subject.name,
-            classroomId: studentSession.classroomId,
-            annualCourseId: subject.annualCourseId ?? null,
-          }))
-        : getSubjectsForClassroom(DEMO_CATALOG, studentSession.classroomId);
-    return groupItemsBySubject(dayItems, subjects);
-  }, [studentSession, items, studentDisplayCourseDay, runtimeClassrooms, agendaSubjects]);
+    if (labeled.length) {
+      return labeled.map((subject) => ({
+        id: subject.id,
+        name: subject.name,
+        classroomId: studentSession.classroomId,
+        annualCourseId: subject.annualCourseId ?? null,
+      }));
+    }
+    if (runtimeSubjects.length) {
+      return runtimeSubjects.map((subject) => ({
+        id: subject.id,
+        name: subject.name,
+        classroomId: studentSession.classroomId,
+        annualCourseId: subject.annualCourseId ?? null,
+      }));
+    }
+    return getSubjectsForClassroom(DEMO_CATALOG, studentSession.classroomId);
+  }, [studentSession, runtimeClassrooms, agendaSubjects]);
+
+  const studentControlCatalog = useMemo((): ClassroomCatalog => {
+    if (!studentSession) return EMPTY_CLASSROOM_CATALOG;
+    if (studentClassroomSubjects.length) {
+      return {
+        classrooms: [{
+          id: studentSession.classroomId,
+          name: studentClassroomName || studentSession.classroomId,
+          programLabel: "",
+          accessCodeHint: "",
+        }],
+        subjects: studentClassroomSubjects,
+        memberships: [],
+        teachers: [],
+      };
+    }
+    return catalogFromRuntime(runtimeClassrooms).classrooms.length
+      ? catalogFromRuntime(runtimeClassrooms)
+      : DEMO_CATALOG;
+  }, [studentSession, studentClassroomSubjects, studentClassroomName, runtimeClassrooms]);
+
+  const studentFutureTests = useMemo(() => {
+    if (!studentSession || !schoolWeeksMemo.length) return [];
+    return listFutureTestsForClass(
+      items,
+      studentControlCatalog,
+      studentSession.classroomId,
+      studentToday,
+      schoolWeeksMemo,
+    );
+  }, [studentSession, items, studentControlCatalog, studentToday, schoolWeeksMemo]);
 
   const studentFollowingCourseDay = useMemo(() => {
     if (!studentDisplayCourseDay || !studentAutoCourseDay) return true;
     return courseDayKey(studentDisplayCourseDay) === courseDayKey(studentAutoCourseDay);
   }, [studentDisplayCourseDay, studentAutoCourseDay]);
 
-  const studentUpcomingTests = useMemo(() => {
-    if (!studentSession || !studentAutoCourseDay) return [];
-    const labeled = agendaSubjects.filter((subject) => subject.classroomId === studentSession.classroomId);
-    const catalog = labeled.length
-      ? {
-          classrooms: [{
-            id: studentSession.classroomId,
-            name: studentClassroomName || studentSession.classroomId,
-            programLabel: "",
-            accessCodeHint: "",
-          }],
-          subjects: labeled.map((subject) => ({
-            id: subject.id,
-            name: subject.name,
-            classroomId: studentSession.classroomId,
-            annualCourseId: subject.annualCourseId ?? null,
-          })),
-          memberships: [],
-          teachers: [],
-        }
-      : catalogFromRuntime(runtimeClassrooms).classrooms.length
-        ? catalogFromRuntime(runtimeClassrooms)
-        : DEMO_CATALOG;
-    return listUpcomingTestsForClass(
-      items,
-      catalog,
-      studentSession.classroomId,
-      studentAutoCourseDay,
-      schoolWeeksMemo,
+  const studentCourseDaySections = useMemo(() => {
+    if (!studentSession || !studentDisplayCourseDay) return [];
+    const classroomItems = getStudentAgendaItems(items, studentSession.classroomId);
+    const dayItems = filterItemsForCourseDay(classroomItems, studentDisplayCourseDay);
+    return buildStudentCourseDaySections(
+      dayItems,
+      studentClassroomSubjects,
+      studentFutureTests,
+      { includeNextControls: studentFollowingCourseDay },
     );
-  }, [studentSession, items, studentAutoCourseDay, schoolWeeksMemo, runtimeClassrooms, agendaSubjects, studentClassroomName]);
+  }, [
+    studentSession,
+    items,
+    studentDisplayCourseDay,
+    studentClassroomSubjects,
+    studentFutureTests,
+    studentFollowingCourseDay,
+  ]);
+
+  const studentControlPlanning = useMemo(
+    () => groupControlPlanning(studentFutureTests),
+    [studentFutureTests],
+  );
 
   function resetSelectedWeek() {
     if (!schoolWeeksMemo.length) {
@@ -1498,32 +1549,72 @@ export default function Home() {
                   <p className="student-course-day-note">Consultation d’un cours passé.</p>
                 )}
 
-                {studentCourseDayGroups.length ? (
+                {studentCourseDaySections.length ? (
                   <div className="student-branch-list">
-                    {studentCourseDayGroups.map((group) => (
+                    {studentCourseDaySections.map((section) => {
+                      const dateLabel = section.nextControls[0]
+                        ? formatCourseDayHeading(section.nextControls[0].slot)
+                        : "";
+                      const headline = nextControlHeadlineForEntries(
+                        section.nextControls,
+                        studentToday,
+                        dateLabel,
+                      );
+                      return (
                       <section
                         className="student-branch-block"
-                        key={group.subject.id}
-                        aria-label={group.subject.name || undefined}
+                        key={section.subject.id}
+                        aria-label={section.subject.name || undefined}
                       >
-                        {group.subject.name ? <h2>{group.subject.name}</h2> : null}
-                        <ul>
-                          {group.items.map((item) => (
-                            <li key={item.id} className={`student-branch-item ${item.type.toLowerCase()}`}>
-                              <span className="student-item-type">{TYPE_LABELS[item.type]}</span>
-                              {decodeRichDetail(item.detail) ? (
-                                <RichDocView doc={decodeRichDetail(item.detail)!} />
-                              ) : (
-                                <>
-                                  <strong>{item.title}</strong>
-                                  {!isPlaceholderDetail(item.detail) ? <p>{item.detail}</p> : null}
-                                </>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
+                        {section.subject.name ? <h2>{section.subject.name}</h2> : null}
+                        {headline ? (
+                          <div
+                            className={`student-next-control urgency-${headline.urgency}`}
+                            data-next-control=""
+                          >
+                            <p className="student-next-control-kicker">
+                              {headline.warn ? (
+                                <span className="student-next-control-warn" aria-hidden="true">⚠</span>
+                              ) : null}
+                              {headline.kicker.replace(/^⚠\s/, "")}
+                            </p>
+                            {headline.dateLabel ? (
+                              <p className="student-next-control-date">{headline.dateLabel}</p>
+                            ) : null}
+                            <ul className="student-next-control-titles">
+                              {section.nextControls.map((entry) => (
+                                <li key={entry.item.id}>
+                                  <strong>{entry.item.title}</strong>
+                                  {studentUpcomingPlainDetail(entry.item) ? (
+                                    <span className="student-next-control-detail">
+                                      {studentUpcomingPlainDetail(entry.item)}
+                                    </span>
+                                  ) : null}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        {section.publications.length ? (
+                          <ul>
+                            {section.publications.map((item) => (
+                              <li key={item.id} className={`student-branch-item ${item.type.toLowerCase()}`}>
+                                <span className="student-item-type">{TYPE_LABELS[item.type]}</span>
+                                {decodeRichDetail(item.detail) ? (
+                                  <RichDocView doc={decodeRichDetail(item.detail)!} />
+                                ) : (
+                                  <>
+                                    <strong>{item.title}</strong>
+                                    {!isPlaceholderDetail(item.detail) ? <p>{item.detail}</p> : null}
+                                  </>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
                       </section>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="student-course-day-empty">
@@ -1545,24 +1636,38 @@ export default function Home() {
             data-panel="controles"
             aria-labelledby="student-upcoming-tests-title"
           >
-            <h2 id="student-upcoming-tests-title">Contrôles à venir</h2>
-            {studentUpcomingTests.length ? (
-              <ol className="student-upcoming-tests-list">
-                {studentUpcomingTests.map((entry) => (
-                  <li key={entry.item.id}>
-                    <span className="student-upcoming-tests-date">
-                      {formatSchoolWeekLabel(entry.slot)} · {formatCourseDayHeading(entry.slot)}
-                    </span>
-                    {entry.subjectName ? (
-                      <span className="student-upcoming-tests-branch">{entry.subjectName}</span>
-                    ) : null}
-                    <strong>{entry.item.title}</strong>
-                    {studentUpcomingPlainDetail(entry.item) ? (
-                      <span className="student-upcoming-tests-detail">{studentUpcomingPlainDetail(entry.item)}</span>
-                    ) : null}
-                  </li>
+            <h2 id="student-upcoming-tests-title">Planning des contrôles</h2>
+            {studentControlPlanning.length ? (
+              <div className="student-control-planning">
+                {studentControlPlanning.map((week) => (
+                  <section
+                    className="student-control-planning-week"
+                    key={`${week.schoolWeekNumber}-${week.weekKind ?? ""}`}
+                  >
+                    <h3 className="student-week-label">{week.weekLabel}</h3>
+                    {week.days.map((day) => (
+                      <div className="student-control-planning-day" key={day.dateKey}>
+                        <h4>{formatCourseDayHeading(day.slot)}</h4>
+                        <ol className="student-upcoming-tests-list">
+                          {day.entries.map((entry) => (
+                            <li key={entry.item.id}>
+                              {entry.subjectName ? (
+                                <span className="student-upcoming-tests-branch">{entry.subjectName}</span>
+                              ) : null}
+                              <strong>{entry.item.title}</strong>
+                              {studentUpcomingPlainDetail(entry.item) ? (
+                                <span className="student-upcoming-tests-detail">
+                                  {studentUpcomingPlainDetail(entry.item)}
+                                </span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    ))}
+                  </section>
                 ))}
-              </ol>
+              </div>
             ) : (
               <p className="student-upcoming-tests-empty">Aucun contrôle planifié à venir pour votre classe.</p>
             )}
