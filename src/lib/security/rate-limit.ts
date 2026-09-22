@@ -14,7 +14,7 @@ export const STUDENT_UNPARSED_RATE_LIMIT_TARGET = "unparsed";
 export type AuthRateLimitScope = "teacher" | "student" | "teacher-password" | "teacher-mfa";
 export type AuthRateLimitLayer = "ip" | "target";
 
-/** Plafond : une école tient largement ; une rafale de cibles uniques ne peut pas faire grandir la Map. ~1 Mo. */
+/** Plafond fail-closed : au-delà, une nouvelle clé est refusée. Aucun seau actif n’est évincé. */
 export const MEMORY_RATE_LIMIT_MAX_BUCKETS = 8_000;
 /** Évite un parcours complet à chaque requête. */
 const MEMORY_RATE_LIMIT_CLEANUP_EVERY_CHECKS = 32;
@@ -23,7 +23,6 @@ const MEMORY_RATE_LIMIT_CLEANUP_EVERY_MS = 15_000;
 interface MemoryRateLimitBucket {
   count: number;
   resetAt: number;
-  createdAt: number;
 }
 
 const memoryBuckets = new Map<string, MemoryRateLimitBucket>();
@@ -220,35 +219,20 @@ function maybeCleanupExpiredRateLimitBuckets(now: number): void {
   }
 }
 
-/** Plus proche de l’expiration, puis plus ancien `createdAt` — jamais un tri par nom de clé. */
-function evictClosestToExpiration(needed: number): void {
-  if (needed <= 0 || memoryBuckets.size === 0) return;
-  const ranked = Array.from(memoryBuckets, ([key, bucket], index) => ({
-    key,
-    index,
-    resetAt: bucket.resetAt,
-    createdAt: bucket.createdAt,
-  }));
-  ranked.sort((left, right) => {
-    const resetDelta = left.resetAt - right.resetAt;
-    if (resetDelta !== 0) return resetDelta;
-    const createdDelta = left.createdAt - right.createdAt;
-    if (createdDelta !== 0) return createdDelta;
-    return left.index - right.index;
-  });
-  const removeCount = Math.min(needed, ranked.length);
-  for (let offset = 0; offset < removeCount; offset += 1) {
-    memoryBuckets.delete(ranked[offset].key);
-  }
-}
-
-function ensureMemoryBucketCapacity(now: number): void {
-  if (memoryBuckets.size < MEMORY_RATE_LIMIT_MAX_BUCKETS) return;
+/**
+ * Place pour une nouvelle clé : cleanup des expirés, puis refus si 8000 seaux actifs.
+ * Ne supprime jamais un seau encore valide. Pas de tri.
+ */
+function canAllocateNewMemoryBucket(now: number): boolean {
+  if (memoryBuckets.size < MEMORY_RATE_LIMIT_MAX_BUCKETS) return true;
   cleanupExpiredRateLimitBuckets(now);
-  if (memoryBuckets.size < MEMORY_RATE_LIMIT_MAX_BUCKETS) return;
-  evictClosestToExpiration(memoryBuckets.size - MEMORY_RATE_LIMIT_MAX_BUCKETS + 1);
+  return memoryBuckets.size < MEMORY_RATE_LIMIT_MAX_BUCKETS;
 }
 
+/**
+ * `false` = compteur individuel dépassé **ou** Map saturée (8000 seaux actifs).
+ * Dans les deux cas la route répond 429. Un seau existant n’est jamais évincé.
+ */
 export function checkInMemoryRateLimit(
   key: string,
   limit: number,
@@ -264,10 +248,10 @@ export function checkInMemoryRateLimit(
     bucket.count += 1;
     return true;
   }
-  if (!bucket) {
-    ensureMemoryBucketCapacity(now);
+  if (!bucket && !canAllocateNewMemoryBucket(now)) {
+    return false;
   }
-  memoryBuckets.set(key, { count: 1, resetAt: now + windowMs, createdAt: now });
+  memoryBuckets.set(key, { count: 1, resetAt: now + windowMs });
   return true;
 }
 

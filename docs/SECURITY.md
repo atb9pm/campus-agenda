@@ -57,7 +57,7 @@ Deux seaux indépendants (IP **et** cible). Concaténer `IP:compte` permettrait 
 
 ### Rate limiter mémoire
 
-Seaux expirés nettoyés automatiquement (toutes les 32 opérations ou 15 s, et avant éviction). Taille maximale **8000** seaux : d’abord les expirés, puis les plus proches de l’expiration. Pas de vidage global. Les clés ne sont pas journalisées. Redis n’est pas utilisé dans cette version.
+Seaux expirés nettoyés automatiquement (toutes les 32 opérations ou 15 s, et avant décision de saturation). Plafond **8000** seaux **fail closed** : aucun seau actif n’est évincé ; une nouvelle clé est refusée tant que la Map est pleine de seaux encore valides. Pas de vidage global, pas de tri. Les clés ne sont pas journalisées. Redis n’est pas utilisé dans cette version.
 
 ## AUTH_SECRET
 

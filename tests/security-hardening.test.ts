@@ -62,6 +62,8 @@ test("version 2.61.8 — durcissement MFA, sessions, restore, en-têtes, pas de 
   assert.match(rateLimit, /authRateLimitTargetFromStudentCode/);
   assert.match(rateLimit, /MEMORY_RATE_LIMIT_MAX_BUCKETS/);
   assert.match(rateLimit, /cleanupExpiredRateLimitBuckets/);
+  assert.match(rateLimit, /canAllocateNewMemoryBucket/);
+  assert.doesNotMatch(rateLimit, /evictClosestToExpiration/);
   assert.doesNotMatch(rateLimit, /IP:compte/);
   assert.doesNotMatch(rateLimit, /console\.(log|info|debug|warn)/);
 

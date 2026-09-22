@@ -102,8 +102,9 @@ Changer d’IP ne réinitialise pas la limite d’un compte ou d’une classe. P
 
 ### Rate limiter mémoire
 
-- Les seaux expirés (`resetAt` atteint) sont retirés automatiquement : toutes les 32 opérations ou 15 secondes, et avant toute éviction. Un seau encore actif n’est pas modifié.
-- La Map est plafonnée à **8000** seaux (~1 Mo). Au-delà : d’abord les expirés, puis les plus proches de l’expiration (à `createdAt` égal, les plus anciens). Pas de vidage global, pas de tri par nom de clé.
+- Les seaux expirés (`resetAt` atteint) sont retirés automatiquement : toutes les 32 opérations ou 15 secondes, et avant toute décision de saturation. Un seau encore actif n’est jamais modifié ni évincé.
+- La Map est plafonnée à **8000** seaux. Si 8000 seaux **actifs** sont présents, une **nouvelle** clé est refusée (fail closed, 429) jusqu’à ce qu’un seau expire. Pas de vidage global, pas de tri de la Map.
+- `false` peut signifier un compteur individuel dépassé **ou** une saturation globale : dans les deux cas la route répond 429.
 - Fallback **par processus**. Un redémarrage remet toujours les compteurs à zéro. Redis / stockage partagé n’est pas utilisé dans cette version.
 
 Réponse en cas de dépassement :
