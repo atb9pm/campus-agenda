@@ -6,6 +6,7 @@ import {
   AUTH_PASSWORD_CHANGE_LIMIT,
   AUTH_STUDENT_LIMIT,
   AUTH_TEACHER_LIMIT,
+  MEMORY_RATE_LIMIT_MAX_BUCKETS,
   STUDENT_UNPARSED_RATE_LIMIT_TARGET,
   authRateLimitTargetFromStudentCode,
   authRateLimitTargetFromTeacherIdentifier,
@@ -14,6 +15,8 @@ import {
   buildAuthRateLimitKey,
   buildAuthTargetRateLimitKey,
   checkInMemoryRateLimit,
+  cleanupExpiredRateLimitBuckets,
+  countInMemoryRateLimitBuckets,
   rateLimitKeyLooksSensitive,
   readClientKey,
   resetInMemoryRateLimits,
@@ -247,6 +250,92 @@ test("rate limit enseignant — identifiant inexistant limité, casse et espaces
   );
   assert.equal(sameAfterCase, unknownKey);
   assert.equal(checkInMemoryRateLimit(sameAfterCase, limit), false);
+});
+
+test("rate limiter mémoire — un seau actif survit au cleanup", () => {
+  resetInMemoryRateLimits();
+  const now = 1_700_000_000_000;
+  const key = buildAuthTargetRateLimitKey("teacher", "teacher-chf");
+  assert.equal(checkInMemoryRateLimit(key, 2, 60_000, now), true);
+  assert.equal(checkInMemoryRateLimit(key, 2, 60_000, now), true);
+  assert.equal(checkInMemoryRateLimit(key, 2, 60_000, now), false);
+  assert.equal(countInMemoryRateLimitBuckets(), 1);
+  assert.equal(cleanupExpiredRateLimitBuckets(now + 1_000), 0);
+  assert.equal(countInMemoryRateLimitBuckets(), 1);
+  assert.equal(checkInMemoryRateLimit(key, 2, 60_000, now + 1_000), false);
+});
+
+test("rate limiter mémoire — un seau expiré est retiré par le cleanup", () => {
+  resetInMemoryRateLimits();
+  const now = 1_700_000_000_000;
+  const key = buildAuthIpRateLimitKey("teacher", "203.0.113.9");
+  assert.equal(checkInMemoryRateLimit(key, 5, 1_000, now), true);
+  assert.equal(countInMemoryRateLimitBuckets(), 1);
+  assert.equal(cleanupExpiredRateLimitBuckets(now + 1_000), 1);
+  assert.equal(countInMemoryRateLimitBuckets(), 0);
+});
+
+test("rate limiter mémoire — milliers de seaux expirés libérés, taille retombe à zéro", () => {
+  resetInMemoryRateLimits();
+  const now = 1_700_000_000_000;
+  const flood = 2_400;
+  for (let index = 0; index < flood; index += 1) {
+    assert.equal(checkInMemoryRateLimit(`auth:teacher:target:PROBE${index}`, 10, 500, now), true);
+  }
+  assert.equal(countInMemoryRateLimitBuckets(), flood);
+  assert.equal(cleanupExpiredRateLimitBuckets(now + 500), flood);
+  assert.equal(countInMemoryRateLimitBuckets(), 0);
+});
+
+test("rate limiter mémoire — la Map ne dépasse jamais le plafond", () => {
+  resetInMemoryRateLimits();
+  const now = 1_700_000_000_000;
+  for (let index = 0; index < MEMORY_RATE_LIMIT_MAX_BUCKETS + 80; index += 1) {
+    checkInMemoryRateLimit(`auth:teacher:target:FLOOD${index}`, 10, 60_000, now);
+    assert.ok(countInMemoryRateLimitBuckets() <= MEMORY_RATE_LIMIT_MAX_BUCKETS);
+  }
+  assert.equal(countInMemoryRateLimitBuckets(), MEMORY_RATE_LIMIT_MAX_BUCKETS);
+});
+
+test("rate limiter mémoire — éviction préfère les expirés, seau actif inchangé", () => {
+  resetInMemoryRateLimits();
+  const now = 1_700_000_000_000;
+  const sensitive = buildAuthTargetRateLimitKey("teacher", "teacher-chf");
+  const student = buildAuthTargetRateLimitKey("student", authRateLimitTargetFromStudentCode("MA2-K7M4-R2P8"));
+  const mfa = buildAuthTargetRateLimitKey("teacher-mfa", "teacher-chf");
+  const password = buildAuthTargetRateLimitKey("teacher-password", "teacher-chf");
+  const ip = buildAuthIpRateLimitKey("teacher", "203.0.113.40");
+
+  assert.equal(checkInMemoryRateLimit(sensitive, 2, 60_000, now), true);
+  assert.equal(checkInMemoryRateLimit(sensitive, 2, 60_000, now), true);
+  assert.equal(checkInMemoryRateLimit(sensitive, 2, 60_000, now), false);
+  assert.equal(checkInMemoryRateLimit(student, 2, 60_000, now), true);
+  assert.equal(checkInMemoryRateLimit(student, 2, 60_000, now), true);
+  assert.equal(checkInMemoryRateLimit(student, 2, 60_000, now), false);
+  assert.equal(checkInMemoryRateLimit(mfa, 2, 60_000, now), true);
+  assert.equal(checkInMemoryRateLimit(mfa, 2, 60_000, now), true);
+  assert.equal(checkInMemoryRateLimit(mfa, 2, 60_000, now), false);
+  assert.equal(checkInMemoryRateLimit(password, 2, 60_000, now), true);
+  assert.equal(checkInMemoryRateLimit(password, 2, 60_000, now), true);
+  assert.equal(checkInMemoryRateLimit(password, 2, 60_000, now), false);
+  assert.equal(checkInMemoryRateLimit(ip, 2, 60_000, now), true);
+  assert.equal(checkInMemoryRateLimit(ip, 2, 60_000, now), true);
+  assert.equal(checkInMemoryRateLimit(ip, 2, 60_000, now), false);
+
+  const junkNow = now - 5_000;
+  const junkCount = MEMORY_RATE_LIMIT_MAX_BUCKETS - 5;
+  for (let index = 0; index < junkCount; index += 1) {
+    checkInMemoryRateLimit(`auth:teacher:target:EXPIRED${index}`, 10, 1, junkNow);
+  }
+  assert.equal(countInMemoryRateLimitBuckets(), MEMORY_RATE_LIMIT_MAX_BUCKETS);
+
+  assert.equal(checkInMemoryRateLimit("auth:teacher:target:NEWONE", 10, 60_000, now), true);
+  assert.ok(countInMemoryRateLimitBuckets() <= MEMORY_RATE_LIMIT_MAX_BUCKETS);
+  assert.equal(checkInMemoryRateLimit(sensitive, 2, 60_000, now), false);
+  assert.equal(checkInMemoryRateLimit(student, 2, 60_000, now), false);
+  assert.equal(checkInMemoryRateLimit(mfa, 2, 60_000, now), false);
+  assert.equal(checkInMemoryRateLimit(password, 2, 60_000, now), false);
+  assert.equal(checkInMemoryRateLimit(ip, 2, 60_000, now), false);
 });
 
 test("phase 1.0 — limites configurables via variables d'environnement", () => {

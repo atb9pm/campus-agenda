@@ -60,13 +60,18 @@ test("version 2.61.8 — durcissement MFA, sessions, restore, en-têtes, pas de 
   assert.match(rateLimit, /buildAuthIpRateLimitKey/);
   assert.match(rateLimit, /buildAuthTargetRateLimitKey/);
   assert.match(rateLimit, /authRateLimitTargetFromStudentCode/);
+  assert.match(rateLimit, /MEMORY_RATE_LIMIT_MAX_BUCKETS/);
+  assert.match(rateLimit, /cleanupExpiredRateLimitBuckets/);
   assert.doesNotMatch(rateLimit, /IP:compte/);
+  assert.doesNotMatch(rateLimit, /console\.(log|info|debug|warn)/);
 
   const operations = await readFile(new URL("../docs/OPERATIONS.md", import.meta.url), "utf8");
   assert.match(operations, /mémoire par processus/);
   assert.match(operations, /préfixe de classe/);
   assert.match(operations, /32 octets/);
   assert.match(operations, /teacherId` interne canonique/);
+  assert.match(operations, /Rate limiter mémoire/);
+  assert.match(operations, /8000/);
 
   const worker = await readFile(new URL("../web/worker/index.ts", import.meta.url), "utf8");
   assert.match(worker, /withSecurityHeaders/);

@@ -55,6 +55,10 @@ Deux seaux indépendants (IP **et** cible). Concaténer `IP:compte` permettrait 
 
 20 tentatives élève / min sur une IP partagée restent compatibles avec une classe qui se connecte en même temps. Le secret du code fait 8 caractères d’un alphabet de **32** symboles (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, I et O exclus) : le plafond empêche un balayage automatique, pas une recherche exhaustive. Le secret complet n’entre jamais dans une clé de rate limit ou de log. `cf-connecting-ip` n’est utilisé que si `cf-ray` est présent (Infomaniak n’est pas Cloudflare). Le fallback mémoire est **par processus** : redémarrage = compteurs à zéro.
 
+### Rate limiter mémoire
+
+Seaux expirés nettoyés automatiquement (toutes les 32 opérations ou 15 s, et avant éviction). Taille maximale **8000** seaux : d’abord les expirés, puis les plus proches de l’expiration. Pas de vidage global. Les clés ne sont pas journalisées. Redis n’est pas utilisé dans cette version.
+
 ## AUTH_SECRET
 
 En production : au moins **32 octets**, 48 ou 64 caractères aléatoires recommandés. Pas d’exigence artificielle majuscule/chiffre. Valeur jamais loguée. Hors production, valeur fictive interne si la variable est absente.

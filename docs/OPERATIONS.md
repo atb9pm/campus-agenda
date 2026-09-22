@@ -100,6 +100,12 @@ Changer d’IP ne réinitialise pas la limite d’un compte ou d’une classe. P
 
 **Limite Infomaniak** : sans Redis, le compteur mémoire est **local à chaque processus**. Un redémarrage remet les compteurs à zéro. Plusieurs processus Node ne partagent pas les seaux. `x-real-ip` / dernier saut `X-Forwarded-For` restent un indice IP ; Infomaniak n’est pas garanti d’écraser ces en-têtes — d’où le seau cible indépendant. `cf-connecting-ip` n’est crédible que si `cf-ray` est présent.
 
+### Rate limiter mémoire
+
+- Les seaux expirés (`resetAt` atteint) sont retirés automatiquement : toutes les 32 opérations ou 15 secondes, et avant toute éviction. Un seau encore actif n’est pas modifié.
+- La Map est plafonnée à **8000** seaux (~1 Mo). Au-delà : d’abord les expirés, puis les plus proches de l’expiration (à `createdAt` égal, les plus anciens). Pas de vidage global, pas de tri par nom de clé.
+- Fallback **par processus**. Un redémarrage remet toujours les compteurs à zéro. Redis / stockage partagé n’est pas utilisé dans cette version.
+
 Réponse en cas de dépassement :
 
 ```http

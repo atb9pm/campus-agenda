@@ -14,7 +14,21 @@ export const STUDENT_UNPARSED_RATE_LIMIT_TARGET = "unparsed";
 export type AuthRateLimitScope = "teacher" | "student" | "teacher-password" | "teacher-mfa";
 export type AuthRateLimitLayer = "ip" | "target";
 
-const memoryBuckets = new Map<string, { count: number; resetAt: number }>();
+/** Plafond : une école tient largement ; une rafale de cibles uniques ne peut pas faire grandir la Map. ~1 Mo. */
+export const MEMORY_RATE_LIMIT_MAX_BUCKETS = 8_000;
+/** Évite un parcours complet à chaque requête. */
+const MEMORY_RATE_LIMIT_CLEANUP_EVERY_CHECKS = 32;
+const MEMORY_RATE_LIMIT_CLEANUP_EVERY_MS = 15_000;
+
+interface MemoryRateLimitBucket {
+  count: number;
+  resetAt: number;
+  createdAt: number;
+}
+
+const memoryBuckets = new Map<string, MemoryRateLimitBucket>();
+let lastCleanupAt = 0;
+let checksSinceCleanup = 0;
 
 const IPV4 =
   /^(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
@@ -175,26 +189,92 @@ export function resolveAuthRateLimit(scope: AuthRateLimitScope, layer: AuthRateL
   return readPositiveLimit(RATE_LIMIT_ENV_KEYS[scope], RATE_LIMIT_DEFAULTS[scope]);
 }
 
+export function countInMemoryRateLimitBuckets(): number {
+  return memoryBuckets.size;
+}
+
+/**
+ * Retire uniquement les seaux dont `resetAt <= now`.
+ * Les seaux encore actifs restent intacts. Ne journalise aucune clé.
+ */
+export function cleanupExpiredRateLimitBuckets(now = Date.now()): number {
+  let removed = 0;
+  for (const [key, bucket] of memoryBuckets) {
+    if (bucket.resetAt <= now) {
+      memoryBuckets.delete(key);
+      removed += 1;
+    }
+  }
+  lastCleanupAt = now;
+  checksSinceCleanup = 0;
+  return removed;
+}
+
+function maybeCleanupExpiredRateLimitBuckets(now: number): void {
+  checksSinceCleanup += 1;
+  if (
+    checksSinceCleanup >= MEMORY_RATE_LIMIT_CLEANUP_EVERY_CHECKS
+    || now - lastCleanupAt >= MEMORY_RATE_LIMIT_CLEANUP_EVERY_MS
+  ) {
+    cleanupExpiredRateLimitBuckets(now);
+  }
+}
+
+/** Plus proche de l’expiration, puis plus ancien `createdAt` — jamais un tri par nom de clé. */
+function evictClosestToExpiration(needed: number): void {
+  if (needed <= 0 || memoryBuckets.size === 0) return;
+  const ranked = Array.from(memoryBuckets, ([key, bucket], index) => ({
+    key,
+    index,
+    resetAt: bucket.resetAt,
+    createdAt: bucket.createdAt,
+  }));
+  ranked.sort((left, right) => {
+    const resetDelta = left.resetAt - right.resetAt;
+    if (resetDelta !== 0) return resetDelta;
+    const createdDelta = left.createdAt - right.createdAt;
+    if (createdDelta !== 0) return createdDelta;
+    return left.index - right.index;
+  });
+  const removeCount = Math.min(needed, ranked.length);
+  for (let offset = 0; offset < removeCount; offset += 1) {
+    memoryBuckets.delete(ranked[offset].key);
+  }
+}
+
+function ensureMemoryBucketCapacity(now: number): void {
+  if (memoryBuckets.size < MEMORY_RATE_LIMIT_MAX_BUCKETS) return;
+  cleanupExpiredRateLimitBuckets(now);
+  if (memoryBuckets.size < MEMORY_RATE_LIMIT_MAX_BUCKETS) return;
+  evictClosestToExpiration(memoryBuckets.size - MEMORY_RATE_LIMIT_MAX_BUCKETS + 1);
+}
+
 export function checkInMemoryRateLimit(
   key: string,
   limit: number,
   windowMs = AUTH_RATE_LIMIT_WINDOW_MS,
+  now = Date.now(),
 ): boolean {
-  const now = Date.now();
+  maybeCleanupExpiredRateLimitBuckets(now);
   const bucket = memoryBuckets.get(key);
-  if (!bucket || now >= bucket.resetAt) {
-    memoryBuckets.set(key, { count: 1, resetAt: now + windowMs });
+  if (bucket && now < bucket.resetAt) {
+    if (bucket.count >= limit) {
+      return false;
+    }
+    bucket.count += 1;
     return true;
   }
-  if (bucket.count >= limit) {
-    return false;
+  if (!bucket) {
+    ensureMemoryBucketCapacity(now);
   }
-  bucket.count += 1;
+  memoryBuckets.set(key, { count: 1, resetAt: now + windowMs, createdAt: now });
   return true;
 }
 
 export function resetInMemoryRateLimits(): void {
   memoryBuckets.clear();
+  lastCleanupAt = 0;
+  checksSinceCleanup = 0;
 }
 
 export function rateLimitKeyLooksSensitive(key: string): boolean {
