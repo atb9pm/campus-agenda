@@ -1,3 +1,5 @@
+import { isProductionRuntime } from "./runtime-env.ts";
+
 export { DEMO_TEACHER_PASSWORD, isDemoTeacherPassword } from "./password.ts";
 
 /** Minimum de secret effectif (octets UTF-8) en production. */
@@ -31,7 +33,7 @@ export function assertProductionAuthSecret(secret: string | undefined | null): s
 
 export function getAuthSecret(): string {
   const secret = process.env.AUTH_SECRET?.trim();
-  if (process.env.NODE_ENV === "production") {
+  if (isProductionRuntime()) {
     return assertProductionAuthSecret(secret);
   }
   return secret || DEV_FALLBACK_AUTH_SECRET;

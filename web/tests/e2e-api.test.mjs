@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 process.env.AUTH_SECRET ??= "test-secret-e2e-phase-08";
+if (process.env.NODE_ENV === "production") {
+  process.env.NODE_ENV = "test";
+}
 // Les comptes de démonstration n'ont pas de mot de passe personnel : le parcours
 // E2E autorise explicitement l'empreinte héritée `campus-demo`.
 process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";

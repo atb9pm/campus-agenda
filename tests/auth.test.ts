@@ -17,6 +17,7 @@ import {
   getAuthSecret,
   isDemoTeacherPassword,
 } from "../src/lib/auth/config.ts";
+import { isProductionRuntime } from "../src/lib/auth/runtime-env.ts";
 import { getMemoryAgendaStore, resetMemoryAgendaStore } from "../src/lib/persistence/memory-store.ts";
 import { DEMO_CURRENT_TEACHER_ID } from "../src/features/classes/index.ts";
 
@@ -63,6 +64,12 @@ test("AUTH_SECRET — production refuse l’absence, le secret trop court, accep
     if (previousEnv === undefined) delete process.env.NODE_ENV;
     else process.env.NODE_ENV = previousEnv;
   }
+});
+
+test("runtime env — isProductionRuntime lit l’objet env (anti-repli bundler)", () => {
+  assert.equal(isProductionRuntime({ NODE_ENV: "production" }), true);
+  assert.equal(isProductionRuntime({ NODE_ENV: "test" }), false);
+  assert.equal(isProductionRuntime({ NODE_ENV: "development" }), false);
 });
 
 test("AUTH_SECRET — hors production conserve une valeur fictive si absent", () => {

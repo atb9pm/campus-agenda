@@ -7,6 +7,7 @@
  */
 
 import { DEMO_TEACHER_PASSWORD } from "../../features/teacher-accounts/password-policy.ts";
+import { isProductionRuntime } from "./runtime-env.ts";
 
 export {
   checkPasswordStrength,
@@ -43,7 +44,7 @@ export function isUsablePasswordHash(hash: string | null | undefined): boolean {
  * `NODE_ENV=development` l’accepte si la variable est absente.
  */
 export function demoPasswordAllowed(): boolean {
-  if (process.env.NODE_ENV === "production") return false;
+  if (isProductionRuntime()) return false;
   const flag = process.env.CAMPUS_ALLOW_DEMO_PASSWORD;
   if (flag === "1") return true;
   if (flag === "0") return false;
@@ -102,7 +103,7 @@ export async function verifyPassword(password: string, storedHash: string | null
   if (!candidate) return false;
 
   if (isLegacyDemoHash(storedHash)) {
-    if (process.env.NODE_ENV === "production") return false;
+    if (isProductionRuntime()) return false;
     if (!demoPasswordAllowed()) return false;
     return constantTimeEquals(candidate, storedHash.slice(LEGACY_DEMO_PREFIX.length));
   }
