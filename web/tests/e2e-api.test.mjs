@@ -1770,19 +1770,29 @@ test("audit — IDOR API croisés contrôles, carnet et course-publication", asy
   const ownerCookie = await loginTeacher("teacher-demo-current");
   const otherCookie = await loginTeacher("teacher-demo-martin");
   const adminCookie = await loginAdmin();
+  const seeded = await seedInteractiveControlCourse(adminCookie, "teacher-demo-current", "IDOR");
 
-  const ownerCourses = await jsonRequest("/api/teacher/courses", { headers: { cookie: ownerCookie } });
-  assert.equal(ownerCourses.response.status, 200, ownerCourses.payload.reason);
-  const ownerCourse = (ownerCourses.payload.courses ?? [])[0];
-  assert.ok(ownerCourse?.annualCourseId, "cours légitime de A");
+  let controlOption;
+  for (let week = 1; week <= 8 && !controlOption; week += 1) {
+    const next = await jsonRequest(
+      `/api/teacher/controls/planning?week=${week}&schoolYearId=${encodeURIComponent(seeded.schoolYearId)}&view=week`,
+      { headers: { cookie: ownerCookie } },
+    );
+    if (next.response.status !== 200) continue;
+    for (const day of next.payload.week?.days ?? []) {
+      controlOption = (day.placementOptions ?? []).find((entry) => entry.annualCourseId === seeded.annualCourseId);
+      if (controlOption) break;
+    }
+  }
+  assert.ok(controlOption, "CourseSession de A requise");
 
   const notebook = await jsonRequest("/api/teacher/notebook-publications", {
     method: "POST",
     headers: { "Content-Type": "application/json", cookie: ownerCookie },
     body: JSON.stringify({
-      annualCourseId: ownerCourse.annualCourseId,
-      schoolWeekNumber: 5,
-      day: 1,
+      annualCourseId: seeded.annualCourseId,
+      schoolWeekNumber: controlOption.schoolWeekNumber ?? 5,
+      day: controlOption.dayIndex ?? 1,
       type: "HOMEWORK",
       title: "Carnet de A",
       detail: "Privé A",
@@ -1817,9 +1827,9 @@ test("audit — IDOR API croisés contrôles, carnet et course-publication", asy
     method: "POST",
     headers: { "Content-Type": "application/json", cookie: otherCookie },
     body: JSON.stringify({
-      annualCourseId: ownerCourse.annualCourseId,
-      schoolWeekNumber: 5,
-      day: 1,
+      annualCourseId: seeded.annualCourseId,
+      schoolWeekNumber: controlOption.schoolWeekNumber ?? 5,
+      day: controlOption.dayIndex ?? 1,
       type: "HOMEWORK",
       title: "Carnet volé",
       teacherId: "teacher-demo-current",
@@ -1831,21 +1841,6 @@ test("audit — IDOR API croisés contrôles, carnet et course-publication", asy
     stolenNotebookCreate.response.status === 403 || stolenNotebookCreate.response.status === 404,
     `carnet B sur cours de A ${stolenNotebookCreate.response.status}`,
   );
-
-  const seeded = await seedInteractiveControlCourse(adminCookie, "teacher-demo-current", "IDOR");
-  let controlOption;
-  for (let week = 1; week <= 8 && !controlOption; week += 1) {
-    const next = await jsonRequest(
-      `/api/teacher/controls/planning?week=${week}&schoolYearId=${encodeURIComponent(seeded.schoolYearId)}&view=week`,
-      { headers: { cookie: ownerCookie } },
-    );
-    if (next.response.status !== 200) continue;
-    for (const day of next.payload.week?.days ?? []) {
-      controlOption = (day.placementOptions ?? []).find((entry) => entry.annualCourseId === seeded.annualCourseId);
-      if (controlOption) break;
-    }
-  }
-  assert.ok(controlOption, "CourseSession de A requise");
 
   const stolenCoursePublish = await jsonRequest("/api/teacher/course-publications", {
     method: "POST",
