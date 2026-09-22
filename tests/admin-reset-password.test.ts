@@ -112,6 +112,7 @@ test("bonne confirmation → mot de passe temporaire, ancien refusé, MFA inchan
   assert.ok(reset.temporaryPassword.length >= 10);
   assert.equal(reset.account.mustChangePassword, true);
   assert.equal(reset.account.isAdmin, true);
+  assert.match(reset.account.passwordUpdatedAt ?? "", /\.\d{3}Z$/);
 
   const hashes = await accounts.exportAllAccounts();
   const adminHash = hashes.find((entry) => entry.id === TEACHER_CHF_ID)?.passwordHash ?? "";

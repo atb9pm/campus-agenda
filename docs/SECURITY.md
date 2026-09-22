@@ -53,7 +53,7 @@ Deux seaux indépendants (IP **et** cible). Concaténer `IP:compte` permettrait 
 | `POST /api/auth/teacher/password` | IP | compte enseignant | 10 + 10 |
 | MFA / codes de récupération | IP | compte administrateur | 8 + 8 |
 
-20 tentatives élève / min sur une IP partagée restent compatibles avec une classe qui se connecte en même temps. Le secret du code fait 8 caractères d’un alphabet de **32** symboles (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, I et O exclus) : le plafond empêche un balayage automatique, pas une recherche exhaustive. Le secret complet n’entre jamais dans une clé de rate limit ou de log. `cf-connecting-ip` n’est utilisé que si `cf-ray` est présent (Infomaniak n’est pas Cloudflare). Le fallback mémoire est **par processus** : redémarrage = compteurs à zéro.
+20 tentatives élève / min sur une IP partagée restent compatibles avec une classe qui se connecte en même temps. Le secret du code fait 8 caractères d’un alphabet de **32** symboles (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, I et O exclus) : le plafond empêche un balayage automatique, pas une recherche exhaustive. Le secret complet n’entre jamais dans une clé de rate limit ou de log. Le seau IP n’est **pas** une preuve anti-spoof : `cf-connecting-ip` seulement avec `cf-ray` ; `x-real-ip` / `X-Forwarded-For` dépendent du proxy. La cible reste la protection principale. Corps d’auth ≤ 8 KiB. Le fallback mémoire est **par processus** : redémarrage = compteurs à zéro.
 
 ### Rate limiter mémoire
 

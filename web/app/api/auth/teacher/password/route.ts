@@ -5,6 +5,7 @@ import {
   requireTeacherSessionAllowingPasswordChange,
 } from "../../../../../lib/server/api.ts";
 import { enforceAuthRateLimit } from "../../../../../lib/server/rate-limit.ts";
+import { readBoundedJson } from "../../../../../lib/server/read-bounded-json.ts";
 
 export async function POST(request: Request) {
   const ipLimited = await enforceAuthRateLimit(request, "teacher-password", { layer: "ip" });
@@ -19,11 +20,18 @@ export async function POST(request: Request) {
   });
   if (targetLimited) return targetLimited;
 
-  const body = await request.json() as {
+  const parsed = await readBoundedJson<{
     currentPassword?: string;
     nextPassword?: string;
     remember?: boolean;
-  };
+  }>(request);
+  if (!parsed.ok) {
+    if (parsed.reason === "too-large") {
+      return jsonResponse({ ok: false, reason: "Requête trop volumineuse." }, { status: 413 });
+    }
+    return jsonResponse({ ok: false, reason: "Requête invalide." }, { status: 400 });
+  }
+  const body = parsed.value;
   const previous = auth.session!;
   const accounts = await getTeacherAccountsStore();
   const result = await accounts.changeOwnPassword(

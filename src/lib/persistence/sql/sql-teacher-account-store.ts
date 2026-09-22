@@ -133,11 +133,12 @@ export class SqlTeacherAccountStore implements TeacherAccountStore {
     const temporaryPassword = generateTemporaryPassword();
     const passwordHash = await hashPassword(temporaryPassword);
 
+    const passwordUpdatedAt = new Date().toISOString();
     await this.db
       .prepare(
         `INSERT INTO teachers
           (id, display_name, initials, password_hash, is_admin, is_active, must_change_password, password_updated_at, teaching_type)
-         VALUES (?, ?, ?, ?, ?, 1, 1, datetime('now'), ?)`,
+         VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)`,
       )
       .bind(
         teacherId,
@@ -145,6 +146,7 @@ export class SqlTeacherAccountStore implements TeacherAccountStore {
         initials,
         passwordHash,
         input.isAdmin ? 1 : 0,
+        passwordUpdatedAt,
         input.teachingType ?? null,
       )
       .run();
@@ -238,13 +240,14 @@ export class SqlTeacherAccountStore implements TeacherAccountStore {
 
   private async writePassword(teacherId: string, password: string, mustChange: boolean): Promise<void> {
     const passwordHash = await hashPassword(password.trim());
+    const passwordUpdatedAt = new Date().toISOString();
     await this.db
       .prepare(
         `UPDATE teachers
-         SET password_hash = ?, must_change_password = ?, password_updated_at = datetime('now')
+         SET password_hash = ?, must_change_password = ?, password_updated_at = ?
          WHERE id = ?`,
       )
-      .bind(passwordHash, mustChange ? 1 : 0, teacherId)
+      .bind(passwordHash, mustChange ? 1 : 0, passwordUpdatedAt, teacherId)
       .run();
   }
 

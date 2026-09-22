@@ -14,23 +14,32 @@ import {
 } from "@campus/features/student-access/index.ts";
 import { authRateLimitTargetFromStudentCode } from "@campus/lib/security/rate-limit.ts";
 import { enforceAuthRateLimit } from "../../../../lib/server/rate-limit.ts";
+import { readBoundedJson } from "../../../../lib/server/read-bounded-json.ts";
 
 export async function POST(request: Request) {
-  let body: { code?: string; remember?: boolean };
-  try {
-    body = await request.json() as { code?: string; remember?: boolean };
-  } catch {
-    const limited = await enforceAuthRateLimit(request, "student", authRateLimitTargetFromStudentCode(""));
-    if (limited) return limited;
+  const ipLimited = await enforceAuthRateLimit(request, "student", { layer: "ip" });
+  if (ipLimited) return ipLimited;
+
+  const parsed = await readBoundedJson<{ code?: string; remember?: boolean }>(request);
+  if (!parsed.ok) {
+    if (parsed.reason === "too-large") {
+      return jsonResponse({ ok: false, reason: "Requête trop volumineuse." }, { status: 413 });
+    }
+    const targetLimited = await enforceAuthRateLimit(request, "student", {
+      targetKey: authRateLimitTargetFromStudentCode(""),
+      layer: "target",
+    });
+    if (targetLimited) return targetLimited;
     return jsonResponse({ ok: false, reason: STUDENT_LOGIN_INVALID_REASON }, { status: 401 });
   }
 
-  const limited = await enforceAuthRateLimit(
-    request,
-    "student",
-    authRateLimitTargetFromStudentCode(String(body.code ?? "")),
-  );
-  if (limited) return limited;
+  const code = String(parsed.value.code ?? "");
+  const targetLimited = await enforceAuthRateLimit(request, "student", {
+    targetKey: authRateLimitTargetFromStudentCode(code),
+    layer: "target",
+  });
+  if (targetLimited) return targetLimited;
+
   const [accesses, catalog, years, adapters] = await Promise.all([
     getStudentAccessStore(),
     getSchoolCatalogStore(),
@@ -39,7 +48,7 @@ export async function POST(request: Request) {
   ]);
   await catalog.ensureSeeded();
 
-  const result = await authenticateStudentAccessCode(String(body.code ?? ""), {
+  const result = await authenticateStudentAccessCode(code, {
     getActiveSchoolYear: () => years.getActiveSchoolYear(),
     listClasses: () => catalog.listClasses(),
     getAccessBySchoolClassId: (schoolClassId) => accesses.getBySchoolClassId(schoolClassId),
@@ -65,6 +74,6 @@ export async function POST(request: Request) {
       },
     },
     {},
-    body.remember !== false,
+    parsed.value.remember !== false,
   );
 }

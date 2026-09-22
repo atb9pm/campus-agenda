@@ -23,6 +23,7 @@ import {
   resolveAuthRateLimit,
   resolveTeacherAuthRateLimitTarget,
   sanitizeRateLimitTarget,
+  isAuthRateLimitBypassAllowed,
 } from "../src/lib/security/rate-limit.ts";
 import { STUDENT_ACCESS_ALPHABET } from "../src/features/student-access/code.ts";
 import { initialsKey } from "../src/features/teacher-accounts/rules.ts";
@@ -357,6 +358,15 @@ test("rate limiter mémoire — seaux expirés libèrent une place avant saturat
   assert.equal(checkInMemoryRateLimit("auth:teacher:target:NEWONE", 10, 60_000, now), true);
   assert.ok(countInMemoryRateLimitBuckets() < MEMORY_RATE_LIMIT_MAX_BUCKETS);
   assert.equal(checkInMemoryRateLimit(sensitive, 2, 60_000, now), false);
+});
+
+test("rate limit — CAMPUS_DISABLE_RATE_LIMIT ignoré en production", () => {
+  assert.equal(isAuthRateLimitBypassAllowed({ CAMPUS_DISABLE_RATE_LIMIT: "1" }), true);
+  assert.equal(
+    isAuthRateLimitBypassAllowed({ CAMPUS_DISABLE_RATE_LIMIT: "1", NODE_ENV: "production" }),
+    false,
+  );
+  assert.equal(isAuthRateLimitBypassAllowed({ NODE_ENV: "production" }), false);
 });
 
 test("phase 1.0 — limites configurables via variables d'environnement", () => {

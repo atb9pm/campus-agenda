@@ -1,6 +1,14 @@
+import { listAccessibleRuntimeClassroomsForTeacher } from "@campus/features/control-planning/index.ts";
 import { filterSlotsForCourseDay, groupSlotsByBranch, normalizeBranchLabel } from "@campus/features/timetable";
-import { resolveClassroomIdForClassCode, resolveDemoTeacherCode } from "@campus/features/timetable/demo-mappings.ts";
-import { getTimetableStore } from "@campus/lib/persistence/store-factory.ts";
+import { resolveClassroomIdForClassCode } from "@campus/features/timetable/demo-mappings.ts";
+import {
+  checkClassroomExists,
+  getAnnualCourseStore,
+  getSchoolCatalogStore,
+  getSchoolYearStore,
+  getTimetableStore,
+  listRuntimeClassrooms,
+} from "@campus/lib/persistence/store-factory.ts";
 import { jsonResponse, requireTeacherSession } from "../../../../lib/server/api.ts";
 
 export async function GET(request: Request) {
@@ -14,6 +22,33 @@ export async function GET(request: Request) {
 
   if (!classroomId || !Number.isFinite(dayOfWeek) || (weekKind !== "A" && weekKind !== "B")) {
     return jsonResponse({ ok: false, reason: "Paramètres classroomId, dayOfWeek et weekKind requis." }, { status: 400 });
+  }
+
+  const exists = await checkClassroomExists(classroomId);
+  if (!exists) {
+    return jsonResponse({ ok: false, reason: "Classe introuvable." }, { status: 404 });
+  }
+
+  const catalog = await getSchoolCatalogStore();
+  await catalog.ensureSeeded();
+  const [classrooms, classes, courses, assignments, years] = await Promise.all([
+    listRuntimeClassrooms(),
+    catalog.listClasses(),
+    getAnnualCourseStore().then((entry) => entry.listCourses()),
+    getAnnualCourseStore().then((entry) => entry.listAssignments()),
+    getSchoolYearStore().then((entry) => entry.listSchoolYears()),
+  ]);
+  const accessible = await listAccessibleRuntimeClassroomsForTeacher({
+    teacherId: auth.session!.teacherId,
+    classrooms,
+    classes,
+    courses,
+    assignments,
+    years,
+    teacherCanAccessClassroom: (id, targetId) => auth.store!.teacherCanAccessClassroom(id, targetId),
+  });
+  if (!accessible.some((entry) => entry.id === classroomId)) {
+    return jsonResponse({ ok: false, reason: "Accès refusé." }, { status: 403 });
   }
 
   const timetableStore = await getTimetableStore();
@@ -30,14 +65,10 @@ export async function GET(request: Request) {
     return jsonResponse({ ok: true, branches: [], periods: [], source: active });
   }
 
-  const teacherCode = resolveDemoTeacherCode(auth.session!.teacherId);
-  let slots = classCodes.flatMap((classCode) =>
+  // Enseignant affecté : grille de la classe entière (pas un mapping démo teacherCode).
+  const slots = classCodes.flatMap((classCode) =>
     filterSlotsForCourseDay(allSlots, classCode, dayOfWeek, weekKind),
   );
-
-  if (teacherCode) {
-    slots = slots.filter((slot) => !slot.teacherCode || slot.teacherCode.toLowerCase() === teacherCode.toLowerCase());
-  }
 
   const grouped = groupSlotsByBranch(slots);
   const branches = [...grouped.entries()].map(([branchLabel, branchSlots]) => ({

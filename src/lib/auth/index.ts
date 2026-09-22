@@ -45,6 +45,7 @@ export {
 export { constantTimeEquals } from "./password.ts";
 export {
   checkPasswordStrength,
+  DEFAULT_PBKDF2_ITERATIONS,
   DEMO_TEACHER_PASSWORD,
   demoPasswordAllowed,
   generateTemporaryPassword,
@@ -53,7 +54,10 @@ export {
   isLegacyDemoHash,
   isUsablePasswordHash,
   legacyDemoPasswordHash,
+  MIN_DEV_PBKDF2_ITERATIONS,
   MIN_PASSWORD_LENGTH,
+  MIN_PRODUCTION_PBKDF2_ITERATIONS,
+  resolvePbkdf2Iterations,
   verifyPassword,
 } from "./password.ts";
 export {

@@ -3,6 +3,7 @@ import {
   buildAuthIpRateLimitKey,
   buildAuthTargetRateLimitKey,
   checkInMemoryRateLimit,
+  isAuthRateLimitBypassAllowed,
   readClientKey,
   resolveAuthRateLimit,
   sanitizeRateLimitTarget,
@@ -79,7 +80,7 @@ export async function enforceAuthRateLimit(
   scope: AuthRateLimitScope,
   targetKeyOrOptions?: string | EnforceAuthRateLimitOptions,
 ): Promise<Response | null> {
-  if (process.env.CAMPUS_DISABLE_RATE_LIMIT === "1") {
+  if (isAuthRateLimitBypassAllowed()) {
     return null;
   }
 

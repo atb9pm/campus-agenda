@@ -7,31 +7,31 @@ import {
 import { getStore } from "../../../../lib/server/api.ts";
 import { buildTeacherClientSession } from "../../../../lib/server/teacher-session.ts";
 import { enforceAuthRateLimit } from "../../../../lib/server/rate-limit.ts";
+import { readBoundedJson } from "../../../../lib/server/read-bounded-json.ts";
 
 const TEACHER_LOGIN_INVALID_REASON = "Initiales ou mot de passe incorrect.";
 
 export async function POST(request: Request) {
-  let body: {
+  const ipLimited = await enforceAuthRateLimit(request, "teacher", { layer: "ip" });
+  if (ipLimited) return ipLimited;
+
+  const parsed = await readBoundedJson<{
     teacherId?: string;
     initials?: string;
     password?: string;
     remember?: boolean;
-  };
-  try {
-    body = await request.json() as typeof body;
-  } catch {
-    const limited = await enforceAuthRateLimit(request, "teacher", "empty");
-    if (limited) return limited;
+  }>(request);
+  if (!parsed.ok) {
+    if (parsed.reason === "too-large") {
+      return jsonResponse({ ok: false, reason: "Requête trop volumineuse." }, { status: 413 });
+    }
+    const targetLimited = await enforceAuthRateLimit(request, "teacher", { targetKey: "empty", layer: "target" });
+    if (targetLimited) return targetLimited;
     return jsonResponse({ ok: false, reason: TEACHER_LOGIN_INVALID_REASON }, { status: 401 });
   }
 
-  const password = String(body.password ?? "").trim();
-
-  // Connexion par initiales (ChF) ; l'identifiant interne reste accepté pour les appels existants.
-  const identifier = String(body.initials ?? "").trim() || String(body.teacherId ?? "").trim();
-
-  const ipLimited = await enforceAuthRateLimit(request, "teacher", { layer: "ip" });
-  if (ipLimited) return ipLimited;
+  const password = String(parsed.value.password ?? "").trim();
+  const identifier = String(parsed.value.initials ?? "").trim() || String(parsed.value.teacherId ?? "").trim();
 
   const accounts = await getTeacherAccountsStore();
   const targetKey = await resolveTeacherAuthRateLimitTarget(identifier, accounts);
@@ -60,6 +60,6 @@ export async function POST(request: Request) {
       session: client,
     },
     {},
-    Boolean(body.remember),
+    Boolean(parsed.value.remember),
   );
 }

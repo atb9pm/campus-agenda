@@ -96,14 +96,16 @@ Il n'est appliqué que si aucun compte enseignant n'existe encore, ou si le comp
 **pas encore** de mot de passe personnel : un mot de passe choisi dans l'application n'est
 jamais écrasé au redémarrage.
 
-**Comptes déjà présents** — sans variable, un mot de passe provisoire peut encore être
-tiré au démarrage (base non vide) et inscrit dans les journaux Node.js du Manager :
+**Comptes déjà présents sans mot de passe utilisable** — le démarrage **ne génère
+jamais** et **ne journalise jamais** un mot de passe. Le processus refuse de démarrer :
 
 ```
-==================== CAMPUS AGENDA — ACCÈS ADMINISTRATEUR ====================
-  Initiales        : ChF
-  Mot de passe     : K7QP-M3ZR-T9WD
+Aucun administrateur actif ne possède de mot de passe utilisable.
+Définissez CAMPUS_ADMIN_PASSWORD temporairement ou utilisez admin:reset-password.
 ```
+
+La commande volontaire `pnpm admin:reset-password` peut afficher un mot de passe
+temporaire **une seule fois** dans le terminal.
 
 Dans les deux cas, l'application impose un changement de mot de passe à la première
 connexion, puis les comptes suivants se créent depuis **Administration → Gestion des

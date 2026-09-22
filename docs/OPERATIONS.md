@@ -69,7 +69,7 @@ Journaux JSON sur la sortie standard, sans contenu scolaire :
 | `CAMPUS_ADMIN_PASSWORD` | Mot de passe du premier admin — **obligatoire** si la base SQLite est totalement vide |
 | `CAMPUS_DEMO_SEED` | Seed de démonstration hors production uniquement (`false` pour le désactiver). **Ignoré en production.** |
 | `APP_ENV` | Contexte d'exécution |
-| `CAMPUS_DISABLE_RATE_LIMIT` | Désactive le rate limit (tests uniquement) |
+| `CAMPUS_DISABLE_RATE_LIMIT` | Désactive le rate limit **hors production uniquement**. En production (`NODE_ENV=production`) la variable est **ignorée**. |
 | `CAMPUS_AUTH_RATE_LIMIT_TEACHER` | Limite IP connexion enseignant (défaut : 10/min) |
 | `CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET` | Limite par teacherId canonique (défaut : 10/min) ; identifiant normalisé si le compte n’existe pas |
 | `CAMPUS_AUTH_RATE_LIMIT_STUDENT` | Limite IP connexion élève (défaut : 20/min) |
@@ -79,6 +79,7 @@ Journaux JSON sur la sortie standard, sans contenu scolaire :
 | `CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA` | Limite IP codes TOTP / récupération (défaut : 8/min) |
 | `CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA_TARGET` | Limite MFA par compte administrateur (défaut : 8/min) |
 | `CAMPUS_MFA_ENCRYPTION_KEY` | Clé AES-256-GCM du secret TOTP administrateur (**obligatoire en production**) |
+| `CAMPUS_PBKDF2_ITERATIONS` | Itérations des **nouveaux** hashes (défaut **600000**). En production, une valeur < 600000 est ignorée. Les anciens hashes `pbkdf2-sha256$210000$…` restent valides jusqu’au prochain changement de mot de passe. |
 
 ## Rate limiting
 
@@ -96,9 +97,13 @@ Changer d’IP ne réinitialise pas la limite d’un compte ou d’une classe. P
 | Environnement | Mécanisme | Limite |
 |---|---|---|
 | Production Infomaniak | Compteur **mémoire par processus Node.js** | 10 enseignant, 20 élève, 10 mot de passe, 8 MFA / min, **par seau** (IP et cible séparés) |
-| Tests / aperçu local | Idem, ou `CAMPUS_DISABLE_RATE_LIMIT=1` | — |
+| Tests / aperçu local | Idem, ou `CAMPUS_DISABLE_RATE_LIMIT=1` (ignoré en production) | — |
 
-**Limite Infomaniak** : sans Redis, le compteur mémoire est **local à chaque processus**. Un redémarrage remet les compteurs à zéro. Plusieurs processus Node ne partagent pas les seaux. `x-real-ip` / dernier saut `X-Forwarded-For` restent un indice IP ; Infomaniak n’est pas garanti d’écraser ces en-têtes — d’où le seau cible indépendant. `cf-connecting-ip` n’est crédible que si `cf-ray` est présent.
+**Limite Infomaniak** : sans Redis, le compteur mémoire est **local à chaque processus**. Un redémarrage remet les compteurs à zéro. Plusieurs processus Node ne partagent pas les seaux.
+
+**Confiance IP** : le seau IP est une défense en profondeur, **pas une garantie anti-spoof**. Le runtime Web `Request` n’expose pas l’adresse TCP. Cloudflare Worker : `cf-connecting-ip` uniquement si `cf-ray` est présent. Infomaniak : `x-real-ip` / dernier `X-Forwarded-For` seulement si le reverse proxy les réécrit — ce n’est pas vérifiable depuis l’application. La **cible** (teacherId / préfixe de classe) reste la protection principale. On ne regroupe pas tous les clients dans un unique seau global.
+
+Les routes `POST /api/auth/teacher` et `POST /api/auth/student` consomment le seau IP **avant** de lire le corps. Corps d’authentification limité à **8 KiB** (413 si dépassé). Un enseignant affecté à une classe voit la **grille horaire entière** de cette classe via `GET /api/timetable/branches` ; un enseignant non affecté reçoit 403 (classe inconnue : 404). Le `classroomId` du navigateur n’est jamais une preuve d’autorisation.
 
 ### Rate limiter mémoire
 
@@ -303,8 +308,7 @@ La commande affiche le compte ciblé et n’agit que si l’opérateur tape exac
 - Le changement de mot de passe est obligatoire à la prochaine connexion.
 - La 2FA n’est **pas** touchée (secret TOTP et recovery codes inchangés).
 - La commande ne crée **jamais** de session administrateur.
-
-Les cookies de session déjà émis restent valides jusqu’à expiration (HMAC, pas de store de sessions serveur). Un reset mot de passe ne les révoque pas.
+- La réinitialisation du mot de passe révoque les sessions enseignant émises avant le reset.
 
 ### 11. Restauration d’un backup et clé MFA
 

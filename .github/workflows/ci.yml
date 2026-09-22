@@ -36,6 +36,10 @@ jobs:
         working-directory: web
         run: npm ci
 
+      - name: Audit des dépendances de production
+        working-directory: web
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Typecheck
         working-directory: web
         run: npm run typecheck

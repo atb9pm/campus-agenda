@@ -1,5 +1,6 @@
 import { initialsKey } from "../../features/teacher-accounts/rules.ts";
 import { parseStudentAccessCode } from "../../features/student-access/code.ts";
+import { isProductionRuntime } from "../auth/runtime-env.ts";
 
 export const AUTH_RATE_LIMIT_WINDOW_MS = 60_000;
 export const AUTH_TEACHER_LIMIT = 10;
@@ -53,11 +54,11 @@ function lastForwardedIp(header: string | null): string | null {
 }
 
 /**
- * Identifiant de client pour le rate limit.
- * `cf-connecting-ip` n’est crédible que derrière Cloudflare (`cf-ray`).
- * Sinon : `x-real-ip`, puis le *dernier* saut `X-Forwarded-For` (ajouté par le proxy).
- * Infomaniak n’est pas garanti d’écraser ces en-têtes : d’où le seau cible indépendant.
- * Sans IP valide : seau partagé `unknown`.
+ * Indice IP pour le seau de défense en profondeur — **pas une preuve anti-spoof**.
+ * Cloudflare Worker : `cf-connecting-ip` seulement si `cf-ray` est présent.
+ * Infomaniak Node : `x-real-ip` / dernier `X-Forwarded-For` si le proxy les réécrit ;
+ * le Request Web ne expose pas l’IP TCP. La **cible** reste la protection principale.
+ * Sans IP valide : seau partagé `unknown` (pas un plafond global unique pour tout le monde).
  */
 export function readClientKey(request: Request): string {
   const cfRay = request.headers.get("cf-ray")?.trim();
@@ -186,6 +187,11 @@ export function resolveAuthRateLimit(scope: AuthRateLimitScope, layer: AuthRateL
     return readPositiveLimit(RATE_LIMIT_TARGET_ENV_KEYS[scope], RATE_LIMIT_DEFAULTS[scope]);
   }
   return readPositiveLimit(RATE_LIMIT_ENV_KEYS[scope], RATE_LIMIT_DEFAULTS[scope]);
+}
+
+/** `CAMPUS_DISABLE_RATE_LIMIT=1` n’a aucun effet en production. */
+export function isAuthRateLimitBypassAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.CAMPUS_DISABLE_RATE_LIMIT === "1" && !isProductionRuntime(env);
 }
 
 export function countInMemoryRateLimitBuckets(): number {

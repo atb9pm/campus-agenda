@@ -97,6 +97,9 @@ export function resetStoreFactory(): void {
 /** Amorçage de l'accès administrateur, journalisé une seule fois au démarrage. */
 async function bootstrapTeacherAccounts(teacherAccountStore: TeacherAccountStore): Promise<void> {
   const outcome = await ensureTeacherAccountBootstrap(teacherAccountStore);
+  if (outcome.action === "needs-admin-password") {
+    throw new Error(describeBootstrapOutcome(outcome) ?? "");
+  }
   const message = describeBootstrapOutcome(outcome);
   if (message) console.warn(message);
 }

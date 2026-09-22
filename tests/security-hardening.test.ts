@@ -55,6 +55,12 @@ test("version 2.61.8 — durcissement MFA, sessions, restore, en-têtes, pas de 
   assert.match(teacherLogin, /layer: "ip"/);
   assert.match(teacherLogin, /layer: "target"/);
   assert.match(teacherLogin, /TEACHER_LOGIN_INVALID_REASON/);
+  assert.match(teacherLogin, /readBoundedJson/);
+  assert.ok(teacherLogin.indexOf('layer: "ip"') < teacherLogin.indexOf("readBoundedJson"));
+
+  const studentLogin = await readFile(new URL("../web/app/api/auth/student/route.ts", import.meta.url), "utf8");
+  assert.match(studentLogin, /readBoundedJson/);
+  assert.ok(studentLogin.indexOf('layer: "ip"') < studentLogin.indexOf("readBoundedJson"));
 
   const rateLimit = await readFile(new URL("../src/lib/security/rate-limit.ts", import.meta.url), "utf8");
   assert.match(rateLimit, /buildAuthIpRateLimitKey/);
@@ -63,6 +69,7 @@ test("version 2.61.8 — durcissement MFA, sessions, restore, en-têtes, pas de 
   assert.match(rateLimit, /MEMORY_RATE_LIMIT_MAX_BUCKETS/);
   assert.match(rateLimit, /cleanupExpiredRateLimitBuckets/);
   assert.match(rateLimit, /canAllocateNewMemoryBucket/);
+  assert.match(rateLimit, /isAuthRateLimitBypassAllowed/);
   assert.doesNotMatch(rateLimit, /evictClosestToExpiration/);
   assert.doesNotMatch(rateLimit, /IP:compte/);
   assert.doesNotMatch(rateLimit, /console\.(log|info|debug|warn)/);
@@ -74,6 +81,28 @@ test("version 2.61.8 — durcissement MFA, sessions, restore, en-têtes, pas de 
   assert.match(operations, /teacherId` interne canonique/);
   assert.match(operations, /Rate limiter mémoire/);
   assert.match(operations, /8000/);
+  assert.match(operations, /ignorée/);
+  assert.match(operations, /révoque les sessions enseignant/);
+  assert.match(operations, /8 KiB/);
+
+  const envExample = await readFile(new URL("../.env.example", import.meta.url), "utf8");
+  assert.match(envExample, /CAMPUS_MFA_ENCRYPTION_KEY=/);
+  assert.match(envExample, /32 octets/);
+
+  const sqlAccounts = await readFile(new URL("../src/lib/persistence/sql/sql-teacher-account-store.ts", import.meta.url), "utf8");
+  assert.match(sqlAccounts, /passwordUpdatedAt = new Date\(\)\.toISOString\(\)/);
+  assert.doesNotMatch(sqlAccounts, /password_updated_at = datetime\('now'\)/);
+
+  const bootstrap = await readFile(new URL("../src/lib/persistence/teacher-account-bootstrap.ts", import.meta.url), "utf8");
+  assert.match(bootstrap, /needs-admin-password/);
+
+  const branches = await readFile(new URL("../web/app/api/timetable/branches/route.ts", import.meta.url), "utf8");
+  assert.match(branches, /listAccessibleRuntimeClassroomsForTeacher/);
+  assert.match(branches, /checkClassroomExists/);
+  assert.doesNotMatch(branches, /resolveDemoTeacherCode/);
+
+  const passwordHash = await readFile(new URL("../src/lib/auth/password.ts", import.meta.url), "utf8");
+  assert.match(passwordHash, /DEFAULT_PBKDF2_ITERATIONS = 600_000/);
 
   const worker = await readFile(new URL("../web/worker/index.ts", import.meta.url), "utf8");
   assert.match(worker, /withSecurityHeaders/);
@@ -201,6 +230,19 @@ test("horodatage d’identifiants — fail closed sur date présente mais invali
   assert.equal(isSessionOlderThanCredential(issuedAt, "2026-99-99"), true);
   assert.equal(isSessionOlderThanCredential(issuedAt, ""), true);
   assert.equal(isSessionOlderThanCredential(issuedAt, "   "), true);
+
+  const sameSecondIssued = Date.parse("2026-09-22T10:00:00.700Z");
+  // A. issuedAt puis passwordUpdatedAt 1 ms plus tard → session refusée.
+  assert.equal(isSessionOlderThanCredential(sameSecondIssued, "2026-09-22T10:00:00.701Z"), true);
+  // B. même seconde civile, horodatage ISO avec millisecondes → session refusée.
+  assert.equal(isSessionOlderThanCredential(sameSecondIssued, "2026-09-22T10:00:00.850Z"), true);
+  assert.equal(isSessionOlderThanCredential(sameSecondIssued - 1, "2026-09-22T10:00:00.000Z"), true);
+  // C. timestamp SQLite historique YYYY-MM-DD HH:MM:SS toujours interprété.
+  assert.equal(classifyCredentialTimestamp("2026-09-22 10:00:00").kind, "valid");
+  assert.equal(classifyCredentialTimestamp("2026-09-22 10:00:00").ts, Date.parse("2026-09-22T10:00:00Z"));
+  assert.equal(isSessionOlderThanCredential(Date.parse("2026-09-22T09:59:59.000Z"), "2026-09-22 10:00:00"), true);
+  // D. les nouveaux writes SQL sont ISO UTC avec millisecondes (source + createAccount).
+  assert.match(new Date().toISOString(), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 });
 
 test("session enseignant refusée si passwordUpdatedAt est corrompu", async () => {

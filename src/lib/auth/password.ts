@@ -19,7 +19,10 @@ export {
 
 const PBKDF2_PREFIX = "pbkdf2-sha256";
 const LEGACY_DEMO_PREFIX = "demo:";
-const DEFAULT_ITERATIONS = 210_000;
+/** Nouveaux hashes. Les anciens `pbkdf2-sha256$210000$…` restent vérifiables. */
+export const DEFAULT_PBKDF2_ITERATIONS = 600_000;
+export const MIN_PRODUCTION_PBKDF2_ITERATIONS = 600_000;
+export const MIN_DEV_PBKDF2_ITERATIONS = 10_000;
 const SALT_BYTES = 16;
 const KEY_BITS = 256;
 
@@ -51,10 +54,14 @@ export function demoPasswordAllowed(): boolean {
   return process.env.NODE_ENV === "development";
 }
 
-function pbkdf2Iterations(): number {
-  const raw = Number(process.env.CAMPUS_PBKDF2_ITERATIONS ?? "");
-  if (Number.isInteger(raw) && raw >= 10_000) return raw;
-  return DEFAULT_ITERATIONS;
+export function resolvePbkdf2Iterations(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = Number(env.CAMPUS_PBKDF2_ITERATIONS ?? "");
+  if (isProductionRuntime(env)) {
+    if (Number.isInteger(raw) && raw >= MIN_PRODUCTION_PBKDF2_ITERATIONS) return raw;
+    return DEFAULT_PBKDF2_ITERATIONS;
+  }
+  if (Number.isInteger(raw) && raw >= MIN_DEV_PBKDF2_ITERATIONS) return raw;
+  return DEFAULT_PBKDF2_ITERATIONS;
 }
 
 function toBase64(bytes: Uint8Array): string {
@@ -81,8 +88,7 @@ async function derive(password: string, salt: Uint8Array, iterations: number): P
   return new Uint8Array(bits);
 }
 
-export async function hashPassword(password: string): Promise<string> {
-  const iterations = pbkdf2Iterations();
+export async function hashPassword(password: string, iterations = resolvePbkdf2Iterations()): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
   const derived = await derive(password, salt, iterations);
   return `${PBKDF2_PREFIX}$${iterations}$${toBase64(salt)}$${toBase64(derived)}`;

@@ -372,6 +372,102 @@ test("audit — rate limit enseignant : cible canonique et 401 identique", async
   }
 });
 
+test("audit — corps d’auth 8 KiB et rate limit IP avant parsing", async () => {
+  const previous = process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER;
+  const previousTarget = process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET;
+  process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER = "2";
+  process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET = "50";
+  const ip = "198.51.100.77";
+  const huge = JSON.stringify({ initials: "ChF", password: "x".repeat(9000) });
+  try {
+    const first = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": ip },
+      body: huge,
+    });
+    const second = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": ip },
+      body: huge,
+    });
+    const third = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": ip },
+      body: huge,
+    });
+    assert.equal(first.status, 413);
+    assert.equal(second.status, 413);
+    assert.equal(third.status, 429);
+    const invalid = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": "198.51.100.78" },
+      body: "{",
+    });
+    assert.equal(invalid.status, 401);
+    const invalidBody = await invalid.json();
+    assert.equal(invalidBody.reason, "Initiales ou mot de passe incorrect.");
+  } finally {
+    if (previous === undefined) delete process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER;
+    else process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER = previous;
+    if (previousTarget === undefined) delete process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET;
+    else process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET = previousTarget;
+  }
+});
+
+test("audit — timetable/branches refuse une classe non affectée", async () => {
+  const ownerCookie = await loginTeacher("teacher-demo-current");
+  const listResponse = await request("/api/teacher/classrooms", { headers: { cookie: ownerCookie } });
+  const list = await listResponse.json();
+  const classroomId = list.classrooms?.[0]?.id;
+  assert.ok(classroomId, "une classe accessible à l’enseignant courant");
+
+  const allowed = await request(
+    `/api/timetable/branches?classroomId=${encodeURIComponent(classroomId)}&dayOfWeek=0&weekKind=A`,
+    { headers: { cookie: ownerCookie } },
+  );
+  assert.equal(allowed.status, 200);
+
+  const missing = await request(
+    "/api/timetable/branches?classroomId=classe-absente-xyz&dayOfWeek=0&weekKind=A",
+    { headers: { cookie: ownerCookie } },
+  );
+  assert.equal(missing.status, 404);
+
+  const adminCookie = await loginAdmin();
+  const stamp = Date.now().toString(26).replace(/[^a-z]/g, "q").slice(-3);
+  const initials = `U${stamp}`.slice(0, 4);
+  const created = await request("/api/admin/teachers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: adminCookie },
+    body: JSON.stringify({ displayName: "Horaire Interdit", initials, teachingType: "GENERAL" }),
+  });
+  const createdPayload = await created.json();
+  assert.equal(created.status, 200, createdPayload.reason ?? "création");
+  const firstLogin = await request("/api/auth/teacher", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ initials, password: createdPayload.temporaryPassword }),
+  });
+  assert.equal(firstLogin.status, 200);
+  const change = await request("/api/auth/teacher/password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: extractCookie(firstLogin) },
+    body: JSON.stringify({ currentPassword: createdPayload.temporaryPassword, nextPassword: "Atelier-2027" }),
+  });
+  assert.equal(change.status, 200);
+  const outsider = await request("/api/auth/teacher", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ initials, password: "Atelier-2027" }),
+  });
+  assert.equal(outsider.status, 200);
+  const forbidden = await request(
+    `/api/timetable/branches?classroomId=${encodeURIComponent(classroomId)}&dayOfWeek=0&weekKind=A`,
+    { headers: { cookie: extractCookie(outsider) } },
+  );
+  assert.equal(forbidden.status, 403);
+});
+
 test("comptes enseignant — E2E création, mot de passe provisoire, première connexion", async () => {
   const clientIp = "198.51.100.42";
   const jsonHeaders = { "Content-Type": "application/json", "cf-connecting-ip": clientIp, "cf-ray": "e2e-accounts" };
