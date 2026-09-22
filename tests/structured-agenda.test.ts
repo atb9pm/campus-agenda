@@ -285,6 +285,21 @@ async function sqliteWorld(): Promise<World> {
   };
 }
 
+async function createUniqueTestTeacher(world: World) {
+  const prefix = world.kind === "memory" ? "Tm" : "Ts";
+  let last: Awaited<ReturnType<World["teachers"]["createAccount"]>> | null = null;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const letters = Math.random().toString(36).replace(/[^a-z]/g, "").slice(0, 4) || "wxyz";
+    last = await world.teachers.createAccount({
+      displayName: "Tina Titulaire",
+      initials: `${prefix}${letters}${attempt}`,
+      teachingType: "TECHNICAL",
+    });
+    if (last.ok) return last;
+  }
+  return last ?? { ok: false as const, reason: "Impossible de créer un enseignant de test." };
+}
+
 async function seedStructuredCourse(world: World, options?: { classCode?: string; schoolYearId?: string }) {
   const profession = await world.catalog.createProfession({
     label: `Mécatronicien PR59 ${Math.random().toString(36).slice(2, 7)}`,
@@ -310,11 +325,7 @@ async function seedStructuredCourse(world: World, options?: { classCode?: string
     trainingYear: 1,
     parallelCode: "A",
   });
-  const teacher = await world.teachers.createAccount({
-    displayName: "Tina Titulaire",
-    initials: `T${world.kind === "memory" ? "m" : "s"}${Math.random().toString(36).slice(2, 5)}`,
-    teachingType: "TECHNICAL",
-  });
+  const teacher = await createUniqueTestTeacher(world);
   assert.equal(teacher.ok, true);
   if (!teacher.ok) throw new Error(teacher.reason);
   const courseResult = await createAnnualCourse(world.courseDeps, {
