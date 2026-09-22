@@ -20,6 +20,7 @@ import {
   getActiveSchoolYear,
   authorizeTeacherAgendaPublish,
 } from "../../../lib/server/api.ts";
+import { listResolvedAgendaSubjects } from "@campus/features/agenda-bridge/index.ts";
 import {
   getAnnualCourseStore,
   getCourseScheduleStore,
@@ -52,7 +53,25 @@ export async function GET(request: Request) {
   const readOnly = Boolean(schoolYearId && archivedIds.has(schoolYearId));
   const attendanceDays = await listAttendanceDaysForLegacyClassroom(classroomId);
 
-  return jsonResponse({ ok: true, items, readOnly, schoolYearId, attendanceDays });
+  const catalog = await getSchoolCatalogStore();
+  await catalog.ensureSeeded();
+  const [courses, contexts, branches, adapters] = await Promise.all([
+    getAnnualCourseStore().then((store) => store.listCourses()),
+    catalog.listContexts(),
+    catalog.listBranches(),
+    getRuntimeAgendaAdapterStore(),
+  ]);
+  const runtimeSubjects = (await adapters.listSubjects()).filter((subject) => subject.classroomId === classroomId);
+  const subjects = listResolvedAgendaSubjects({
+    classroomId,
+    items,
+    runtimeSubjects,
+    courses,
+    contexts,
+    branches,
+  });
+
+  return jsonResponse({ ok: true, items, subjects, readOnly, schoolYearId, attendanceDays });
 }
 
 export async function POST(request: Request) {

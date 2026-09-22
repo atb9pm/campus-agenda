@@ -66,6 +66,7 @@ import {
   confirmAdminMfaSetupApi,
   verifyAdminMfaApi,
   fetchAgendaView,
+  type AgendaSubjectLabel,
   saveTeacherNotesApi,
   saveTeacherSetupApi,
   updateAgendaItemApi,
@@ -139,6 +140,14 @@ const TYPE_LABELS: Record<AgendaItemType, string> = {
   TEST: "Contrôle",
   INFORMATION: "Information",
 };
+
+function studentUpcomingHeadline(item: PrototypeAgendaItem): string {
+  const title = item.title.trim();
+  if (decodeRichDetail(item.detail) || isPlaceholderDetail(item.detail)) return title;
+  const detail = item.detail.trim().replace(/\s+/g, " ");
+  if (!detail || detail === title) return title;
+  return `${title} · ${detail}`;
+}
 
 const EMPTY_CLASSROOM_CATALOG: ClassroomCatalog = {
   classrooms: [],
@@ -256,6 +265,7 @@ export default function Home() {
   const [studentCodeModalOpen, setStudentCodeModalOpen] = useState(false);
   const [selectedSchoolWeekNumber, setSelectedSchoolWeekNumber] = useState(1);
   const [items, setItems] = useState<PrototypeAgendaItem[]>([]);
+  const [agendaSubjects, setAgendaSubjects] = useState<AgendaSubjectLabel[]>([]);
   const [notice, setNotice] = useState("");
   const [teacherAuthenticated, setTeacherAuthenticated] = useState(false);
   const [teacherIsAdmin, setTeacherIsAdmin] = useState(false);
@@ -593,6 +603,7 @@ export default function Home() {
             .then((view) => {
               if (!cancelled) {
                 setItems(view.items);
+                setAgendaSubjects(view.subjects);
                 setAttendanceDays(view.attendanceDays.map((day) => ({
                   dayOfWeek: day.dayOfWeek as 1 | 2 | 3 | 4 | 5,
                   weekKind: day.weekKind,
@@ -772,17 +783,25 @@ export default function Home() {
     if (!studentSession || !studentDisplayCourseDay) return [];
     const classroomItems = getStudentAgendaItems(items, studentSession.classroomId);
     const dayItems = filterItemsForCourseDay(classroomItems, studentDisplayCourseDay);
+    const labeled = agendaSubjects.filter((subject) => subject.classroomId === studentSession.classroomId);
     const runtimeSubjects = runtimeClassrooms.find((entry) => entry.id === studentSession.classroomId)?.subjects ?? [];
-    const subjects = runtimeSubjects.length
-      ? runtimeSubjects.map((subject) => ({
+    const subjects = labeled.length
+      ? labeled.map((subject) => ({
           id: subject.id,
           name: subject.name,
           classroomId: studentSession.classroomId,
           annualCourseId: subject.annualCourseId ?? null,
         }))
-      : getSubjectsForClassroom(DEMO_CATALOG, studentSession.classroomId);
+      : runtimeSubjects.length
+        ? runtimeSubjects.map((subject) => ({
+            id: subject.id,
+            name: subject.name,
+            classroomId: studentSession.classroomId,
+            annualCourseId: subject.annualCourseId ?? null,
+          }))
+        : getSubjectsForClassroom(DEMO_CATALOG, studentSession.classroomId);
     return groupItemsBySubject(dayItems, subjects);
-  }, [studentSession, items, studentDisplayCourseDay, runtimeClassrooms]);
+  }, [studentSession, items, studentDisplayCourseDay, runtimeClassrooms, agendaSubjects]);
 
   const studentFollowingCourseDay = useMemo(() => {
     if (!studentDisplayCourseDay || !studentAutoCourseDay) return true;
@@ -791,16 +810,35 @@ export default function Home() {
 
   const studentUpcomingTests = useMemo(() => {
     if (!studentSession || !studentAutoCourseDay) return [];
+    const labeled = agendaSubjects.filter((subject) => subject.classroomId === studentSession.classroomId);
+    const catalog = labeled.length
+      ? {
+          classrooms: [{
+            id: studentSession.classroomId,
+            name: studentClassroomName || studentSession.classroomId,
+            programLabel: "",
+            accessCodeHint: "",
+          }],
+          subjects: labeled.map((subject) => ({
+            id: subject.id,
+            name: subject.name,
+            classroomId: studentSession.classroomId,
+            annualCourseId: subject.annualCourseId ?? null,
+          })),
+          memberships: [],
+          teachers: [],
+        }
+      : catalogFromRuntime(runtimeClassrooms).classrooms.length
+        ? catalogFromRuntime(runtimeClassrooms)
+        : DEMO_CATALOG;
     return listUpcomingTestsForClass(
       items,
-      catalogFromRuntime(runtimeClassrooms).classrooms.length
-        ? catalogFromRuntime(runtimeClassrooms)
-        : DEMO_CATALOG,
+      catalog,
       studentSession.classroomId,
       studentAutoCourseDay,
       schoolWeeksMemo,
     );
-  }, [studentSession, items, studentAutoCourseDay, schoolWeeksMemo, runtimeClassrooms]);
+  }, [studentSession, items, studentAutoCourseDay, schoolWeeksMemo, runtimeClassrooms, agendaSubjects, studentClassroomName]);
 
   function resetSelectedWeek() {
     if (!schoolWeeksMemo.length) {
@@ -826,6 +864,12 @@ export default function Home() {
     setStudentCourseDayKey(null);
     setStudentHistoryOpen(false);
     resetSelectedWeek();
+    void fetchAgendaView(access.classroomId)
+      .then((view) => {
+        setItems(view.items);
+        setAgendaSubjects(view.subjects);
+      })
+      .catch(() => undefined);
   }
 
   function enterStudentWithCode(code: string) {
@@ -846,6 +890,7 @@ export default function Home() {
         resetSelectedWeek();
         const view = await fetchAgendaView(session.classroomId);
         setItems(view.items);
+        setAgendaSubjects(view.subjects);
         setAttendanceDays(view.attendanceDays.map((day) => ({
           dayOfWeek: day.dayOfWeek as 1 | 2 | 3 | 4 | 5,
           weekKind: day.weekKind,
@@ -1506,7 +1551,8 @@ export default function Home() {
                     <span className="student-upcoming-tests-date">
                       {formatSchoolWeekLabel(entry.slot)} · {formatCourseDayHeading(entry.slot)}
                     </span>
-                    <strong>{entry.subjectName} — {entry.item.title}</strong>
+                    <span className="student-upcoming-tests-branch">{entry.subjectName}</span>
+                    <strong>{studentUpcomingHeadline(entry.item)}</strong>
                   </li>
                 ))}
               </ol>

@@ -1,7 +1,18 @@
 export {
+  annualCourseIdFromRuntimeSubjectId,
+  looksLikeRuntimeSubjectId,
   runtimeClassroomIdForSchoolClass,
   runtimeSubjectIdForAnnualCourse,
 } from "./ids.ts";
+export {
+  UNDEFINED_BRANCH_LABEL,
+  buildAgendaSubjectLabelMap,
+  displayBranchLabel,
+  listResolvedAgendaSubjects,
+  resolveAgendaBranchLabel,
+  type AgendaBranchLabelCatalog,
+  type AgendaBranchSubjectHint,
+} from "./branch-label.ts";
 export {
   classroomNameMatchesSchoolClass,
   findUniqueAdoptableClassroom,

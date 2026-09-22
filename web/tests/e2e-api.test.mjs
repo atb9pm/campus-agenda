@@ -201,6 +201,9 @@ test("phase 0.8 — E2E enseignant publie puis élève consulte", async () => {
     headers: { cookie: student.cookie },
   });
   assert.equal(ownAgenda.status, 200);
+  const ownAgendaPayload = await ownAgenda.json();
+  assert.ok(Array.isArray(ownAgendaPayload.subjects));
+  assert.ok(ownAgendaPayload.subjects.every((subject) => !String(subject.name ?? "").startsWith("subject-course-")));
 
   const studentMutation = await request("/api/agenda", {
     method: "POST",
