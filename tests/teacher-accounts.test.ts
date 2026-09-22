@@ -350,6 +350,8 @@ test("amorçage — CAMPUS_ADMIN_PASSWORD n'écrase jamais un mot de passe chois
 
 test("amorçage — production : aucun mot de passe généré ni journalisé", async () => {
   const store = freshStore();
+  const seeded = await store.listAccounts();
+  assert.ok(seeded.some((account) => account.isAdmin && !account.hasPassword));
   const previousEnv = process.env.NODE_ENV;
   const previousPassword = process.env.CAMPUS_ADMIN_PASSWORD;
   const previousDemo = process.env.CAMPUS_ALLOW_DEMO_PASSWORD;

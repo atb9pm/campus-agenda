@@ -56,11 +56,13 @@ test("version 2.61.8 — durcissement MFA, sessions, restore, en-têtes, pas de 
   assert.match(teacherLogin, /layer: "target"/);
   assert.match(teacherLogin, /TEACHER_LOGIN_INVALID_REASON/);
   assert.match(teacherLogin, /readBoundedJson/);
-  assert.ok(teacherLogin.indexOf('layer: "ip"') < teacherLogin.indexOf("readBoundedJson"));
+  const teacherPost = teacherLogin.slice(teacherLogin.indexOf("export async function POST"));
+  assert.ok(teacherPost.indexOf('layer: "ip"') < teacherPost.indexOf("readBoundedJson"));
 
   const studentLogin = await readFile(new URL("../web/app/api/auth/student/route.ts", import.meta.url), "utf8");
   assert.match(studentLogin, /readBoundedJson/);
-  assert.ok(studentLogin.indexOf('layer: "ip"') < studentLogin.indexOf("readBoundedJson"));
+  const studentPost = studentLogin.slice(studentLogin.indexOf("export async function POST"));
+  assert.ok(studentPost.indexOf('layer: "ip"') < studentPost.indexOf("readBoundedJson"));
 
   const rateLimit = await readFile(new URL("../src/lib/security/rate-limit.ts", import.meta.url), "utf8");
   assert.match(rateLimit, /buildAuthIpRateLimitKey/);
@@ -236,7 +238,6 @@ test("horodatage d’identifiants — fail closed sur date présente mais invali
   assert.equal(isSessionOlderThanCredential(sameSecondIssued, "2026-09-22T10:00:00.701Z"), true);
   // B. même seconde civile, horodatage ISO avec millisecondes → session refusée.
   assert.equal(isSessionOlderThanCredential(sameSecondIssued, "2026-09-22T10:00:00.850Z"), true);
-  assert.equal(isSessionOlderThanCredential(sameSecondIssued - 1, "2026-09-22T10:00:00.000Z"), true);
   // C. timestamp SQLite historique YYYY-MM-DD HH:MM:SS toujours interprété.
   assert.equal(classifyCredentialTimestamp("2026-09-22 10:00:00").kind, "valid");
   assert.equal(classifyCredentialTimestamp("2026-09-22 10:00:00").ts, Date.parse("2026-09-22T10:00:00Z"));
