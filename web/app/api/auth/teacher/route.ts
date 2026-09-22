@@ -1,3 +1,4 @@
+import { resolveTeacherAuthRateLimitTarget } from "@campus/lib/security/rate-limit.ts";
 import {
   getTeacherAccountsStore,
   jsonResponse,
@@ -6,26 +7,41 @@ import {
 import { getStore } from "../../../../lib/server/api.ts";
 import { buildTeacherClientSession } from "../../../../lib/server/teacher-session.ts";
 import { enforceAuthRateLimit } from "../../../../lib/server/rate-limit.ts";
+import { readBoundedJson } from "../../../../lib/server/read-bounded-json.ts";
+
+const TEACHER_LOGIN_INVALID_REASON = "Initiales ou mot de passe incorrect.";
 
 export async function POST(request: Request) {
-  const limited = await enforceAuthRateLimit(request, "teacher");
-  if (limited) return limited;
+  const ipLimited = await enforceAuthRateLimit(request, "teacher", { layer: "ip" });
+  if (ipLimited) return ipLimited;
 
-  const body = await request.json() as {
+  const parsed = await readBoundedJson<{
     teacherId?: string;
     initials?: string;
     password?: string;
     remember?: boolean;
-  };
-  const password = String(body.password ?? "").trim();
+  }>(request);
+  if (!parsed.ok) {
+    if (parsed.reason === "too-large") {
+      return jsonResponse({ ok: false, reason: "Requête trop volumineuse." }, { status: 413 });
+    }
+    const targetLimited = await enforceAuthRateLimit(request, "teacher", { targetKey: "empty", layer: "target" });
+    if (targetLimited) return targetLimited;
+    return jsonResponse({ ok: false, reason: TEACHER_LOGIN_INVALID_REASON }, { status: 401 });
+  }
 
-  // Connexion par initiales (ChF) ; l'identifiant interne reste accepté pour les appels existants.
-  const identifier = String(body.initials ?? "").trim() || String(body.teacherId ?? "").trim();
+  const password = String(parsed.value.password ?? "").trim();
+  const identifier = String(parsed.value.initials ?? "").trim() || String(parsed.value.teacherId ?? "").trim();
+
   const accounts = await getTeacherAccountsStore();
+  const targetKey = await resolveTeacherAuthRateLimitTarget(identifier, accounts);
+  const targetLimited = await enforceAuthRateLimit(request, "teacher", { targetKey, layer: "target" });
+  if (targetLimited) return targetLimited;
+
   const outcome = await accounts.authenticate(identifier, password);
   if (!outcome.ok || !outcome.teacherId) {
     return jsonResponse(
-      { ok: false, reason: outcome.reason ?? "Initiales ou mot de passe incorrect." },
+      { ok: false, reason: outcome.reason ?? TEACHER_LOGIN_INVALID_REASON },
       { status: 401 },
     );
   }
@@ -44,6 +60,6 @@ export async function POST(request: Request) {
       session: client,
     },
     {},
-    Boolean(body.remember),
+    Boolean(parsed.value.remember),
   );
 }

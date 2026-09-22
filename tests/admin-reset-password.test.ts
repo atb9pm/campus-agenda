@@ -51,7 +51,7 @@ async function enrollAdmin() {
 }
 
 test("version 2.54.1 — reset mot de passe admin serveur", () => {
-  assert.equal(APP_VERSION, "2.61.7");
+  assert.equal(APP_VERSION, "2.61.8");
   assert.equal(isResetPasswordConfirmToken("reset-password"), false);
   assert.equal(isResetPasswordConfirmToken("RESET-PASSWORD "), true);
   assert.equal(isResetPasswordConfirmToken(RESET_PASSWORD_CONFIRM_TOKEN), true);
@@ -112,6 +112,7 @@ test("bonne confirmation → mot de passe temporaire, ancien refusé, MFA inchan
   assert.ok(reset.temporaryPassword.length >= 10);
   assert.equal(reset.account.mustChangePassword, true);
   assert.equal(reset.account.isAdmin, true);
+  assert.match(reset.account.passwordUpdatedAt ?? "", /\.\d{3}Z$/);
 
   const hashes = await accounts.exportAllAccounts();
   const adminHash = hashes.find((entry) => entry.id === TEACHER_CHF_ID)?.passwordHash ?? "";

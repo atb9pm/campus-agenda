@@ -1,5 +1,9 @@
 import { restoreStoreSnapshot } from "@campus/lib/persistence/store-factory.ts";
 import { logOperationalEvent, logOperationalWarning } from "@campus/lib/observability/index.ts";
+import {
+  isRestoreConfirmToken,
+  RESTORE_CONFIRM_REQUIRED_REASON,
+} from "@campus/features/admin-backup/index.ts";
 import { jsonResponse, requireAdminSession } from "../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../lib/server/observability.ts";
 
@@ -7,7 +11,13 @@ async function handlePost(request: Request) {
   const auth = await requireAdminSession(request);
   if ("error" in auth && auth.error) return auth.error;
 
-  const body = await request.json() as { snapshot?: unknown };
+  const body = await request.json() as { snapshot?: unknown; confirmation?: unknown };
+  if (!isRestoreConfirmToken(String(body.confirmation ?? ""))) {
+    return jsonResponse(
+      { ok: false, reason: RESTORE_CONFIRM_REQUIRED_REASON },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
+    );
+  }
   const result = await restoreStoreSnapshot(body.snapshot);
 
   if (!result.ok) {

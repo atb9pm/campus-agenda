@@ -9,7 +9,11 @@ export type BootstrapOutcome =
   | { action: "env-password"; teacherId: string; initials: string }
   | { action: "generated"; teacherId: string; initials: string; temporaryPassword: string }
   | { action: "created-bootstrap"; teacherId: string; initials: string }
-  | { action: "no-admin" };
+  | { action: "no-admin" }
+  | { action: "needs-admin-password" };
+
+export const MISSING_USABLE_ADMIN_PASSWORD =
+  "Aucun administrateur actif ne possède de mot de passe utilisable. Définissez CAMPUS_ADMIN_PASSWORD temporairement ou utilisez admin:reset-password.";
 
 const DEFAULT_ADMIN_INITIALS = "ChF";
 
@@ -88,13 +92,18 @@ export async function ensureTeacherAccountBootstrap(
   const target = pickAdmin(accounts, wantedInitials);
   if (!target) return { action: "no-admin" };
 
+  const anyAdminCanLogIn = accounts.some((account) => account.isAdmin && account.isActive && account.hasPassword);
+
   if (envPassword && !target.hasPassword) {
     await store.setPassword(target.id, envPassword, true);
     return { action: "env-password", teacherId: target.id, initials: target.initials };
   }
 
-  const anyAdminCanLogIn = accounts.some((account) => account.isAdmin && account.isActive && account.hasPassword);
   if (anyAdminCanLogIn || demoPasswordAllowed()) return { action: "none" };
+
+  if (isProductionEnv()) {
+    return { action: "needs-admin-password" };
+  }
 
   const temporaryPassword = generateTemporaryPassword();
   await store.setPassword(target.id, temporaryPassword, true);
@@ -119,6 +128,9 @@ export function describeBootstrapOutcome(outcome: BootstrapOutcome): string | nu
       "==============================================================================",
       "",
     ].join("\n");
+  }
+  if (outcome.action === "needs-admin-password") {
+    return `[campus-agenda] ${MISSING_USABLE_ADMIN_PASSWORD}`;
   }
   if (outcome.action === "no-admin") {
     return "[campus-agenda] Aucun compte enseignant en base : impossible d'amorcer un accès administrateur.";

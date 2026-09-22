@@ -1,4 +1,5 @@
 import { attachRequestId, logApiEvent, readRequestId } from "@campus/lib/observability/index.ts";
+import { applySecurityHeaders } from "@campus/lib/security/http-headers.ts";
 
 import { jsonResponse } from "./api.ts";
 
@@ -14,7 +15,7 @@ export function withApiObservability<H extends ObservabilityHandler>(route: stri
     const requestId = readRequestId(request);
     const startedAt = performance.now();
     const response = await handler(request, context as never);
-    const headers = new Headers(response.headers);
+    const headers = applySecurityHeaders(new Headers(response.headers));
     attachRequestId(headers, requestId);
     logApiEvent({
       requestId,

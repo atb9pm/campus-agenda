@@ -1,8 +1,10 @@
 import type { AppSession, StudentSession } from "../persistence/types.ts";
 import type { TeacherAccountRecord } from "../../features/teacher-accounts/types.ts";
+import { isSessionOlderThanCredential } from "./session-freshness.ts";
 
 export interface LiveSessionLookup {
   findAccount(teacherId: string): Promise<TeacherAccountRecord | null>;
+  findMfaConfirmedAt?(teacherId: string): Promise<string | null>;
   revalidateStudent?(session: StudentSession): Promise<StudentSession | null>;
   findStudentAccessById?(
     accessId: string,
@@ -21,6 +23,11 @@ export async function revalidateLiveSession(
     if (session.kind === "teacher") {
       const account = await lookup.findAccount(session.teacherId);
       if (!account || !account.isActive || account.isArchived) return null;
+      if (isSessionOlderThanCredential(session.issuedAt, account.passwordUpdatedAt)) return null;
+      if (lookup.findMfaConfirmedAt) {
+        const confirmedAt = await lookup.findMfaConfirmedAt(session.teacherId);
+        if (isSessionOlderThanCredential(session.issuedAt, confirmedAt)) return null;
+      }
       return session;
     }
     if (lookup.revalidateStudent) {

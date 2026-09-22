@@ -7,6 +7,7 @@
  */
 
 import { DEMO_TEACHER_PASSWORD } from "../../features/teacher-accounts/password-policy.ts";
+import { isProductionRuntime } from "./runtime-env.ts";
 
 export {
   checkPasswordStrength,
@@ -18,7 +19,10 @@ export {
 
 const PBKDF2_PREFIX = "pbkdf2-sha256";
 const LEGACY_DEMO_PREFIX = "demo:";
-const DEFAULT_ITERATIONS = 210_000;
+/** Nouveaux hashes. Les anciens `pbkdf2-sha256$210000$…` restent vérifiables. */
+export const DEFAULT_PBKDF2_ITERATIONS = 600_000;
+export const MIN_PRODUCTION_PBKDF2_ITERATIONS = 600_000;
+export const MIN_DEV_PBKDF2_ITERATIONS = 10_000;
 const SALT_BYTES = 16;
 const KEY_BITS = 256;
 
@@ -36,23 +40,28 @@ export function isUsablePasswordHash(hash: string | null | undefined): boolean {
 }
 
 /**
- * Le mot de passe de démonstration reste utile pour les tests et l'aperçu local,
- * mais il est refusé par défaut : il faut l'autoriser explicitement avec
- * `CAMPUS_ALLOW_DEMO_PASSWORD=1`. Le serveur de développement (`NODE_ENV=development`)
- * l'accepte pour ne pas gêner le travail local ; une production ne l'accepte jamais
- * sans la variable.
+ * Le mot de passe de démonstration reste utile pour les tests et l'aperçu local.
+ * En production, un hash `demo:` est TOUJOURS refusé : `CAMPUS_ALLOW_DEMO_PASSWORD=1`
+ * ne peut pas réactiver ce mécanisme.
+ * Hors production : `CAMPUS_ALLOW_DEMO_PASSWORD=1` l’autorise ; `=0` le refuse ;
+ * `NODE_ENV=development` l’accepte si la variable est absente.
  */
 export function demoPasswordAllowed(): boolean {
+  if (isProductionRuntime()) return false;
   const flag = process.env.CAMPUS_ALLOW_DEMO_PASSWORD;
   if (flag === "1") return true;
   if (flag === "0") return false;
   return process.env.NODE_ENV === "development";
 }
 
-function pbkdf2Iterations(): number {
-  const raw = Number(process.env.CAMPUS_PBKDF2_ITERATIONS ?? "");
-  if (Number.isInteger(raw) && raw >= 10_000) return raw;
-  return DEFAULT_ITERATIONS;
+export function resolvePbkdf2Iterations(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = Number(env.CAMPUS_PBKDF2_ITERATIONS ?? "");
+  if (isProductionRuntime(env)) {
+    if (Number.isInteger(raw) && raw >= MIN_PRODUCTION_PBKDF2_ITERATIONS) return raw;
+    return DEFAULT_PBKDF2_ITERATIONS;
+  }
+  if (Number.isInteger(raw) && raw >= MIN_DEV_PBKDF2_ITERATIONS) return raw;
+  return DEFAULT_PBKDF2_ITERATIONS;
 }
 
 function toBase64(bytes: Uint8Array): string {
@@ -79,8 +88,7 @@ async function derive(password: string, salt: Uint8Array, iterations: number): P
   return new Uint8Array(bits);
 }
 
-export async function hashPassword(password: string): Promise<string> {
-  const iterations = pbkdf2Iterations();
+export async function hashPassword(password: string, iterations = resolvePbkdf2Iterations()): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
   const derived = await derive(password, salt, iterations);
   return `${PBKDF2_PREFIX}$${iterations}$${toBase64(salt)}$${toBase64(derived)}`;
@@ -101,6 +109,7 @@ export async function verifyPassword(password: string, storedHash: string | null
   if (!candidate) return false;
 
   if (isLegacyDemoHash(storedHash)) {
+    if (isProductionRuntime()) return false;
     if (!demoPasswordAllowed()) return false;
     return constantTimeEquals(candidate, storedHash.slice(LEGACY_DEMO_PREFIX.length));
   }

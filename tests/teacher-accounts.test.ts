@@ -15,14 +15,18 @@ import {
   wouldRemoveLastAdmin,
   type TeacherAccountRecord,
 } from "../src/features/teacher-accounts/index.ts";
+import { resolveTeacherAuthRateLimitTarget } from "../src/lib/security/rate-limit.ts";
 import {
   demoPasswordAllowed,
   DEMO_TEACHER_PASSWORD,
   generateTemporaryPassword,
+  DEFAULT_PBKDF2_ITERATIONS,
   hashPassword,
   isLegacyDemoHash,
   isUsablePasswordHash,
   legacyDemoPasswordHash,
+  MIN_PRODUCTION_PBKDF2_ITERATIONS,
+  resolvePbkdf2Iterations,
   verifyPassword,
 } from "../src/lib/auth/password.ts";
 import {
@@ -49,6 +53,15 @@ test("mots de passe — hachage PBKDF2 salé et vérifiable", async () => {
   const hash = await hashPassword("Moteur-2027-ok");
   assert.ok(hash.startsWith("pbkdf2-sha256$"));
   assert.equal(isUsablePasswordHash(hash), true);
+  assert.equal(await verifyPassword("Moteur-2027-ok", hash), true);
+  assert.equal(await verifyPassword("mauvais", hash), false);
+  assert.equal(resolvePbkdf2Iterations({ NODE_ENV: "production" }), DEFAULT_PBKDF2_ITERATIONS);
+  assert.equal(resolvePbkdf2Iterations({ NODE_ENV: "production", CAMPUS_PBKDF2_ITERATIONS: "10000" }), MIN_PRODUCTION_PBKDF2_ITERATIONS);
+  assert.equal(resolvePbkdf2Iterations({ CAMPUS_PBKDF2_ITERATIONS: "10000" }), 10_000);
+  const oldHash = await hashPassword("Ancien-210000-ok", 210_000);
+  assert.match(oldHash, /^pbkdf2-sha256\$210000\$/);
+  assert.equal(await verifyPassword("Ancien-210000-ok", oldHash), true);
+  assert.equal(await verifyPassword("mauvais", oldHash), false);
   assert.equal(hash.includes("Moteur-2027-ok"), false);
   assert.equal(await verifyPassword("Moteur-2027-ok", hash), true);
   assert.equal(await verifyPassword("moteur-2027-ok", hash), false);
@@ -76,10 +89,30 @@ test("mots de passe — empreinte démo refusée sans autorisation explicite", a
     process.env.CAMPUS_ALLOW_DEMO_PASSWORD = "0";
     assert.equal(demoPasswordAllowed(), false);
     assert.equal(await verifyPassword(DEMO_TEACHER_PASSWORD, legacy), false);
+
+    process.env.CAMPUS_ALLOW_DEMO_PASSWORD = "1";
+    assert.equal(demoPasswordAllowed(), false);
+    assert.equal(await verifyPassword(DEMO_TEACHER_PASSWORD, legacy), false);
   } finally {
     delete process.env.NODE_ENV;
     if (previous === undefined) delete process.env.CAMPUS_ALLOW_DEMO_PASSWORD;
     else process.env.CAMPUS_ALLOW_DEMO_PASSWORD = previous;
+  }
+});
+
+test("mots de passe — NODE_ENV=production + CAMPUS_ALLOW_DEMO_PASSWORD=1 refuse le hash demo", async () => {
+  const previousFlag = process.env.CAMPUS_ALLOW_DEMO_PASSWORD;
+  const previousEnv = process.env.NODE_ENV;
+  try {
+    process.env.NODE_ENV = "production";
+    process.env.CAMPUS_ALLOW_DEMO_PASSWORD = "1";
+    assert.equal(demoPasswordAllowed(), false);
+    assert.equal(await verifyPassword(DEMO_TEACHER_PASSWORD, legacyDemoPasswordHash()), false);
+  } finally {
+    if (previousEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousEnv;
+    if (previousFlag === undefined) delete process.env.CAMPUS_ALLOW_DEMO_PASSWORD;
+    else process.env.CAMPUS_ALLOW_DEMO_PASSWORD = previousFlag;
   }
 });
 
@@ -142,6 +175,21 @@ test("comptes — création avec mot de passe provisoire à usage unique", async
   // Les mêmes initiales ne peuvent pas être réattribuées.
   const duplicate = await store.createAccount({ displayName: "Marc Dumas", initials: "dum", teachingType: "GENERAL" });
   assert.equal(duplicate.ok, false);
+
+  const missing = await store.authenticate("ZzQ", "mauvais-mot-de-passe");
+  const wrong = await store.authenticate("DuM", "mauvais-mot-de-passe");
+  assert.equal(missing.ok, false);
+  assert.equal(wrong.ok, false);
+  assert.equal(missing.reason, wrong.reason);
+  assert.equal(missing.reason, "Initiales ou mot de passe incorrect.");
+
+  const fromInitials = await resolveTeacherAuthRateLimitTarget("DuM", store);
+  const fromId = await resolveTeacherAuthRateLimitTarget(created.account.id, store);
+  const fromCase = await resolveTeacherAuthRateLimitTarget("dum", store);
+  assert.equal(fromInitials, created.account.id);
+  assert.equal(fromId, created.account.id);
+  assert.equal(fromCase, created.account.id);
+  assert.equal(typeof created.account.passwordHash, "undefined");
 });
 
 test("comptes — changement de mot de passe par l'enseignant", async () => {
@@ -252,6 +300,7 @@ test("comptes SQLite — migration, création et vérification des identifiants"
   assert.ok(created.ok);
   if (!created.ok) return;
 
+  assert.match(created.account.passwordUpdatedAt ?? "", /\.\d{3}Z$/);
   const login = await accounts.authenticate("dum", created.temporaryPassword);
   assert.equal(login.ok, true);
   assert.equal(login.mustChangePassword, true);
@@ -296,6 +345,33 @@ test("amorçage — CAMPUS_ADMIN_PASSWORD n'écrase jamais un mot de passe chois
     else process.env.CAMPUS_ADMIN_PASSWORD = previousPassword;
     if (previousInitials === undefined) delete process.env.CAMPUS_ADMIN_INITIALS;
     else process.env.CAMPUS_ADMIN_INITIALS = previousInitials;
+  }
+});
+
+test("amorçage — production : aucun mot de passe généré ni journalisé", async () => {
+  const store = freshStore();
+  const seeded = await store.listAccounts();
+  assert.ok(seeded.some((account) => account.isAdmin && !account.hasPassword));
+  const previousEnv = process.env.NODE_ENV;
+  const previousPassword = process.env.CAMPUS_ADMIN_PASSWORD;
+  const previousDemo = process.env.CAMPUS_ALLOW_DEMO_PASSWORD;
+  process.env.NODE_ENV = "production";
+  delete process.env.CAMPUS_ADMIN_PASSWORD;
+  delete process.env.CAMPUS_ALLOW_DEMO_PASSWORD;
+  try {
+    const outcome = await ensureTeacherAccountBootstrap(store);
+    assert.equal(outcome.action, "needs-admin-password");
+    const described = describeBootstrapOutcome(outcome) ?? "";
+    assert.match(described, /Aucun administrateur actif/);
+    assert.equal(/Mot de passe\s*:/.test(described), false);
+    assert.equal((await store.authenticate("ChF", DEMO_TEACHER_PASSWORD)).ok, false);
+  } finally {
+    if (previousEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousEnv;
+    if (previousPassword === undefined) delete process.env.CAMPUS_ADMIN_PASSWORD;
+    else process.env.CAMPUS_ADMIN_PASSWORD = previousPassword;
+    if (previousDemo === undefined) delete process.env.CAMPUS_ALLOW_DEMO_PASSWORD;
+    else process.env.CAMPUS_ALLOW_DEMO_PASSWORD = previousDemo;
   }
 });
 

@@ -19,7 +19,21 @@ test("server-renders the single entry page, student tab first", async () => {
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
+  const csp = response.headers.get("content-security-policy") ?? "";
+  assert.match(csp, /script-src 'self' 'nonce-[a-f0-9]+' 'strict-dynamic'/);
+  assert.doesNotMatch(csp, /script-src[^;]*unsafe-inline/);
+  assert.doesNotMatch(csp, /unsafe-eval/);
+  assert.match(csp, /frame-ancestors 'none'/);
+  assert.match(csp, /fonts\.googleapis\.com/);
+  const nonce = csp.match(/'nonce-([a-f0-9]+)'/)?.[1];
+  assert.ok(nonce, "nonce CSP attendu");
+
   const html = await response.text();
+  const scriptTags = [...html.matchAll(/<script\b([^>]*)>/gi)].map((match) => match[1]);
+  assert.ok(scriptTags.length > 0, "la page vinext doit contenir des scripts");
+  for (const attrs of scriptTags) {
+    assert.match(attrs, new RegExp(`nonce="${nonce}"`));
+  }
   assert.match(html, /Campus Agenda — Agenda scolaire partagé/);
   assert.match(html, /id="main-content"/);
   assert.match(html, /Mon agenda de classe/);

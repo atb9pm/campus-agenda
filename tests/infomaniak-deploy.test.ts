@@ -5,7 +5,7 @@ import test from "node:test";
 import { APP_VERSION } from "../src/lib/app-version.ts";
 
 test("version 2.54.1 — workflow Infomaniak : santé seulement, pas de SSH", async () => {
-  assert.equal(APP_VERSION, "2.61.7");
+  assert.equal(APP_VERSION, "2.61.8");
   const workflow = await readFile(new URL("../.github/workflows/deploy-infomaniak.yml", import.meta.url), "utf8");
   const guide = await readFile(new URL("../docs/infomaniak-deploy.md", import.meta.url), "utf8");
 
@@ -60,4 +60,15 @@ test("build Infomaniak installe racine puis web, puis build — git inchangé", 
     /cd web && AUTH_SECRET=votre-secret CAMPUS_MFA_ENCRYPTION_KEY=votre-cle-mfa CAMPUS_STORE=sqlite npm run start:infomaniak/,
   );
   assert.doesNotMatch(build, /qrcode only|uniquement qrcode/);
+});
+
+test("démarrage Infomaniak — AUTH_SECRET absent ou trop court refusé, valeur jamais loguée", async () => {
+  const start = await readFile(new URL("../scripts/start-infomaniak.mjs", import.meta.url), "utf8");
+  assert.match(start, /AUTH_SECRET_MIN_BYTES = 32/);
+  assert.match(start, /Buffer\.byteLength\(secret, "utf8"\) < AUTH_SECRET_MIN_BYTES/);
+  assert.match(start, /AUTH_SECRET trop faible/);
+  assert.match(start, /openssl rand -base64 48/);
+  assert.match(start, /La valeur fournie n'est jamais affichée/);
+  assert.doesNotMatch(start, /console\.(error|log|warn)\([^)]*AUTH_SECRET\$\{/);
+  assert.doesNotMatch(start, /console\.(error|log|warn)\([^)]*secret\)/);
 });

@@ -1,4 +1,12 @@
-export { getAuthSecret } from "./config.ts";
+export {
+  AUTH_SECRET_MIN_BYTES,
+  AUTH_SECRET_MISSING_PRODUCTION,
+  AUTH_SECRET_WEAK_PRODUCTION,
+  DEV_FALLBACK_AUTH_SECRET,
+  assertProductionAuthSecret,
+  authSecretByteLength,
+  getAuthSecret,
+} from "./config.ts";
 export {
   MFA_KEY_ENV,
   MFA_REQUIRE_KEY_ENV,
@@ -37,6 +45,7 @@ export {
 export { constantTimeEquals } from "./password.ts";
 export {
   checkPasswordStrength,
+  DEFAULT_PBKDF2_ITERATIONS,
   DEMO_TEACHER_PASSWORD,
   demoPasswordAllowed,
   generateTemporaryPassword,
@@ -45,7 +54,10 @@ export {
   isLegacyDemoHash,
   isUsablePasswordHash,
   legacyDemoPasswordHash,
+  MIN_DEV_PBKDF2_ITERATIONS,
   MIN_PASSWORD_LENGTH,
+  MIN_PRODUCTION_PBKDF2_ITERATIONS,
+  resolvePbkdf2Iterations,
   verifyPassword,
 } from "./password.ts";
 export {
@@ -66,3 +78,8 @@ export {
   unauthorizedResponse,
 } from "./permissions.ts";
 export { revalidateLiveSession, type LiveSessionLookup } from "./session-live.ts";
+export {
+  classifyCredentialTimestamp,
+  isSessionOlderThanCredential,
+  parseCredentialTimestamp,
+} from "./session-freshness.ts";

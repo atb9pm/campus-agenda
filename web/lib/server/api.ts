@@ -34,6 +34,12 @@ import { revalidateStructuredStudentSession } from "@campus/features/student-acc
 import type { AppSession } from "@campus/lib/persistence/types.ts";
 import { evaluateAdminMfaAccess } from "@campus/features/admin-mfa/index.ts";
 import { getAdminMfaStore } from "@campus/lib/persistence/store-factory.ts";
+import { applySecurityHeaders } from "@campus/lib/security/http-headers.ts";
+import {
+  UNTRUSTED_ORIGIN_REASON,
+  isTrustedSensitiveRead,
+  isTrustedWriteOrigin,
+} from "@campus/lib/security/csrf.ts";
 
 export async function getRequestSession(request: Request): Promise<AppSession | null> {
   const parsed = await parseSessionToken(readSessionTokenFromRequest(request));
@@ -47,6 +53,10 @@ export async function getRequestSession(request: Request): Promise<AppSession | 
   ]);
   return revalidateLiveSession(parsed, {
     findAccount: (teacherId) => accounts.findAccount(teacherId),
+    findMfaConfirmedAt: async (teacherId) => {
+      const record = await (await getAdminMfaStore()).get(teacherId);
+      return record?.confirmedAt ?? null;
+    },
     revalidateStudent: (session) =>
       revalidateStructuredStudentSession(session, {
         getAccessById: (accessId) => accesses.getById(accessId),
@@ -70,18 +80,21 @@ export async function jsonWithSession(
   const headers = new Headers(init.headers);
   headers.append("Set-Cookie", buildSessionCookie(token, remember));
   headers.set("Content-Type", "application/json");
+  applySecurityHeaders(headers);
   return new Response(JSON.stringify(body), { ...init, headers });
 }
 
 export function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
+  applySecurityHeaders(headers);
   return new Response(JSON.stringify(body), { ...init, headers });
 }
 
 export function logoutResponse(): Response {
   const headers = new Headers({ "Content-Type": "application/json" });
   headers.append("Set-Cookie", clearSessionCookie());
+  applySecurityHeaders(headers);
   return new Response(JSON.stringify({ ok: true }), { headers });
 }
 
@@ -527,11 +540,15 @@ export async function requireClassroomReadAccess(request: Request, classroomId: 
       if (!allowed) {
         return { error: unauthorizedResponse("Accès à cette classe non autorisé.") };
       }
+      const mfa = await rejectIncompleteAdminMfa(session, store);
+      if (mfa) return mfa;
       return { session, store };
     }
     if (!(await canReadClassroomAgenda(session, classroomId, store))) {
       return { error: unauthorizedResponse("Accès à cette classe non autorisé.") };
     }
+    const mfa = await rejectIncompleteAdminMfa(session, store);
+    if (mfa) return mfa;
     return { session, store };
   }
   return { error: unauthorizedResponse("Accès à cette classe non autorisé.") };
@@ -547,8 +564,24 @@ export async function reconcileRuntimeStructuredClassrooms(): Promise<void> {
   await reconcileStructuredClassrooms(adapters, classes);
 }
 
+type TeacherSessionAuth =
+  | { session: Extract<AppSession, { kind: "teacher" }>; store: Awaited<ReturnType<typeof getStore>>; error?: undefined }
+  | { error: Response; session?: undefined; store?: undefined };
+
+function rejectUntrustedWrite(request: Request): TeacherSessionAuth | null {
+  if (isTrustedWriteOrigin(request)) return null;
+  return { error: jsonResponse({ ok: false, reason: UNTRUSTED_ORIGIN_REASON }, { status: 403 }) };
+}
+
+function rejectUntrustedAdminRead(request: Request): TeacherSessionAuth | null {
+  if (isTrustedSensitiveRead(request)) return null;
+  return { error: jsonResponse({ ok: false, reason: UNTRUSTED_ORIGIN_REASON }, { status: 403 }) };
+}
+
 /** Session enseignant sans contrôle du mot de passe provisoire. */
-async function requireTeacherIdentity(request: Request) {
+async function requireTeacherIdentity(request: Request): Promise<TeacherSessionAuth> {
+  const originGuard = rejectUntrustedWrite(request);
+  if (originGuard) return originGuard;
   const session = await getRequestSession(request);
   if (!canMutateAgenda(session)) {
     return { error: unauthorizedResponse() };
@@ -556,7 +589,34 @@ async function requireTeacherIdentity(request: Request) {
   return { session, store: await getStore() };
 }
 
-export async function requireTeacherSession(request: Request) {
+async function rejectIncompleteAdminMfa(
+  session: AppSession,
+  store: Awaited<ReturnType<typeof getStore>>,
+) {
+  if (session.kind !== "teacher") return null;
+  const isAdmin = await store.teacherIsAdmin(session.teacherId);
+  if (!isAdmin) return null;
+  const record = await (await getAdminMfaStore()).get(session.teacherId);
+  const gate = evaluateAdminMfaAccess({
+    isAdmin: true,
+    mfaPending: Boolean(session.mfaPending),
+    status: record?.status,
+  });
+  if (gate.ok) return null;
+  return {
+    error: jsonResponse(
+      {
+        ok: false,
+        reason: gate.reason,
+        ...(gate.mfaPending ? { mfaPending: true } : {}),
+        ...(gate.mfaSetupRequired ? { mfaSetupRequired: true } : {}),
+      },
+      { status: gate.status },
+    ),
+  };
+}
+
+export async function requireTeacherSession(request: Request): Promise<TeacherSessionAuth> {
   const auth = await requireTeacherIdentity(request);
   if ("error" in auth && auth.error) return auth;
 
@@ -570,17 +630,22 @@ export async function requireTeacherSession(request: Request) {
       ),
     };
   }
+
+  const mfa = await rejectIncompleteAdminMfa(auth.session!, auth.store!);
+  if (mfa) return mfa;
   return auth;
 }
 
 /** Utilisée par la route de changement de mot de passe uniquement. */
-export async function requireTeacherSessionAllowingPasswordChange(request: Request) {
+export async function requireTeacherSessionAllowingPasswordChange(request: Request): Promise<TeacherSessionAuth> {
   return requireTeacherIdentity(request);
 }
 
-export async function requireAdminSession(request: Request) {
+export async function requireAdminSession(request: Request): Promise<TeacherSessionAuth> {
   const auth = await requireTeacherSession(request);
   if ("error" in auth && auth.error) return auth;
+  const readGuard = rejectUntrustedAdminRead(request);
+  if (readGuard) return readGuard;
   const isAdmin = await auth.store!.teacherIsAdmin(auth.session!.teacherId);
   const record = await (await getAdminMfaStore()).get(auth.session!.teacherId);
   const gate = evaluateAdminMfaAccess({
@@ -605,7 +670,7 @@ export async function requireAdminSession(request: Request) {
 }
 
 /** Identité enseignant + admin, y compris session MFA_PENDING (enrôlement / défi). */
-export async function requireAdminMfaPendingSession(request: Request) {
+export async function requireAdminMfaPendingSession(request: Request): Promise<TeacherSessionAuth> {
   const auth = await requireTeacherIdentity(request);
   if ("error" in auth && auth.error) return auth;
   const accounts = await getTeacherAccountsStore();

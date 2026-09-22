@@ -96,14 +96,16 @@ Il n'est appliqué que si aucun compte enseignant n'existe encore, ou si le comp
 **pas encore** de mot de passe personnel : un mot de passe choisi dans l'application n'est
 jamais écrasé au redémarrage.
 
-**Comptes déjà présents** — sans variable, un mot de passe provisoire peut encore être
-tiré au démarrage (base non vide) et inscrit dans les journaux Node.js du Manager :
+**Comptes déjà présents sans mot de passe utilisable** — le démarrage **ne génère
+jamais** et **ne journalise jamais** un mot de passe. Le processus refuse de démarrer :
 
 ```
-==================== CAMPUS AGENDA — ACCÈS ADMINISTRATEUR ====================
-  Initiales        : ChF
-  Mot de passe     : K7QP-M3ZR-T9WD
+Aucun administrateur actif ne possède de mot de passe utilisable.
+Définissez CAMPUS_ADMIN_PASSWORD temporairement ou utilisez admin:reset-password.
 ```
+
+La commande volontaire `pnpm admin:reset-password` peut afficher un mot de passe
+temporaire **une seule fois** dans le terminal.
 
 Dans les deux cas, l'application impose un changement de mot de passe à la première
 connexion, puis les comptes suivants se créent depuis **Administration → Gestion des
@@ -111,12 +113,12 @@ enseignants** (mot de passe provisoire affiché à l'écran, à transmettre de v
 
 | Variable | Rôle |
 |---|---|
-| `AUTH_SECRET` | Signature des sessions (obligatoire) |
+| `AUTH_SECRET` | Signature des sessions (obligatoire, ≥ 32 octets ; 48 ou 64 caractères aléatoires recommandés) |
 | `CAMPUS_STORE=sqlite` | Persistance sur disque |
 | `CAMPUS_ADMIN_INITIALS` | Compte administrateur visé par l'amorçage (`ChF` par défaut) |
 | `CAMPUS_ADMIN_DISPLAY_NAME` | Nom affiché du premier admin (base vide) |
 | `CAMPUS_ADMIN_PASSWORD` | Mot de passe d'amorçage ; **obligatoire** si la table `teachers` est vide |
-| `CAMPUS_ALLOW_DEMO_PASSWORD` | **À ne pas définir en production** : rouvrirait `campus-demo` |
+| `CAMPUS_ALLOW_DEMO_PASSWORD` | Inopérant en production : un hash `demo:` est toujours refusé |
 | `CAMPUS_MFA_ENCRYPTION_KEY` | Clé AES-GCM 32 octets (hex 64) pour le secret TOTP admin — **obligatoire** |
 
 ## Déploiement manuel (première fois)
@@ -192,7 +194,7 @@ administrateur.
 |---|---|---|
 | `EROFS … corepack … /usr/local/bin/pnpm` | `corepack enable` interdit | Build/lancement **sans** corepack, avec **npm** |
 | `pnpm: command not found` | pnpm non installé globalement | Utiliser `npm` |
-| `AUTH_SECRET requis` | Secret absent | Mettre `AUTH_SECRET=…` dans la commande de lancement |
+| `AUTH_SECRET requis` / trop faible | Secret absent ou < 32 octets | `AUTH_SECRET=$(openssl rand -base64 48)` dans la commande de lancement |
 | « Initiales ou mot de passe incorrect » avec `campus-demo` | Comportement voulu : le mot de passe démo est refusé en production | Utiliser le mot de passe d'amorçage (voir « Premier mot de passe administrateur ») |
 | Site en maintenance | Mode maintenance ON | **Gérer** → désactiver maintenance |
 | Build OK mais Run échoue | Ancienne commande avec corepack | Remplacer la commande de lancement |

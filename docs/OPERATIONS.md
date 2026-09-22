@@ -61,7 +61,7 @@ Journaux JSON sur la sortie standard, sans contenu scolaire :
 
 | Variable | Rôle |
 |---|---|
-| `AUTH_SECRET` | Signature des cookies (obligatoire en production) |
+| `AUTH_SECRET` | Signature HMAC des sessions et dérivation des codes élèves. **Production : obligatoire, ≥ 32 octets** (48 ou 64 caractères aléatoires recommandés, ex. `openssl rand -base64 48`). Un secret faible refuse le démarrage. Jamais logué. Hors production, valeur fictive interne si absent. |
 | `CAMPUS_STORE` | Backend de persistance (`sqlite` en production) |
 | `CAMPUS_SQLITE_PATH` | Fichier SQLite |
 | `CAMPUS_ADMIN_INITIALS` | Initiales de l’administrateur bootstrap (`ChF` par défaut) |
@@ -69,20 +69,48 @@ Journaux JSON sur la sortie standard, sans contenu scolaire :
 | `CAMPUS_ADMIN_PASSWORD` | Mot de passe du premier admin — **obligatoire** si la base SQLite est totalement vide |
 | `CAMPUS_DEMO_SEED` | Seed de démonstration hors production uniquement (`false` pour le désactiver). **Ignoré en production.** |
 | `APP_ENV` | Contexte d'exécution |
-| `CAMPUS_DISABLE_RATE_LIMIT` | Désactive le rate limit (tests uniquement) |
-| `CAMPUS_AUTH_RATE_LIMIT_TEACHER` | Limite personnalisée connexion enseignant (défaut : 10/min) |
-| `CAMPUS_AUTH_RATE_LIMIT_STUDENT` | Limite personnalisée connexion élève (défaut : 20/min) |
-| `CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA` | Limite personnalisée codes TOTP / récupération (défaut : 8/min) |
+| `CAMPUS_DISABLE_RATE_LIMIT` | Désactive le rate limit **hors production uniquement**. En production (`NODE_ENV=production`) la variable est **ignorée**. |
+| `CAMPUS_AUTH_RATE_LIMIT_TEACHER` | Limite IP connexion enseignant (défaut : 10/min) |
+| `CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET` | Limite par teacherId canonique (défaut : 10/min) ; identifiant normalisé si le compte n’existe pas |
+| `CAMPUS_AUTH_RATE_LIMIT_STUDENT` | Limite IP connexion élève (défaut : 20/min) |
+| `CAMPUS_AUTH_RATE_LIMIT_STUDENT_TARGET` | Limite par préfixe de classe (défaut : 20/min) |
+| `CAMPUS_AUTH_RATE_LIMIT_TEACHER_PASSWORD` | Limite IP changement de mot de passe (défaut : 10/min) |
+| `CAMPUS_AUTH_RATE_LIMIT_TEACHER_PASSWORD_TARGET` | Limite par compte enseignant (défaut : 10/min) |
+| `CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA` | Limite IP codes TOTP / récupération (défaut : 8/min) |
+| `CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA_TARGET` | Limite MFA par compte administrateur (défaut : 8/min) |
 | `CAMPUS_MFA_ENCRYPTION_KEY` | Clé AES-256-GCM du secret TOTP administrateur (**obligatoire en production**) |
+| `CAMPUS_PBKDF2_ITERATIONS` | Itérations des **nouveaux** hashes (défaut **600000**). En production, une valeur < 600000 est ignorée. Les anciens hashes `pbkdf2-sha256$210000$…` restent valides jusqu’au prochain changement de mot de passe. |
 
 ## Rate limiting
 
-Les tentatives de connexion (`POST /api/auth/teacher`, `POST /api/auth/student`) sont limitées par adresse IP.
+Deux seaux **indépendants** (pas une concaténation `IP:compte`) :
+
+| Route | Seau IP | Seau cible |
+|---|---|---|
+| `POST /api/auth/teacher` | adresse IP (consommée en premier) | `teacherId` interne canonique après résolution d’annuaire **sans mot de passe**. Inconnu : identifiant normalisé (casse / espaces). Le mot de passe n’est vérifié qu’après les deux seaux. |
+| `POST /api/auth/student` | adresse IP | préfixe de classe uniquement (jamais le secret du code). Format invalide → seau générique `unparsed` |
+| `POST /api/auth/teacher/password` | adresse IP | compte enseignant (session) |
+| MFA / récupération | adresse IP | compte administrateur |
+
+Changer d’IP ne réinitialise pas la limite d’un compte ou d’une classe. Plusieurs comptes derrière la même IP restent utilisables tant que chaque cible et l’IP restent sous leur plafond.
 
 | Environnement | Mécanisme | Limite |
 |---|---|---|
-| Production Infomaniak | Compteur mémoire par processus Node.js | 10 enseignant, 20 élève / min |
-| Tests / aperçu local | Idem, ou `CAMPUS_DISABLE_RATE_LIMIT=1` | — |
+| Production Infomaniak | Compteur **mémoire par processus Node.js** | 10 enseignant, 20 élève, 10 mot de passe, 8 MFA / min, **par seau** (IP et cible séparés) |
+| Tests / aperçu local | Idem, ou `CAMPUS_DISABLE_RATE_LIMIT=1` (ignoré en production) | — |
+
+**Limite Infomaniak** : sans Redis, le compteur mémoire est **local à chaque processus**. Un redémarrage remet les compteurs à zéro. Plusieurs processus Node ne partagent pas les seaux.
+
+**Confiance IP** : le seau IP est une défense en profondeur, **pas une garantie anti-spoof**. Le runtime Web `Request` n’expose pas l’adresse TCP. Cloudflare Worker : `cf-connecting-ip` uniquement si `cf-ray` est présent. Infomaniak : `x-real-ip` / dernier `X-Forwarded-For` seulement si le reverse proxy les réécrit — ce n’est pas vérifiable depuis l’application. La **cible** (teacherId / préfixe de classe) reste la protection principale. On ne regroupe pas tous les clients dans un unique seau global.
+
+Les routes `POST /api/auth/teacher` et `POST /api/auth/student` consomment le seau IP **avant** de lire le corps. Corps d’authentification limité à **8 KiB** (413 si dépassé). Un enseignant affecté à une classe voit la **grille horaire entière** de cette classe via `GET /api/timetable/branches` ; un enseignant non affecté reçoit 403 (classe inconnue : 404). Le `classroomId` du navigateur n’est jamais une preuve d’autorisation.
+
+### Rate limiter mémoire
+
+- Les seaux expirés (`resetAt` atteint) sont retirés automatiquement : toutes les 32 opérations ou 15 secondes, et avant toute décision de saturation. Un seau encore actif n’est jamais modifié ni évincé.
+- La Map est plafonnée à **8000** seaux. Si 8000 seaux **actifs** sont présents, une **nouvelle** clé est refusée (fail closed, 429) jusqu’à ce qu’un seau expire. Pas de vidage global, pas de tri de la Map.
+- `false` peut signifier un compteur individuel dépassé **ou** une saturation globale : dans les deux cas la route répond 429.
+- Fallback **par processus**. Un redémarrage remet toujours les compteurs à zéro. Redis / stockage partagé n’est pas utilisé dans cette version.
 
 Réponse en cas de dépassement :
 
@@ -125,7 +153,7 @@ Administration → onglet **Restaurer une sauvegarde** → **Choisir un fichier 
 5. Saisir exactement `RESTAURER`.
 6. Confirmer avec **Restaurer maintenant**.
 7. Campus Agenda crée automatiquement une sauvegarde de sécurité `campus-agenda-before-restore-YYYY-MM-DD-HHmm.json` (`GET /api/admin/backup`). Si cette étape échoue, **rien n’est restauré**.
-8. Restauration : `POST /api/admin/restore` avec `{ "snapshot": snapshot }`.
+8. Restauration : `POST /api/admin/restore` avec `{ "snapshot": snapshot, "confirmation": "RESTAURER" }`. Sans ce jeton, le serveur refuse (400).
 9. Succès : message, puis rechargement complet de la page.
 
 API : `POST /api/admin/restore`
@@ -280,8 +308,7 @@ La commande affiche le compte ciblé et n’agit que si l’opérateur tape exac
 - Le changement de mot de passe est obligatoire à la prochaine connexion.
 - La 2FA n’est **pas** touchée (secret TOTP et recovery codes inchangés).
 - La commande ne crée **jamais** de session administrateur.
-
-Les cookies de session déjà émis restent valides jusqu’à expiration (HMAC, pas de store de sessions serveur). Un reset mot de passe ne les révoque pas.
+- La réinitialisation du mot de passe révoque les sessions enseignant émises avant le reset.
 
 ### 11. Restauration d’un backup et clé MFA
 

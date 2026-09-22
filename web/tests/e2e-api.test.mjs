@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 process.env.AUTH_SECRET ??= "test-secret-e2e-phase-08";
+if (process.env.NODE_ENV === "production") {
+  process.env.NODE_ENV = "test";
+}
 // Les comptes de démonstration n'ont pas de mot de passe personnel : le parcours
 // E2E autorise explicitement l'empreinte héritée `campus-demo`.
 process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
@@ -10,6 +13,11 @@ process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
 process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER ??= "50";
 process.env.CAMPUS_AUTH_RATE_LIMIT_STUDENT ??= "50";
 process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA ??= "80";
+process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET ??= "50";
+process.env.CAMPUS_AUTH_RATE_LIMIT_STUDENT_TARGET ??= "50";
+process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA_TARGET ??= "80";
+process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_PASSWORD ??= "50";
+process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_PASSWORD_TARGET ??= "50";
 process.env.CAMPUS_MFA_ENCRYPTION_KEY ??= "a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00";
 
 const env = {
@@ -246,7 +254,7 @@ test("phase 0.8 — E2E restauration de sauvegarde", async () => {
   const restoreResponse = await request("/api/admin/restore", {
     method: "POST",
     headers: { "Content-Type": "application/json", cookie: adminCookie },
-    body: JSON.stringify({ snapshot: backupPayload.snapshot }),
+    body: JSON.stringify({ snapshot: backupPayload.snapshot, confirmation: "RESTAURER" }),
   });
   assert.equal(restoreResponse.status, 200);
   const restorePayload = await restoreResponse.json();
@@ -265,6 +273,7 @@ test("phase 1.0 — E2E rate limit sur connexion enseignant", async () => {
         headers: {
           "Content-Type": "application/json",
           "cf-connecting-ip": clientIp,
+          "cf-ray": `e2e-rate-${clientIp}`,
         },
         body: JSON.stringify({ teacherId: "teacher-demo-current", password: "wrong-password" }),
       });
@@ -276,6 +285,7 @@ test("phase 1.0 — E2E rate limit sur connexion enseignant", async () => {
       headers: {
         "Content-Type": "application/json",
         "cf-connecting-ip": clientIp,
+        "cf-ray": `e2e-rate-${clientIp}`,
       },
       body: JSON.stringify({ teacherId: "teacher-demo-current", password: "wrong-password" }),
     });
@@ -292,9 +302,212 @@ test("phase 1.0 — E2E rate limit sur connexion enseignant", async () => {
   }
 });
 
+test("audit — rate limit enseignant : cible canonique et 401 identique", async () => {
+  const adminCookie = await loginAdmin();
+  const previousTarget = process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET;
+  const previousIp = process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER;
+  process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET = "2";
+  process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER = "50";
+  try {
+    const stamp = Date.now().toString(26).replace(/[^a-z]/g, "q").slice(-3);
+    const identityInitials = `V${stamp}`.slice(0, 4);
+    const bucketInitials = `W${stamp}`.slice(0, 4);
+    const identityCreated = await request("/api/admin/teachers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: adminCookie },
+      body: JSON.stringify({ displayName: "Rate Limit Identite", initials: identityInitials, teachingType: "TECHNICAL" }),
+    });
+    const identityPayload = await identityCreated.json();
+    assert.equal(identityCreated.status, 200, identityPayload.reason ?? "création enseignant identité");
+
+    const created = await request("/api/admin/teachers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie: adminCookie },
+      body: JSON.stringify({ displayName: "Rate Limit Canon", initials: bucketInitials, teachingType: "TECHNICAL" }),
+    });
+    const createdPayload = await created.json();
+    assert.equal(created.status, 200, createdPayload.reason ?? "création enseignant");
+    const teacherId = createdPayload.teacher.id;
+
+    const missing = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": "203.0.113.201" },
+      body: JSON.stringify({ initials: "ZzQ", password: "mauvais-mot-de-passe" }),
+    });
+    const wrong = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": "203.0.113.202" },
+      body: JSON.stringify({ initials: identityInitials, password: "mauvais-mot-de-passe" }),
+    });
+    assert.equal(missing.status, 401);
+    assert.equal(wrong.status, 401);
+    const missingBody = await missing.json();
+    const wrongBody = await wrong.json();
+    assert.equal(missingBody.reason, wrongBody.reason);
+    assert.equal(missingBody.reason, "Initiales ou mot de passe incorrect.");
+
+    const first = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": "198.51.100.201" },
+      body: JSON.stringify({ initials: bucketInitials, password: "mauvais-mot-de-passe" }),
+    });
+    const second = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": "198.51.100.202" },
+      body: JSON.stringify({ teacherId, password: "mauvais-mot-de-passe" }),
+    });
+    const blocked = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": "198.51.100.203" },
+      body: JSON.stringify({ initials: bucketInitials.toLowerCase(), password: "mauvais-mot-de-passe" }),
+    });
+    assert.equal(first.status, 401);
+    assert.equal(second.status, 401);
+    assert.equal(blocked.status, 429);
+  } finally {
+    if (previousTarget === undefined) delete process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET;
+    else process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET = previousTarget;
+    if (previousIp === undefined) delete process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER;
+    else process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER = previousIp;
+  }
+});
+
+test("audit — corps d’auth 8 KiB et rate limit IP avant parsing", async () => {
+  const previous = process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER;
+  const previousTarget = process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET;
+  process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER = "2";
+  process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET = "50";
+  const ip = "198.51.100.77";
+  const huge = JSON.stringify({ initials: "ChF", password: "x".repeat(9000) });
+  try {
+    const first = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": ip },
+      body: huge,
+    });
+    const second = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": ip },
+      body: huge,
+    });
+    const third = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": ip },
+      body: huge,
+    });
+    assert.equal(first.status, 413);
+    assert.equal(second.status, 413);
+    assert.equal(third.status, 429);
+    const invalid = await request("/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-real-ip": "198.51.100.78" },
+      body: "{",
+    });
+    assert.equal(invalid.status, 401);
+    const invalidBody = await invalid.json();
+    assert.equal(invalidBody.reason, "Initiales ou mot de passe incorrect.");
+  } finally {
+    if (previous === undefined) delete process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER;
+    else process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER = previous;
+    if (previousTarget === undefined) delete process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET;
+    else process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET = previousTarget;
+  }
+});
+
+test("audit — MFA admin : bodies > 8 KiB → 413, JSON normal inchangé", async () => {
+  const cookie = await loginAdmin();
+  const huge = JSON.stringify({ password: "x".repeat(9000), totp: "000000", code: "000000" });
+  const routes = [
+    "/api/admin/security/mfa/reconfigure",
+    "/api/admin/security/mfa/reconfigure/confirm",
+    "/api/admin/security/mfa/recovery",
+  ];
+  for (const path of routes) {
+    const oversized = await request(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie },
+      body: huge,
+    });
+    assert.equal(oversized.status, 413, path);
+    const oversizedBody = await oversized.json();
+    assert.equal(oversizedBody.reason, "Requête trop volumineuse.");
+
+    const invalid = await request(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie },
+      body: "{",
+    });
+    assert.equal(invalid.status, 400, `${path} json invalide`);
+  }
+
+  const recovery = await request("/api/admin/security/mfa/recovery", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie },
+    body: JSON.stringify({ password: "mauvais-mot-de-passe", totp: "000000" }),
+  });
+  assert.equal(recovery.status, 401);
+  const recoveryBody = await recovery.json();
+  assert.notEqual(recoveryBody.reason, "Requête trop volumineuse.");
+  assert.notEqual(recoveryBody.reason, "Requête invalide.");
+});
+
+test("audit — timetable/branches refuse une classe non affectée", async () => {
+  const ownerCookie = await loginTeacher("teacher-demo-current");
+  const listResponse = await request("/api/teacher/classrooms", { headers: { cookie: ownerCookie } });
+  const list = await listResponse.json();
+  const classroomId = list.classrooms?.[0]?.id;
+  assert.ok(classroomId, "une classe accessible à l’enseignant courant");
+
+  const allowed = await request(
+    `/api/timetable/branches?classroomId=${encodeURIComponent(classroomId)}&dayOfWeek=0&weekKind=A`,
+    { headers: { cookie: ownerCookie } },
+  );
+  assert.equal(allowed.status, 200);
+
+  const missing = await request(
+    "/api/timetable/branches?classroomId=classe-absente-xyz&dayOfWeek=0&weekKind=A",
+    { headers: { cookie: ownerCookie } },
+  );
+  assert.equal(missing.status, 404);
+
+  const adminCookie = await loginAdmin();
+  const stamp = Date.now().toString(26).replace(/[^a-z]/g, "q").slice(-3);
+  const initials = `U${stamp}`.slice(0, 4);
+  const created = await request("/api/admin/teachers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: adminCookie },
+    body: JSON.stringify({ displayName: "Horaire Interdit", initials, teachingType: "GENERAL" }),
+  });
+  const createdPayload = await created.json();
+  assert.equal(created.status, 200, createdPayload.reason ?? "création");
+  const firstLogin = await request("/api/auth/teacher", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ initials, password: createdPayload.temporaryPassword }),
+  });
+  assert.equal(firstLogin.status, 200);
+  const change = await request("/api/auth/teacher/password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: extractCookie(firstLogin) },
+    body: JSON.stringify({ currentPassword: createdPayload.temporaryPassword, nextPassword: "Atelier-2027" }),
+  });
+  assert.equal(change.status, 200);
+  const outsider = await request("/api/auth/teacher", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ initials, password: "Atelier-2027" }),
+  });
+  assert.equal(outsider.status, 200);
+  const forbidden = await request(
+    `/api/timetable/branches?classroomId=${encodeURIComponent(classroomId)}&dayOfWeek=0&weekKind=A`,
+    { headers: { cookie: extractCookie(outsider) } },
+  );
+  assert.equal(forbidden.status, 403);
+});
+
 test("comptes enseignant — E2E création, mot de passe provisoire, première connexion", async () => {
   const clientIp = "198.51.100.42";
-  const jsonHeaders = { "Content-Type": "application/json", "cf-connecting-ip": clientIp };
+  const jsonHeaders = { "Content-Type": "application/json", "cf-connecting-ip": clientIp, "cf-ray": "e2e-accounts" };
 
   const adminLogin = await request("/api/auth/teacher", {
     method: "POST",
@@ -347,19 +560,24 @@ test("comptes enseignant — E2E création, mot de passe provisoire, première c
 
   const weakChange = await request("/api/auth/teacher/password", {
     method: "POST",
-    headers: { "Content-Type": "application/json", cookie: newCookie, "cf-connecting-ip": clientIp },
+    headers: { "Content-Type": "application/json", cookie: newCookie, "cf-connecting-ip": clientIp, "cf-ray": "e2e-accounts" },
     body: JSON.stringify({ currentPassword: created.temporaryPassword, nextPassword: "court" }),
   });
   assert.equal(weakChange.status, 400);
 
   const change = await request("/api/auth/teacher/password", {
     method: "POST",
-    headers: { "Content-Type": "application/json", cookie: newCookie, "cf-connecting-ip": clientIp },
+    headers: { "Content-Type": "application/json", cookie: newCookie, "cf-connecting-ip": clientIp, "cf-ray": "e2e-accounts" },
     body: JSON.stringify({ currentPassword: created.temporaryPassword, nextPassword: "Atelier-2027" }),
   });
   assert.equal(change.status, 200);
+  const changedCookie = extractCookie(change) || newCookie;
 
-  const sessionResponse = await request("/api/auth/session", { headers: { cookie: newCookie } });
+  const staleSession = await request("/api/auth/session", { headers: { cookie: newCookie } });
+  const stalePayload = await staleSession.json();
+  assert.equal(stalePayload.session, null);
+
+  const sessionResponse = await request("/api/auth/session", { headers: { cookie: changedCookie } });
   const sessionPayload = await sessionResponse.json();
   assert.equal(sessionPayload.session.mustChangePassword, false);
 
@@ -470,6 +688,10 @@ test("2.53.0 — admin MFA_PENDING : API admin refusée après le seul mot de pa
   const blockedBody = await blocked.json();
   assert.equal(blockedBody.ok, false);
   assert.ok(blockedBody.mfaPending || blockedBody.mfaSetupRequired);
+  const blockedNotes = await request("/api/teacher/notes", { headers: { cookie: pendingCookie } });
+  assert.equal(blockedNotes.status, 403);
+  const notesBody = await blockedNotes.json();
+  assert.ok(notesBody.mfaPending || notesBody.mfaSetupRequired);
 });
 
 test("2.26.0 — matrice admin : anonyme 401, enseignant 403, admin 200", async () => {
@@ -1674,6 +1896,267 @@ test("2.52.0 — E2E surlignage, couleur et listes persistés après enregistrem
   assert.match(afterSave.detail, /puce un/);
   assert.match(afterSave.detail, /puce deux/);
   assert.match(afterSave.detail, /case un/);
+});
+
+test("audit — Origin externe refusée sur écriture authentifiée et backup cross-site", async () => {
+  const teacherCookie = await loginTeacher("teacher-demo-current");
+  const adminCookie = await loginAdmin();
+
+  const evilNotes = await request("/api/teacher/notes", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      cookie: teacherCookie,
+      origin: "https://evil.example",
+      host: "localhost",
+    },
+    body: JSON.stringify({ notes: { version: 1, weeks: {} } }),
+  });
+  assert.equal(evilNotes.status, 403);
+  const evilBody = await evilNotes.json();
+  assert.match(evilBody.reason ?? "", /Origine/);
+
+  const sameOrigin = await request("/api/teacher/notes", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      cookie: teacherCookie,
+      origin: "http://localhost",
+      host: "localhost",
+    },
+    body: JSON.stringify({ notes: { version: 1, weeks: {} } }),
+  });
+  assert.ok(sameOrigin.status < 400, await sameOrigin.text());
+
+  const crossBackup = await request("/api/admin/backup", {
+    headers: {
+      cookie: adminCookie,
+      "sec-fetch-site": "cross-site",
+      host: "localhost",
+    },
+  });
+  assert.equal(crossBackup.status, 403);
+});
+
+test("audit — DELETE /api/auth/session : Origin externe 403, même origine 200", async () => {
+  const teacherCookie = await loginTeacher("teacher-demo-current");
+  const crossSite = await request("/api/auth/session", {
+    method: "DELETE",
+    headers: {
+      cookie: teacherCookie,
+      origin: "https://evil.example",
+      host: "localhost",
+    },
+  });
+  assert.equal(crossSite.status, 403);
+  const crossBody = await crossSite.json();
+  assert.match(crossBody.reason ?? "", /Origine/);
+
+  const stillIn = await request("/api/auth/session", { headers: { cookie: teacherCookie } });
+  const stillPayload = await stillIn.json();
+  assert.ok(stillPayload.session, "la session reste après un logout cross-site");
+
+  const sameOrigin = await request("/api/auth/session", {
+    method: "DELETE",
+    headers: {
+      cookie: teacherCookie,
+      origin: "http://localhost",
+      host: "localhost",
+    },
+  });
+  assert.equal(sameOrigin.status, 200);
+  const sameBody = await sameOrigin.json();
+  assert.equal(sameBody.ok, true);
+});
+
+test("audit — IDOR API croisés contrôles, carnet et course-publication", async () => {
+  const ownerCookie = await loginTeacher("teacher-demo-current");
+  const otherCookie = await loginTeacher("teacher-demo-martin");
+  const adminCookie = await loginAdmin();
+  const seeded = await seedInteractiveControlCourse(adminCookie, "teacher-demo-current", "IDOR");
+
+  let controlOption;
+  for (let week = 1; week <= 8 && !controlOption; week += 1) {
+    const next = await jsonRequest(
+      `/api/teacher/controls/planning?week=${week}&schoolYearId=${encodeURIComponent(seeded.schoolYearId)}&view=week`,
+      { headers: { cookie: ownerCookie } },
+    );
+    if (next.response.status !== 200) continue;
+    for (const day of next.payload.week?.days ?? []) {
+      controlOption = (day.placementOptions ?? []).find((entry) => entry.annualCourseId === seeded.annualCourseId);
+      if (controlOption) break;
+    }
+  }
+  assert.ok(controlOption, "CourseSession de A requise");
+
+  const notebook = await jsonRequest("/api/teacher/notebook-publications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: ownerCookie },
+    body: JSON.stringify({
+      annualCourseId: seeded.annualCourseId,
+      schoolWeekNumber: controlOption.schoolWeekNumber ?? 5,
+      day: controlOption.dayIndex ?? 1,
+      type: "HOMEWORK",
+      title: "Carnet de A",
+      detail: "Privé A",
+      teacherId: "teacher-demo-martin",
+      authorTeacherId: "teacher-demo-martin",
+      classroomId: "classe-inconnue",
+    }),
+  });
+  assert.equal(notebook.response.status, 201, notebook.payload.reason);
+  assert.equal(notebook.payload.item.authorTeacherId, "teacher-demo-current");
+  assert.notEqual(notebook.payload.item.classroomId, "classe-inconnue");
+  const notebookId = notebook.payload.item.id;
+
+  const stolenNotebookPatch = await jsonRequest(`/api/agenda/${notebookId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", cookie: otherCookie },
+    body: JSON.stringify({
+      title: "Usurpé carnet",
+      teacherId: "teacher-demo-current",
+      authorTeacherId: "teacher-demo-current",
+    }),
+  });
+  assert.equal(stolenNotebookPatch.response.status, 403);
+
+  const stolenNotebookDelete = await jsonRequest(`/api/agenda/${notebookId}`, {
+    method: "DELETE",
+    headers: { cookie: otherCookie },
+  });
+  assert.equal(stolenNotebookDelete.response.status, 403);
+
+  const stolenNotebookCreate = await jsonRequest("/api/teacher/notebook-publications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: otherCookie },
+    body: JSON.stringify({
+      annualCourseId: seeded.annualCourseId,
+      schoolWeekNumber: controlOption.schoolWeekNumber ?? 5,
+      day: controlOption.dayIndex ?? 1,
+      type: "HOMEWORK",
+      title: "Carnet volé",
+      teacherId: "teacher-demo-current",
+      authorTeacherId: "teacher-demo-current",
+      classroomId: notebook.payload.item.classroomId,
+    }),
+  });
+  assert.ok(
+    stolenNotebookCreate.response.status === 403 || stolenNotebookCreate.response.status === 404,
+    `carnet B sur cours de A ${stolenNotebookCreate.response.status}`,
+  );
+
+  const stolenCoursePublish = await jsonRequest("/api/teacher/course-publications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: otherCookie },
+    body: JSON.stringify({
+      annualCourseId: controlOption.annualCourseId,
+      courseSessionKey: controlOption.courseSessionKey,
+      referenceItemId: "ref-a",
+      teacherId: "teacher-demo-current",
+      authorTeacherId: "teacher-demo-current",
+      classroomId: notebook.payload.item.classroomId,
+    }),
+  });
+  assert.ok(
+    stolenCoursePublish.response.status === 403 || stolenCoursePublish.response.status === 404,
+    `course-publication B sur cours exclusif de A ${stolenCoursePublish.response.status}`,
+  );
+
+  const createdControl = await jsonRequest("/api/teacher/controls", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: ownerCookie },
+    body: JSON.stringify({
+      annualCourseId: controlOption.annualCourseId,
+      courseSessionKey: controlOption.courseSessionKey,
+      title: "Contrôle IDOR A",
+      teacherId: "teacher-demo-martin",
+      authorTeacherId: "teacher-demo-martin",
+      classroomId: "classe-inconnue",
+    }),
+  });
+  assert.equal(createdControl.response.status, 201, createdControl.payload.reason);
+  assert.equal(createdControl.payload.item.authorTeacherId, "teacher-demo-current");
+  const controlId = createdControl.payload.item.id;
+
+  const forgedControlPatch = await jsonRequest(`/api/teacher/controls/${controlId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", cookie: otherCookie },
+    body: JSON.stringify({
+      title: "Contrôle usurpé",
+      teacherId: "teacher-demo-current",
+      authorTeacherId: "teacher-demo-current",
+      classroomId: createdControl.payload.item.classroomId,
+      annualCourseId: createdControl.payload.item.annualCourseId,
+    }),
+  });
+  assert.ok(
+    forgedControlPatch.response.status === 400 || forgedControlPatch.response.status === 403,
+    `PATCH forgé B ${forgedControlPatch.response.status}`,
+  );
+
+  const stolenControlPatch = await jsonRequest(`/api/teacher/controls/${controlId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", cookie: otherCookie },
+    body: JSON.stringify({ title: "Contrôle usurpé" }),
+  });
+  assert.equal(stolenControlPatch.response.status, 403);
+
+  const stolenControlDelete = await jsonRequest(`/api/teacher/controls/${controlId}`, {
+    method: "DELETE",
+    headers: {
+      cookie: otherCookie,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      teacherId: "teacher-demo-current",
+      authorTeacherId: "teacher-demo-current",
+      classroomId: createdControl.payload.item.classroomId,
+      annualCourseId: createdControl.payload.item.annualCourseId,
+    }),
+  });
+  assert.equal(stolenControlDelete.response.status, 403);
+});
+
+test("audit — professeur B ne peut pas modifier ni supprimer l'agenda de A", async () => {
+  const ownerCookie = await loginTeacher("teacher-demo-current");
+  const otherCookie = await loginTeacher("teacher-demo-martin");
+
+  const created = await jsonRequest("/api/agenda", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: ownerCookie },
+    body: JSON.stringify({
+      classroomId: "classe-demo-tma-2a",
+      subjectId: "subject-demo-moteur-2a",
+      day: 3,
+      hour: 10,
+      weekOffset: 0,
+      schoolWeekNumber: 12,
+      type: "HOMEWORK",
+      title: "Note de A",
+      detail: "Privée",
+    }),
+  });
+  assert.equal(created.response.status, 201, created.payload.reason);
+  const itemId = created.payload.item.id;
+
+  const stolenPatch = await jsonRequest(`/api/agenda/${itemId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", cookie: otherCookie },
+    body: JSON.stringify({ title: "Usurpé par B" }),
+  });
+  assert.equal(stolenPatch.response.status, 403);
+
+  const stolenDelete = await jsonRequest(`/api/agenda/${itemId}`, {
+    method: "DELETE",
+    headers: { cookie: otherCookie },
+  });
+  assert.equal(stolenDelete.response.status, 403);
+
+  const removed = await jsonRequest(`/api/agenda/${itemId}`, {
+    method: "DELETE",
+    headers: { cookie: ownerCookie },
+  });
+  assert.equal(removed.response.status, 200, removed.payload.reason);
 });
 
 
