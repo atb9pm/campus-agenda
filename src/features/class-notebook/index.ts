@@ -163,6 +163,7 @@ export {
   cloneRichDoc,
   composeWeekPublicationDoc,
   findCarnetPublicationItem,
+  findCarnetPublicationItemForSave,
   isCarnetOwnedPublication,
   isPublicationLine,
   listFoldableCarnetPublications,

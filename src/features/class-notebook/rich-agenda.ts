@@ -46,6 +46,14 @@ export function findCarnetPublicationItem(
   return items.find((item) => isCarnetOwnedPublication(item) && decodeRichDetail(item.detail));
 }
 
+/** Item que `planCarnetWeekPublicationSave` mettra à jour : doc riche s’il existe, sinon première publication Carnet. */
+export function findCarnetPublicationItemForSave(
+  weekItems: readonly PrototypeAgendaItem[],
+): PrototypeAgendaItem | undefined {
+  const foldable = listFoldableCarnetPublications(weekItems);
+  return findCarnetPublicationItem(foldable) ?? foldable[0];
+}
+
 export function listFoldableCarnetPublications(
   items: readonly PrototypeAgendaItem[],
 ): PrototypeAgendaItem[] {
@@ -93,7 +101,7 @@ export function planCarnetWeekPublicationSave(
   if (!payload) {
     return { action: "clear", deleteIds: foldable.map((item) => item.id) };
   }
-  const existing = foldable.find((item) => decodeRichDetail(item.detail)) ?? foldable[0];
+  const existing = findCarnetPublicationItemForSave(foldable);
   if (existing) {
     return {
       action: "update",

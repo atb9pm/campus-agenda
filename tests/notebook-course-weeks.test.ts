@@ -8,11 +8,15 @@ import {
   controlDayOptionsForCourseWeek,
   eligibleCourseWeekNumbers,
   eligibleSchoolWeeksForSessions,
+  encodeRichDetail,
+  findCarnetPublicationItemForSave,
   formatWeekColumnSubtitle,
+  fromPlainText,
   formatWeekColumnSubtitleFromSessions,
   isCourseControlSlotAllowed,
   listWeekNotes,
   publicationDayIndexForCourseWeek,
+  planCarnetWeekPublicationSave,
   moveTargetSchoolWeeks,
   weekdayToCourseDayIndex,
   shiftEligibleCourseWeek,
@@ -542,6 +546,46 @@ test("carnet — legacy sans séances CourseSession → fallback jour de classe"
   assert.equal(fallback, 0);
 });
 
+test("carnet — sauvegarde : publication riche jeudi conservée malgré une publication lundi plus tôt", () => {
+  const weeks = chassisCalendarWeeks();
+  const sessions = sessionsFor({
+    slots: [
+      slot({ id: "mon", dayOfWeek: 1, weekKind: "B" }),
+      slot({ id: "thu", dayOfWeek: 4, weekKind: "B" }),
+    ],
+    weeks,
+  });
+  const mondayPlain: PrototypeAgendaItem = {
+    id: 1,
+    classroomId: "class-demo",
+    subjectId: "subj-demo",
+    authorTeacherId: "teacher-demo",
+    day: 0,
+    hour: 8,
+    weekOffset: 0,
+    schoolWeekNumber: 6,
+    type: "HOMEWORK",
+    title: "Ancien lundi",
+    detail: "texte simple",
+  };
+  const thursdayRich: PrototypeAgendaItem = {
+    ...mondayPlain,
+    id: 2,
+    day: 3,
+    title: "Devoir jeudi",
+    detail: encodeRichDetail(fromPlainText("Document riche du jeudi")),
+  };
+  const weekItems = [mondayPlain, thursdayRich];
+  const existing = findCarnetPublicationItemForSave(weekItems);
+  assert.equal(existing?.id, 2);
+  assert.equal(existing?.day, 3);
+  const plan = planCarnetWeekPublicationSave(weekItems, fromPlainText("Fusion de la semaine"));
+  assert.equal(plan.action, "update");
+  if (plan.action !== "update") throw new Error("plan");
+  assert.equal(plan.updateId, 2);
+  assert.equal(publicationDayIndexForCourseWeek(sessions, 6, existing?.day), 3);
+});
+
 test("carnet — vue élève retrouve la publication Sem 06-B jeudi", () => {
   const item: PrototypeAgendaItem = {
     id: 9106,
@@ -594,6 +638,7 @@ test("carnet — pas de règle hardcodée classe / branche / jour", async () => 
   assert.match(panel, /fetchTeacherCourseTimelineApi/);
   assert.match(panel, /visibleCourseWeeks/);
   assert.match(panel, /publicationDayIndexForCourseWeek/);
+  assert.match(panel, /findCarnetPublicationItemForSave/);
   assert.match(panel, /Aucune séance planifiée pour ce cours dans l’horaire/);
   assert.match(modal, /controlDayOptionsForCourseWeek/);
   assert.match(modal, /courseSessions/);

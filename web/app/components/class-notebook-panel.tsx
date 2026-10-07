@@ -21,6 +21,7 @@ import {
   eligibleCourseWeekNumbers,
   eligibleSchoolWeeksForSessions,
   extractLine,
+  findCarnetPublicationItemForSave,
   formatWeekColumnLabel,
   formatWeekColumnSubtitle,
   formatWeekColumnSubtitleFromSessions,
@@ -265,9 +266,8 @@ export function ClassNotebookPanel({
 
   const onSaveWeekPublication = useCallback(
     (schoolWeekNumber: number, doc: CampusRichDoc, options?: { studentVisible?: boolean }) => {
-      const existing = items.find(
-        (item) => item.schoolWeekNumber === schoolWeekNumber && isCarnetOwnedPublication(item),
-      );
+      const weekItems = items.filter((item) => item.schoolWeekNumber === schoolWeekNumber);
+      const existing = findCarnetPublicationItemForSave(weekItems);
       return persistSaveWeekPublication(schoolWeekNumber, doc, {
         ...options,
         day: publicationDayForWeek(schoolWeekNumber, existing?.day),
