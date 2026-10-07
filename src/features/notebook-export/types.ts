@@ -42,6 +42,12 @@ export interface NotebookExportSessionBlock {
   notes: NotebookExportRichLine[];
 }
 
+export interface NotebookExportUnmatchedControl {
+  id: number;
+  title: string;
+  dateLabel: string | null;
+}
+
 export interface NotebookExportDocument {
   classCode: string;
   classLabel: string;
@@ -57,6 +63,19 @@ export interface NotebookExportDocument {
   controlCount: number;
   noteCount: number;
   sessions: NotebookExportSessionBlock[];
+  unmatchedControls: NotebookExportUnmatchedControl[];
+}
+
+export const NOTEBOOK_EXPORT_UNMATCHED_CONTROLS_TITLE =
+  "Contrôles non rattachés à une séance actuelle";
+
+export function formatNotebookExportCoverage(counts: {
+  sessionCount: number;
+  publicationCount: number;
+  controlCount: number;
+}): string {
+  const plural = (count: number, word: string) => `${count} ${word}${count > 1 ? "s" : ""}`;
+  return `${plural(counts.sessionCount, "séance")}  ·  ${plural(counts.publicationCount, "publication")} élèves  ·  ${plural(counts.controlCount, "contrôle")}`;
 }
 
 export const NOTEBOOK_EXPORT_EMPTY_REASON = "Aucun contenu à exporter avec les options sélectionnées.";

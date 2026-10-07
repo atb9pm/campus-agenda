@@ -9,7 +9,15 @@ import {
   type PDFPage,
 } from "pdf-lib";
 
-import type { NotebookExportDocument, NotebookExportRichLine, NotebookExportRun, NotebookExportSessionBlock } from "./types.ts";
+import {
+  formatNotebookExportCoverage,
+  NOTEBOOK_EXPORT_UNMATCHED_CONTROLS_TITLE,
+  type NotebookExportDocument,
+  type NotebookExportRichLine,
+  type NotebookExportRun,
+  type NotebookExportSessionBlock,
+  type NotebookExportUnmatchedControl,
+} from "./types.ts";
 import {
   colorHexForMarks,
   fontKindForMarks,
@@ -311,10 +319,7 @@ class PdfWriter {
     this.field("Enseignant", document.teacherName);
     this.field("Horaire", document.scheduleSummary);
     this.y -= 8;
-    this.drawText(
-      `${document.sessionCount} séance${document.sessionCount > 1 ? "s" : ""}  ·  ${document.publicationCount} publication${document.publicationCount > 1 ? "s" : ""} élèves  ·  ${document.controlCount} contrôle${document.controlCount > 1 ? "s" : ""}`,
-      { size: 10, color: MUTED, gap: 24 },
-    );
+    this.drawText(formatNotebookExportCoverage(document), { size: 10, color: MUTED, gap: 24 });
     this.y = MARGIN + 36;
     this.drawText("Document généré avec Campus Agenda", { size: 9, color: MUTED, gap: 2 });
     this.drawText(document.generatedOn, { size: 9, color: MUTED, gap: 0 });
@@ -381,6 +386,28 @@ class PdfWriter {
     this.y -= 8;
   }
 
+  unmatchedControls(controls: readonly NotebookExportUnmatchedControl[], layout: NotebookExportDocument["layout"]): void {
+    if (!controls.length) return;
+    this.ensure(48);
+    if (layout === "detailed") {
+      this.section(NOTEBOOK_EXPORT_UNMATCHED_CONTROLS_TITLE.toUpperCase());
+      for (const control of controls) {
+        const line = control.dateLabel ? `${control.title}  ·  ${control.dateLabel}` : control.title;
+        this.drawText(line, { size: 10, gap: 3 });
+      }
+      this.y -= 8;
+      return;
+    }
+    this.drawText(NOTEBOOK_EXPORT_UNMATCHED_CONTROLS_TITLE, { size: 10, font: this.bold, color: NAVY, gap: 2 });
+    for (const control of controls) {
+      const line = control.dateLabel
+        ? `Contrôle — ${control.title}  ·  ${control.dateLabel}`
+        : `Contrôle — ${control.title}`;
+      this.drawText(line, { size: 9, color: BLACK, gap: 1 });
+    }
+    this.y -= 8;
+  }
+
   footers(): void {
     const total = this.pages.length;
     this.pages.forEach((page, index) => {
@@ -427,6 +454,7 @@ export async function renderNotebookExportPdf(document: NotebookExportDocument):
     if (document.layout === "detailed") writer.sessionDetailed(session);
     else writer.sessionSummary(session);
   }
+  writer.unmatchedControls(document.unmatchedControls, document.layout);
   writer.footers();
   return pdf.save();
 }

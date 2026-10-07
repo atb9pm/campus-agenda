@@ -12,6 +12,16 @@ export {
   formatExportWeekLabel,
 } from "./assemble.ts";
 export {
+  agendaItemBelongsToExportPeriod,
+  diagnoseAgendaItemSession,
+  diagnoseAnnualCourseTests,
+  matchAgendaItemToSession,
+  resolveAgendaItemSession,
+  SESSION_MATCH_KINDS,
+  type AgendaItemSessionDiagnosis,
+  type SessionMatchKind,
+} from "./session-match.ts";
+export {
   compactLineText,
   exportLineHasMark,
   exportLinesContainRawRichPayload,
@@ -38,8 +48,11 @@ export {
   NOTEBOOK_EXPORT_FAILED_REASON,
   NOTEBOOK_EXPORT_LAYOUTS,
   NOTEBOOK_EXPORT_PERIODS,
+  NOTEBOOK_EXPORT_UNMATCHED_CONTROLS_TITLE,
+  formatNotebookExportCoverage,
   type NotebookExportLayout,
   type NotebookExportOptions,
   type NotebookExportPeriod,
   type NotebookExportDocument,
+  type NotebookExportUnmatchedControl,
 } from "./types.ts";

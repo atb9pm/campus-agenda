@@ -17,20 +17,27 @@ import {
   assembleNotebookExport,
   COURSE_TIMELINE_FORBIDDEN_REASON,
   DEFAULT_NOTEBOOK_EXPORT_OPTIONS,
+  diagnoseAnnualCourseTests,
   exportLineHasMark,
   exportLinesContainRawRichPayload,
   filterSessionsForExportPeriod,
   fontKindForMarks,
   formatCourseScheduleSummary,
+  formatNotebookExportCoverage,
   highlightHexForMarks,
+  matchAgendaItemToSession,
   notebookExportFilename,
+  NOTEBOOK_EXPORT_UNMATCHED_CONTROLS_TITLE,
   parseNotebookExportOptions,
   publicationToExportLines,
   renderNotebookExportPdf,
+  resolveAgendaItemSession,
   richDocToExportLines,
   summaryLinesForSession,
   underlineForMarks,
 } from "../src/features/notebook-export/index.ts";
+import { openPdfDocument } from "../src/lib/pdf/open-pdf-document.ts";
+import { MemoryAgendaStore } from "../src/lib/persistence/memory-store.ts";
 import type { SchoolWeekEntry } from "../src/features/school-year/types.ts";
 
 const COURSE = { id: "ac-export", classId: "class-demo", contextId: "ctx-demo" };
@@ -470,5 +477,411 @@ test("export — synthèse compacte distincte du carnet détaillé", async () =>
   assert.equal(Buffer.from(summaryPdf.slice(0, 5)).toString("latin1"), "%PDF-");
   assert.equal(Buffer.from(detailedPdf.slice(0, 5)).toString("latin1"), "%PDF-");
   assert.notEqual(summaryPdf.byteLength, detailedPdf.byteLength);
+});
+
+function sessionByWeek(weekNumber: number) {
+  const found = sessionsFor({ slots: [slot({})] }).find((session) => session.schoolWeekNumber === weekNumber);
+  assert.ok(found, `séance semaine ${weekNumber}`);
+  return found!;
+}
+
+async function pdfText(pdf: Uint8Array): Promise<string> {
+  const document = await openPdfDocument(pdf);
+  const parts: string[] = [];
+  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+    const page = await document.getPage(pageNumber);
+    const content = await page.getTextContent();
+    for (const entry of content.items) {
+      if ("str" in entry && typeof entry.str === "string") parts.push(entry.str);
+    }
+  }
+  return parts.join(" ");
+}
+
+test("export — association key prioritaire même si semaine/jour incohérents", () => {
+  const s6 = sessionByWeek(6);
+  const itemWithKey = item({
+    id: 1,
+    type: "TEST",
+    title: "C-key",
+    annualCourseId: COURSE.id,
+    courseSessionKey: s6.key,
+    courseSessionDate: s6.date,
+    schoolWeekNumber: 99,
+    day: 0,
+  });
+  assert.equal(matchAgendaItemToSession(itemWithKey, s6), "MATCH_KEY");
+  assert.equal(resolveAgendaItemSession(itemWithKey, sessionsFor({ slots: [slot({})] })).kind, "MATCH_KEY");
+  const doc = assemble({ items: [itemWithKey] });
+  assert.equal(doc?.controlCount, 1);
+  assert.equal(doc?.sessions.some((block) => block.controls.includes("C-key")), true);
+});
+
+test("export — association par courseSessionDate sans key", () => {
+  const s6 = sessionByWeek(6);
+  const dated = item({
+    id: 1,
+    type: "TEST",
+    title: "C-date",
+    annualCourseId: COURSE.id,
+    courseSessionKey: null,
+    courseSessionDate: s6.date,
+    schoolWeekNumber: 99,
+    day: 0,
+  });
+  assert.equal(matchAgendaItemToSession(dated, s6), "MATCH_DATE");
+  const doc = assemble({ items: [dated] });
+  assert.equal(doc?.controlCount, 1);
+  assert.equal(doc?.sessions[0]?.controls.includes("C-date"), true);
+});
+
+test("export — fallback historique semaine/jour pour ancien TEST sans key/date", () => {
+  const s6 = sessionByWeek(6);
+  const legacy = item({
+    id: 1,
+    type: "TEST",
+    title: "C-legacy",
+    annualCourseId: COURSE.id,
+    schoolWeekNumber: 6,
+    day: 3,
+  });
+  assert.equal(legacy.courseSessionKey, undefined);
+  assert.equal(legacy.courseSessionDate, undefined);
+  assert.equal(matchAgendaItemToSession(legacy, s6), "MATCH_WEEK_DAY");
+  const doc = assemble({ items: [legacy] });
+  assert.equal(doc?.controlCount, 1);
+  assert.equal(doc?.sessions[0]?.controls.includes("C-legacy"), true);
+});
+
+test("export — TEST d'un autre AnnualCourse de la même classe jamais exporté", () => {
+  const s6 = sessionByWeek(6);
+  const doc = assemble({
+    items: [
+      item({
+        id: 1,
+        type: "TEST",
+        title: "C-cours",
+        annualCourseId: COURSE.id,
+        courseSessionKey: s6.key,
+        courseSessionDate: s6.date,
+      }),
+      item({
+        id: 2,
+        type: "TEST",
+        title: "C-autre",
+        annualCourseId: "ac-other",
+        classroomId: "class-demo",
+        courseSessionKey: s6.key,
+        courseSessionDate: s6.date,
+        schoolWeekNumber: 6,
+        day: 3,
+      }),
+    ],
+  });
+  assert.equal(doc?.controlCount, 1);
+  assert.equal(doc?.sessions.some((block) => block.controls.includes("C-autre")), false);
+  assert.equal(doc?.unmatchedControls.some((entry) => entry.title === "C-autre"), false);
+});
+
+test("export — TEST non rattaché à une séance actuelle reste compté et listé", () => {
+  const orphan = item({
+    id: 7,
+    type: "TEST",
+    title: "C-orphelin",
+    annualCourseId: COURSE.id,
+    courseSessionKey: "SY-2026-27|ac-export|2099-01-01",
+    courseSessionDate: "2099-01-01",
+    schoolWeekNumber: 6,
+    day: 3,
+  });
+  const diagnosis = diagnoseAnnualCourseTests([orphan], sessionsFor({ slots: [slot({})] }), COURSE.id);
+  assert.equal(diagnosis[0]?.result, "UNMATCHED");
+  const doc = assemble({ items: [orphan] });
+  assert.ok(doc);
+  assert.equal(doc!.controlCount, 1);
+  assert.equal(doc!.sessions.some((block) => block.controls.includes("C-orphelin")), false);
+  assert.equal(doc!.unmatchedControls.length, 1);
+  assert.equal(doc!.unmatchedControls[0]?.title, "C-orphelin");
+  assert.equal(doc!.unmatchedControls[0]?.dateLabel, "01.01.2099");
+});
+
+test("export — PDF des contrôles non rattachés", async () => {
+  const orphan = item({
+    id: 7,
+    type: "TEST",
+    title: "C-orphelin",
+    annualCourseId: COURSE.id,
+    courseSessionKey: "SY-2026-27|ac-export|2099-01-01",
+    courseSessionDate: "2099-01-01",
+    schoolWeekNumber: 6,
+    day: 3,
+  });
+  const doc = assemble({ items: [orphan], exportOptions: { layout: "summary" } });
+  assert.ok(doc);
+  const pdf = await renderNotebookExportPdf(doc!);
+  const text = await pdfText(pdf);
+  assert.match(text, /C-orphelin/);
+  assert.match(text, /1 contrôle/);
+  assert.equal(text.includes(NOTEBOOK_EXPORT_UNMATCHED_CONTROLS_TITLE), true);
+});
+
+test("export — 2 TEST structurés : controlCount=2, jamais 0, PDF contient les titres", async () => {
+  const s6 = sessionByWeek(6);
+  const s10 = sessionByWeek(10);
+  const items = [
+    item({
+      id: 1,
+      type: "TEST",
+      title: "ControleAlpha",
+      annualCourseId: COURSE.id,
+      courseSessionKey: s6.key,
+      courseSessionDate: s6.date,
+      schoolWeekNumber: 1,
+      day: 0,
+    }),
+    item({
+      id: 2,
+      type: "TEST",
+      title: "ControleBeta",
+      annualCourseId: COURSE.id,
+      courseSessionKey: s10.key,
+      courseSessionDate: s10.date,
+      schoolWeekNumber: 1,
+      day: 0,
+    }),
+  ];
+  const doc = assemble({ items });
+  assert.ok(doc);
+  assert.equal(doc!.controlCount, 2);
+  assert.equal(formatNotebookExportCoverage(doc!), "3 séances  ·  0 publication élèves  ·  2 contrôles");
+  assert.doesNotMatch(formatNotebookExportCoverage(doc!), /0 contrôle(?:s)?(?!\S)/);
+  const titles = doc!.sessions.flatMap((block) => block.controls);
+  assert.equal(titles.includes("ControleAlpha"), true);
+  assert.equal(titles.includes("ControleBeta"), true);
+
+  const pdf = await renderNotebookExportPdf(doc!);
+  const text = await pdfText(pdf);
+  assert.match(text, /ControleAlpha/);
+  assert.match(text, /ControleBeta/);
+  assert.match(text, /2 contrôles/);
+  assert.doesNotMatch(text, /0 contrôle/);
+});
+
+test("export — singulier/pluriel de la couverture", () => {
+  assert.equal(
+    formatNotebookExportCoverage({ sessionCount: 0, publicationCount: 0, controlCount: 0 }),
+    "0 séance  ·  0 publication élèves  ·  0 contrôle",
+  );
+  assert.equal(
+    formatNotebookExportCoverage({ sessionCount: 1, publicationCount: 1, controlCount: 1 }),
+    "1 séance  ·  1 publication élèves  ·  1 contrôle",
+  );
+  assert.equal(
+    formatNotebookExportCoverage({ sessionCount: 10, publicationCount: 3, controlCount: 2 }),
+    "10 séances  ·  3 publications élèves  ·  2 contrôles",
+  );
+});
+
+test("export — année complète et semestres : période par date puis semaine", () => {
+  const s6 = sessionByWeek(6);
+  const s10 = sessionByWeek(10);
+  const items = [
+    item({
+      id: 1,
+      type: "TEST",
+      title: "C-S1",
+      annualCourseId: COURSE.id,
+      courseSessionKey: s6.key,
+      courseSessionDate: s6.date,
+    }),
+    item({
+      id: 2,
+      type: "TEST",
+      title: "C-S2",
+      annualCourseId: COURSE.id,
+      courseSessionKey: s10.key,
+      courseSessionDate: s10.date,
+    }),
+    item({
+      id: 3,
+      type: "TEST",
+      title: "C-orphelin-S2",
+      annualCourseId: COURSE.id,
+      courseSessionKey: "gone-key",
+      courseSessionDate: "2026-11-05",
+      schoolWeekNumber: 1,
+      day: 0,
+    }),
+  ];
+  const year = assemble({ items, exportOptions: { period: "year" } });
+  const semester1 = assemble({ items, exportOptions: { period: "semester-1" } });
+  const semester2 = assemble({ items, exportOptions: { period: "semester-2" } });
+  assert.equal(year?.controlCount, 3);
+  assert.equal(semester1?.controlCount, 1);
+  assert.equal(semester1?.sessions.some((block) => block.controls.includes("C-S1")), true);
+  assert.equal(semester2?.controlCount, 2);
+  assert.equal(semester2?.sessions.some((block) => block.controls.includes("C-S2")), true);
+  assert.equal(semester2?.unmatchedControls.some((entry) => entry.title === "C-orphelin-S2"), true);
+  assert.equal(semester1?.unmatchedControls.length, 0);
+});
+
+test("export — publications élèves inchangées avec le même rattachement", () => {
+  const s6 = sessionByWeek(6);
+  const items = [
+    item({
+      id: 1,
+      type: "HOMEWORK",
+      title: "Devoir visible",
+      studentVisible: true,
+      annualCourseId: COURSE.id,
+      courseSessionKey: s6.key,
+      courseSessionDate: s6.date,
+      schoolWeekNumber: 99,
+      day: 0,
+    }),
+    item({
+      id: 2,
+      type: "HOMEWORK",
+      title: "Devoir historique",
+      studentVisible: true,
+      annualCourseId: COURSE.id,
+      schoolWeekNumber: 6,
+      day: 3,
+    }),
+    item({
+      id: 3,
+      type: "INFORMATION",
+      title: "Info visible",
+      studentVisible: true,
+      annualCourseId: COURSE.id,
+      schoolWeekNumber: 6,
+      day: 3,
+    }),
+  ];
+  const doc = assemble({ items });
+  const texts = doc?.sessions[0]?.publications.map((line) => line.text).join("\n") ?? "";
+  assert.match(texts, /Devoir visible/);
+  assert.match(texts, /Devoir historique/);
+  assert.match(texts, /Info visible/);
+  assert.equal(doc?.publicationCount, 3);
+  assert.equal(doc?.controlCount, 0);
+});
+
+test("export — diagnostic non destructif MATCH_KEY / DATE / WEEK_DAY / UNMATCHED", () => {
+  const computed = sessionsFor({ slots: [slot({})] });
+  const s6 = computed.find((session) => session.schoolWeekNumber === 6)!;
+  const s10 = computed.find((session) => session.schoolWeekNumber === 10)!;
+  const items = [
+    item({
+      id: 1,
+      type: "TEST",
+      title: "Par clé",
+      annualCourseId: COURSE.id,
+      courseSessionKey: s6.key,
+      courseSessionDate: s6.date,
+      schoolWeekNumber: 99,
+      day: 0,
+    }),
+    item({
+      id: 2,
+      type: "TEST",
+      title: "Par date",
+      annualCourseId: COURSE.id,
+      courseSessionDate: s10.date,
+      schoolWeekNumber: 99,
+      day: 0,
+    }),
+    item({
+      id: 3,
+      type: "TEST",
+      title: "Par semaine",
+      annualCourseId: COURSE.id,
+      schoolWeekNumber: 6,
+      day: 3,
+    }),
+    item({
+      id: 4,
+      type: "TEST",
+      title: "Sans séance",
+      annualCourseId: COURSE.id,
+      courseSessionKey: "missing-key",
+      courseSessionDate: "2099-12-31",
+    }),
+    item({
+      id: 5,
+      type: "TEST",
+      title: "Autre cours",
+      annualCourseId: "ac-other",
+      schoolWeekNumber: 6,
+      day: 3,
+    }),
+  ];
+  const snapshot = items.map((entry) => ({ ...entry }));
+  const rows = diagnoseAnnualCourseTests(items, computed, COURSE.id);
+  assert.deepEqual(
+    rows.map((row) => [row.id, row.title, row.result, row.annualCourseId]),
+    [
+      [1, "Par clé", "MATCH_KEY", COURSE.id],
+      [2, "Par date", "MATCH_DATE", COURSE.id],
+      [3, "Par semaine", "MATCH_WEEK_DAY", COURSE.id],
+      [4, "Sans séance", "UNMATCHED", COURSE.id],
+    ],
+  );
+  assert.equal(rows[0]?.courseSessionKey, s6.key);
+  assert.equal(rows[1]?.courseSessionDate, s10.date);
+  assert.equal(rows.some((row) => row.title === "Autre cours"), false);
+  assert.deepEqual(items, snapshot);
+});
+
+test("export — intégration listAgendaItemsByAnnualCourse puis PDF", async () => {
+  const s6 = sessionByWeek(6);
+  const s10 = sessionByWeek(10);
+  const store = new MemoryAgendaStore([]);
+  await store.replaceAllItems([
+    item({
+      id: 11,
+      type: "TEST",
+      title: "ControleStoreA",
+      annualCourseId: COURSE.id,
+      courseSessionKey: s6.key,
+      courseSessionDate: s6.date,
+      schoolWeekNumber: 1,
+      day: 0,
+    }),
+    item({
+      id: 12,
+      type: "TEST",
+      title: "ControleStoreB",
+      annualCourseId: COURSE.id,
+      courseSessionKey: s10.key,
+      courseSessionDate: s10.date,
+      schoolWeekNumber: 1,
+      day: 0,
+    }),
+    item({
+      id: 13,
+      type: "TEST",
+      title: "ControleAutreCours",
+      annualCourseId: "ac-other",
+      classroomId: "class-demo",
+      courseSessionKey: s6.key,
+      courseSessionDate: s6.date,
+      schoolWeekNumber: 6,
+      day: 3,
+    }),
+  ]);
+  const listed = await store.listAgendaItemsByAnnualCourse(COURSE.id);
+  assert.equal(listed.length, 2);
+  assert.equal(listed.some((entry) => entry.title === "ControleAutreCours"), false);
+  const doc = assemble({ items: listed });
+  assert.equal(doc?.controlCount, 2);
+  assert.equal(formatNotebookExportCoverage(doc!), "3 séances  ·  0 publication élèves  ·  2 contrôles");
+  const pdf = await renderNotebookExportPdf(doc!);
+  const text = await pdfText(pdf);
+  assert.match(text, /ControleStoreA/);
+  assert.match(text, /ControleStoreB/);
+  assert.match(text, /2 contrôles/);
+  assert.doesNotMatch(text, /ControleAutreCours/);
+  assert.doesNotMatch(text, /non rattachés/);
 });
 

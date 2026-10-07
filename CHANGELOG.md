@@ -2,6 +2,13 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [Non publié] — Export Carnet : contrôles structurés
+
+### Corrigé
+
+- L’export annuel rattache les `agenda_items` d’abord par `courseSessionKey`, puis `courseSessionDate`, puis le fallback historique semaine/jour.
+- Un TEST du AnnualCourse qui ne correspond plus à une CourseSession actuelle reste compté et listé (section « Contrôles non rattachés à une séance actuelle »).
+
 ## [Non publié] — Catalogue runtime et documentation
 
 ### Changé

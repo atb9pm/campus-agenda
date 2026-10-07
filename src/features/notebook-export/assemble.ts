@@ -8,11 +8,16 @@ import type { CourseSession } from "../course-sessions/types.ts";
 import { splitControlPlanningPeriods } from "../control-planning/periods.ts";
 import type { SchoolWeekEntry } from "../school-year/types.ts";
 import { publicationToExportLines, richDocToExportLines } from "./rich-lines.ts";
+import {
+  agendaItemBelongsToExportPeriod,
+  resolveAgendaItemSession,
+} from "./session-match.ts";
 import { formatSummaryDateLabel } from "./summary.ts";
 import type {
   NotebookExportDocument,
   NotebookExportOptions,
   NotebookExportSessionBlock,
+  NotebookExportUnmatchedControl,
 } from "./types.ts";
 
 function padWeek(number: number): string {
@@ -49,24 +54,39 @@ export function filterSessionsForExportPeriod(
   return sessions.filter((session) => numbers.has(session.schoolWeekNumber));
 }
 
-function sessionDayIndex(session: CourseSession): number {
-  return session.dayOfWeek - 1;
-}
-
 function itemsForSession(
   items: readonly PrototypeAgendaItem[],
   session: CourseSession,
+  allSessions: readonly CourseSession[],
   kind: "publication" | "control",
   includeDrafts: boolean,
 ): PrototypeAgendaItem[] {
   return items.filter((item) => {
-    if (item.schoolWeekNumber !== session.schoolWeekNumber) return false;
-    if (item.day !== sessionDayIndex(session)) return false;
+    const resolved = resolveAgendaItemSession(item, allSessions);
+    if (resolved.kind === "UNMATCHED" || resolved.session.key !== session.key) return false;
     if (kind === "control") return item.type === "TEST";
     if (!isPublicationLine(item)) return false;
     if (!includeDrafts && !isStudentVisible(item)) return false;
     return true;
   });
+}
+
+function unmatchedControlEntry(item: PrototypeAgendaItem): NotebookExportUnmatchedControl {
+  const date = item.courseSessionDate?.trim();
+  return {
+    id: item.id,
+    title: item.title.trim() || "Contrôle",
+    dateLabel: date ? formatSwissDate(date) : null,
+  };
+}
+
+function compareUnmatchedControls(
+  left: PrototypeAgendaItem,
+  right: PrototypeAgendaItem,
+): number {
+  const leftDate = left.courseSessionDate?.trim() ?? "";
+  const rightDate = right.courseSessionDate?.trim() ?? "";
+  return leftDate.localeCompare(rightDate) || left.schoolWeekNumber - right.schoolWeekNumber || left.id - right.id;
 }
 
 export function assembleNotebookExport(input: {
@@ -85,25 +105,27 @@ export function assembleNotebookExport(input: {
   generatedOn: string;
   options: NotebookExportOptions;
 }): NotebookExportDocument | null {
-  const sessions = filterSessionsForExportPeriod(input.sessions, input.weeks, input.options.period);
+  const allSessions = [...input.sessions];
+  const sessions = filterSessionsForExportPeriod(allSessions, input.weeks, input.options.period);
   const notesSeen = new Set<number>();
   const blocks: NotebookExportSessionBlock[] = [];
   const scopedItems = input.annualCourseId
     ? input.items.filter((entry) => !entry.annualCourseId || entry.annualCourseId === input.annualCourseId)
     : input.items;
   let publicationCount = 0;
-  let controlCount = 0;
+  let matchedControlCount = 0;
 
   for (const session of sessions) {
     const publicationItems = input.options.includePublications
-      ? itemsForSession(scopedItems, session, "publication", input.options.includeDrafts)
+      ? itemsForSession(scopedItems, session, allSessions, "publication", input.options.includeDrafts)
       : [];
     const publications = publicationItems.flatMap((entry) => publicationToExportLines(entry.title, entry.detail));
-    const controls = input.options.includeControls
-      ? itemsForSession(scopedItems, session, "control", true).map((entry) => entry.title.trim()).filter(Boolean)
+    const controlItems = input.options.includeControls
+      ? itemsForSession(scopedItems, session, allSessions, "control", true)
       : [];
+    const controls = controlItems.map((entry) => entry.title.trim()).filter(Boolean);
     publicationCount += publicationItems.length;
-    controlCount += controls.length;
+    matchedControlCount += controlItems.length;
     let notes: NotebookExportSessionBlock["notes"] = [];
     if (input.options.includeTeacherNotes && input.notes && !notesSeen.has(session.schoolWeekNumber)) {
       notesSeen.add(session.schoolWeekNumber);
@@ -123,7 +145,17 @@ export function assembleNotebookExport(input: {
     });
   }
 
-  if (!blocks.length) return null;
+  const unmatchedControlItems = input.options.includeControls
+    ? scopedItems
+        .filter((item) => item.type === "TEST")
+        .filter((item) => resolveAgendaItemSession(item, allSessions).kind === "UNMATCHED")
+        .filter((item) => agendaItemBelongsToExportPeriod(item, input.options.period, input.weeks))
+        .sort(compareUnmatchedControls)
+    : [];
+  const unmatchedControls = unmatchedControlItems.map(unmatchedControlEntry);
+  const controlCount = matchedControlCount + unmatchedControlItems.length;
+
+  if (!blocks.length && !unmatchedControls.length) return null;
 
   return {
     classCode: input.classCode,
@@ -140,5 +172,6 @@ export function assembleNotebookExport(input: {
     controlCount,
     noteCount: blocks.reduce((sum, block) => sum + (block.notes.length ? 1 : 0), 0),
     sessions: blocks,
+    unmatchedControls,
   };
 }
