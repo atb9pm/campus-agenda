@@ -1854,6 +1854,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .class-notebook-title h2 { margin: 4px 0 0; color: var(--navy); font-size: 22px; }
 .class-notebook-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
 .class-notebook-warning { margin: 0 38px 16px; padding: 12px 14px; border: 1px solid #f0d9a8; border-radius: 8px; background: #fff8ea; color: #7a5a12; font-size: 11px; }
+.class-notebook-empty { margin: 0 38px 16px; padding: 12px 14px; border: 1px solid #e3e8ef; border-radius: 8px; background: #f7f9fc; color: #4a5568; font-size: 11px; }
 .class-notebook-week-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 0 38px 16px; }
 .class-notebook-shift { display: flex; gap: 8px; }
 .class-notebook-shift button { width: 36px; height: 36px; border: 1px solid var(--line-strong); border-radius: 8px; background: #fff; color: var(--navy); cursor: pointer; }

@@ -18,22 +18,31 @@ import {
   copyLineToDoc,
   deleteLine,
   emptyRichDoc,
+  eligibleCourseWeekNumbers,
+  eligibleSchoolWeeksForSessions,
   extractLine,
   formatWeekColumnLabel,
   formatWeekColumnSubtitle,
+  formatWeekColumnSubtitleFromSessions,
   insertBlockAt,
   isCarnetOwnedPublication,
+  isCourseControlSlotAllowed,
   isEmptyRichDoc,
   isPublicationLine,
   lineIndexAfterMove,
   listWeekNotes,
   moveLineToDoc,
   moveLineWithinDoc,
+  moveTargetSchoolWeeks,
   moveWeekNote,
   rememberRichClip,
   setWeekRichNote,
+  shiftEligibleCourseWeek,
+  snapToEligibleCourseWeek,
+  visibleCourseWeeks,
   visibleRichDocLines,
   weekCarnetVisibility,
+  weekdayLabelForCourseDayIndex,
   type CampusRichDoc,
   type ClassNotesDocument,
   type NotebookClipboard,
@@ -42,8 +51,10 @@ import {
   weekNotesKey,
   visibleSchoolWeeks,
 } from "@campus/features/class-notebook";
+import type { CourseSession } from "@campus/features/course-sessions";
 import { isStructuredAgendaPublication as isStructuredPublication } from "@campus/features/agenda/publications";
 import type { TeacherClassSetup } from "@campus/features/teacher-setup";
+import { fetchTeacherCourseTimelineApi } from "../../lib/api-client.ts";
 import { ControlsModal } from "./controls-modal.tsx";
 import { ConfirmDialog } from "./confirm-dialog.tsx";
 import { RichDocEditor } from "./rich-doc-editor.tsx";
@@ -152,11 +163,95 @@ export function ClassNotebookPanel({
   const [dropSlot, setDropSlot] = useState<{ source: LineSource; weekNumber: number; atLineIndex: number } | null>(
     null,
   );
+  const [courseSessions, setCourseSessions] = useState<CourseSession[] | null>(null);
+  const [sessionsLoading, setSessionsLoading] = useState(Boolean(annualCourseId?.trim()));
+  const [sessionsError, setSessionsError] = useState("");
 
-  const visibleWeeks = useMemo(
-    () => visibleSchoolWeeks(schoolWeeks, centerWeekNumber, weekDisplayCount),
-    [centerWeekNumber, schoolWeeks, weekDisplayCount],
+  const structuredCourse = Boolean(annualCourseId?.trim());
+
+  useEffect(() => {
+    const courseId = annualCourseId?.trim() || "";
+    if (!courseId) {
+      setCourseSessions(null);
+      setSessionsLoading(false);
+      setSessionsError("");
+      return;
+    }
+
+    const controller = new AbortController();
+    setSessionsLoading(true);
+    setSessionsError("");
+    setCourseSessions(null);
+
+    void (async () => {
+      try {
+        const payload = await fetchTeacherCourseTimelineApi(courseId, controller.signal);
+        if (controller.signal.aborted) return;
+        setCourseSessions(payload.timeline.entries.map((entry) => entry.courseSession));
+        setSessionsError("");
+      } catch (caught) {
+        if (controller.signal.aborted) return;
+        if (caught instanceof DOMException && caught.name === "AbortError") return;
+        if (caught instanceof Error && caught.name === "AbortError") return;
+        setSessionsError(caught instanceof Error ? caught.message : "Chargement des séances impossible.");
+        setCourseSessions([]);
+      } finally {
+        if (!controller.signal.aborted) setSessionsLoading(false);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [annualCourseId]);
+
+  const eligibleWeeks = useMemo(() => {
+    if (!structuredCourse || courseSessions == null) return schoolWeeks;
+    return eligibleSchoolWeeksForSessions(schoolWeeks, courseSessions);
+  }, [courseSessions, schoolWeeks, structuredCourse]);
+
+  const eligibleWeekNumbers = useMemo(
+    () => (structuredCourse && courseSessions ? eligibleCourseWeekNumbers(courseSessions) : schoolWeeks.map((week) => week.number)),
+    [courseSessions, schoolWeeks, structuredCourse],
   );
+
+  useEffect(() => {
+    if (!structuredCourse || sessionsLoading || courseSessions == null) return;
+    if (!eligibleWeekNumbers.length) return;
+    if (eligibleWeekNumbers.includes(centerWeekNumber)) return;
+    const snapped = snapToEligibleCourseWeek(eligibleWeekNumbers, centerWeekNumber);
+    if (snapped != null) onCenterWeekChange(snapped);
+  }, [
+    centerWeekNumber,
+    courseSessions,
+    eligibleWeekNumbers,
+    onCenterWeekChange,
+    sessionsLoading,
+    structuredCourse,
+  ]);
+
+  const visibleWeeks = useMemo(() => {
+    if (structuredCourse) {
+      if (sessionsLoading || courseSessions == null) return [];
+      return visibleCourseWeeks(eligibleWeeks, centerWeekNumber, weekDisplayCount);
+    }
+    return visibleSchoolWeeks(schoolWeeks, centerWeekNumber, weekDisplayCount);
+  }, [
+    centerWeekNumber,
+    courseSessions,
+    eligibleWeeks,
+    schoolWeeks,
+    sessionsLoading,
+    structuredCourse,
+    weekDisplayCount,
+  ]);
+
+  function shiftVisibleWeeks(direction: -1 | 1) {
+    if (structuredCourse) {
+      const next = shiftEligibleCourseWeek(eligibleWeekNumbers, centerWeekNumber, direction);
+      if (next != null) onCenterWeekChange(next);
+      return;
+    }
+    onShiftWeeks(direction);
+  }
 
   const classControls = useMemo(
     () =>
@@ -791,7 +886,12 @@ export function ClassNotebookPanel({
           <h2>{classSetup.name} · {branchLabel}</h2>
         </div>
         <div className="class-notebook-actions">
-          <button type="button" className="workspace-action secondary" onClick={() => setControlsOpen(true)}>
+          <button
+            type="button"
+            className="workspace-action secondary"
+            onClick={() => setControlsOpen(true)}
+            disabled={structuredCourse && (sessionsLoading || (courseSessions != null && courseSessions.length === 0))}
+          >
             Contrôles 📅
           </button>
           {onPreviewStudent ? (
@@ -808,10 +908,10 @@ export function ClassNotebookPanel({
 
       <div className="class-notebook-week-controls">
         <div className="class-notebook-shift">
-          <button type="button" onClick={() => onShiftWeeks(-1)} aria-label="Semaines précédentes">
+          <button type="button" onClick={() => shiftVisibleWeeks(-1)} aria-label="Semaines précédentes">
             ◀
           </button>
-          <button type="button" onClick={() => onShiftWeeks(1)} aria-label="Semaines suivantes">
+          <button type="button" onClick={() => shiftVisibleWeeks(1)} aria-label="Semaines suivantes">
             ▶
           </button>
         </div>
@@ -831,9 +931,19 @@ export function ClassNotebookPanel({
         </fieldset>
       </div>
 
+      {structuredCourse && sessionsLoading ? (
+        <p className="class-notebook-empty">Chargement des séances du cours…</p>
+      ) : null}
+      {structuredCourse && !sessionsLoading && sessionsError ? (
+        <p className="class-notebook-warning">{sessionsError}</p>
+      ) : null}
+      {structuredCourse && !sessionsLoading && !sessionsError && courseSessions?.length === 0 ? (
+        <p className="class-notebook-empty">Aucune séance planifiée pour ce cours dans l’horaire.</p>
+      ) : null}
+
       <div
         className={`class-notebook-grid class-notebook-grid-${weekDisplayCount}`}
-        style={{ gridTemplateColumns: `repeat(${weekDisplayCount}, minmax(0, 1fr))` }}
+        style={{ gridTemplateColumns: `repeat(${Math.max(visibleWeeks.length, 1)}, minmax(0, 1fr))` }}
       >
         {visibleWeeks.map((week) => {
           const weekKey = weekNotesKey(classSetup.id, week.number);
@@ -874,7 +984,13 @@ export function ClassNotebookPanel({
               <header className="class-notebook-column-header">
                 <button type="button" onClick={() => onCenterWeekChange(week.number)}>
                   <strong>{formatWeekColumnLabel(week)}</strong>
-                  <span>{formatWeekColumnSubtitle(week)}</span>
+                  <span>
+                    {structuredCourse && courseSessions
+                      ? formatWeekColumnSubtitleFromSessions(
+                          courseSessions.filter((session) => session.schoolWeekNumber === week.number),
+                        )
+                      : formatWeekColumnSubtitle(week)}
+                  </span>
                 </button>
               </header>
 
@@ -896,7 +1012,7 @@ export function ClassNotebookPanel({
                         >
                           <span>📅 {item.title}</span>
                         </button>
-                        <small>{item.day === 3 ? "jeudi" : "lundi"}</small>
+                        <small>{weekdayLabelForCourseDayIndex(item.day) || (item.day === 3 ? "jeudi" : "lundi")}</small>
                         <button
                           type="button"
                           aria-label={`Supprimer le contrôle ${item.title}`}
@@ -953,8 +1069,7 @@ export function ClassNotebookPanel({
                       {moveMenuWeek === week.number ? (
                         <menu className="class-notebook-move-menu">
                           <li className="class-notebook-move-menu-title">Déplacer vers</li>
-                          {schoolWeeks
-                            .filter((entry) => entry.number !== week.number)
+                          {moveTargetSchoolWeeks(structuredCourse ? eligibleWeeks : schoolWeeks, week.number)
                             .map((entry) => (
                               <li key={entry.number}>
                                 <button
@@ -1249,10 +1364,20 @@ export function ClassNotebookPanel({
         open={controlsOpen}
         classLabel={classSetup.name}
         branchLabel={branchLabel}
-        schoolWeeks={schoolWeeks}
+        schoolWeeks={structuredCourse ? eligibleWeeks : schoolWeeks}
+        courseSessions={structuredCourse ? courseSessions : null}
         controls={classControls}
         onClose={() => setControlsOpen(false)}
-        onSave={onSaveControl}
+        onSave={async (input) => {
+          if (
+            structuredCourse &&
+            courseSessions &&
+            !isCourseControlSlotAllowed(courseSessions, input.schoolWeekNumber, input.day)
+          ) {
+            throw new Error("Ce cours n’a pas de séance à cette date.");
+          }
+          await onSaveControl(input);
+        }}
         onDelete={onDeleteControl}
       />
     </section>

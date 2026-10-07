@@ -180,4 +180,19 @@ export {
   visibleSchoolWeeks,
   type WeekDisplayCount,
 } from "./week-window.ts";
+export {
+  controlDayOptionsForCourseWeek,
+  courseSessionsForWeek,
+  eligibleCourseWeekNumbers,
+  eligibleSchoolWeeksForSessions,
+  formatControlSessionDayLabel,
+  formatWeekColumnSubtitleFromSessions,
+  isCourseControlSlotAllowed,
+  moveTargetSchoolWeeks,
+  shiftEligibleCourseWeek,
+  snapToEligibleCourseWeek,
+  visibleCourseWeeks,
+  weekdayLabelForCourseDayIndex,
+  type CourseControlDayOption,
+} from "./course-week-window.ts";
 export type { ClassNotesDocument, NotebookClipboard, TeacherWeekNote } from "./types.ts";
