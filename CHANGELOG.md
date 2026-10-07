@@ -12,6 +12,14 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 - API : `GET /api/school-year/calendar`, `POST /api/admin/school-year/parse`, `POST /api/admin/school-year/import`, `POST /api/admin/school-year/activate`.
 - Calendrier runtime lu depuis l'année **active** en base (repli sur le référentiel codé 2026-2027).
 
+### Phase 2.4 — Coordination des contrôles (en cours)
+
+- **Alerte au 3ᵉ contrôle** le même jour de cours / même classe (sans blocage, « Publier quand même »).
+- Vues enseignant **Contrôles · classe** et **Mes contrôles**.
+- Panneau élève **Contrôles à venir** (8 max, chronologique).
+- Mise en évidence charge globale jours avec plusieurs contrôles.
+- Colonne `is_admin` sur les enseignants (fondation rôle admin).
+
 ## [1.2.0] - 2026-08-18
 
 ### Ajouté

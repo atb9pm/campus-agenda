@@ -100,7 +100,8 @@ export class SqlAgendaStore implements AgendaStore {
     patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber">>,
   ): Promise<AgendaMutationResult> {
     const items = await this.exportAllItems();
-    const result = updatePublication(items, itemId, actorTeacherId, patch);
+    const actorIsAdmin = await this.teacherIsAdmin(actorTeacherId);
+    const result = updatePublication(items, itemId, actorTeacherId, patch, actorIsAdmin);
     if (!result.ok) {
       return { ok: false, reason: result.reason, status: result.reason.includes("introuvable") ? 404 : 403 };
     }
@@ -120,7 +121,8 @@ export class SqlAgendaStore implements AgendaStore {
 
   async deleteAgendaItem(itemId: number, actorTeacherId: string): Promise<AgendaMutationResult> {
     const items = await this.exportAllItems();
-    const result = deletePublication(items, itemId, actorTeacherId);
+    const actorIsAdmin = await this.teacherIsAdmin(actorTeacherId);
+    const result = deletePublication(items, itemId, actorTeacherId, actorIsAdmin);
     if (!result.ok) {
       return { ok: false, reason: result.reason, status: result.reason.includes("introuvable") ? 404 : 403 };
     }
@@ -151,6 +153,14 @@ export class SqlAgendaStore implements AgendaStore {
       .bind(teacherId, classroomId, subjectId)
       .first<{ ok: number }>();
     return Boolean(row);
+  }
+
+  async teacherIsAdmin(teacherId: string): Promise<boolean> {
+    const row = await this.db
+      .prepare("SELECT is_admin FROM teachers WHERE id = ? LIMIT 1")
+      .bind(teacherId)
+      .first<{ is_admin: number }>();
+    return Boolean(row?.is_admin);
   }
 
   async resolveStudentAccess(label: string) {

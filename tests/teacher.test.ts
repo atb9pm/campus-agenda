@@ -50,7 +50,7 @@ test("phase 0.3 — Mes éléments ne montre que les publications de l'enseignan
   );
 
   assert.equal(mine.length, 2);
-  assert.equal(all.length, 5);
+  assert.equal(all.length, 7);
   assert.ok(mine.every((item) => item.authorTeacherId === DEMO_CURRENT_TEACHER_ID));
 });
 
@@ -61,7 +61,7 @@ test("phase 0.3 — le tableau de bord résume chaque classe rattachée", () => 
   const secondYear = summaries.find((entry) => entry.classroom.id === "classe-demo-tma-2a");
   assert.ok(secondYear);
   assert.equal(secondYear.myItemCount, 2);
-  assert.equal(secondYear.classItemCount, 5);
+  assert.equal(secondYear.classItemCount, 7);
   assert.equal(secondYear.branchesTaught.length, 2);
 
   const firstYear = summaries.find((entry) => entry.classroom.id === "classe-demo-tma-1a");

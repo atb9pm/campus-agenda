@@ -22,7 +22,12 @@ export function isAllowedPublicationType(type: string): type is AgendaItemType {
   return (AGENDA_ITEM_TYPES as readonly string[]).includes(type);
 }
 
-export function canModifyPublication(item: PrototypeAgendaItem, actorTeacherId: string): boolean {
+export function canModifyPublication(
+  item: PrototypeAgendaItem,
+  actorTeacherId: string,
+  actorIsAdmin = false,
+): boolean {
+  if (actorIsAdmin) return true;
   return item.authorTeacherId === actorTeacherId;
 }
 
@@ -68,12 +73,13 @@ export function updatePublication(
   itemId: number,
   actorTeacherId: string,
   patch: PublicationPatch,
+  actorIsAdmin = false,
 ): { ok: true; items: PrototypeAgendaItem[] } | { ok: false; reason: string } {
   const existing = findPublicationById(items, itemId);
   if (!existing) {
     return { ok: false, reason: "Publication introuvable." };
   }
-  if (!canModifyPublication(existing, actorTeacherId)) {
+  if (!canModifyPublication(existing, actorTeacherId, actorIsAdmin)) {
     return { ok: false, reason: "Seul l'auteur peut modifier cette publication." };
   }
 
@@ -102,12 +108,13 @@ export function deletePublication(
   items: PrototypeAgendaItem[],
   itemId: number,
   actorTeacherId: string,
+  actorIsAdmin = false,
 ): { ok: true; items: PrototypeAgendaItem[] } | { ok: false; reason: string } {
   const existing = findPublicationById(items, itemId);
   if (!existing) {
     return { ok: false, reason: "Publication introuvable." };
   }
-  if (!canModifyPublication(existing, actorTeacherId)) {
+  if (!canModifyPublication(existing, actorTeacherId, actorIsAdmin)) {
     return { ok: false, reason: "Seul l'auteur peut supprimer cette publication." };
   }
 
