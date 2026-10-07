@@ -141,14 +141,19 @@ test("export — options par défaut : publications et contrôles, pas notes ni 
 test("export — bouton et fenêtre uniquement pour un cours ouvert, sans catégorie Information", async () => {
   const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
   const modal = await readFile(new URL("../web/app/components/notebook-export-modal.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
   assert.match(panel, /annualCourseId\?\.trim\(\) \? \(/);
   assert.match(panel, /Exporter le carnet/);
   assert.match(modal, /Publications élèves/);
   assert.match(modal, /Contrôles/);
   assert.match(modal, /Notes professeur/);
   assert.match(modal, /Brouillons/);
+  assert.match(modal, /notebook-export-option/);
   assert.doesNotMatch(modal, /<legend>Information/);
   assert.doesNotMatch(modal, />Informations</);
+  assert.match(css, /\.notebook-export-modal \.notebook-export-option \{/);
+  assert.match(css, /text-transform: none;/);
+  assert.match(css, /flex: 0 0 16px;/);
 });
 
 test("export — limité au AnnualCourse ouvert / CourseSession semaine B", () => {

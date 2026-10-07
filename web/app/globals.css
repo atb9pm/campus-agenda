@@ -2345,13 +2345,64 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .controls-modal-list li { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #f8fbff; font-size: 11px; }
 .controls-modal-list li button { border: 0; background: transparent; color: #8b3a3a; cursor: pointer; }
 .controls-modal-empty { margin: 0; color: #8793a9; font-size: 11px; }
-.notebook-export-modal { max-width: 440px; }
-.notebook-export-context { margin: 8px 0 0; color: #516582; font-size: 12px; line-height: 1.4; }
-.notebook-export-form { display: grid; gap: 16px; }
-.notebook-export-form fieldset { margin: 0; padding: 0; border: 0; display: grid; gap: 8px; }
-.notebook-export-form legend { margin-bottom: 4px; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8793a9; }
-.notebook-export-form label, .notebook-export-cover { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #1d3557; }
-.notebook-export-footer { display: flex; justify-content: flex-end; gap: 10px; }
+.notebook-export-modal { width: min(420px, 100%); max-width: 420px; }
+.notebook-export-modal .controls-modal-header { margin-bottom: 0; }
+.notebook-export-context { margin: 8px 0 0; color: #516582; font-size: 13px; font-weight: 400; line-height: 1.45; letter-spacing: 0; text-transform: none; }
+.notebook-export-form { display: grid; gap: 18px; padding-top: 18px; }
+.notebook-export-fieldset { margin: 0; padding: 0; border: 0; display: grid; gap: 4px; }
+.notebook-export-fieldset legend {
+  display: block;
+  float: none;
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 0;
+  color: #8793a9;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.notebook-export-modal .notebook-export-option {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 7px 8px;
+  border-radius: 8px;
+  color: var(--navy);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.35;
+  text-transform: none;
+  cursor: pointer;
+}
+.notebook-export-modal .notebook-export-option:hover { background: #f5f8fc; }
+.notebook-export-modal .notebook-export-option span {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+}
+.notebook-export-modal .notebook-export-option input[type="checkbox"],
+.notebook-export-modal .notebook-export-option input[type="radio"] {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  accent-color: var(--navy);
+}
+.notebook-export-cover { margin-top: 2px; padding-top: 10px; border-top: 1px solid var(--line); }
+.notebook-export-footer { display: flex; justify-content: flex-end; align-items: center; gap: 10px; padding-top: 6px; }
+.notebook-export-modal .notebook-export-footer .workspace-action { justify-self: auto; }
 
 @media (max-width: 1030px) {
   .technical-sidebar { width: 190px; }.technical-main { width: calc(100% - 190px); margin-left: 190px; }

@@ -94,57 +94,57 @@ export function NotebookExportModal({
         </header>
 
         <form className="notebook-export-form" onSubmit={(event) => void submit(event)}>
-          <fieldset>
+          <fieldset className="notebook-export-fieldset">
             <legend>Contenu</legend>
-            <label>
+            <label className="notebook-export-option">
               <input type="checkbox" checked={includePublications} onChange={(event) => setIncludePublications(event.target.checked)} />
-              Publications élèves
+              <span>Publications élèves</span>
             </label>
-            <label>
+            <label className="notebook-export-option">
               <input type="checkbox" checked={includeControls} onChange={(event) => setIncludeControls(event.target.checked)} />
-              Contrôles
+              <span>Contrôles</span>
             </label>
-            <label>
+            <label className="notebook-export-option">
               <input type="checkbox" checked={includeTeacherNotes} onChange={(event) => setIncludeTeacherNotes(event.target.checked)} />
-              Notes professeur
+              <span>Notes professeur</span>
             </label>
-            <label>
+            <label className="notebook-export-option">
               <input type="checkbox" checked={includeDrafts} onChange={(event) => setIncludeDrafts(event.target.checked)} />
-              Brouillons
+              <span>Brouillons</span>
             </label>
           </fieldset>
 
-          <fieldset>
+          <fieldset className="notebook-export-fieldset">
             <legend>Période</legend>
-            <label>
+            <label className="notebook-export-option">
               <input type="radio" name="export-period" checked={period === "year"} onChange={() => setPeriod("year")} />
-              Année scolaire complète
+              <span>Année scolaire complète</span>
             </label>
-            <label>
+            <label className="notebook-export-option">
               <input type="radio" name="export-period" checked={period === "semester-1"} onChange={() => setPeriod("semester-1")} />
-              Semestre 1
+              <span>Semestre 1</span>
             </label>
-            <label>
+            <label className="notebook-export-option">
               <input type="radio" name="export-period" checked={period === "semester-2"} onChange={() => setPeriod("semester-2")} />
-              Semestre 2
+              <span>Semestre 2</span>
             </label>
           </fieldset>
 
-          <fieldset>
+          <fieldset className="notebook-export-fieldset">
             <legend>Présentation</legend>
-            <label>
+            <label className="notebook-export-option">
               <input type="radio" name="export-layout" checked={layout === "summary"} onChange={() => setLayout("summary")} />
-              Synthèse annuelle
+              <span>Synthèse annuelle</span>
             </label>
-            <label>
+            <label className="notebook-export-option">
               <input type="radio" name="export-layout" checked={layout === "detailed"} onChange={() => setLayout("detailed")} />
-              Carnet détaillé
+              <span>Carnet détaillé</span>
             </label>
           </fieldset>
 
-          <label className="notebook-export-cover">
+          <label className="notebook-export-option notebook-export-cover">
             <input type="checkbox" checked={coverPage} onChange={(event) => setCoverPage(event.target.checked)} />
-            Ajouter une page de garde
+            <span>Ajouter une page de garde</span>
           </label>
 
           {error ? <p className="controls-modal-error">{error}</p> : null}
@@ -153,7 +153,7 @@ export function NotebookExportModal({
             <button type="button" className="workspace-action secondary" onClick={onClose}>
               Annuler
             </button>
-            <button type="submit" disabled={working}>
+            <button type="submit" className="workspace-action" disabled={working}>
               {working ? "Génération…" : "Générer le PDF"}
             </button>
           </footer>
