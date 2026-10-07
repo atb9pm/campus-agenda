@@ -3,6 +3,7 @@ import {
   buildAgendaItemUpdatePatch,
   isAgendaPlacementChange,
   isStructuredAgendaPublication,
+  notebookOwnedPublicationPatch,
   structuredAgendaPatchGuard,
   type AgendaPlacementContext,
   type PublicationPatch,
@@ -77,15 +78,14 @@ async function updateAgendaItemWithPlacement(
   store: AgendaStore,
   teacherId: string,
   item: PrototypeAgendaItem,
-  body: Parameters<typeof contentPatchFromBody>[0],
+  patch: PublicationPatch,
 ) {
-  const raw = contentPatchFromBody(body);
-  if (!isAgendaPlacementChange(item, raw)) {
-    return store.updateAgendaItem(item.id, teacherId, raw);
+  if (!isAgendaPlacementChange(item, patch)) {
+    return store.updateAgendaItem(item.id, teacherId, patch);
   }
   const loaded = await placementContextForItem(item);
   if (!loaded.ok) return loaded;
-  const built = buildAgendaItemUpdatePatch(item, raw, loaded.context);
+  const built = buildAgendaItemUpdatePatch(item, patch, loaded.context);
   if (!built.ok) return { ok: false as const, reason: built.reason, status: 400 as const };
   return store.updateAgendaItem(item.id, teacherId, built.patch);
 }
@@ -134,7 +134,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         auth.store!,
         auth.session!.teacherId,
         existing,
-        body,
+        notebookOwnedPublicationPatch(body),
       );
       if (!result.ok) {
         return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
@@ -205,7 +205,12 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const result = existing
-    ? await updateAgendaItemWithPlacement(auth.store!, auth.session!.teacherId, existing, body)
+    ? await updateAgendaItemWithPlacement(
+        auth.store!,
+        auth.session!.teacherId,
+        existing,
+        contentPatchFromBody(body),
+      )
     : await auth.store!.updateAgendaItem(itemId, auth.session!.teacherId, contentPatchFromBody(body));
   if (!result.ok) {
     return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });

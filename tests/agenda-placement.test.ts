@@ -8,11 +8,13 @@ import {
   buildAgendaItemUpdatePatch,
   isAgendaPlacementChange,
   isStructuredAgendaPublication,
+  notebookOwnedPublicationPatch,
   normalizeAgendaPlacement,
   structuredAgendaPatchGuard,
   type PublicationPatch,
 } from "../src/features/agenda/index.ts";
 import type { PrototypeAgendaItem } from "../src/features/agenda/demo-items.ts";
+import { isCarnetOwnedPublication } from "../src/features/class-notebook/index.ts";
 import type { CourseSession } from "../src/features/course-sessions/types.ts";
 import { isoDateForSchoolWeekDay } from "../src/features/school-days/index.ts";
 import { DEMO_CURRENT_TEACHER_ID } from "../src/features/classes/index.ts";
@@ -403,6 +405,70 @@ test("export CSV/JSON après déplacement utilise la nouvelle date", async () =>
   assert.match(csv, /courseSessionDate/);
   assert.match(csv, new RegExp(`${item.id},.*,8,0,${MONDAY_S8},`));
   assert.doesNotMatch(csv, new RegExp(`${item.id},.*,${THURSDAY_S6},`));
+});
+
+test("Carnet notebookOwned — PATCH subjectId et provenance ignorés, date recalculée", async () => {
+  const item = unstructuredHomework({
+    subjectId: "subj-transmission",
+    annualCourseId: "ac-transmission",
+    courseSessionKey: null,
+    courseSessionDate: THURSDAY_S6,
+    referenceSessionId: "ref-origin",
+    referenceItemId: "item-origin",
+  });
+  assert.equal(isCarnetOwnedPublication(item), true);
+  assert.equal(isStructuredAgendaPublication(item), false);
+
+  const malicious = {
+    title: "Titre modifié",
+    detail: "Détail modifié",
+    subjectId: "subj-chassis",
+    annualCourseId: "ac-chassis",
+    courseSessionKey: "stolen-key",
+    courseSessionDate: "2099-01-01",
+    referenceSessionId: "ref-stolen",
+    referenceItemId: "item-stolen",
+    schoolWeekNumber: 8,
+    day: 0,
+    hour: 9,
+    studentVisible: true,
+  };
+  const patch = notebookOwnedPublicationPatch(malicious);
+  assert.equal(patch.subjectId, undefined);
+  assert.equal(patch.courseSessionKey, undefined);
+  assert.equal(patch.courseSessionDate, undefined);
+  assert.equal("annualCourseId" in patch, false);
+  assert.equal("referenceSessionId" in patch, false);
+  assert.equal("referenceItemId" in patch, false);
+
+  const store = new MemoryAgendaStore([item]);
+  const moved = await persistPlacement(store, item, patch);
+  assert.equal(moved.ok, true);
+  if (!moved.ok) return;
+  const persisted = await store.findAgendaItem(item.id);
+  assert.equal(persisted?.title, "Titre modifié");
+  assert.equal(persisted?.subjectId, "subj-transmission");
+  assert.equal(persisted?.annualCourseId, "ac-transmission");
+  assert.equal(persisted?.courseSessionKey ?? null, null);
+  assert.equal(persisted?.referenceSessionId, "ref-origin");
+  assert.equal(persisted?.referenceItemId, "item-origin");
+  assert.equal(persisted?.schoolWeekNumber, 8);
+  assert.equal(persisted?.day, 0);
+  assert.equal(persisted?.hour, 9);
+  assert.equal(persisted?.courseSessionDate, MONDAY_S8);
+  assert.notEqual(persisted?.courseSessionDate, "2099-01-01");
+
+  const route = await readFile(new URL("../web/app/api/agenda/[id]/route.ts", import.meta.url), "utf8");
+  const notebookBlock = route.slice(
+    route.indexOf("if (notebookOwned)"),
+    route.indexOf("if (existing && isStructuredAgendaPublication"),
+  );
+  assert.match(notebookBlock, /notebookOwnedPublicationPatch\(body\)/);
+  assert.doesNotMatch(notebookBlock, /updateAgendaItemWithPlacement\([\s\S]*,\s*body\s*\)/);
+  assert.doesNotMatch(notebookBlock, /subjectId: body\.subjectId/);
+  assert.doesNotMatch(notebookBlock, /annualCourseId: body\.annualCourseId/);
+  assert.doesNotMatch(notebookBlock, /courseSessionKey: body\.courseSessionKey/);
+  assert.doesNotMatch(notebookBlock, /courseSessionDate: body\.courseSessionDate/);
 });
 
 test("architecture — normalisation centralisée, stores persistants, Carnet inchangé", async () => {

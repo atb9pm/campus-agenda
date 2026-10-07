@@ -11,6 +11,7 @@ export {
   findPublicationById,
   isAllowedPublicationType,
   isStructuredAgendaPublication,
+  notebookOwnedPublicationPatch,
   structuredAgendaPatchGuard,
   STRUCTURED_AGENDA_PATCH_FORBIDDEN_REASON,
   updatePublication,

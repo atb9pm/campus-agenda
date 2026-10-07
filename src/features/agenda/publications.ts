@@ -38,6 +38,25 @@ export type PublicationPatch = Partial<
   >
 >;
 
+/** PATCH Carnet : contenu et placement seulement. Jamais la branche ni la provenance. */
+export function notebookOwnedPublicationPatch(body: {
+  title?: string;
+  detail?: string;
+  day?: number;
+  hour?: number;
+  schoolWeekNumber?: number;
+  studentVisible?: boolean;
+}): PublicationPatch {
+  return {
+    title: body.title,
+    detail: body.detail,
+    day: body.day,
+    hour: body.hour,
+    schoolWeekNumber: body.schoolWeekNumber,
+    studentVisible: body.studentVisible,
+  };
+}
+
 export function isAllowedPublicationType(type: string): type is AgendaItemType {
   return (AGENDA_ITEM_TYPES as readonly string[]).includes(type);
 }
