@@ -440,6 +440,18 @@ test("UI — un AnnualCourse ouvert n’affiche jamais « aucune branche enseign
     )?.annualCourseId,
     "ac-3b",
   );
+  assert.equal(implicitNotebookPublishCourse([], "sc-3a"), null);
+  assert.equal(
+    implicitNotebookPublishCourse(
+      [
+        { classId: "sc-3a", annualCourseId: "ac-3a" },
+        { classId: "sc-3a", annualCourseId: "ac-3a-cp2" },
+        { classId: "sc-3a", annualCourseId: "ac-3a-cp3" },
+      ],
+      "sc-3a",
+    ),
+    null,
+  );
 });
 
 test("filtre — annualCourseId sépare 3A / 3B ; legacy subjectId reste lisible", () => {

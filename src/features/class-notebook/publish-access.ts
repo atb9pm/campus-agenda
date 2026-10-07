@@ -78,7 +78,8 @@ export function implicitNotebookPublishCourse<T extends { classId: string }>(
 ): T | null {
   const wanted = classId?.trim() || "";
   if (!wanted) return null;
-  return courses.find((course) => course.classId === wanted) ?? null;
+  const matches = courses.filter((course) => course.classId === wanted);
+  return matches.length === 1 ? (matches[0] ?? null) : null;
 }
 
 export function notebookPublishBlockedReason(options: {
