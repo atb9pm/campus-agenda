@@ -15,10 +15,13 @@ export {
   agendaItemBelongsToExportPeriod,
   diagnoseAgendaItemSession,
   diagnoseAnnualCourseTests,
+  isUnambiguousLegacyTestForCourse,
   matchAgendaItemToSession,
   resolveAgendaItemSession,
+  selectLegacyTestsForAnnualCourseExport,
   SESSION_MATCH_KINDS,
   type AgendaItemSessionDiagnosis,
+  type LegacyTestCourseIdentity,
   type SessionMatchKind,
 } from "./session-match.ts";
 export {

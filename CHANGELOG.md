@@ -6,8 +6,10 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
 ### Corrigé
 
-- L’export annuel rattache les `agenda_items` d’abord par `courseSessionKey`, puis `courseSessionDate`, puis le fallback historique semaine/jour.
+- L’export annuel rattache les `agenda_items` par key encore valide, puis date encore valide, puis fallback semaine/jour non ambigu.
 - Un TEST du AnnualCourse qui ne correspond plus à une CourseSession actuelle reste compté et listé (section « Contrôles non rattachés à une séance actuelle »).
+- Un contrôle créé depuis le Carnet d’un AnnualCourse passe par `POST /api/teacher/controls` (annualCourseId + courseSessionKey réelle).
+- Les TEST legacy (`annualCourseId` vide) attribuables sans ambiguïté à la classe/matière/année du cours sont inclus dans l’export, sans mutation.
 
 ## [Non publié] — Catalogue runtime et documentation
 

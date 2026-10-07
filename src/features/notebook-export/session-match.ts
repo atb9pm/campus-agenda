@@ -66,8 +66,9 @@ export function agendaItemBelongsToExportPeriod(
 
 /**
  * Associe un agenda_item à une CourseSession.
- * Ordre : courseSessionKey → courseSessionDate → fallback historique semaine/jour.
- * Un champ key/date renseigné n’autorise pas le palier suivant, même si semaine/jour colleraient.
+ * Ordre sûr : key encore valide → date encore valide → fallback semaine/jour non ambigu.
+ * Une key devenue invalide ne bloque pas le palier date ; une date invalide ne bloque pas
+ * le fallback historique s’il n’existe qu’une séance candidate.
  */
 export function resolveAgendaItemSession<S extends SessionMatchFields>(
   item: AgendaItemMatchFields,
@@ -75,19 +76,54 @@ export function resolveAgendaItemSession<S extends SessionMatchFields>(
 ): ResolvedAgendaItemSession<S> {
   const key = filled(item.courseSessionKey);
   if (key) {
-    const session = sessions.find((entry) => entry.key === key) ?? null;
-    return session ? { kind: "MATCH_KEY", session } : { kind: "UNMATCHED", session: null };
+    const session = sessions.find((entry) => entry.key === key);
+    if (session) return { kind: "MATCH_KEY", session };
   }
   const date = filled(item.courseSessionDate);
   if (date) {
-    const session = sessions.find((entry) => entry.date === date) ?? null;
-    return session ? { kind: "MATCH_DATE", session } : { kind: "UNMATCHED", session: null };
+    const session = sessions.find((entry) => entry.date === date);
+    if (session) return { kind: "MATCH_DATE", session };
   }
-  const session =
-    sessions.find(
-      (entry) => item.schoolWeekNumber === entry.schoolWeekNumber && item.day === entry.dayOfWeek - 1,
-    ) ?? null;
-  return session ? { kind: "MATCH_WEEK_DAY", session } : { kind: "UNMATCHED", session: null };
+  const weekDayMatches = sessions.filter(
+    (entry) => item.schoolWeekNumber === entry.schoolWeekNumber && item.day === entry.dayOfWeek - 1,
+  );
+  if (weekDayMatches.length === 1) {
+    return { kind: "MATCH_WEEK_DAY", session: weekDayMatches[0]! };
+  }
+  return { kind: "UNMATCHED", session: null };
+}
+
+export interface LegacyTestCourseIdentity {
+  annualCourseId: string;
+  classroomId: string;
+  subjectId: string;
+  schoolYearId: string;
+}
+
+/**
+ * TEST legacy (annualCourseId vide) attribuable sans ambiguïté à un AnnualCourse.
+ * Exige la classe runtime + la matière du cours ; jamais un simple voisinage de date.
+ */
+export function isUnambiguousLegacyTestForCourse(
+  item: PrototypeAgendaItem,
+  course: LegacyTestCourseIdentity,
+  sessions: readonly SessionMatchFields[],
+): boolean {
+  if (item.type !== "TEST") return false;
+  if (item.annualCourseId?.trim()) return false;
+  if (item.classroomId !== course.classroomId) return false;
+  if (item.subjectId !== course.subjectId) return false;
+  const itemYear = item.schoolYearId?.trim() ?? "";
+  if (itemYear && itemYear !== course.schoolYearId) return false;
+  return resolveAgendaItemSession(item, sessions).kind !== "UNMATCHED";
+}
+
+export function selectLegacyTestsForAnnualCourseExport(
+  classroomItems: readonly PrototypeAgendaItem[],
+  course: LegacyTestCourseIdentity,
+  sessions: readonly SessionMatchFields[],
+): PrototypeAgendaItem[] {
+  return classroomItems.filter((item) => isUnambiguousLegacyTestForCourse(item, course, sessions));
 }
 
 export function matchAgendaItemToSession(

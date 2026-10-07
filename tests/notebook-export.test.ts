@@ -25,6 +25,7 @@ import {
   formatCourseScheduleSummary,
   formatNotebookExportCoverage,
   highlightHexForMarks,
+  isUnambiguousLegacyTestForCourse,
   matchAgendaItemToSession,
   notebookExportFilename,
   NOTEBOOK_EXPORT_UNMATCHED_CONTROLS_TITLE,
@@ -591,8 +592,8 @@ test("export — TEST non rattaché à une séance actuelle reste compté et lis
     annualCourseId: COURSE.id,
     courseSessionKey: "SY-2026-27|ac-export|2099-01-01",
     courseSessionDate: "2099-01-01",
-    schoolWeekNumber: 6,
-    day: 3,
+    schoolWeekNumber: 99,
+    day: 0,
   });
   const diagnosis = diagnoseAnnualCourseTests([orphan], sessionsFor({ slots: [slot({})] }), COURSE.id);
   assert.equal(diagnosis[0]?.result, "UNMATCHED");
@@ -613,8 +614,8 @@ test("export — PDF des contrôles non rattachés", async () => {
     annualCourseId: COURSE.id,
     courseSessionKey: "SY-2026-27|ac-export|2099-01-01",
     courseSessionDate: "2099-01-01",
-    schoolWeekNumber: 6,
-    day: 3,
+    schoolWeekNumber: 99,
+    day: 0,
   });
   const doc = assemble({ items: [orphan], exportOptions: { layout: "summary" } });
   assert.ok(doc);
@@ -708,9 +709,9 @@ test("export — année complète et semestres : période par date puis semaine"
       title: "C-orphelin-S2",
       annualCourseId: COURSE.id,
       courseSessionKey: "gone-key",
-      courseSessionDate: "2026-11-05",
-      schoolWeekNumber: 1,
-      day: 0,
+      courseSessionDate: "2026-10-29",
+      schoolWeekNumber: 9,
+      day: 3,
     }),
   ];
   const year = assemble({ items, exportOptions: { period: "year" } });
@@ -806,6 +807,8 @@ test("export — diagnostic non destructif MATCH_KEY / DATE / WEEK_DAY / UNMATCH
       annualCourseId: COURSE.id,
       courseSessionKey: "missing-key",
       courseSessionDate: "2099-12-31",
+      schoolWeekNumber: 99,
+      day: 0,
     }),
     item({
       id: 5,
@@ -883,5 +886,119 @@ test("export — intégration listAgendaItemsByAnnualCourse puis PDF", async () 
   assert.match(text, /2 contrôles/);
   assert.doesNotMatch(text, /ControleAutreCours/);
   assert.doesNotMatch(text, /non rattachés/);
+});
+
+test("export — key invalide : date encore valide, sinon fallback semaine/jour", () => {
+  const s6 = sessionByWeek(6);
+  const staleKeyDate = item({
+    id: 1,
+    type: "TEST",
+    title: "C-stale-key-date",
+    annualCourseId: COURSE.id,
+    courseSessionKey: "stale-key",
+    courseSessionDate: s6.date,
+    schoolWeekNumber: 99,
+    day: 0,
+  });
+  assert.equal(resolveAgendaItemSession(staleKeyDate, sessionsFor({ slots: [slot({})] })).kind, "MATCH_DATE");
+  const byDate = assemble({ items: [staleKeyDate] });
+  assert.equal(byDate?.controlCount, 1);
+  assert.equal(byDate?.sessions.some((block) => block.controls.includes("C-stale-key-date")), true);
+
+  const staleKeyWeek = item({
+    id: 2,
+    type: "TEST",
+    title: "C-stale-key-week",
+    annualCourseId: COURSE.id,
+    courseSessionKey: "stale-key",
+    courseSessionDate: "2099-01-01",
+    schoolWeekNumber: 6,
+    day: 3,
+  });
+  assert.equal(resolveAgendaItemSession(staleKeyWeek, sessionsFor({ slots: [slot({})] })).kind, "MATCH_WEEK_DAY");
+  const byWeek = assemble({ items: [staleKeyWeek] });
+  assert.equal(byWeek?.sessions.some((block) => block.controls.includes("C-stale-key-week")), true);
+});
+
+test("export — publication structurée à key invalide ne disparaît pas", () => {
+  const s6 = sessionByWeek(6);
+  const doc = assemble({
+    items: [
+      item({
+        id: 1,
+        type: "HOMEWORK",
+        title: "DevoirStaleKey",
+        studentVisible: true,
+        annualCourseId: COURSE.id,
+        courseSessionKey: "obsolete-session-key",
+        courseSessionDate: s6.date,
+        schoolWeekNumber: 6,
+        day: 3,
+      }),
+    ],
+  });
+  const texts = doc?.sessions.flatMap((block) => block.publications.map((line) => line.text)).join("\n") ?? "";
+  assert.match(texts, /DevoirStaleKey/);
+  assert.equal(doc?.publicationCount, 1);
+});
+
+test("export — TEST legacy sans annualCourseId seulement s'il est non ambigu", () => {
+  const s6 = sessionByWeek(6);
+  const course = {
+    annualCourseId: COURSE.id,
+    classroomId: "class-demo",
+    subjectId: "subj-demo",
+    schoolYearId: "SY-2026-27",
+  };
+  const sessions = sessionsFor({ slots: [slot({})] });
+  const legacy = item({
+    id: 1,
+    type: "TEST",
+    title: "C-legacy-null",
+    classroomId: "class-demo",
+    subjectId: "subj-demo",
+    schoolYearId: "SY-2026-27",
+    courseSessionDate: s6.date,
+    schoolWeekNumber: 6,
+    day: 3,
+  });
+  assert.equal(legacy.annualCourseId, undefined);
+  assert.equal(isUnambiguousLegacyTestForCourse(legacy, course, sessions), true);
+  const otherBranch = item({
+    ...legacy,
+    id: 2,
+    title: "C-autre-branche",
+    subjectId: "subj-other",
+  });
+  assert.equal(isUnambiguousLegacyTestForCourse(otherBranch, course, sessions), false);
+  const otherClass = item({
+    ...legacy,
+    id: 3,
+    title: "C-autre-classe",
+    classroomId: "class-other",
+  });
+  assert.equal(isUnambiguousLegacyTestForCourse(otherClass, course, sessions), false);
+});
+
+test("export — Carnet structuré crée le contrôle via POST /api/teacher/controls", async () => {
+  const page = await readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8");
+  const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
+  const perform = page.slice(page.indexOf("async function performNotebookControl"));
+  const save = page.slice(page.indexOf("async function notebookSaveControl"));
+  assert.match(page, /createTeacherControlApi/);
+  assert.match(perform, /createTeacherControlApi/);
+  assert.match(perform, /annualCourseId: input\.annualCourseId/);
+  assert.match(perform, /courseSessionKey: input\.courseSessionKey/);
+  assert.match(save, /notebookPublishAnnualCourseId/);
+  assert.match(save, /courseSessionKey/);
+  assert.match(save, /Ce cours n’a pas de séance à cette date/);
+  assert.match(panel, /courseSessionForControlSlot/);
+  assert.match(panel, /courseSessionKey: session\.key/);
+  const structuredSave = save.slice(
+    save.indexOf("if (notebookPublishAnnualCourseId)"),
+    save.indexOf("evaluateThirdTestAlert"),
+  );
+  assert.match(structuredSave, /performNotebookControl/);
+  assert.doesNotMatch(structuredSave, /createAgendaItemApi/);
 });
 

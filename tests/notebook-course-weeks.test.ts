@@ -13,6 +13,7 @@ import {
   formatWeekColumnSubtitle,
   fromPlainText,
   formatWeekColumnSubtitleFromSessions,
+  courseSessionForControlSlot,
   isCourseControlSlotAllowed,
   listWeekNotes,
   publicationDayIndexForCourseWeek,
@@ -374,6 +375,12 @@ test("carnet — contrôle impossible sur une semaine sans cours", () => {
   assert.equal(isCourseControlSlotAllowed(sessions, 6, 0), false);
   assert.equal(isCourseControlSlotAllowed(sessions, 5, 3), false);
   assert.equal(isCourseControlSlotAllowed(sessions, 7, 0), false);
+  const matched = courseSessionForControlSlot(sessions, 6, 3);
+  assert.ok(matched);
+  assert.equal(matched!.schoolWeekNumber, 6);
+  assert.equal(matched!.dayOfWeek, 4);
+  assert.ok(matched!.key.includes("|"));
+  assert.equal(courseSessionForControlSlot(sessions, 6, 0), null);
 });
 
 test("carnet — horaire année N en B n’influence pas année N+1 en all", () => {
@@ -638,6 +645,7 @@ test("carnet — pas de règle hardcodée classe / branche / jour", async () => 
   assert.match(panel, /fetchTeacherCourseTimelineApi/);
   assert.match(panel, /visibleCourseWeeks/);
   assert.match(panel, /publicationDayIndexForCourseWeek/);
+  assert.match(panel, /courseSessionForControlSlot/);
   assert.match(panel, /findCarnetPublicationItemForSave/);
   assert.match(panel, /Aucune séance planifiée pour ce cours dans l’horaire/);
   assert.match(modal, /controlDayOptionsForCourseWeek/);

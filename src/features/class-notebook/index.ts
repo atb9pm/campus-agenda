@@ -183,6 +183,7 @@ export {
 } from "./week-window.ts";
 export {
   controlDayOptionsForCourseWeek,
+  courseSessionForControlSlot,
   courseSessionsForWeek,
   eligibleCourseWeekNumbers,
   eligibleSchoolWeeksForSessions,
