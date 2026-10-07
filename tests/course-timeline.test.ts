@@ -364,9 +364,9 @@ test("version 2.32.0 — déroulement conservé, nav Contrôles, migration 0024"
   assert.equal(APP_VERSION, "2.61.8");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
+    "ma-semaine",
     "mes-cours",
     "controles",
-    "ma-semaine",
     "configuration",
     "administration",
   ]);

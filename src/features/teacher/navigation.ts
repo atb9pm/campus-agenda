@@ -1,14 +1,14 @@
 export const TEACHER_NAV_SECTIONS = [
+  "ma-semaine",
   "mes-cours",
   "controles",
-  "ma-semaine",
   "configuration",
   "administration",
 ] as const;
 
 export type TeacherNavSection = (typeof TEACHER_NAV_SECTIONS)[number];
 
-export const DEFAULT_TEACHER_NAV_SECTION: TeacherNavSection = "mes-cours";
+export const DEFAULT_TEACHER_NAV_SECTION: TeacherNavSection = "ma-semaine";
 
 export const TEACHER_NAV_LABELS: Record<TeacherNavSection, string> = {
   "mes-cours": "Mes cours",
