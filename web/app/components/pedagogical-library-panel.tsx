@@ -3,13 +3,6 @@
 import { useCallback, useEffect, useId, useState } from "react";
 
 import {
-  DEMO_CATALOG,
-  getClassroomsForTeacher,
-  getSubjectById,
-  getSubjectsForTeacherInClassroom,
-  type Classroom,
-} from "@campus/features/classes";
-import {
   formatSchoolWeekOptionLabel,
   getCourseDayOptionsForSchoolWeek,
   type SchoolWeek,
@@ -41,7 +34,6 @@ interface PedagogicalLibraryPanelProps {
 }
 
 export function PedagogicalLibraryPanel({
-  teacherId,
   defaultClassroomId,
   schoolWeeks,
   onNotice,
@@ -62,8 +54,10 @@ export function PedagogicalLibraryPanel({
   const [duplicateClassroomId, setDuplicateClassroomId] = useState(defaultClassroomId);
   const [alsoCreateTemplates, setAlsoCreateTemplates] = useState(false);
 
-  const teacherClassrooms = getClassroomsForTeacher(DEMO_CATALOG, teacherId);
-  const deploySubjects = getSubjectsForTeacherInClassroom(DEMO_CATALOG, teacherId, deployClassroomId);
+  const classroomOptions = defaultClassroomId
+    ? [{ id: defaultClassroomId, name: defaultClassroomId }]
+    : [];
+  const deploySubjects: Array<{ id: string }> = [];
   const deployWeek = schoolWeeks.find((week) => week.number === deployWeekNumber) ?? schoolWeeks[0];
   const deployCourseDays = deployWeek ? getCourseDayOptionsForSchoolWeek(deployWeek.number) : [];
 
@@ -189,7 +183,7 @@ export function PedagogicalLibraryPanel({
 
   function subjectLabel(subjectId: string | null): string {
     if (!subjectId) return "—";
-    return getSubjectById(DEMO_CATALOG, subjectId)?.name ?? "Branche";
+    return subjectId;
   }
 
   return (
@@ -264,9 +258,13 @@ export function PedagogicalLibraryPanel({
             <label>
               Classe
               <select value={deployClassroomId} onChange={(event) => setDeployClassroomId(event.target.value)}>
-                {teacherClassrooms.map((classroom: Classroom) => (
-                  <option key={classroom.id} value={classroom.id}>{classroom.name}</option>
-                ))}
+                {classroomOptions.length === 0 ? (
+                  <option value="">Aucune classe</option>
+                ) : (
+                  classroomOptions.map((classroom) => (
+                    <option key={classroom.id} value={classroom.id}>{classroom.name}</option>
+                  ))
+                )}
               </select>
             </label>
             <label>
@@ -322,9 +320,13 @@ export function PedagogicalLibraryPanel({
                   value={duplicateClassroomId}
                   onChange={(event) => setDuplicateClassroomId(event.target.value)}
                 >
-                  {teacherClassrooms.map((classroom) => (
-                    <option key={classroom.id} value={classroom.id}>{classroom.name}</option>
-                  ))}
+                  {classroomOptions.length === 0 ? (
+                    <option value="">Aucune classe</option>
+                  ) : (
+                    classroomOptions.map((classroom) => (
+                      <option key={classroom.id} value={classroom.id}>{classroom.name}</option>
+                    ))
+                  )}
                 </select>
               </label>
               <label className="library-checkbox">

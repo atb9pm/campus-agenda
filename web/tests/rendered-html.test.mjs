@@ -93,7 +93,7 @@ test("keeps the validated teacher essentials and social preview", async () => {
   assert.match(page, /PasswordChangePanel/);
   assert.match(page, /changeTeacherPasswordApi/);
   assert.doesNotMatch(page, /DEMO_TEACHER_PASSWORD/);
-  assert.match(page, /DEMO_CATALOG/);
+  assert.doesNotMatch(page, /DEMO_CATALOG/);
   assert.match(page, /BrandLogo/);
 
   // Publication et coordination passent uniquement par le carnet de classe.

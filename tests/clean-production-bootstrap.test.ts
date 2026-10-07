@@ -407,9 +407,12 @@ test("états vides UI — messages et pas de fallback DEMO_CATALOG enseignant", 
   assert.equal(CONTROL_COURSES_UNAVAILABLE_MESSAGE, "Aucun cours disponible.");
 
   const page = await readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(page, /DEMO_CATALOG/);
   assert.doesNotMatch(page, /getClassroomsForTeacher\(DEMO_CATALOG/);
   assert.doesNotMatch(page, /buildDefaultTeacherSetup\(DEMO_CATALOG/);
   assert.doesNotMatch(page, /DEMO_CATALOG\.classrooms\[0\]/);
+  assert.doesNotMatch(page, /getSubjectsForClassroom\(DEMO_CATALOG/);
+  assert.doesNotMatch(page, /findStudentAccessForClassroom\(DEMO_CATALOG/);
   assert.doesNotMatch(page, /DEMO_PROTOTYPE_ITEMS/);
   assert.match(page, /emptyTeacherSetup\(\)/);
   assert.match(page, /EMPTY_CLASSROOM_CATALOG/);

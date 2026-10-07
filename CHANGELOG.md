@@ -2,6 +2,14 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [Non publié] — Catalogue runtime et documentation
+
+### Changé
+
+- L’UI production n’utilise plus `DEMO_CATALOG` comme liste de classes, branches ou enseignants.
+- Libellé enseignant : `CAMPUS AGENDA` (plus « PROTOTYPE INTERACTIF »).
+- README, architecture et feuille de route alignés sur Infomaniak / SQLite / Ma semaine.
+
 ## [2.61.8] — Durcissement auth, sessions, backup et en-têtes
 
 ### Changé

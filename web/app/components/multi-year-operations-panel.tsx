@@ -2,12 +2,6 @@
 
 import { useCallback, useEffect, useId, useState } from "react";
 
-import {
-  DEMO_CATALOG,
-  getSubjectById,
-  getSubjectsForClassroom,
-  getTeacherById,
-} from "@campus/features/classes";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import { formatSwissDate } from "@campus/features/course-sessions/format.ts";
 import {
@@ -60,7 +54,10 @@ export function MultiYearOperationsPanel({
   const [transferSubjectIds, setTransferSubjectIds] = useState<string[]>([]);
 
   const archivedYears = years.filter((year) => year.status === "archived");
-  const classroomSubjects = getSubjectsForClassroom(DEMO_CATALOG, classroomId);
+  const classroomOptions = classroomId ? [{ id: classroomId, name: classroomId }] : [];
+  const classroomSubjects = [...new Set(memberships.flatMap((membership) => membership.subjectIds))].map(
+    (subjectId) => ({ id: subjectId, name: subjectId }),
+  );
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -194,9 +191,13 @@ export function MultiYearOperationsPanel({
             disabled={working}
             onChange={(event) => setClassroomId(event.target.value)}
           >
-            {DEMO_CATALOG.classrooms.map((classroom) => (
-              <option key={classroom.id} value={classroom.id}>{classroom.name}</option>
-            ))}
+            {classroomOptions.length === 0 ? (
+              <option value="">Aucune classe</option>
+            ) : (
+              classroomOptions.map((classroom) => (
+                <option key={classroom.id} value={classroom.id}>{classroom.name}</option>
+              ))
+            )}
           </select>
 
           <label htmlFor={yearSelectId}>Année archivée</label>
@@ -254,10 +255,10 @@ export function MultiYearOperationsPanel({
                     <tr key={item.id}>
                       <td>S{item.schoolWeekNumber}</td>
                       <td>{item.courseSessionDate ? formatSwissDate(item.courseSessionDate) : "—"}</td>
-                      <td>{getSubjectById(DEMO_CATALOG, item.subjectId)?.name ?? item.subjectId}</td>
+                      <td>{item.subjectId}</td>
                       <td>{item.type}</td>
                       <td>{item.title}</td>
-                      <td>{getTeacherById(DEMO_CATALOG, item.authorTeacherId)?.initials ?? "?"}</td>
+                      <td>{item.authorTeacherId || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -284,11 +285,13 @@ export function MultiYearOperationsPanel({
               Enseignant sortant
               <select value={outgoingTeacherId} required disabled={working} onChange={(event) => setOutgoingTeacherId(event.target.value)}>
                 <option value="">Choisir…</option>
-                {activeTeachers.map((teacherId) => (
-                  <option key={teacherId} value={teacherId}>
-                    {getTeacherById(DEMO_CATALOG, teacherId)?.displayName ?? teacherId}
-                  </option>
-                ))}
+                {activeTeachers.length === 0 ? (
+                  <option value="">Aucun enseignant</option>
+                ) : (
+                  activeTeachers.map((teacherId) => (
+                    <option key={teacherId} value={teacherId}>{teacherId}</option>
+                  ))
+                )}
               </select>
             </label>
 
@@ -296,17 +299,24 @@ export function MultiYearOperationsPanel({
               Enseignant remplaçant
               <select value={incomingTeacherId} required disabled={working} onChange={(event) => setIncomingTeacherId(event.target.value)}>
                 <option value="">Choisir…</option>
-                {DEMO_CATALOG.teachers
-                  .filter((teacher) => teacher.id !== outgoingTeacherId)
-                  .map((teacher) => (
-                    <option key={teacher.id} value={teacher.id}>{teacher.displayName}</option>
-                  ))}
+                {activeTeachers.filter((teacherId) => teacherId !== outgoingTeacherId).length === 0 ? (
+                  <option value="">Aucun enseignant</option>
+                ) : (
+                  activeTeachers
+                    .filter((teacherId) => teacherId !== outgoingTeacherId)
+                    .map((teacherId) => (
+                      <option key={teacherId} value={teacherId}>{teacherId}</option>
+                    ))
+                )}
               </select>
             </label>
 
             <fieldset>
               <legend>Branches à transférer</legend>
               <ul className="multi-year-subject-checklist">
+                {classroomSubjects.length === 0 ? (
+                  <li>Aucune branche disponible</li>
+                ) : null}
                 {classroomSubjects.map((subject) => (
                   <li key={subject.id}>
                     <label>
