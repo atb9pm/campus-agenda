@@ -7,7 +7,9 @@ import {
   checkWeekPlanConsistency,
   countClassDays,
   easterSunday,
+  isoDateForSchoolWeekDay,
   listHolidayDays,
+  resolveAgendaItemDate,
   valaisHolidaysForSchoolYear,
 } from "../src/features/school-days/index.ts";
 import type { SchoolDayWeekRow } from "../src/features/school-days/index.ts";
@@ -128,6 +130,33 @@ test("store mémoire — corriger une semaine et une exception de jour", async (
 
   const cleared = await store.setDayException(active.id, "2027-05-27", null);
   assert.deepEqual(cleared, []);
+});
+
+test("date d’agenda — calendrier scolaire puis courseSessionDate", () => {
+  const weeks = [{ number: 12, monday: "2026-11-02" }];
+  assert.equal(isoDateForSchoolWeekDay(weeks, 12, 3), "2026-11-05");
+  assert.equal(
+    resolveAgendaItemDate({ schoolWeekNumber: 12, day: 3, courseSessionDate: null }, weeks),
+    "2026-11-05",
+  );
+  assert.equal(
+    resolveAgendaItemDate(
+      { schoolWeekNumber: 12, day: 3, courseSessionDate: "2026-11-05" },
+      weeks,
+    ),
+    "2026-11-05",
+  );
+  assert.equal(
+    resolveAgendaItemDate(
+      { schoolWeekNumber: 99, day: 0, courseSessionDate: "2026-01-15" },
+      weeks,
+    ),
+    "2026-01-15",
+  );
+  assert.equal(
+    resolveAgendaItemDate({ schoolWeekNumber: 99, day: 0, courseSessionDate: null }, weeks),
+    null,
+  );
 });
 
 test("plan des semaines — contrôles non bloquants", () => {

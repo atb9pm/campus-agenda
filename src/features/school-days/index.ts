@@ -5,6 +5,7 @@ export {
   countClassDays,
   isoDateForSchoolWeekDay,
   isMonday,
+  resolveAgendaItemDate,
   listHolidayDays,
   SCHOOL_WEEKDAY_COUNT,
   SCHOOL_WEEKDAY_LABELS,

@@ -35,6 +35,7 @@ import { MemoryPedagogicalPathStore, MemoryAnnualCourseNotesStore } from "./memo
 import { replaceMemorySchoolYears } from "./memory-school-year-store.ts";
 import type { SchoolYearWithWeeks } from "../../features/school-year/types.ts";
 import { parseSchoolWeekKind } from "../../features/calendar/types.ts";
+import { isoDateForSchoolWeekDay } from "../../features/school-days/index.ts";
 import type { SchoolDayException } from "../../features/school-days/types.ts";
 import type { CourseScheduleSlot, ClassAttendanceDay, CourseWeekKind, CourseWeekday, AttendanceRole } from "../../features/course-schedule/types.ts";
 import type { AnnualCourse, TeacherCourseAssignment, TeacherCourseAssignmentEvent, AssignmentRole, AssignmentEventKind } from "../../features/annual-courses/types.ts";
@@ -402,11 +403,45 @@ async function buildMemoryTables(deps: CampusBackupDeps): Promise<CampusTableDum
   return dump;
 }
 
+export function fillMissingAgendaItemDates(dump: CampusTableDump): void {
+  const weeksByYear = new Map<string, Array<{ number: number; monday: string }>>();
+  for (const row of dump.school_weeks ?? []) {
+    const yearId = typeof row.school_year_id === "string" ? row.school_year_id : "";
+    const monday = typeof row.monday === "string" ? row.monday : "";
+    const number = typeof row.week_number === "number" ? row.week_number : Number(row.week_number);
+    if (!yearId || !monday || !Number.isInteger(number)) continue;
+    const list = weeksByYear.get(yearId) ?? [];
+    list.push({ number, monday });
+    weeksByYear.set(yearId, list);
+  }
+  for (const row of dump.agenda_items ?? []) {
+    if (typeof row.course_session_date === "string" && row.course_session_date.trim()) continue;
+    const yearId = typeof row.school_year_id === "string" ? row.school_year_id : "";
+    const date = isoDateForSchoolWeekDay(
+      weeksByYear.get(yearId) ?? [],
+      Number(row.school_week_number),
+      Number(row.day),
+    );
+    if (date) row.course_session_date = date;
+  }
+}
+
 export async function exportCampusSnapshot(deps: CampusBackupDeps): Promise<CampusBackupSnapshot> {
   const base = await exportAgendaSnapshotV3(deps);
   const tables = deps.sqlDb ? await dumpCampusTables(deps.sqlDb) : await buildMemoryTables(deps);
+  fillMissingAgendaItemDates(tables);
+  const datesById = new Map<number, string>();
+  for (const row of tables.agenda_items ?? []) {
+    const id = typeof row.id === "number" ? row.id : Number(row.id);
+    const date = typeof row.course_session_date === "string" ? row.course_session_date.trim() : "";
+    if (Number.isInteger(id) && date) datesById.set(id, date);
+  }
   return {
     ...base,
+    items: base.items.map((item) => ({
+      ...item,
+      courseSessionDate: datesById.get(item.id) ?? item.courseSessionDate ?? null,
+    })),
     version: BACKUP_FORMAT_VERSION_V4,
     tables,
   };

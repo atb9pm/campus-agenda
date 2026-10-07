@@ -20,6 +20,7 @@ import {
   getActiveSchoolYear,
   authorizeTeacherAgendaPublish,
 } from "../../../lib/server/api.ts";
+import { isoDateForSchoolWeekDay, resolveAgendaItemDate } from "@campus/features/school-days/index.ts";
 import { listResolvedAgendaSubjects } from "@campus/features/agenda-bridge/index.ts";
 import {
   getAnnualCourseStore,
@@ -44,6 +45,13 @@ export async function GET(request: Request) {
   let items = await access.store!.listAgendaItems(classroomId);
   if (schoolYearId) {
     items = items.filter((item) => item.schoolYearId === schoolYearId);
+    const year = await getSchoolYearStore().then((store) => store.getSchoolYearById(schoolYearId));
+    if (year) {
+      items = items.map((item) => ({
+        ...item,
+        courseSessionDate: resolveAgendaItemDate(item, year.weeks),
+      }));
+    }
   }
   if (access.session?.kind === "student") {
     items = items.filter(isVisibleToStudent);
@@ -199,6 +207,9 @@ export async function POST(request: Request) {
     title: String(body.title ?? ""),
     detail: String(body.detail ?? ""),
     schoolYearId: activeSchoolYearId,
+    courseSessionDate: activeYear
+      ? isoDateForSchoolWeekDay(activeYear.weeks, schoolWeekNumber, day)
+      : null,
     studentVisible: typeof body.studentVisible === "boolean" ? body.studentVisible : undefined,
   });
 

@@ -21,7 +21,7 @@ async function handleGet(
   }
 
   const store = await getAgendaStore();
-  const snapshot = await exportSchoolYearSnapshot(store, id, year.label);
+  const snapshot = await exportSchoolYearSnapshot(store, id, year.label, year.weeks);
 
   if (format === "csv") {
     const csv = schoolYearExportToCsv(snapshot);

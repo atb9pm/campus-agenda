@@ -48,6 +48,24 @@ export function isoDateForSchoolWeekDay(
   return addDays(week.monday, dayIndex);
 }
 
+/**
+ * Date calendaire d’un élément d’agenda (contrôles inclus).
+ * Priorité : calendrier scolaire (semaine + jour), sinon `courseSessionDate` déjà stocké.
+ */
+export function resolveAgendaItemDate(
+  item: {
+    courseSessionDate?: string | null;
+    schoolWeekNumber: number;
+    day: number;
+  },
+  weeks: ReadonlyArray<{ number: number; monday: string }>,
+): string | null {
+  return (
+    isoDateForSchoolWeekDay(weeks, item.schoolWeekNumber, item.day) ??
+    (item.courseSessionDate?.trim() || null)
+  );
+}
+
 export function isMonday(isoDate: string): boolean {
   return parseIsoDate(isoDate).getDay() === 1;
 }

@@ -1,4 +1,5 @@
 import type { PrototypeAgendaItem } from "../../features/agenda/demo-items.ts";
+import { resolveAgendaItemDate } from "../../features/school-days/index.ts";
 import { AGENDA_ITEM_TYPES } from "../../types/agenda.ts";
 import type { AgendaStore } from "./types.ts";
 
@@ -17,8 +18,14 @@ export async function exportSchoolYearSnapshot(
   store: AgendaStore,
   schoolYearId: string,
   schoolYearLabel: string,
+  weeks: ReadonlyArray<{ number: number; monday: string }> = [],
 ): Promise<SchoolYearExportSnapshot> {
-  const items = (await store.exportAllItems()).filter((item) => item.schoolYearId === schoolYearId);
+  const items = (await store.exportAllItems())
+    .filter((item) => item.schoolYearId === schoolYearId)
+    .map((item) => ({
+      ...item,
+      courseSessionDate: resolveAgendaItemDate(item, weeks),
+    }));
   return {
     version: SCHOOL_YEAR_EXPORT_VERSION,
     exportedAt: new Date().toISOString(),
@@ -44,6 +51,7 @@ export function schoolYearExportToCsv(snapshot: SchoolYearExportSnapshot): strin
     "authorTeacherId",
     "schoolWeekNumber",
     "day",
+    "courseSessionDate",
     "hour",
     "type",
     "title",
@@ -61,6 +69,7 @@ export function schoolYearExportToCsv(snapshot: SchoolYearExportSnapshot): strin
       item.authorTeacherId,
       item.schoolWeekNumber,
       item.day,
+      item.courseSessionDate ?? "",
       item.hour,
       item.type,
       escapeCsv(item.title),
