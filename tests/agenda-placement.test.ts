@@ -313,6 +313,10 @@ test("store SQL — relecture réelle de courseSessionDate et courseSessionKey",
   const db = createNodeSqliteDatabase(":memory:");
   await applyMigrations(db);
   await seedDemoDatabase(db);
+  await db.exec(
+    `INSERT OR IGNORE INTO school_years (id, label, status, starts_on, ends_on, created_at)
+     VALUES ('year-2026', '2026-2027', 'active', '2026-08-01', '2027-07-31', datetime('now'))`,
+  );
   const store = new SqlAgendaStore(db);
 
   const created = await store.createAgendaItem({

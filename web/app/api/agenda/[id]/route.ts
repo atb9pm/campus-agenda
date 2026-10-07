@@ -66,7 +66,7 @@ async function placementContextForItem(
       annualCourseId: item.annualCourseId ?? "",
     });
     if (!sessions.ok) {
-      return { ok: false, reason: sessions.reason, status: sessions.status };
+      return { ok: false, reason: sessions.reason, status: sessions.status ?? 400 };
     }
     context.sessions = sessions.value;
   }
