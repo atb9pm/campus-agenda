@@ -20,6 +20,7 @@ import {
 interface MaSemainePanelProps {
   classes: TeacherClassSetup[];
   courses: TeacherCourseWorkspaceEntry[];
+  weekSignals: Record<string, string>;
   schoolWeeks: SchoolWeek[];
   selectedSchoolWeekNumber: number;
   onSelectSchoolWeek: (weekNumber: number) => void;
@@ -34,6 +35,7 @@ function formatSchoolWeekHeading(week: SchoolWeek): string {
 export function MaSemainePanel({
   classes,
   courses,
+  weekSignals,
   schoolWeeks,
   selectedSchoolWeekNumber,
   onSelectSchoolWeek,
@@ -105,23 +107,35 @@ export function MaSemainePanel({
                   const cardTitle = entry.programLabel || theme.legendLabel;
                   const branches = classCourses.length ? (
                     <span className="ma-semaine-class-branches">
-                      {classCourses.map((course) =>
-                        uniqueCourse ? (
-                          <span className="ma-semaine-branch-badge" key={course.annualCourseId}>
-                            {course.branchLabel}
-                          </span>
-                        ) : (
+                      {classCourses.map((course) => {
+                        const signal = weekSignals[course.annualCourseId] ?? "";
+                        const signalLine = signal ? (
+                          <small style={{ display: "block", fontWeight: 600, opacity: 0.8 }}>{signal}</small>
+                        ) : null;
+                        if (uniqueCourse) {
+                          return (
+                            <span className="ma-semaine-branch-badge" key={course.annualCourseId}>
+                              {course.branchLabel}
+                              {signalLine}
+                            </span>
+                          );
+                        }
+                        const label = signal
+                          ? `Ouvrir ${course.branchLabel} dans le carnet — ${signal}`
+                          : `Ouvrir ${course.branchLabel} dans le carnet`;
+                        return (
                           <button
                             type="button"
                             className="ma-semaine-branch-badge"
                             key={course.annualCourseId}
-                            aria-label={`Ouvrir ${course.branchLabel} dans le carnet`}
+                            aria-label={label}
                             onClick={() => onOpenCourse(course)}
                           >
                             {course.branchLabel}
+                            {signalLine}
                           </button>
-                        ),
-                      )}
+                        );
+                      })}
                     </span>
                   ) : (
                     <span className="ma-semaine-no-branches">Branche du cours attribué</span>

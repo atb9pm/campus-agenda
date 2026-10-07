@@ -66,7 +66,20 @@ export class MemoryAgendaStore implements AgendaStore {
   async updateAgendaItem(
     itemId: number,
     actorTeacherId: string,
-    patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber" | "studentVisible">>,
+    patch: Partial<
+      Pick<
+        CreateAgendaInput,
+        | "title"
+        | "detail"
+        | "day"
+        | "hour"
+        | "subjectId"
+        | "schoolWeekNumber"
+        | "studentVisible"
+        | "courseSessionDate"
+        | "courseSessionKey"
+      >
+    >,
   ): Promise<AgendaMutationResult> {
     const actorIsAdmin = await this.teacherIsAdmin(actorTeacherId);
     const result = updatePublication(this.items, itemId, actorTeacherId, patch, actorIsAdmin);

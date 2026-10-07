@@ -851,8 +851,8 @@ test("PATCH structuré — title/detail OK, ciblage refusé, horaire disparu san
   assert.equal(structuredAgendaPatchGuard(published.item, { title: "Nouveau" }).ok, true);
   assert.equal(structuredAgendaPatchGuard(published.item, { detail: "Corrigé" }).ok, true);
   assert.equal(structuredAgendaPatchGuard(published.item, { title: "A", detail: "B" }).ok, true);
-  assert.equal(structuredAgendaPatchGuard(published.item, { day: 2 }).ok, false);
-  assert.equal(structuredAgendaPatchGuard(published.item, { schoolWeekNumber: 9 }).ok, false);
+  assert.equal(structuredAgendaPatchGuard(published.item, { day: 2 }).ok, true);
+  assert.equal(structuredAgendaPatchGuard(published.item, { schoolWeekNumber: 9 }).ok, true);
   assert.equal(structuredAgendaPatchGuard(published.item, { subjectId: "x" }).ok, false);
   assert.equal(structuredAgendaPatchGuard(published.item, { courseSessionKey: "other" }).ok, false);
   assert.equal(structuredAgendaPatchGuard(published.item, { annualCourseId: "other" }).reason, STRUCTURED_AGENDA_PATCH_FORBIDDEN_REASON);

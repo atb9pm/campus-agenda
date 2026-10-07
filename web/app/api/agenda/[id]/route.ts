@@ -1,19 +1,93 @@
-import { isStructuredAgendaPublication, structuredAgendaPatchGuard } from "@campus/features/agenda/index.ts";
+import {
+  AGENDA_PLACEMENT_YEAR_REASON,
+  buildAgendaItemUpdatePatch,
+  isAgendaPlacementChange,
+  isStructuredAgendaPublication,
+  structuredAgendaPatchGuard,
+  type AgendaPlacementContext,
+  type PublicationPatch,
+} from "@campus/features/agenda/index.ts";
+import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import { authorizeNotebookOwnedItemMutation } from "@campus/features/class-notebook";
+import { listComputedCourseSessions } from "@campus/features/course-sessions/index.ts";
 import {
   assertAgendaItemMutable,
   assertAgendaClassMutableForItem,
   assertAgendaPublicationBranchAllowed,
   assertValidAgendaScheduleTarget,
   forbiddenResponse,
+  getCourseScheduleServiceDeps,
   getNotebookPublicationDeps,
   jsonResponse,
   requireTeacherSession,
   authorizeTeacherAgendaPublish,
 } from "../../../../lib/server/api.ts";
+import { getSchoolYearStore } from "@campus/lib/persistence/store-factory.ts";
+import type { AgendaStore } from "@campus/lib/persistence/types.ts";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
+}
+
+function contentPatchFromBody(body: {
+  title?: string;
+  detail?: string;
+  day?: number;
+  hour?: number;
+  subjectId?: string;
+  schoolWeekNumber?: number;
+  studentVisible?: boolean;
+}): PublicationPatch {
+  return {
+    title: body.title,
+    detail: body.detail,
+    day: body.day,
+    hour: body.hour,
+    subjectId: body.subjectId,
+    schoolWeekNumber: body.schoolWeekNumber,
+    studentVisible: body.studentVisible,
+  };
+}
+
+async function placementContextForItem(
+  item: PrototypeAgendaItem,
+): Promise<{ ok: true; context: AgendaPlacementContext } | { ok: false; reason: string; status: number }> {
+  const years = await getSchoolYearStore();
+  const year = item.schoolYearId
+    ? await years.getSchoolYearById(item.schoolYearId)
+    : await years.getActiveSchoolYear();
+  if (!year) {
+    return { ok: false, reason: AGENDA_PLACEMENT_YEAR_REASON, status: 400 };
+  }
+  const context: AgendaPlacementContext = { weeks: year.weeks };
+  if (isStructuredAgendaPublication(item)) {
+    const sessions = await listComputedCourseSessions(await getCourseScheduleServiceDeps(), {
+      schoolYearId: year.id,
+      annualCourseId: item.annualCourseId ?? "",
+    });
+    if (!sessions.ok) {
+      return { ok: false, reason: sessions.reason, status: sessions.status };
+    }
+    context.sessions = sessions.value;
+  }
+  return { ok: true, context };
+}
+
+async function updateAgendaItemWithPlacement(
+  store: AgendaStore,
+  teacherId: string,
+  item: PrototypeAgendaItem,
+  body: Parameters<typeof contentPatchFromBody>[0],
+) {
+  const raw = contentPatchFromBody(body);
+  if (!isAgendaPlacementChange(item, raw)) {
+    return store.updateAgendaItem(item.id, teacherId, raw);
+  }
+  const loaded = await placementContextForItem(item);
+  if (!loaded.ok) return loaded;
+  const built = buildAgendaItemUpdatePatch(item, raw, loaded.context);
+  if (!built.ok) return { ok: false as const, reason: built.reason, status: 400 as const };
+  return store.updateAgendaItem(item.id, teacherId, built.patch);
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
@@ -56,14 +130,12 @@ export async function PATCH(request: Request, context: RouteContext) {
       if (!notebookOwned.ok) {
         return jsonResponse({ ok: false, reason: notebookOwned.reason }, { status: notebookOwned.status });
       }
-      const result = await auth.store!.updateAgendaItem(itemId, auth.session!.teacherId, {
-        title: body.title,
-        detail: body.detail,
-        schoolWeekNumber: body.schoolWeekNumber,
-        day: body.day,
-        hour: body.hour,
-        studentVisible: body.studentVisible,
-      });
+      const result = await updateAgendaItemWithPlacement(
+        auth.store!,
+        auth.session!.teacherId,
+        existing,
+        body,
+      );
       if (!result.ok) {
         return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
       }
@@ -76,11 +148,18 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (!guard.ok) {
       return jsonResponse({ ok: false, reason: guard.reason }, { status: 400 });
     }
-    const result = await auth.store!.updateAgendaItem(itemId, auth.session!.teacherId, {
-      title: body.title,
-      detail: body.detail,
-      studentVisible: body.studentVisible,
-    });
+    const result = await updateAgendaItemWithPlacement(
+      auth.store!,
+      auth.session!.teacherId,
+      existing,
+      {
+        title: body.title,
+        detail: body.detail,
+        day: body.day,
+        schoolWeekNumber: body.schoolWeekNumber,
+        studentVisible: body.studentVisible,
+      },
+    );
     if (!result.ok) {
       return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
     }
@@ -125,7 +204,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (scheduleGuard) return scheduleGuard;
   }
 
-  const result = await auth.store!.updateAgendaItem(itemId, auth.session!.teacherId, body);
+  const result = existing
+    ? await updateAgendaItemWithPlacement(auth.store!, auth.session!.teacherId, existing, body)
+    : await auth.store!.updateAgendaItem(itemId, auth.session!.teacherId, contentPatchFromBody(body));
   if (!result.ok) {
     return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
   }

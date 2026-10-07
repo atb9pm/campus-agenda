@@ -126,7 +126,20 @@ export class SqlAgendaStore implements AgendaStore {
   async updateAgendaItem(
     itemId: number,
     actorTeacherId: string,
-    patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber" | "studentVisible">>,
+    patch: Partial<
+      Pick<
+        CreateAgendaInput,
+        | "title"
+        | "detail"
+        | "day"
+        | "hour"
+        | "subjectId"
+        | "schoolWeekNumber"
+        | "studentVisible"
+        | "courseSessionDate"
+        | "courseSessionKey"
+      >
+    >,
   ): Promise<AgendaMutationResult> {
     const items = await this.exportAllItems();
     const actorIsAdmin = await this.teacherIsAdmin(actorTeacherId);
@@ -140,7 +153,7 @@ export class SqlAgendaStore implements AgendaStore {
 
     await this.db
       .prepare(
-        "UPDATE agenda_items SET title = ?, detail = ?, day = ?, hour = ?, subject_id = ?, school_week_number = ?, student_visible = ?, updated_at = datetime('now') WHERE id = ?",
+        "UPDATE agenda_items SET title = ?, detail = ?, day = ?, hour = ?, subject_id = ?, school_week_number = ?, student_visible = ?, course_session_key = ?, course_session_date = ?, updated_at = datetime('now') WHERE id = ?",
       )
       .bind(
         updated.title,
@@ -150,6 +163,8 @@ export class SqlAgendaStore implements AgendaStore {
         updated.subjectId,
         updated.schoolWeekNumber,
         updated.studentVisible === false ? 0 : 1,
+        updated.courseSessionKey ?? null,
+        updated.courseSessionDate ?? null,
         itemId,
       )
       .run();

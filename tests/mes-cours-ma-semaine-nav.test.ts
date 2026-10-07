@@ -21,6 +21,8 @@ import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 import {
   displaySetupsFromAssignedCourses,
   groupTeacherCoursesByClass,
+  maSemaineSignalsByCourse,
+  summarizeMaSemaineCourseWeek,
   teacherCoursesForClass,
   type TeacherCourseWorkspaceEntry,
 } from "../src/features/teacher-workspace/index.ts";
@@ -553,4 +555,183 @@ test("Mes cours — Ouvrir dans Ma semaine inchangé", async () => {
   const fromMaSemaine = openCourseInWeekTarget(TRANSMISSION, 8);
   assert.deepEqual(fromMesCours, fromMaSemaine);
   assert.equal(fromMaSemaine.annualCourseId, TRANSMISSION.annualCourseId);
+});
+
+function signalItem(
+  overrides: Partial<PrototypeAgendaItem> & Pick<PrototypeAgendaItem, "id" | "type" | "annualCourseId">,
+): PrototypeAgendaItem {
+  return {
+    classroomId: "classroom-mecauto3a",
+    subjectId: "subj-transmission",
+    authorTeacherId: TEACHER_ID,
+    day: 0,
+    hour: 8,
+    weekOffset: 0,
+    schoolWeekNumber: 12,
+    title: "Titre interne ignoré",
+    detail: "",
+    studentVisible: true,
+    ...overrides,
+  };
+}
+
+test("Ma semaine — carte multi-cours n’ouvre pas un cours arbitraire", async () => {
+  const classCourses = teacherCoursesForClass(MECAUTO_COURSES, "class-mecauto3a");
+  assert.equal(classCourses.length, 3);
+  assert.equal(implicitNotebookPublishCourse(MECAUTO_COURSES, "class-mecauto3a"), null);
+  const semaine = await readFile(new URL("../web/app/components/ma-semaine-panel.tsx", import.meta.url), "utf8");
+  assert.match(semaine, /const uniqueCourse = classCourses\.length === 1 \? classCourses\[0\] : null;/);
+  assert.match(semaine, /onOpenCourse\(course\)/);
+  assert.match(semaine, /onOpenCourse\(uniqueCourse\)/);
+  assert.doesNotMatch(semaine, /onOpenClass/);
+  assert.doesNotMatch(semaine, /onOpenCourse\(classCourses\[0\]\)/);
+  assert.match(semaine, /<article[\s\S]*className="ma-semaine-class-card"/);
+});
+
+test("Ma semaine — signaux par AnnualCourse et semaine, jamais par classId seul", () => {
+  const week = 12;
+  const homeworkCp2 = signalItem({
+    id: 1,
+    type: "HOMEWORK",
+    annualCourseId: "ac-transmission",
+    title: "Exercice boîte de vitesses",
+  });
+  const draftHomework = signalItem({
+    id: 2,
+    type: "HOMEWORK",
+    annualCourseId: "ac-transmission",
+    studentVisible: false,
+    title: "Brouillon CP2",
+  });
+  const infoCp2 = signalItem({
+    id: 3,
+    type: "INFORMATION",
+    annualCourseId: "ac-transmission",
+    title: "Rappel atelier",
+  });
+  const testCp2 = signalItem({
+    id: 4,
+    type: "TEST",
+    annualCourseId: "ac-transmission",
+    title: "Contrôle Transmission",
+  });
+  const homeworkCp1 = signalItem({
+    id: 5,
+    type: "HOMEWORK",
+    annualCourseId: "ac-electro",
+    subjectId: "subj-electro",
+    title: "Devoir CP1",
+  });
+  const otherTeacherInfo = signalItem({
+    id: 6,
+    type: "INFORMATION",
+    annualCourseId: "ac-transmission",
+    authorTeacherId: "teacher-other",
+    title: "Info collègue",
+  });
+  const otherWeek = signalItem({
+    id: 7,
+    type: "HOMEWORK",
+    annualCourseId: "ac-transmission",
+    schoolWeekNumber: 18,
+    title: "Devoir autre semaine",
+  });
+  const extraHomework = signalItem({
+    id: 8,
+    type: "HOMEWORK",
+    annualCourseId: "ac-transmission",
+    title: "Second devoir CP2",
+  });
+  const draftInfo = signalItem({
+    id: 9,
+    type: "INFORMATION",
+    annualCourseId: "ac-transmission",
+    studentVisible: false,
+    title: "Info brouillon",
+  });
+  const sameClassWrongCourse = signalItem({
+    id: 10,
+    type: "TEST",
+    annualCourseId: "ac-chassis",
+    subjectId: "subj-chassis",
+    title: "Contrôle Châssis",
+  });
+
+  assert.equal(summarizeMaSemaineCourseWeek([homeworkCp2], "ac-transmission", week), "Devoir");
+  assert.equal(summarizeMaSemaineCourseWeek([homeworkCp2], "ac-chassis", week), "");
+  assert.equal(summarizeMaSemaineCourseWeek([draftHomework], "ac-transmission", week), "");
+  assert.equal(summarizeMaSemaineCourseWeek([infoCp2], "ac-transmission", week), "Information");
+  assert.equal(summarizeMaSemaineCourseWeek([draftInfo], "ac-transmission", week), "");
+  assert.equal(summarizeMaSemaineCourseWeek([testCp2], "ac-transmission", week), "Contrôle");
+  assert.equal(
+    summarizeMaSemaineCourseWeek([homeworkCp2, testCp2], "ac-transmission", week),
+    "Devoir · Contrôle",
+  );
+  assert.equal(
+    summarizeMaSemaineCourseWeek([testCp2, infoCp2, homeworkCp2], "ac-transmission", week),
+    "Devoir · Information · Contrôle",
+  );
+  assert.equal(
+    summarizeMaSemaineCourseWeek([homeworkCp2, extraHomework], "ac-transmission", week),
+    "Devoir",
+  );
+  assert.equal(summarizeMaSemaineCourseWeek([homeworkCp1], "ac-transmission", week), "");
+  assert.equal(summarizeMaSemaineCourseWeek([sameClassWrongCourse], "ac-transmission", week), "");
+  assert.equal(summarizeMaSemaineCourseWeek([], "ac-transmission", week), "");
+  assert.equal(summarizeMaSemaineCourseWeek([otherWeek], "ac-transmission", week), "");
+  assert.equal(
+    summarizeMaSemaineCourseWeek([otherTeacherInfo], "ac-transmission", week),
+    "Information",
+  );
+
+  const signals = maSemaineSignalsByCourse(
+    [
+      homeworkCp2,
+      draftHomework,
+      infoCp2,
+      testCp2,
+      homeworkCp1,
+      otherTeacherInfo,
+      otherWeek,
+      extraHomework,
+      draftInfo,
+      sameClassWrongCourse,
+    ],
+    MECAUTO_COURSES,
+    week,
+  );
+  assert.equal(signals["ac-electro"], "Devoir");
+  assert.equal(signals["ac-transmission"], "Devoir · Information · Contrôle");
+  assert.equal(signals["ac-chassis"], "Contrôle");
+  assert.equal(signals["ac-transmission"]?.includes("Exercice"), false);
+  assert.equal(Object.keys(signals).sort().join(","), "ac-chassis,ac-electro,ac-transmission");
+
+  const emptyWeek = maSemaineSignalsByCourse(MECAUTO_COURSES.length ? [homeworkCp2] : [], MECAUTO_COURSES, 99);
+  assert.equal(emptyWeek["ac-electro"], "");
+  assert.equal(emptyWeek["ac-transmission"], "");
+  assert.equal(emptyWeek["ac-chassis"], "");
+});
+
+test("Ma semaine — clic CP2, signaux précalculés, retour sans changer de semaine", async () => {
+  const opened = openCourseInWeekTarget(TRANSMISSION, 8);
+  assert.equal(opened.annualCourseId, "ac-transmission");
+  assert.equal(opened.branchLabel, "CP 2 Transmission");
+  assert.notEqual(opened.annualCourseId, ELECTRO.annualCourseId);
+  assert.notEqual(opened.annualCourseId, CHASSIS.annualCourseId);
+
+  const [semaine, page] = await Promise.all([
+    readFile(new URL("../web/app/components/ma-semaine-panel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(semaine, /weekSignals: Record<string, string>/);
+  assert.match(semaine, /weekSignals\[course\.annualCourseId\]/);
+  assert.match(semaine, /onOpenCourse\(course\)/);
+  assert.doesNotMatch(semaine, /summarizeMaSemaineCourseWeek/);
+  assert.doesNotMatch(semaine, /listComputedCourseSessions/);
+  assert.match(page, /maSemaineSignalsByCourse\(items, teacherCourses, selectedSchoolWeekNumber\)/);
+  assert.match(page, /weekSignals=\{maSemaineWeekSignals\}/);
+  assert.match(page, /function openCourseInWeek\(course: TeacherCourseWorkspaceEntry\)/);
+  assert.doesNotMatch(page, /listComputedCourseSessions/);
+  assert.match(page, /function closeClassNotebook\(\) \{\s*setOpenNotebookClassId\(null\);\s*setOpenNotebookCourse\(null\);/);
+  assert.doesNotMatch(page, /function closeClassNotebook\([\s\S]{0,220}setSelectedSchoolWeekNumber/);
 });
