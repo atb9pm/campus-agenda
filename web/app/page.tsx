@@ -1851,10 +1851,11 @@ export default function Home() {
         {activeSection === "ma-semaine" && !openNotebookClass && (
           <MaSemainePanel
             classes={assignedDisplaySetups}
+            courses={teacherCourses}
             schoolWeeks={schoolWeeksMemo}
             selectedSchoolWeekNumber={selectedSchoolWeekNumber}
             onSelectSchoolWeek={setSelectedSchoolWeekNumber}
-            onOpenClass={openClassNotebook}
+            onOpenCourse={openCourseInWeek}
           />
         )}
 

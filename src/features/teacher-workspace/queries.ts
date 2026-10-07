@@ -134,6 +134,15 @@ export function buildTeacherCourseWorkspace(
   return { schoolYearId, courses: entries };
 }
 
+export function teacherCoursesForClass(
+  courses: readonly TeacherCourseWorkspaceEntry[],
+  classId: string | null | undefined,
+): TeacherCourseWorkspaceEntry[] {
+  const wanted = classId?.trim() || "";
+  if (!wanted) return [];
+  return courses.filter((course) => course.classId === wanted);
+}
+
 /** Classes distinctes des AnnualCourse réellement attribués (ordre de « Mes cours »). */
 export function assignedSchoolClassIdsFromTeacherCourses(
   courses: TeacherCourseWorkspaceEntry[],

@@ -11,14 +11,19 @@ import {
   groupClassesByWeekday,
   type TeacherClassSetup,
 } from "@campus/features/teacher-setup";
-import { TEACHER_WEEK_EMPTY_CLASSES_MESSAGE } from "@campus/features/teacher-workspace";
+import {
+  TEACHER_WEEK_EMPTY_CLASSES_MESSAGE,
+  teacherCoursesForClass,
+  type TeacherCourseWorkspaceEntry,
+} from "@campus/features/teacher-workspace";
 
 interface MaSemainePanelProps {
   classes: TeacherClassSetup[];
+  courses: TeacherCourseWorkspaceEntry[];
   schoolWeeks: SchoolWeek[];
   selectedSchoolWeekNumber: number;
   onSelectSchoolWeek: (weekNumber: number) => void;
-  onOpenClass: (classSetup: TeacherClassSetup) => void;
+  onOpenCourse: (course: TeacherCourseWorkspaceEntry) => void;
 }
 
 function formatSchoolWeekHeading(week: SchoolWeek): string {
@@ -28,10 +33,11 @@ function formatSchoolWeekHeading(week: SchoolWeek): string {
 
 export function MaSemainePanel({
   classes,
+  courses,
   schoolWeeks,
   selectedSchoolWeekNumber,
   onSelectSchoolWeek,
-  onOpenClass,
+  onOpenCourse,
 }: MaSemainePanelProps) {
   const activeClasses = useMemo(
     () => classes.filter((entry) => entry.name.trim()),
@@ -93,28 +99,58 @@ export function MaSemainePanel({
               <div className="ma-semaine-class-grid">
                 {group.classes.map((entry) => {
                   const theme = resolveProfessionColorTheme(entry.professionPrefix, entry.name);
+                  const classCourses = teacherCoursesForClass(courses, entry.id);
+                  const uniqueCourse = classCourses.length === 1 ? classCourses[0] : null;
+                  const cardStyle = professionColorStyle(theme);
+                  const cardTitle = entry.programLabel || theme.legendLabel;
+                  const branches = classCourses.length ? (
+                    <span className="ma-semaine-class-branches">
+                      {classCourses.map((course) =>
+                        uniqueCourse ? (
+                          <span className="ma-semaine-branch-badge" key={course.annualCourseId}>
+                            {course.branchLabel}
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="ma-semaine-branch-badge"
+                            key={course.annualCourseId}
+                            aria-label={`Ouvrir ${course.branchLabel} dans le carnet`}
+                            onClick={() => onOpenCourse(course)}
+                          >
+                            {course.branchLabel}
+                          </button>
+                        ),
+                      )}
+                    </span>
+                  ) : (
+                    <span className="ma-semaine-no-branches">Branche du cours attribué</span>
+                  );
+                  if (uniqueCourse) {
+                    return (
+                      <button
+                        type="button"
+                        className="ma-semaine-class-card is-single-course"
+                        key={entry.id}
+                        style={cardStyle}
+                        title={cardTitle}
+                        onClick={() => onOpenCourse(uniqueCourse)}
+                      >
+                        <span className="ma-semaine-class-code">{entry.name}</span>
+                        {branches}
+                      </button>
+                    );
+                  }
                   return (
-                    <button
-                      type="button"
+                    <article
                       className="ma-semaine-class-card"
                       key={entry.id}
-                      style={professionColorStyle(theme)}
-                      title={entry.programLabel || theme.legendLabel}
-                      onClick={() => onOpenClass(entry)}
+                      style={cardStyle}
+                      title={cardTitle}
                     >
                       <span className="ma-semaine-class-code">{entry.name}</span>
-                      {entry.branchNames.length ? (
-                        <span className="ma-semaine-class-branches">
-                          {entry.branchNames.map((branch) => (
-                            <span className="ma-semaine-branch-badge" key={`${entry.id}-${branch}`}>
-                              {branch}
-                            </span>
-                          ))}
-                        </span>
-                      ) : (
-                        <span className="ma-semaine-no-branches">Branche du cours attribué</span>
-                      )}
-                    </button>
+                      {branches}
+                    </article>
                   );
                 })}
               </div>

@@ -15,6 +15,7 @@ export {
   displaySetupsFromAssignedCourses,
   formatTeacherCourseClassMeta,
   groupTeacherCoursesByClass,
+  teacherCoursesForClass,
   removeSetupPreferenceForCourse,
   resolveWorkspaceSchoolYearId,
   toDisplayClassSetup,

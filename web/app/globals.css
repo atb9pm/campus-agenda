@@ -1841,11 +1841,13 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .ma-semaine-day-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-bottom: 6px; border-bottom: 2px solid var(--navy); color: var(--navy); font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .ma-semaine-day-heading small { color: #8793a9; font-size: 9px; font-weight: 700; }
 .ma-semaine-class-grid { display: grid; gap: 12px; }
-.ma-semaine-class-card { display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 10px 12px; width: 100%; padding: 16px 18px; border: 1px solid var(--profession-ring, var(--line)); border-radius: 14px; background: var(--profession-wash, #fff); box-shadow: 0 8px 28px var(--profession-halo, rgba(18, 38, 63, .08)); color: inherit; text-align: left; cursor: pointer; }
+.ma-semaine-class-card { display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 10px 12px; width: 100%; padding: 16px 18px; border: 1px solid var(--profession-ring, var(--line)); border-radius: 14px; background: var(--profession-wash, #fff); box-shadow: 0 8px 28px var(--profession-halo, rgba(18, 38, 63, .08)); color: inherit; text-align: left; cursor: default; }
+.ma-semaine-class-card.is-single-course { cursor: pointer; }
 .ma-semaine-class-card:hover { box-shadow: 0 10px 34px var(--profession-halo-strong, rgba(18, 38, 63, .12)); }
 .ma-semaine-class-code { flex: 0 0 auto; color: var(--navy); font-size: 18px; font-weight: 800; letter-spacing: -.02em; }
 .ma-semaine-class-branches { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.ma-semaine-branch-badge { display: inline-flex; align-items: center; padding: 6px 12px; border: 1px solid var(--profession-ring, var(--line-strong)); border-radius: 8px; color: var(--profession-fg, var(--navy)); background: var(--profession-bg, #eef4fd); box-shadow: 0 2px 8px var(--profession-halo, rgba(18, 38, 63, .08)); font-size: 12px; font-weight: 700; }
+.ma-semaine-branch-badge { display: inline-flex; align-items: center; padding: 6px 12px; border: 1px solid var(--profession-ring, var(--line-strong)); border-radius: 8px; color: var(--profession-fg, var(--navy)); background: var(--profession-bg, #eef4fd); box-shadow: 0 2px 8px var(--profession-halo, rgba(18, 38, 63, .08)); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.ma-semaine-branch-badge:hover { filter: brightness(0.97); }
 .ma-semaine-no-branches { margin: 0; color: #8793a9; font-size: 10px; font-style: italic; }
 .admin-teacher-initials.is-profession-colored { color: var(--profession-fg, var(--navy)); background: var(--profession-bg, #eef4fd); }
 .admin-profession-card.has-profession-accent, .admin-teacher-card.has-profession-accent { border-left: 4px solid var(--profession-accent, var(--line)); }
