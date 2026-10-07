@@ -4,7 +4,11 @@ import test from "node:test";
 process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
 
 import { hashPassword } from "../src/lib/auth/password.ts";
-import { exportCampusSnapshot, restoreCampusSnapshot } from "../src/lib/persistence/campus-backup.ts";
+import {
+  exportCampusSnapshot,
+  fillMissingAgendaItemDates,
+  restoreCampusSnapshot,
+} from "../src/lib/persistence/campus-backup.ts";
 import { restoreAgendaSnapshot } from "../src/lib/persistence/backup.ts";
 import {
   canonicalizeCampusDump,
@@ -47,6 +51,7 @@ import {
   resetMemoryPedagogicalPathStore,
 } from "../src/lib/persistence/memory-pedagogical-path-store.ts";
 import { resetMemoryLegacySchool } from "../src/lib/persistence/memory-legacy-school.ts";
+import { isoDateForSchoolWeekDay } from "../src/features/school-days/index.ts";
 import { DEMO_PROTOTYPE_ITEMS } from "../src/features/agenda/demo-items.ts";
 import { DEMO_CURRENT_TEACHER_ID } from "../src/features/classes/index.ts";
 import { createAnnualCourse, assignTeacherToCourse } from "../src/features/annual-courses/index.ts";
@@ -564,5 +569,87 @@ test("backup v4 — dump SQL couvre exactement CAMPUS_BACKUP_INSERT_ORDER", asyn
   await seedDemoDatabase(db);
   const dump = await dumpCampusTables(db);
   assert.deepEqual(Object.keys(dump), [...CAMPUS_BACKUP_INSERT_ORDER]);
+});
+
+test("backup v4 — les dates des contrôles sont exportées", async () => {
+  const dump = tablesWithAdmin({
+    school_years: [
+      {
+        id: "year-1",
+        label: "2026-2027",
+        status: "active",
+        starts_on: "2026-08-17",
+        ends_on: "2027-07-02",
+      },
+    ],
+    school_weeks: [
+      { school_year_id: "year-1", week_number: 12, week_kind: "A", monday: "2026-11-02" },
+    ],
+    classrooms: [{ id: "classe-1", name: "MECAUTO3A", program_label: "TMA", access_code_hint: "x" }],
+    subjects: [{ id: "subj-1", classroom_id: "classe-1", name: "Transmission" }],
+    agenda_items: [
+      {
+        id: 1,
+        classroom_id: "classe-1",
+        subject_id: "subj-1",
+        author_teacher_id: "admin-1",
+        day: 3,
+        hour: 8,
+        week_offset: 0,
+        school_week_number: 12,
+        type: "TEST",
+        title: "Contrôle CP2",
+        detail: "",
+        school_year_id: "year-1",
+        course_session_date: null,
+      },
+      {
+        id: 2,
+        classroom_id: "classe-1",
+        subject_id: "subj-1",
+        author_teacher_id: "admin-1",
+        day: 0,
+        hour: 8,
+        week_offset: 0,
+        school_week_number: 12,
+        type: "TEST",
+        title: "Contrôle CP1",
+        detail: "",
+        school_year_id: "year-1",
+        course_session_date: "2026-11-02",
+      },
+    ],
+  });
+  fillMissingAgendaItemDates(dump);
+  assert.equal(dump.agenda_items[0]?.course_session_date, "2026-11-05");
+  assert.equal(dump.agenda_items[1]?.course_session_date, "2026-11-02");
+
+  resetMemoryWorld();
+  const deps = memoryDeps();
+  await populateStructured(deps, DEMO_CURRENT_TEACHER_ID);
+  const year = await deps.years.getActiveSchoolYear();
+  assert.ok(year);
+  const week = year.weeks.find((entry) => entry.number === 12);
+  assert.ok(week);
+  await deps.agenda.createAgendaItem({
+    classroomId: "classe-demo-tma-2a",
+    subjectId: "subject-demo-moteur-2a",
+    authorTeacherId: DEMO_CURRENT_TEACHER_ID,
+    day: 3,
+    hour: 8,
+    weekOffset: 0,
+    schoolWeekNumber: 12,
+    type: "TEST",
+    title: "Contrôle export",
+    detail: "Date manquante en base",
+    schoolYearId: year.id,
+    courseSessionDate: null,
+  });
+  const snapshot = await exportCampusSnapshot(deps);
+  const exported = snapshot.tables.agenda_items?.find((row) => row.title === "Contrôle export");
+  assert.equal(exported?.type, "TEST");
+  assert.equal(exported?.course_session_date, isoDateForSchoolWeekDay([week], 12, 3));
+  const listed = snapshot.items.find((item) => item.title === "Contrôle export");
+  assert.equal(listed?.courseSessionDate, exported?.course_session_date);
 });
 

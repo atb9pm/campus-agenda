@@ -9,6 +9,7 @@ import {
   getTeacherById,
 } from "@campus/features/classes";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
+import { formatSwissDate } from "@campus/features/course-sessions/format.ts";
 import {
   exportSchoolYear,
   fetchAgendaItemsForYear,
@@ -236,6 +237,7 @@ export function MultiYearOperationsPanel({
                 <thead>
                   <tr>
                     <th scope="col">Semaine</th>
+                    <th scope="col">Date</th>
                     <th scope="col">Branche</th>
                     <th scope="col">Type</th>
                     <th scope="col">Titre</th>
@@ -245,12 +247,13 @@ export function MultiYearOperationsPanel({
                 <tbody>
                   {archivedItems.length === 0 && (
                     <tr>
-                      <td colSpan={5}>Aucune publication pour cette classe et cette année.</td>
+                      <td colSpan={6}>Aucune publication pour cette classe et cette année.</td>
                     </tr>
                   )}
                   {archivedItems.map((item) => (
                     <tr key={item.id}>
                       <td>S{item.schoolWeekNumber}</td>
+                      <td>{item.courseSessionDate ? formatSwissDate(item.courseSessionDate) : "—"}</td>
                       <td>{getSubjectById(DEMO_CATALOG, item.subjectId)?.name ?? item.subjectId}</td>
                       <td>{item.type}</td>
                       <td>{item.title}</td>

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { DEMO_PROTOTYPE_ITEMS } from "../src/features/agenda/demo-items.ts";
+import { readFile } from "node:fs/promises";
+
+import { DEMO_PROTOTYPE_ITEMS, type PrototypeAgendaItem } from "../src/features/agenda/demo-items.ts";
 import { DEMO_CATALOG, TEACHER_DEMO_ID } from "../src/features/classes/index.ts";
 import { replaceTeacherMemberships } from "../src/features/memberships/replacement.ts";
 import { filterActiveMemberships, isMembershipActiveAt } from "../src/features/memberships/validity.ts";
@@ -113,7 +115,57 @@ test("phase 2.3 — export annuel JSON et CSV", async () => {
 
   const csv = schoolYearExportToCsv(snapshot);
   assert.match(csv, /^id,classroomId/);
+  assert.match(csv, /courseSessionDate/);
   assert.match(csv, /\n/);
+});
+
+test("export annuel — les dates calendaires des contrôles sont exportées", async () => {
+  const weeks = [{ number: 12, monday: "2026-11-02" }];
+  const derived: PrototypeAgendaItem = {
+    id: 101,
+    classroomId: "classe-demo-tma-2a",
+    subjectId: "subject-demo-chassis-2a",
+    authorTeacherId: "teacher-demo-current",
+    day: 3,
+    hour: 8,
+    weekOffset: 0,
+    schoolWeekNumber: 12,
+    type: "TEST",
+    title: "Contrôle transmission",
+    detail: "Capteurs",
+    schoolYearId: ARCHIVED_YEAR_ID,
+    courseSessionDate: null,
+  };
+  const stored: PrototypeAgendaItem = {
+    ...derived,
+    id: 102,
+    title: "Contrôle châssis",
+    courseSessionDate: "2026-11-05",
+  };
+  resetMemoryAgendaStore([derived, stored]);
+  const snapshot = await exportSchoolYearSnapshot(
+    getMemoryAgendaStore(),
+    ARCHIVED_YEAR_ID,
+    "2025-2026",
+    weeks,
+  );
+  assert.equal(snapshot.items.find((item) => item.id === 101)?.courseSessionDate, "2026-11-05");
+  assert.equal(snapshot.items.find((item) => item.id === 102)?.courseSessionDate, "2026-11-05");
+  const csv = schoolYearExportToCsv(snapshot);
+  assert.match(csv, /^id,classroomId.*courseSessionDate/);
+  assert.match(csv, /101,classe-demo-tma-2a,.*12,3,2026-11-05,8,TEST,Contrôle transmission/);
+  assert.match(csv, /102,classe-demo-tma-2a,.*12,3,2026-11-05,8,TEST,Contrôle châssis/);
+
+  const [route, panel, agenda] = await Promise.all([
+    readFile(new URL("../web/app/api/admin/school-year/[id]/export/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/components/multi-year-operations-panel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/api/agenda/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(route, /exportSchoolYearSnapshot\(store, id, year\.label, year\.weeks\)/);
+  assert.match(panel, /<th scope="col">Date<\/th>/);
+  assert.match(panel, /item\.courseSessionDate \? formatSwissDate\(item\.courseSessionDate\)/);
+  assert.match(agenda, /isoDateForSchoolWeekDay\(activeYear\.weeks, schoolWeekNumber, day\)/);
+  assert.match(agenda, /courseSessionDate: resolveAgendaItemDate\(item, year\.weeks\)/);
 });
 
 test("phase 2.3 — statistiques de charge par classe et année", () => {
