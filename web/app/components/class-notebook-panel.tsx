@@ -27,7 +27,7 @@ import {
   formatWeekColumnSubtitleFromSessions,
   insertBlockAt,
   isCarnetOwnedPublication,
-  isCourseControlSlotAllowed,
+  courseSessionForControlSlot,
   isEmptyRichDoc,
   isPublicationLine,
   lineIndexAfterMove,
@@ -87,7 +87,12 @@ interface ClassNotebookPanelProps {
   ) => Promise<void>;
   onSetWeekPublicationVisibility: (schoolWeekNumber: number, studentVisible: boolean) => Promise<void>;
   onMovePublication: (itemId: number, schoolWeekNumber: number, day?: number) => Promise<void>;
-  onSaveControl: (input: { schoolWeekNumber: number; day: number; title: string }) => Promise<void>;
+  onSaveControl: (input: {
+    schoolWeekNumber: number;
+    day: number;
+    title: string;
+    courseSessionKey?: string;
+  }) => Promise<void>;
   onDeleteControl: (itemId: number) => Promise<void>;
   onPreviewStudent?: () => void;
 }
@@ -1409,12 +1414,17 @@ export function ClassNotebookPanel({
         controls={classControls}
         onClose={() => setControlsOpen(false)}
         onSave={async (input) => {
-          if (
-            structuredCourse &&
-            courseSessions &&
-            !isCourseControlSlotAllowed(courseSessions, input.schoolWeekNumber, input.day)
-          ) {
-            throw new Error("Ce cours n’a pas de séance à cette date.");
+          if (structuredCourse && courseSessions) {
+            const session = courseSessionForControlSlot(
+              courseSessions,
+              input.schoolWeekNumber,
+              input.day,
+            );
+            if (!session) {
+              throw new Error("Ce cours n’a pas de séance à cette date.");
+            }
+            await onSaveControl({ ...input, courseSessionKey: session.key });
+            return;
           }
           await onSaveControl(input);
         }}

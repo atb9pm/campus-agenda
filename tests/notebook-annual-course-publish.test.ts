@@ -273,6 +273,7 @@ test("version 2.52.2 — AnnualCourse attribué suffit pour publier, sans migrat
     readFile(new URL("../web/app/api/agenda/[id]/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(page, /createNotebookPublicationApi/);
+  assert.match(page, /createTeacherControlApi/);
   assert.match(page, /workspaceAllowsNotebookPublish/);
   assert.match(page, /notebookPublishAnnualCourseId/);
   assert.doesNotMatch(page, /notebookCanPublish = Boolean\(notebookClassroomId && notebookSubjectId\)/);

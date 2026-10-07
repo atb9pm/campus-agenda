@@ -45,7 +45,7 @@ import {
   changeTeacherPasswordApi,
   createAgendaItemApi,
   createNotebookPublicationApi,
-  ensureNotebookRuntimeApi,
+  createTeacherControlApi,
   ControlCoordinationRequiredError,
   deleteAgendaItemApi,
   fetchAgendaItems,
@@ -297,8 +297,10 @@ export default function Home() {
     createEmptyNotesDocument(),
   );
   const [pendingNotebookControl, setPendingNotebookControl] = useState<{
-    classroomId: string;
-    subjectId: string;
+    classroomId?: string;
+    subjectId?: string;
+    annualCourseId?: string;
+    courseSessionKey?: string;
     schoolWeekNumber: number;
     day: number;
     title: string;
@@ -1224,14 +1226,29 @@ export default function Home() {
 
   async function performNotebookControl(
     input: {
-      classroomId: string;
-      subjectId: string;
+      classroomId?: string;
+      subjectId?: string;
+      annualCourseId?: string;
+      courseSessionKey?: string;
       schoolWeekNumber: number;
       day: number;
       title: string;
     },
     confirmCoordination = false,
   ) {
+    if (input.annualCourseId?.trim() && input.courseSessionKey?.trim()) {
+      const created = await createTeacherControlApi({
+        annualCourseId: input.annualCourseId,
+        courseSessionKey: input.courseSessionKey,
+        title: input.title.trim(),
+        detail: "",
+        confirmCoordination,
+      });
+      setItems((previous) => upsertAgendaItem(previous, created.item));
+      showNotice("Contrôle planifié.");
+      return;
+    }
+    if (!input.classroomId || !input.subjectId) return;
     const created = await createAgendaItemApi({
       classroomId: input.classroomId,
       subjectId: input.subjectId,
@@ -1370,14 +1387,29 @@ export default function Home() {
     setItems((previous) => previous.filter((item) => item.id !== itemId));
   }
 
-  async function notebookSaveControl(input: { schoolWeekNumber: number; day: number; title: string }) {
-    let classroomId = notebookClassroomId;
-    let subjectId = notebookSubjectId;
+  async function notebookSaveControl(input: {
+    schoolWeekNumber: number;
+    day: number;
+    title: string;
+    courseSessionKey?: string;
+  }) {
+    const classroomId = notebookClassroomId;
+    const subjectId = notebookSubjectId;
     try {
       if (notebookPublishAnnualCourseId) {
-        const ensured = await ensureNotebookRuntimeApi(notebookPublishAnnualCourseId);
-        classroomId = ensured.classroomId;
-        subjectId = ensured.subjectId;
+        const courseSessionKey = input.courseSessionKey?.trim() ?? "";
+        if (!courseSessionKey) {
+          showNotice("Ce cours n’a pas de séance à cette date.");
+          return;
+        }
+        await performNotebookControl({
+          annualCourseId: notebookPublishAnnualCourseId,
+          courseSessionKey,
+          schoolWeekNumber: input.schoolWeekNumber,
+          day: input.day,
+          title: input.title,
+        });
+        return;
       }
       if (!classroomId || !subjectId) return;
       const alert = evaluateThirdTestAlert(items, catalogFromRuntime(runtimeClassrooms), {
@@ -1411,13 +1443,19 @@ export default function Home() {
             teacherName: entry.teacherName,
           })),
         });
-        if (classroomId && subjectId) {
-          setPendingNotebookControl({
-            classroomId,
-            subjectId,
-            ...input,
-          });
-        }
+        setPendingNotebookControl(
+          notebookPublishAnnualCourseId && input.courseSessionKey
+            ? {
+                annualCourseId: notebookPublishAnnualCourseId,
+                courseSessionKey: input.courseSessionKey,
+                schoolWeekNumber: input.schoolWeekNumber,
+                day: input.day,
+                title: input.title,
+              }
+            : classroomId && subjectId
+              ? { classroomId, subjectId, ...input }
+              : null,
+        );
         return;
       }
       showNotice(error instanceof Error ? error.message : "Publication impossible.");

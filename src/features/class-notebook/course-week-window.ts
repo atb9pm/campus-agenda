@@ -124,7 +124,19 @@ export function isCourseControlSlotAllowed(
   schoolWeekNumber: number,
   dayIndex: number,
 ): boolean {
-  return controlDayOptionsForCourseWeek(sessions, schoolWeekNumber).some((option) => option.dayIndex === dayIndex);
+  return courseSessionForControlSlot(sessions, schoolWeekNumber, dayIndex) != null;
+}
+
+/** Vraie CourseSession du cours pour une case Carnet (semaine + jour). Jamais une clé reconstruite. */
+export function courseSessionForControlSlot(
+  sessions: readonly CourseSession[],
+  schoolWeekNumber: number,
+  dayIndex: number,
+): CourseSession | null {
+  const matches = courseSessionsForWeek(sessions, schoolWeekNumber).filter(
+    (session) => session.dayOfWeek - 1 === dayIndex,
+  );
+  return matches.length === 1 ? matches[0]! : null;
 }
 
 export function moveTargetSchoolWeeks(
