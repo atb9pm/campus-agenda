@@ -1,51 +1,36 @@
 # Architecture fonctionnelle
 
-## Modèle central
+Campus Agenda est une application web. L’autorité des mutations est l’**API serveur**. Les `CourseSession` sont **calculées**, jamais persistées en table SQL.
 
-La **classe** est l'espace partagé. Chaque élément d'agenda est rattaché à une classe, une branche et un enseignant auteur.
+## Modèle vivant
 
 ```text
-Classe
-├── Enseignants (plusieurs)
-│   └── Branches enseignées
-├── Élèves anonymisés (consultation)
-└── Agenda partagé
-    ├── Devoir
-    ├── Contrôle
-    └── Information
+SchoolYear
+  → SchoolClass
+    → AnnualCourse
+      → CourseScheduleSlot
+        → CourseSession (calculée : année + cours + date)
+          → agenda_items (devoirs, informations, contrôles)
 ```
 
-## Vues
+- **AnnualCourse** : cours annuel (classe + CTX + année). L’enseignant travaille dessus.
+- **CourseScheduleSlot** : créneau d’horaire du cours.
+- **CourseSession** : séance réelle projetée sur le calendrier scolaire (A/B, vacances). Clé `schoolYearId|annualCourseId|date`. Pas de table SQL.
+- **agenda_items** : publications et contrôles, éventuellement rattachés à une CourseSession (`courseSessionKey`, `courseSessionDate`).
 
-### Enseignant
+## Vues actuelles
 
-- **Mes éléments**, vue par défaut : publications dont l'enseignant est l'auteur.
-- **Toute la classe** : publications de tous les enseignants de la classe, en lecture seule hors éléments personnels.
-- Filtres possibles : classe, branche, type et période.
+| Vue | Rôle |
+|---|---|
+| **Ma semaine** | Entrée enseignant. Cours attribués, ouverture d’un AnnualCourse. |
+| **Mes cours** | Liste des AnnualCourse de l’année. |
+| **Carnet** | Contexte d’un cours annuel : notes, devoirs, informations. |
+| **Contrôles** | Planification et déplacement des tests vers une CourseSession. |
+| **Élève** | Agenda de la classe, accès par code. |
+| **Administration** | Année, classes, enseignants, accès élèves, sauvegardes. |
 
-### Élève
-
-- Agenda global de sa classe, toutes branches confondues.
-- Consultation uniquement.
-- Accès par identifiant anonyme ou code géré hors du dépôt.
-
-## Entités prévues
-
-- `Teacher` : compte authentifié d'un enseignant.
-- `Classroom` : espace partagé d'une classe.
-- `Subject` : branche enseignée dans une classe.
-- `Membership` : rattachement d'un enseignant à une classe et à ses branches.
-- `StudentAccess` : accès anonyme et limité à une classe.
-- `AgendaItem` : publication typée `HOMEWORK`, `TEST` ou `INFORMATION`.
+Ma semaine ouvre un **AnnualCourse** (jamais le premier cours d’une classe multi-cours par défaut).
 
 ## Autorisations
 
-| Action | Élève | Enseignant rattaché | Auteur |
-|---|---:|---:|---:|
-| Consulter l'agenda de la classe | Oui | Oui | Oui |
-| Ajouter un élément | Non | Oui | Oui |
-| Modifier ou supprimer l'élément d'un autre | Non | Non | — |
-| Modifier ou supprimer son élément | Non | — | Oui |
-
-Les autorisations devront être vérifiées côté serveur pour chaque opération.
-
+Les droits (auteur, attribution, admin, MFA) sont vérifiés côté serveur pour chaque mutation. Le client ne choisit pas une date ou une branche à la place du modèle métier.

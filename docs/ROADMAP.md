@@ -1,38 +1,48 @@
 # Feuille de route
 
-## 0.1 — Socle du projet
+Les étapes 0.1 à 1.0 sont **réalisées**. Elles décrivent l’historique du socle, pas l’état cible actuel.
+
+## Historique réalisé
+
+### 0.1 — Socle du projet
 
 Structure, architecture, règles de contribution et protection des données.
 
-## 0.2 — Classes et branches
+### 0.2 — Classes et branches
 
 Modèle de classe partagée, rattachement des enseignants et gestion des branches.
 
-## 0.3 — Espace enseignant
+### 0.3 — Espace enseignant
 
-Navigation par classe et vue par défaut « Mes éléments ».
+Navigation enseignant (aujourd’hui : **Ma semaine** en entrée).
 
-## 0.4 — Publications
+### 0.4 — Publications
 
-Création, modification et suppression des seuls types validés : Devoir, Contrôle et Information.
+Devoir, Contrôle et Information.
 
-## 0.5 — Agenda mutualisé
+### 0.5 — Agenda mutualisé
 
-Vue « Toute la classe », filtres et lecture globale de la charge de travail.
+Charge de classe et coordination des contrôles.
 
-## 0.6 — Vue élève
+### 0.6 — Vue élève
 
-Consultation anonyme de l'agenda complet de la classe.
+Consultation par code d’accès.
 
-## 0.7 — Persistance et authentification
+### 0.7 — Persistance et authentification
 
-Base de données, comptes enseignants, contrôles d'accès et gestion sécurisée des secrets.
+SQLite, comptes enseignants, contrôles d’accès.
 
-## 0.8 — Préparation production
+### 0.8 — Préparation production
 
-Tests de bout en bout, accessibilité renforcée, sauvegardes de démonstration, observabilité et documentation d'exploitation.
+Tests, sauvegardes, observabilité, exploitation.
 
-## 1.0 — Première version utilisable
+### 1.0 — Première version utilisable
 
-Persistance D1/SQLite, sélection automatique du store, documentation de déploiement Cloudflare et parcours complet prêt pour une mise en service de démonstration.
+Parcours enseignant / élève / admin prêt pour une mise en service.
 
+## État actuel
+
+- Exploitation scolaire réelle sur **Infomaniak**, persistance **SQLite**.
+- Modèle **AnnualCourse** ; **CourseSession** calculées.
+- **Carnet** par cours annuel.
+- Vue d’entrée enseignant : **Ma semaine**.

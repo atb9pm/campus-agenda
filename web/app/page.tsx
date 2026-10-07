@@ -2,12 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type PrototypeAgendaItem } from "@campus/features/agenda";
-import {
-  DEMO_CATALOG,
-  DEMO_CURRENT_TEACHER_ID,
-  getSubjectsForClassroom,
-  type ClassroomCatalog,
-} from "@campus/features/classes";
+import type { ClassroomCatalog } from "@campus/features/classes";
 import {
   TEACHER_NAV_ICONS,
   TEACHER_NAV_LABELS,
@@ -18,9 +13,7 @@ import {
 import {
   buildStudentCourseDaySections,
   filterItemsForCourseDay,
-  findStudentAccessForClassroom,
   getStudentAgendaItems,
-  getStudentClassroom,
   groupControlPlanning,
   msUntilNextLocalMidnight,
   nextControlHeadlineForEntries,
@@ -241,7 +234,7 @@ function sectionDescription(activeSection: TeacherNavSection, isStudentView: boo
 }
 
 export default function Home() {
-  const [currentTeacherId, setCurrentTeacherId] = useState(DEMO_CURRENT_TEACHER_ID);
+  const [currentTeacherId, setCurrentTeacherId] = useState("");
   const [authenticatedTeacher, setAuthenticatedTeacher] = useState<AuthenticatedTeacherIdentity | null>(null);
   const [runtimeClassrooms, setRuntimeClassrooms] = useState<NotebookRuntimeClassroom[]>([]);
   const teacherClassrooms = useMemo(() => {
@@ -636,12 +629,15 @@ export default function Home() {
 
   const isStudentView = appMode === "student" && studentSession !== null;
   const studentClassroom = studentSession
-    ? (getStudentClassroom(DEMO_CATALOG, studentSession) ?? {
+    ? {
         id: studentSession.classroomId,
-        name: studentClassroomName || studentSession.classroomId,
+        name:
+          studentClassroomName
+          || runtimeClassrooms.find((entry) => entry.id === studentSession.classroomId)?.name
+          || studentSession.classroomId,
         programLabel: "",
         accessCodeHint: "",
-      })
+      }
     : null;
 
   const selectedClassroom = isStudentView
@@ -831,7 +827,7 @@ export default function Home() {
         annualCourseId: subject.annualCourseId ?? null,
       }));
     }
-    return getSubjectsForClassroom(DEMO_CATALOG, studentSession.classroomId);
+    return [];
   }, [studentSession, runtimeClassrooms, agendaSubjects]);
 
   const studentControlCatalog = useMemo((): ClassroomCatalog => {
@@ -851,7 +847,7 @@ export default function Home() {
     }
     return catalogFromRuntime(runtimeClassrooms).classrooms.length
       ? catalogFromRuntime(runtimeClassrooms)
-      : DEMO_CATALOG;
+      : EMPTY_CLASSROOM_CATALOG;
   }, [studentSession, studentClassroomSubjects, studentClassroomName, runtimeClassrooms]);
 
   const studentFutureTests = useMemo(() => {
@@ -907,12 +903,22 @@ export default function Home() {
   }
 
   function enterTeacherPreview() {
-    const access = findStudentAccessForClassroom(DEMO_CATALOG, selectedClassroomId);
-    if (!access) {
-      showNotice("Aucun accès élève de démonstration pour cette classe.");
+    const classroomId = notebookClassroomId || selectedClassroomId;
+    const classroom =
+      runtimeClassrooms.find((entry) => entry.id === classroomId)
+      ?? teacherClassrooms.find((entry) => entry.id === classroomId)
+      ?? null;
+    if (!classroom) {
+      showNotice("Aucune classe.");
       return;
     }
+    const access = {
+      id: `preview:${classroom.id}`,
+      classroomId: classroom.id,
+      label: "aperçu",
+    };
     setStudentSession(access);
+    setStudentClassroomName(classroom.name);
     setStudentEntry("teacher-preview");
     setAppMode("student");
     setStudentCourseDayKey(null);
@@ -1883,7 +1889,7 @@ export default function Home() {
           />
         )}
 
-        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA {APP_VERSION}</p>
+        <p className="prototype-label">CAMPUS AGENDA {APP_VERSION}</p>
       </main>
 
       

@@ -1,47 +1,40 @@
 # Campus Agenda
 
-Application web d'agenda scolaire pensée pour plusieurs enseignants et plusieurs classes.
+Application web d’agenda scolaire pour enseignants et classes.
 
-## Principes du produit
+## Production
 
-- La classe est l'espace partagé central.
-- Un enseignant peut intervenir dans plusieurs classes et plusieurs branches.
-- L'élève consulte l'agenda global de sa classe, toutes branches confondues.
-- L'enseignant voit par défaut ses propres publications et peut afficher toute la classe.
-- Le menu d'ajout contient uniquement : **Devoir**, **Contrôle** et **Information**.
-- Seul l'auteur d'un élément peut le modifier ou le supprimer ; les autres enseignants le consultent.
+- Hébergement **Infomaniak** (`campusagenda.ch`)
+- Persistance **SQLite**
+- Authentification enseignant, consultation élève par code
 
-## État du projet
+## Espace enseignant
 
-Le dépôt contient le socle documentaire ainsi qu'un prototype web interactif prêt pour une mise en service de démonstration (persistance SQLite/D1). Aucun jeu de données réel, aucun compte d'élève et aucun secret ne doivent être enregistrés dans GitHub.
+- **Ma semaine** : vue d’entrée, cours attribués (AnnualCourse)
+- **Mes cours** : liste des cours de l’année
+- **Carnet** : publications d’un cours annuel
+- **Contrôles** : planification des tests
+- **Administration** : année scolaire, classes, comptes, accès élèves
 
-## Structure
+L’enseignant travaille sur un **AnnualCourse**, jamais uniquement sur une classe.
 
-```text
-docs/            Architecture, sécurité et feuille de route
-src/
-  app/           Initialisation et navigation de l'application
-  components/    Composants d'interface partagés
-  features/      Fonctionnalités métier
-  lib/           Services et utilitaires communs
-  types/         Types du domaine
-tests/           Tests automatisés
-data/            Documentation locale uniquement ; contenu ignoré par Git
-web/             Prototype web interactif et configuration d'hébergement
+## Vue élève
+
+Consultation de l’agenda de la classe, toutes branches confondues, via un code d’accès.
+
+## Développement
+
+```bash
+cp .env.example .env.local
+cd web && pnpm install && pnpm dev
 ```
 
-## Démarrage du développement
-
-1. Choisir et documenter la pile technique avant d'ajouter ses dépendances.
-2. Copier `.env.example` vers `.env.local` et ne jamais versionner ce dernier.
-3. Utiliser uniquement des données fictives et manifestement synthétiques pour les tests.
-4. Créer un commit par changement cohérent et tenir `CHANGELOG.md` à jour pour les versions.
+Données de démonstration (`DEMO_CATALOG`) : tests, fixtures et seed locaux uniquement. Jamais une liste de production.
 
 ## Documentation
 
-- [Architecture fonctionnelle](docs/ARCHITECTURE.md)
-- [Sécurité et données](docs/SECURITY.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Sécurité](docs/SECURITY.md)
 - [Feuille de route](docs/ROADMAP.md)
 - [Exploitation](docs/OPERATIONS.md)
-- [Gestion des versions](docs/VERSIONING.md)
-- [Guide de contribution](CONTRIBUTING.md)
+- [Déploiement Infomaniak](docs/infomaniak-deploy.md)
