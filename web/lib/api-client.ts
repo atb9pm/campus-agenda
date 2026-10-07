@@ -404,6 +404,33 @@ export interface CourseTimelinePublicationSummary {
   type: AgendaItemType;
 }
 
+export async function fetchTeacherNotebookExportApi(input: {
+  annualCourseId: string;
+  includePublications: boolean;
+  includeControls: boolean;
+  includeTeacherNotes: boolean;
+  includeDrafts: boolean;
+  period: "year" | "semester-1" | "semester-2";
+  layout: "summary" | "detailed";
+  coverPage: boolean;
+}): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch("/api/teacher/notebook-export", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!response.ok || !contentType.includes("application/pdf")) {
+    const payload = await parseJson<{ ok?: boolean; reason?: string }>(response);
+    throw new Error(payload.reason ?? "Impossible de générer le PDF. Veuillez réessayer.");
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const matched = disposition.match(/filename="([^"]+)"/);
+  return { blob, filename: matched?.[1] ?? "CampusAgenda_carnet.pdf" };
+}
+
 export async function fetchTeacherCourseTimelineApi(
   annualCourseId: string,
   signal?: AbortSignal,
