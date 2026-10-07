@@ -188,6 +188,7 @@ export {
   formatControlSessionDayLabel,
   formatWeekColumnSubtitleFromSessions,
   isCourseControlSlotAllowed,
+  publicationDayIndexForCourseWeek,
   moveTargetSchoolWeeks,
   shiftEligibleCourseWeek,
   snapToEligibleCourseWeek,

@@ -35,6 +35,7 @@ import {
   moveLineWithinDoc,
   moveTargetSchoolWeeks,
   moveWeekNote,
+  publicationDayIndexForCourseWeek,
   rememberRichClip,
   setWeekRichNote,
   shiftEligibleCourseWeek,
@@ -75,10 +76,14 @@ interface ClassNotebookPanelProps {
   onShiftWeeks: (direction: -1 | 1) => void;
   onCenterWeekChange: (weekNumber: number) => void;
   onNotesChange: (document: ClassNotesDocument) => void;
-  onCreatePublication: (schoolWeekNumber: number, text: string) => Promise<void>;
-  onSaveWeekPublication: (schoolWeekNumber: number, doc: CampusRichDoc, options?: { studentVisible?: boolean }) => Promise<void>;
+  onCreatePublication: (schoolWeekNumber: number, text: string, day?: number) => Promise<void>;
+  onSaveWeekPublication: (
+    schoolWeekNumber: number,
+    doc: CampusRichDoc,
+    options?: { studentVisible?: boolean; day?: number },
+  ) => Promise<void>;
   onSetWeekPublicationVisibility: (schoolWeekNumber: number, studentVisible: boolean) => Promise<void>;
-  onMovePublication: (itemId: number, schoolWeekNumber: number) => Promise<void>;
+  onMovePublication: (itemId: number, schoolWeekNumber: number, day?: number) => Promise<void>;
   onSaveControl: (input: { schoolWeekNumber: number; day: number; title: string }) => Promise<void>;
   onDeleteControl: (itemId: number) => Promise<void>;
   onPreviewStudent?: () => void;
@@ -140,10 +145,10 @@ export function ClassNotebookPanel({
   onShiftWeeks,
   onCenterWeekChange,
   onNotesChange,
-  onCreatePublication,
-  onSaveWeekPublication,
+  onCreatePublication: persistCreatePublication,
+  onSaveWeekPublication: persistSaveWeekPublication,
   onSetWeekPublicationVisibility,
-  onMovePublication,
+  onMovePublication: persistMovePublication,
   onSaveControl,
   onDeleteControl,
   onPreviewStudent,
@@ -242,6 +247,42 @@ export function ClassNotebookPanel({
     }
     onShiftWeeks(direction);
   }
+
+  const publicationDayForWeek = useCallback(
+    (weekNumber: number, existingDay?: number | null): number | undefined => {
+      if (!structuredCourse || courseSessions == null || sessionsLoading) return undefined;
+      return publicationDayIndexForCourseWeek(courseSessions, weekNumber, existingDay) ?? undefined;
+    },
+    [courseSessions, sessionsLoading, structuredCourse],
+  );
+
+  const onCreatePublication = useCallback(
+    (schoolWeekNumber: number, text: string) => {
+      return persistCreatePublication(schoolWeekNumber, text, publicationDayForWeek(schoolWeekNumber));
+    },
+    [persistCreatePublication, publicationDayForWeek],
+  );
+
+  const onSaveWeekPublication = useCallback(
+    (schoolWeekNumber: number, doc: CampusRichDoc, options?: { studentVisible?: boolean }) => {
+      const existing = items.find(
+        (item) => item.schoolWeekNumber === schoolWeekNumber && isCarnetOwnedPublication(item),
+      );
+      return persistSaveWeekPublication(schoolWeekNumber, doc, {
+        ...options,
+        day: publicationDayForWeek(schoolWeekNumber, existing?.day),
+      });
+    },
+    [items, persistSaveWeekPublication, publicationDayForWeek],
+  );
+
+  const onMovePublication = useCallback(
+    (itemId: number, schoolWeekNumber: number) => {
+      const existing = items.find((item) => item.id === itemId);
+      return persistMovePublication(itemId, schoolWeekNumber, publicationDayForWeek(schoolWeekNumber, existing?.day));
+    },
+    [items, persistMovePublication, publicationDayForWeek],
+  );
 
   const classControls = useMemo(
     () =>

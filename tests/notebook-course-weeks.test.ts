@@ -12,7 +12,9 @@ import {
   formatWeekColumnSubtitleFromSessions,
   isCourseControlSlotAllowed,
   listWeekNotes,
+  publicationDayIndexForCourseWeek,
   moveTargetSchoolWeeks,
+  weekdayToCourseDayIndex,
   shiftEligibleCourseWeek,
   snapToEligibleCourseWeek,
   visibleCourseWeeks,
@@ -22,6 +24,8 @@ import {
 import type { CourseScheduleSlot, CourseWeekKind, CourseWeekday } from "../src/features/course-schedule/types.ts";
 import { computeCourseSessions } from "../src/features/course-sessions/index.ts";
 import type { SchoolWeekEntry } from "../src/features/school-year/types.ts";
+import { filterItemsForCourseDay } from "../src/features/student/index.ts";
+import type { PrototypeAgendaItem } from "../src/features/agenda/demo-items.ts";
 import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 
 const YEAR_N = "SY-2026-27";
@@ -445,6 +449,124 @@ test("carnet — publications existantes toujours groupées par schoolWeekNumber
   assert.equal(orphan[0]?.title, "Ancienne semaine A");
 });
 
+test("carnet — publication jeudi B (Sem 06-B) → day=3, pas le lundi de classe", () => {
+  const weeks = chassisCalendarWeeks();
+  const sessions = sessionsFor({
+    slots: [slot({ weekKind: "B", dayOfWeek: 4 })],
+    weeks,
+  });
+  const classMonday = weekdayToCourseDayIndex(1);
+  assert.equal(classMonday, 0);
+  const day = publicationDayIndexForCourseWeek(sessions, 6);
+  assert.equal(day, 3);
+  assert.notEqual(day, classMonday);
+  const week6 = sessions.find((session) => session.schoolWeekNumber === 6);
+  assert.equal(week6?.date, "2026-09-24");
+  assert.equal(week6?.dayOfWeek, 4);
+});
+
+test("carnet — publication mardi toutes les semaines → day=1", () => {
+  const weeks = chassisCalendarWeeks();
+  const sessions = sessionsFor({
+    slots: [slot({ weekKind: "all", dayOfWeek: 2 })],
+    weeks,
+  });
+  assert.equal(publicationDayIndexForCourseWeek(sessions, 6), 1);
+  assert.equal(publicationDayIndexForCourseWeek(sessions, 5), 1);
+});
+
+test("carnet — déplacement jeudi → jeudi conserve day=3", () => {
+  const weeks = chassisCalendarWeeks();
+  const sessions = sessionsFor({
+    slots: [slot({ weekKind: "B", dayOfWeek: 4 })],
+    weeks,
+  });
+  assert.equal(publicationDayIndexForCourseWeek(sessions, 8, 3), 3);
+  assert.equal(publicationDayIndexForCourseWeek(sessions, 10, 3), 3);
+});
+
+test("carnet — validFrom/validTo jeudi → mardi : déplacement met day=1", () => {
+  const weeks = chassisCalendarWeeks();
+  const sessions = sessionsFor({
+    slots: [
+      slot({
+        id: "thu-b",
+        weekKind: "B",
+        dayOfWeek: 4,
+        validFrom: "2026-09-01",
+        validTo: "2026-10-10",
+      }),
+      slot({
+        id: "tue-all",
+        weekKind: "all",
+        dayOfWeek: 2,
+        validFrom: "2026-10-20",
+        validTo: null,
+      }),
+    ],
+    weeks,
+  });
+  assert.equal(publicationDayIndexForCourseWeek(sessions, 6), 3);
+  assert.equal(publicationDayIndexForCourseWeek(sessions, 9, 3), 1);
+});
+
+test("carnet — publication existante dont le jour reste valide → jour conservé", () => {
+  const weeks = chassisCalendarWeeks();
+  const sessions = sessionsFor({
+    slots: [
+      slot({ id: "mon", dayOfWeek: 1, weekKind: "B" }),
+      slot({ id: "thu", dayOfWeek: 4, weekKind: "B" }),
+    ],
+    weeks,
+  });
+  assert.equal(publicationDayIndexForCourseWeek(sessions, 6, 3), 3);
+  assert.equal(publicationDayIndexForCourseWeek(sessions, 6, 0), 0);
+});
+
+test("carnet — lundi + jeudi sans jour existant valide → première séance chrono", () => {
+  const weeks = chassisCalendarWeeks();
+  const sessions = sessionsFor({
+    slots: [
+      slot({ id: "mon", dayOfWeek: 1, weekKind: "B" }),
+      slot({ id: "thu", dayOfWeek: 4, weekKind: "B" }),
+    ],
+    weeks,
+  });
+  assert.equal(publicationDayIndexForCourseWeek(sessions, 6), 0);
+  assert.equal(publicationDayIndexForCourseWeek(sessions, 6, 2), 0);
+});
+
+test("carnet — legacy sans séances CourseSession → fallback jour de classe", () => {
+  assert.equal(publicationDayIndexForCourseWeek([], 6), null);
+  const fallback = publicationDayIndexForCourseWeek([], 6) ?? weekdayToCourseDayIndex(1);
+  assert.equal(fallback, 0);
+});
+
+test("carnet — vue élève retrouve la publication Sem 06-B jeudi", () => {
+  const item: PrototypeAgendaItem = {
+    id: 9106,
+    classroomId: "class-demo",
+    subjectId: "subj-demo",
+    authorTeacherId: "teacher-demo",
+    day: 3,
+    hour: 8,
+    weekOffset: 0,
+    schoolWeekNumber: 6,
+    type: "HOMEWORK",
+    title: "Devoir châssis",
+    detail: "",
+  };
+  const thursday = {
+    schoolWeekNumber: 6,
+    weekKind: "B" as const,
+    date: new Date(2026, 8, 24, 12),
+    dayIndex: 3,
+  };
+  const monday = { ...thursday, dayIndex: 0 };
+  assert.equal(filterItemsForCourseDay([item], thursday).length, 1);
+  assert.equal(filterItemsForCourseDay([item], monday).length, 0);
+});
+
 test("carnet — notes prof non régressées", () => {
   const key = weekNotesKey("class-demo", 6);
   const document = appendWeekNote({ version: 1, weeks: {} }, key, "Préparer le châssis");
@@ -463,6 +585,7 @@ test("carnet — pas de règle hardcodée classe / branche / jour", async () => 
   const helper = await readFile(new URL("../src/features/class-notebook/course-week-window.ts", import.meta.url), "utf8");
   const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
   const modal = await readFile(new URL("../web/app/components/controls-modal.tsx", import.meta.url), "utf8");
+  const page = await readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8");
   const combined = `${helper}\n${panel}\n${modal}`;
   assert.doesNotMatch(combined, /MECAUTO3A/);
   assert.doesNotMatch(combined, /CP3/);
@@ -470,7 +593,11 @@ test("carnet — pas de règle hardcodée classe / branche / jour", async () => 
   assert.doesNotMatch(helper, /weekKind === "B"/);
   assert.match(panel, /fetchTeacherCourseTimelineApi/);
   assert.match(panel, /visibleCourseWeeks/);
+  assert.match(panel, /publicationDayIndexForCourseWeek/);
   assert.match(panel, /Aucune séance planifiée pour ce cours dans l’horaire/);
   assert.match(modal, /controlDayOptionsForCourseWeek/);
   assert.match(modal, /courseSessions/);
+  assert.match(page, /publicationDay = day \?\? weekdayToCourseDayIndex/);
+  assert.match(page, /notebookMovePublication\(itemId: number, schoolWeekNumber: number, day\?: number\)/);
+  assert.match(page, /\.\.\.\(day != null \? \{ day \} : \{\}\)/);
 });

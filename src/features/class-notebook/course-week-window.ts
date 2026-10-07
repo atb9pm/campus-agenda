@@ -138,3 +138,26 @@ export function weekdayLabelForCourseDayIndex(dayIndex: number): string {
   const weekday = (dayIndex + 1) as keyof typeof COURSE_WEEKDAY_LABELS;
   return COURSE_WEEKDAY_LABELS[weekday]?.toLocaleLowerCase("fr-CH") ?? "";
 }
+
+/**
+ * `AgendaItem.day` (0 = lundi … 4 = vendredi) pour une semaine du Carnet structuré.
+ *
+ * Une carte Carnet reste une semaine, même s’il y a plusieurs CourseSession.
+ *
+ * - un seul jour réel cette semaine → ce jour (jamais le jour générique de la classe) ;
+ * - plusieurs jours, `existingDay` encore parmi les séances → le conserver ;
+ * - plusieurs jours sans jour encore valide → première CourseSession par date ;
+ * - aucune séance cette semaine → `null` (le caller garde le fallback legacy).
+ */
+export function publicationDayIndexForCourseWeek(
+  sessions: readonly CourseSession[],
+  schoolWeekNumber: number,
+  existingDay?: number | null,
+): number | null {
+  const weekSessions = courseSessionsForWeek(sessions, schoolWeekNumber);
+  if (!weekSessions.length) return null;
+  const dayIndexes = [...new Set(weekSessions.map((session) => session.dayOfWeek - 1))];
+  if (dayIndexes.length === 1) return dayIndexes[0] ?? null;
+  if (existingDay != null && dayIndexes.includes(existingDay)) return existingDay;
+  return weekSessions[0]!.dayOfWeek - 1;
+}
