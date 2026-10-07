@@ -1,5 +1,12 @@
 export { SCHOOL_WEEK_MONDAYS, SCHOOL_WEEKS_TOTAL } from "./school-week-dates.ts";
 export {
+  buildSchoolWeeksFromEntries,
+  getActiveSchoolWeeks,
+  getSchoolWeekEntries,
+  resetActiveSchoolWeekEntries,
+  setActiveSchoolWeekEntries,
+} from "./active-calendar.ts";
+export {
   buildSchoolWeeks,
   courseDayKey,
   findSchoolWeekByNumber,

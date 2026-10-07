@@ -38,6 +38,7 @@ import {
 } from "@campus/features/student";
 import {
   buildSchoolWeeks,
+  buildSchoolWeeksFromEntries,
   courseDayKey,
   findSchoolWeekByNumber,
   findSchoolWeekForDate,
@@ -49,20 +50,31 @@ import {
   listPreviousCourseDays,
   resolveDisplayCourseDay,
   type CourseDaySlot,
+  type SchoolWeek,
 } from "@campus/features/calendar";
-import type { StudentAccess } from "@campus/types/student-access";
+import {
+  courseDaysWithMultipleTests,
+  evaluateThirdTestAlert,
+  listClassTestsForSchoolWeek,
+  listUpcomingTestsForClass,
+  listUpcomingTestsForTeacher,
+  type ThirdTestAlert,
+} from "@campus/features/evaluations";
 import type { AgendaItemType } from "@campus/types/agenda";
 import {
   createAgendaItemApi,
   deleteAgendaItemApi,
   fetchAgendaItems,
   fetchApiSession,
+  fetchSchoolCalendar,
   loginStudentApi,
   loginTeacherApi,
   logoutApiSession,
   updateAgendaItemApi,
   type ApiTeacherSession,
+  type SchoolCalendarWeek,
 } from "../lib/api-client.ts";
+import { SchoolYearAdminPanel } from "./components/school-year-admin-panel.tsx";
 
 type AppMode = "teacher" | "student";
 type StudentEntry = "code" | "teacher-preview";
@@ -106,6 +118,7 @@ function sectionTitle(activeSection: TeacherNavSection, agendaView: TeacherAgend
   if (isStudentView) return "Mon agenda";
   if (activeSection === "dashboard") return "Tableau de bord";
   if (activeSection === "classes") return "Mes classes";
+  if (activeSection === "settings") return "Paramètres";
   return getAgendaSectionTitle(agendaView, classroomName);
 }
 
@@ -113,6 +126,7 @@ function sectionDescription(activeSection: TeacherNavSection, agendaView: Teache
   if (isStudentView) return `Consultation anonyme — agenda complet de la classe ${classroomName}, toutes branches confondues.`;
   if (activeSection === "dashboard") return "Vue d’ensemble de vos classes et de vos publications.";
   if (activeSection === "classes") return "Classes auxquelles vous êtes rattaché et branches enseignées.";
+  if (activeSection === "settings") return "Année scolaire, plan des semaines A/B et activation.";
   return getAgendaSectionDescription(agendaView, classroomName);
 }
 
@@ -152,6 +166,16 @@ export default function Home() {
   const [loginError, setLoginError] = useState("");
   const [studentCourseDayKey, setStudentCourseDayKey] = useState<string | null>(null);
   const [studentHistoryOpen, setStudentHistoryOpen] = useState(false);
+  const [schoolWeeks, setSchoolWeeks] = useState<SchoolWeek[]>(() => buildSchoolWeeks());
+  const [controlAlert, setControlAlert] = useState<ThirdTestAlert | null>(null);
+  const [controlsPanel, setControlsPanel] = useState<null | "class" | "mine">(null);
+  const [pendingPublish, setPendingPublish] = useState<{
+    title: string;
+    detail: string;
+    subjectId: string;
+    schoolWeekNumber: number;
+    day: number;
+  } | null>(null);
 
   async function applyTeacherSession(session: ApiTeacherSession) {
     setCurrentTeacherId(session.teacherId);
@@ -173,6 +197,11 @@ export default function Home() {
 
     async function bootstrapSession() {
       try {
+        const calendar = await fetchSchoolCalendar().catch(() => null);
+        if (!cancelled && calendar?.weeks.length) {
+          setSchoolWeeks(buildSchoolWeeksFromEntries(calendar.weeks));
+        }
+
         const session = await fetchApiSession();
         if (cancelled) return;
 
@@ -229,10 +258,10 @@ export default function Home() {
     [classroomSubjects],
   );
 
-  const schoolWeeks = useMemo(() => buildSchoolWeeks(), []);
+  const schoolWeeksMemo = schoolWeeks;
   const selectedSchoolWeek = useMemo(
-    () => findSchoolWeekByNumber(selectedSchoolWeekNumber, schoolWeeks),
-    [selectedSchoolWeekNumber, schoolWeeks],
+    () => findSchoolWeekByNumber(selectedSchoolWeekNumber, schoolWeeksMemo),
+    [selectedSchoolWeekNumber, schoolWeeksMemo],
   );
 
   const days = useMemo(() => {
@@ -245,8 +274,8 @@ export default function Home() {
   }, [selectedSchoolWeek]);
 
   const publishCourseDayOptions = useMemo(
-    () => getCourseDayOptionsForSchoolWeek(publishSchoolWeekNumber, schoolWeeks),
-    [publishSchoolWeekNumber, schoolWeeks],
+    () => getCourseDayOptionsForSchoolWeek(publishSchoolWeekNumber, schoolWeeksMemo),
+    [publishSchoolWeekNumber, schoolWeeksMemo],
   );
 
   const agendaBaseItems = filterItemsForAgendaView(
@@ -263,18 +292,18 @@ export default function Home() {
   const showSharedInsights = !isStudentView && (agendaView === "class");
 
   const studentAutoCourseDay = useMemo(
-    () => resolveDisplayCourseDay(new Date()),
-    [],
+    () => resolveDisplayCourseDay(new Date(), schoolWeeksMemo),
+    [schoolWeeksMemo],
   );
 
   const studentCourseDayCatalog = useMemo(() => {
-    const all = [studentAutoCourseDay, ...listPreviousCourseDays(studentAutoCourseDay.date, 20)];
+    const all = [studentAutoCourseDay, ...listPreviousCourseDays(studentAutoCourseDay.date, 20, schoolWeeksMemo)];
     const unique = new Map<string, CourseDaySlot>();
     for (const slot of all) {
       unique.set(courseDayKey(slot), slot);
     }
     return unique;
-  }, [studentAutoCourseDay]);
+  }, [studentAutoCourseDay, schoolWeeksMemo]);
 
   const studentDisplayCourseDay = useMemo(() => {
     if (studentCourseDayKey && studentCourseDayCatalog.has(studentCourseDayKey)) {
@@ -284,8 +313,8 @@ export default function Home() {
   }, [studentAutoCourseDay, studentCourseDayCatalog, studentCourseDayKey]);
 
   const studentPreviousCourseDays = useMemo(
-    () => listPreviousCourseDays(studentDisplayCourseDay.date, 12),
-    [studentDisplayCourseDay],
+    () => listPreviousCourseDays(studentDisplayCourseDay.date, 12, schoolWeeksMemo),
+    [studentDisplayCourseDay, schoolWeeksMemo],
   );
 
   const studentCourseDayGroups = useMemo(() => {
@@ -319,16 +348,42 @@ export default function Home() {
     [showSharedInsights, items, activeClassroomId, selectedSchoolWeekNumber],
   );
 
+  const busyTestDays = useMemo(
+    () => courseDaysWithMultipleTests(items, activeClassroomId, selectedSchoolWeekNumber),
+    [items, activeClassroomId, selectedSchoolWeekNumber],
+  );
+
+  const studentUpcomingTests = useMemo(() => {
+    if (!studentSession) return [];
+    return listUpcomingTestsForClass(
+      items,
+      DEMO_CATALOG,
+      studentSession.classroomId,
+      studentAutoCourseDay,
+      schoolWeeksMemo,
+    );
+  }, [studentSession, items, studentAutoCourseDay, schoolWeeksMemo]);
+
+  const classTestsForWeek = useMemo(
+    () => listClassTestsForSchoolWeek(items, DEMO_CATALOG, activeClassroomId, selectedSchoolWeekNumber, schoolWeeksMemo),
+    [items, activeClassroomId, selectedSchoolWeekNumber, schoolWeeksMemo],
+  );
+
+  const myUpcomingTests = useMemo(
+    () => listUpcomingTestsForTeacher(items, DEMO_CATALOG, currentTeacherId, new Date(), schoolWeeksMemo),
+    [items, currentTeacherId, schoolWeeksMemo],
+  );
+
   function resetAgendaFilters() {
     setSubjectFilter(ALL_SUBJECTS_FILTER);
     setTeacherFilter(ALL_FILTER);
     setDayFilter(ALL_FILTER);
     setTypeFilter("ALL");
-    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date()).number);
+    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date(), schoolWeeksMemo).number);
   }
 
   function isTodayCourseColumn(date: Date) {
-    const slot = resolveDisplayCourseDay(new Date());
+    const slot = resolveDisplayCourseDay(new Date(), schoolWeeksMemo);
     return selectedSchoolWeekNumber === slot.schoolWeekNumber
       && date.getFullYear() === slot.date.getFullYear()
       && date.getMonth() === slot.date.getMonth()
@@ -422,7 +477,7 @@ export default function Home() {
     setSubjectFilter(ALL_SUBJECTS_FILTER);
     setTeacherFilter(ALL_FILTER);
     setDayFilter(ALL_FILTER);
-    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date()).number);
+    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date(), schoolWeeksMemo).number);
   }
 
   function openSharedAgenda(classroomId: string) {
@@ -433,7 +488,7 @@ export default function Home() {
     setSubjectFilter(ALL_SUBJECTS_FILTER);
     setTeacherFilter(ALL_FILTER);
     setDayFilter(ALL_FILTER);
-    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date()).number);
+    setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date(), schoolWeeksMemo).number);
   }
 
   function navigate(section: TeacherNavSection) {
@@ -446,6 +501,10 @@ export default function Home() {
   function showNotice(message: string) {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 3200);
+  }
+
+  function applySchoolCalendarWeeks(weeks: SchoolCalendarWeek[]) {
+    setSchoolWeeks(buildSchoolWeeksFromEntries(weeks));
   }
 
   function openCreateModal(type: AgendaItemType) {
@@ -464,6 +523,8 @@ export default function Home() {
   function closeModal() {
     setModalType(null);
     setEditingItem(null);
+    setControlAlert(null);
+    setPendingPublish(null);
   }
 
   useEffect(() => {
@@ -471,6 +532,10 @@ export default function Home() {
       if (event.key !== "Escape") return;
       if (studentCodeModalOpen) setStudentCodeModalOpen(false);
       if (modalType) closeModal();
+      if (controlAlert) {
+        setControlAlert(null);
+        setPendingPublish(null);
+      }
       if (addMenuOpen) setAddMenuOpen(false);
       if (classPickerOpen) setClassPickerOpen(false);
     }
@@ -489,6 +554,54 @@ export default function Home() {
     })();
   }
 
+  async function performPublish(input: {
+    title: string;
+    detail: string;
+    subjectId: string;
+    schoolWeekNumber: number;
+    day: number;
+    type: AgendaItemType;
+    editing?: PrototypeAgendaItem | null;
+  }) {
+    const subject = getSubjectById(DEMO_CATALOG, input.subjectId);
+    if (!subject || !teacherTeachesSubject(DEMO_CATALOG, currentTeacherId, selectedClassroomId, subject.id)) {
+      return;
+    }
+
+    if (input.editing) {
+      const updated = await updateAgendaItemApi(input.editing.id, {
+        title: input.title,
+        detail: input.detail,
+        day: input.day,
+        hour: 8,
+        subjectId: subject.id,
+        schoolWeekNumber: input.schoolWeekNumber,
+      });
+      setItems((previous) => previous.map((item) => (item.id === updated.id ? updated : item)));
+      closeModal();
+      showNotice(`${TYPE_LABELS[input.editing.type]} modifié.`);
+      return;
+    }
+
+    const created = await createAgendaItemApi({
+      classroomId: selectedClassroomId,
+      subjectId: subject.id,
+      day: input.day,
+      hour: 8,
+      weekOffset: 0,
+      schoolWeekNumber: input.schoolWeekNumber,
+      type: input.type,
+      title: input.title,
+      detail: input.detail,
+    });
+    setItems((previous) => [...previous, created]);
+    setSelectedSchoolWeekNumber(input.schoolWeekNumber);
+    setAgendaView(DEFAULT_TEACHER_AGENDA_VIEW);
+    closeModal();
+    setActiveSection("agenda");
+    showNotice(`${TYPE_LABELS[input.type]} ajouté à ${selectedClassroom.name}.`);
+  }
+
   function submitItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!modalType) return;
@@ -505,42 +618,51 @@ export default function Home() {
     const schoolWeekNumber = Number(form.get("schoolWeekNumber") || selectedSchoolWeekNumber);
     const day = Number(form.get("courseDay") || publishCourseDayOptions[0]?.dayIndex || 0);
     const detail = String(form.get("detail") || "").trim() || "Aucune précision";
-    const hour = 8;
+
+    const publishInput = {
+      title,
+      detail,
+      subjectId: subject.id,
+      schoolWeekNumber,
+      day,
+      type: modalType,
+      editing: editingItem,
+    };
+
+    if (modalType === "TEST") {
+      const alert = evaluateThirdTestAlert(items, DEMO_CATALOG, {
+        classroomId: selectedClassroomId,
+        type: "TEST",
+        courseDay: { schoolWeekNumber, dayIndex: day },
+        excludeItemId: editingItem?.id,
+      });
+      if (alert.triggered) {
+        setControlAlert(alert);
+        setPendingPublish({ title, detail, subjectId: subject.id, schoolWeekNumber, day });
+        return;
+      }
+    }
 
     void (async () => {
       try {
-        if (editingItem) {
-          const updated = await updateAgendaItemApi(editingItem.id, {
-            title,
-            detail,
-            day,
-            hour,
-            subjectId: subject.id,
-            schoolWeekNumber,
-          });
-          setItems((previous) => previous.map((item) => (item.id === updated.id ? updated : item)));
-          closeModal();
-          showNotice(`${TYPE_LABELS[editingItem.type]} modifié.`);
-          return;
-        }
+        await performPublish(publishInput);
+      } catch (error) {
+        showNotice(error instanceof Error ? error.message : "Publication impossible.");
+      }
+    })();
+  }
 
-        const created = await createAgendaItemApi({
-          classroomId: selectedClassroomId,
-          subjectId: subject.id,
-          day,
-          hour,
-          weekOffset: 0,
-          schoolWeekNumber,
+  function confirmPublishDespiteAlert() {
+    if (!modalType || !pendingPublish) return;
+    void (async () => {
+      try {
+        await performPublish({
+          ...pendingPublish,
           type: modalType,
-          title,
-          detail,
+          editing: editingItem,
         });
-        setItems((previous) => [...previous, created]);
-        setSelectedSchoolWeekNumber(schoolWeekNumber);
-        setAgendaView(DEFAULT_TEACHER_AGENDA_VIEW);
-        closeModal();
-        setActiveSection("agenda");
-        showNotice(`${TYPE_LABELS[modalType]} ajouté à ${selectedClassroom.name}.`);
+        setControlAlert(null);
+        setPendingPublish(null);
       } catch (error) {
         showNotice(error instanceof Error ? error.message : "Publication impossible.");
       }
@@ -613,7 +735,7 @@ export default function Home() {
               </button>
             </footer>
           </section>
-          <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 1.0</p>
+          <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 1.2</p>
         </main>
 
         {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
@@ -721,7 +843,25 @@ export default function Home() {
             )}
           </section>
 
-          <p className="prototype-label">CONSULTATION ÉLÈVE · CAMPUS AGENDA 1.1</p>
+          <section className="student-upcoming-tests" aria-labelledby="student-upcoming-tests-title">
+            <h2 id="student-upcoming-tests-title">Contrôles à venir</h2>
+            {studentUpcomingTests.length ? (
+              <ol className="student-upcoming-tests-list">
+                {studentUpcomingTests.map((entry) => (
+                  <li key={entry.item.id}>
+                    <span className="student-upcoming-tests-date">
+                      {formatSchoolWeekLabel(entry.slot)} · {formatCourseDayHeading(entry.slot)}
+                    </span>
+                    <strong>{entry.subjectName} — {entry.item.title}</strong>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="student-upcoming-tests-empty">Aucun contrôle planifié à venir pour votre classe.</p>
+            )}
+          </section>
+
+          <p className="prototype-label">CONSULTATION ÉLÈVE · CAMPUS AGENDA 1.2</p>
         </main>
 
         {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
@@ -748,7 +888,6 @@ export default function Home() {
             </button>
           ))}
           <button disabled><span>□</span> Documents</button>
-          <button disabled><span>⚙</span> Paramètres</button>
         </nav>
 
         {(activeSection === "agenda" || activeSection === "classes") && (
@@ -872,6 +1011,10 @@ export default function Home() {
           </section>
         )}
 
+        {activeSection === "settings" && (
+          <SchoolYearAdminPanel onCalendarUpdated={applySchoolCalendarWeeks} onNotice={showNotice} />
+        )}
+
         {activeSection === "agenda" && (
           <>
             <section className="brand-showcase" aria-label="Identité visuelle Campus Agenda">
@@ -892,13 +1035,59 @@ export default function Home() {
               </figure>
             </section>
 
-            <div className="class-tabs">
-              <button className="active">Calendrier</button>
-              <button disabled>Devoirs</button>
-              <button disabled>Élèves</button>
-              <button disabled>Documents</button>
+            <div className="class-tabs" role="tablist" aria-label="Vues de l'agenda">
+              <button type="button" role="tab" aria-selected={controlsPanel === null} className={controlsPanel === null ? "active" : ""} onClick={() => setControlsPanel(null)}>Calendrier</button>
+              <button type="button" role="tab" aria-selected={controlsPanel === "class"} className={controlsPanel === "class" ? "active" : ""} onClick={() => { setControlsPanel("class"); setAgendaView("class"); setTypeFilter("TEST"); }}>Contrôles · classe</button>
+              <button type="button" role="tab" aria-selected={controlsPanel === "mine"} className={controlsPanel === "mine" ? "active" : ""} onClick={() => { setControlsPanel("mine"); setAgendaView("mine"); }}>Mes contrôles</button>
+              <button type="button" disabled>Documents</button>
             </div>
 
+            {controlsPanel === "class" && (
+              <section className="controls-panel" aria-labelledby="class-controls-title">
+                <header>
+                  <h2 id="class-controls-title">Contrôles · {selectedClassroom.name}</h2>
+                  <p>{formatSchoolWeekOptionLabel(selectedSchoolWeek)} — tous les enseignants et branches</p>
+                </header>
+                {classTestsForWeek.length ? (
+                  <ul className="controls-list">
+                    {classTestsForWeek.map((entry) => (
+                      <li key={entry.item.id}>
+                        <span className="controls-list-date">{formatCourseDayHeading(entry.slot)}</span>
+                        <strong>{entry.subjectName} — {entry.item.title}</strong>
+                        <small>{entry.teacherName}</small>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="controls-empty">Aucun contrôle planifié pour cette semaine scolaire.</p>
+                )}
+              </section>
+            )}
+
+            {controlsPanel === "mine" && (
+              <section className="controls-panel" aria-labelledby="my-controls-title">
+                <header>
+                  <h2 id="my-controls-title">Mes contrôles à venir</h2>
+                  <p>Toutes vos classes confondues</p>
+                </header>
+                {myUpcomingTests.length ? (
+                  <ul className="controls-list">
+                    {myUpcomingTests.map((entry) => (
+                      <li key={entry.item.id}>
+                        <span className="controls-list-date">
+                          {formatSchoolWeekLabel(entry.slot)} · {formatCourseDayHeading(entry.slot)}
+                        </span>
+                        <strong>{getClassroomById(DEMO_CATALOG, entry.item.classroomId)?.name ?? "Classe"} · {entry.subjectName} — {entry.item.title}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="controls-empty">Aucun contrôle à venir dans vos publications.</p>
+                )}
+              </section>
+            )}
+
+            {controlsPanel === null && (
             <section className="calendar-workbench">
               <aside className="calendar-tools">
                 <div className="view-selector" aria-label="Choisir la vue">
@@ -923,6 +1112,9 @@ export default function Home() {
                         <li key={entry.subjectId}><span>{entry.subjectName}</span><strong>{entry.count}</strong></li>
                       ))}
                     </ul>
+                    {busyTestDays.length > 0 && (
+                      <p className="workload-alert">Jours avec plusieurs contrôles repérés cette semaine.</p>
+                    )}
                   </section>
                 )}
 
@@ -965,7 +1157,7 @@ export default function Home() {
                 <header className="week-toolbar">
                   <div>
                     <button type="button" onClick={() => setSelectedSchoolWeekNumber((current) => Math.max(1, current - 1))}>‹</button>
-                    <button type="button" onClick={() => setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date()).number)}>Aujourd’hui</button>
+                    <button type="button" onClick={() => setSelectedSchoolWeekNumber(findSchoolWeekForDate(new Date(), schoolWeeksMemo).number)}>Aujourd’hui</button>
                     <button type="button" onClick={() => setSelectedSchoolWeekNumber((current) => Math.min(38, current + 1))}>›</button>
                   </div>
                   <h2>{formatSchoolWeekOptionLabel(selectedSchoolWeek)} · {shortDate(days[0])} — {shortDate(days[4])}</h2>
@@ -994,13 +1186,16 @@ export default function Home() {
 
                 {showSharedInsights && workload && (
                   <div className="workload-strip" aria-label="Répartition hebdomadaire">
-                    {workload.byDay.map((entry, index) => (
-                      <div className="workload-day" key={entry.day}>
+                    {workload.byDay.map((entry, index) => {
+                      const isBusyTests = busyTestDays.some((day) => day.dayIndex === index);
+                      return (
+                      <div className={`workload-day${isBusyTests ? " busy-tests" : ""}${entry.test >= 2 ? " multi-tests" : ""}`} key={entry.day}>
                         <span>{dayName(days[index] ?? days[0])}</span>
-                        <strong>{entry.total}</strong>
-                        <i style={{ width: `${Math.min(100, entry.total * 20)}%` }} />
+                        <strong>{entry.test > 0 ? entry.test : entry.total}</strong>
+                        <i style={{ width: `${Math.min(100, (entry.test || entry.total) * 20)}%` }} />
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 
@@ -1044,10 +1239,11 @@ export default function Home() {
                 {!visibleItems.length && <div className="empty-week"><span>▱</span><strong>Semaine libre</strong><small>Aucun élément ne correspond aux filtres.</small></div>}
               </section>
             </section>
+            )}
           </>
         )}
 
-        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 1.0</p>
+        <p className="prototype-label">PROTOTYPE INTERACTIF · CAMPUS AGENDA 1.2</p>
       </main>
 
       {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
@@ -1061,6 +1257,33 @@ export default function Home() {
               <p className="modal-hint">Codes fictifs : <strong>eleve-test-001</strong> (2e TMA) ou <strong>eleve-test-002</strong> (1re TMA).</p>
               <footer><button type="button" onClick={() => setStudentCodeModalOpen(false)}>Annuler</button><button type="submit">Consulter mon agenda</button></footer>
             </form>
+          </section>
+        </div>
+      )}
+
+      {controlAlert && (
+        <div className="technical-modal-backdrop">
+          <section className="technical-modal control-alert-modal" role="dialog" aria-modal="true" aria-labelledby="control-alert-title">
+            <header>
+              <div>
+                <span className="eyebrow">COORDINATION</span>
+                <h2 id="control-alert-title">3 contrôles ce jour de cours</h2>
+              </div>
+              <button type="button" onClick={() => { setControlAlert(null); setPendingPublish(null); }}>×</button>
+            </header>
+            <p>Cette publication porterait à <strong>3 contrôles</strong> le même jour de cours pour la classe. Les collègues ont déjà planifié :</p>
+            <ul className="control-alert-list">
+              {controlAlert.existingTests.map((test) => (
+                <li key={test.id}>
+                  <strong>{test.subjectName}</strong> — {test.title}
+                  <small>{test.teacherName}</small>
+                </li>
+              ))}
+            </ul>
+            <footer className="control-alert-actions">
+              <button type="button" onClick={() => { setControlAlert(null); setPendingPublish(null); }}>Modifier la date</button>
+              <button type="button" className="confirm-anyway" onClick={confirmPublishDespiteAlert}>Publier quand même</button>
+            </footer>
           </section>
         </div>
       )}
@@ -1079,7 +1302,7 @@ export default function Home() {
                     value={publishSchoolWeekNumber}
                     onChange={(event) => setPublishSchoolWeekNumber(Number(event.target.value))}
                   >
-                    {schoolWeeks.map((week) => (
+                    {schoolWeeksMemo.map((week) => (
                       <option key={week.number} value={week.number}>{formatSchoolWeekOptionLabel(week)}</option>
                     ))}
                   </select>

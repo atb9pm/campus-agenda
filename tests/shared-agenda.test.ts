@@ -20,7 +20,7 @@ test("phase 0.5 — la vue Toute la classe inclut tous les enseignants", () => {
     filters,
   );
 
-  assert.equal(visible.length, 5);
+  assert.equal(visible.length, 7);
   assert.ok(visible.some((item) => item.authorTeacherId === "teacher-demo-dupont"));
   assert.ok(visible.some((item) => item.authorTeacherId === "teacher-demo-martin"));
 });
@@ -38,13 +38,13 @@ test("phase 0.5 — filtres par branche, type, enseignant et jour", () => {
     ...createDefaultSharedAgendaFilters(0),
     type: "TEST",
   });
-  assert.equal(byType.length, 1);
+  assert.equal(byType.length, 3);
 
   const byTeacher = applySharedAgendaFilters(classroomItems, DEMO_CATALOG, {
     ...createDefaultSharedAgendaFilters(0),
     teacherId: "teacher-demo-dupont",
   });
-  assert.equal(byTeacher.length, 2);
+  assert.equal(byTeacher.length, 3);
 
   const byDay = applySharedAgendaFilters(classroomItems, DEMO_CATALOG, {
     ...createDefaultSharedAgendaFilters(0),
@@ -81,12 +81,12 @@ test("phase 0.5 — filtre par semaine affichée", () => {
 test("phase 0.5 — synthèse de charge de travail hebdomadaire", () => {
   const summary = buildClassWorkloadSummary(DEMO_PROTOTYPE_ITEMS, DEMO_CATALOG, "classe-demo-tma-2a", 12);
 
-  assert.equal(summary.total, 5);
+  assert.equal(summary.total, 7);
   assert.equal(summary.homework, 2);
-  assert.equal(summary.test, 1);
+  assert.equal(summary.test, 3);
   assert.equal(summary.information, 2);
-  assert.equal(summary.byDay.reduce((total, day) => total + day.total, 0), 5);
-  assert.equal(summary.bySubject.length, 4);
+  assert.equal(summary.byDay.reduce((total, day) => total + day.total, 0), 7);
+  assert.equal(summary.bySubject.length, 5);
   assert.equal(summary.byTeacher.length, 3);
-  assert.equal(WORKLOAD_LEVEL_LABELS[summary.level], "Charge modérée");
+  assert.equal(WORKLOAD_LEVEL_LABELS[summary.level], "Semaine dense");
 });

@@ -52,6 +52,7 @@ export interface AgendaStore {
   deleteAgendaItem(itemId: number, actorTeacherId: string): Promise<AgendaMutationResult>;
   teacherCanAccessClassroom(teacherId: string, classroomId: string): Promise<boolean>;
   teacherCanPublish(teacherId: string, classroomId: string, subjectId: string): Promise<boolean>;
+  teacherIsAdmin(teacherId: string): Promise<boolean>;
   resolveStudentAccess(label: string): Promise<{ id: string; classroomId: string; label: string } | undefined>;
   verifyTeacherCredentials(teacherId: string, password: string): Promise<boolean>;
   exportAllItems(): Promise<PrototypeAgendaItem[]>;

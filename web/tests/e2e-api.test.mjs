@@ -173,3 +173,29 @@ test("phase 1.0 — E2E rate limit sur connexion enseignant", async () => {
     }
   }
 });
+
+test("phase 2.0 — E2E calendrier scolaire et liste admin", async () => {
+  const loginResponse = await request("/api/auth/teacher", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ teacherId: "teacher-demo-current", password: "campus-demo" }),
+  });
+  assert.equal(loginResponse.status, 200);
+  const teacherCookie = extractCookie(loginResponse);
+
+  const calendarResponse = await request("/api/school-year/calendar", {
+    headers: { Cookie: teacherCookie },
+  });
+  assert.equal(calendarResponse.status, 200);
+  const calendar = await calendarResponse.json();
+  assert.equal(calendar.ok, true);
+  assert.equal(calendar.calendar.weeks.length, 38);
+
+  const yearsResponse = await request("/api/admin/school-year", {
+    headers: { Cookie: teacherCookie },
+  });
+  assert.equal(yearsResponse.status, 200);
+  const years = await yearsResponse.json();
+  assert.equal(years.ok, true);
+  assert.ok(Array.isArray(years.years));
+});

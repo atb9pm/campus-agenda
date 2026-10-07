@@ -1,0 +1,8 @@
+{
+  "name": "campus-agenda",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "pdfjs-dist": "6.2.108"
+  }
+}
