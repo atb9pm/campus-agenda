@@ -2442,6 +2442,51 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   .controls-panel { margin-right: 16px; margin-left: 16px; }
 }
 
+/* Carnet enseignant — smartphone : une semaine, en-tête compact, 2/3/4 masqués. */
+@media (max-width: 760px) {
+  .teacher-workspace.class-notebook { margin: 0 0 12px; }
+  .class-notebook-toolbar {
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0 16px 8px;
+  }
+  .class-notebook-title { flex: 1 1 auto; min-width: 0; }
+  .class-notebook-title .eyebrow { margin: 0 0 2px; }
+  .class-notebook-title h2 {
+    margin: 0;
+    font-size: 16px;
+    line-height: 1.25;
+  }
+  .class-notebook-actions {
+    width: 100%;
+    margin-left: 0;
+    gap: 6px;
+  }
+  .class-notebook .workspace-action {
+    min-height: 40px;
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+  .class-notebook-week-controls {
+    gap: 8px;
+    margin: 0 16px 10px;
+  }
+  .class-notebook-display-count { display: none; }
+  .class-notebook-shift button {
+    width: 40px;
+    height: 40px;
+  }
+  .class-notebook-empty,
+  .class-notebook-warning {
+    margin-top: 0;
+    margin-bottom: 10px;
+    padding: 8px 12px;
+  }
+  .class-notebook-column { min-height: 0; }
+  .class-notebook-grid > .class-notebook-column:not(.active) { display: none; }
+  .class-notebook-grid { gap: 12px; margin: 0 16px 16px; }
+}
+
 /* Navigation mobile (enseignant + élève) — barre d'onglets fixe en bas. */
 .mobile-tab-bar { display: none; }
 .mobile-only { display: none; }

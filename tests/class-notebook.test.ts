@@ -5,6 +5,8 @@ import { buildSchoolWeeks } from "../src/features/calendar/index.ts";
 import {
   appendWeekNote,
   clampWeekDisplayCount,
+  NOTEBOOK_NARROW_VIEWPORT_MAX_PX,
+  notebookWeekDisplayCountForViewport,
   isClassNotesPayload,
   moveWeekNote,
   normalizeClassNotes,
@@ -43,6 +45,12 @@ test("class notebook — sélecteur 1 à 4 semaines", () => {
   assert.equal(clampWeekDisplayCount(0), 1);
   assert.equal(clampWeekDisplayCount(3), 3);
   assert.equal(clampWeekDisplayCount(6), 4);
+});
+
+test("class notebook — viewport étroit force 1 semaine sans écraser 1–4 desktop", () => {
+  assert.equal(NOTEBOOK_NARROW_VIEWPORT_MAX_PX, 760);
+  assert.equal(notebookWeekDisplayCountForViewport(760, 3), 1);
+  assert.equal(notebookWeekDisplayCountForViewport(761, 3), 3);
 });
 
 test("class notebook — notes prof déplaçables entre semaines", () => {
