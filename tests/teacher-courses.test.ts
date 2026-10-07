@@ -218,13 +218,13 @@ async function listFor(
 test("version 2.24.0 — Mes cours depuis les attributions", () => {
   assert.match(APP_VERSION, /^\d+\.\d+\.\d+$/);
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
+    "ma-semaine",
     "mes-cours",
     "controles",
-    "ma-semaine",
     "configuration",
     "administration",
   ]);
-  assert.equal(DEFAULT_TEACHER_NAV_SECTION, "mes-cours");
+  assert.equal(DEFAULT_TEACHER_NAV_SECTION, "ma-semaine");
   assert.equal(WORKSPACE_ASSIGNMENT_ROLE_LABELS.PRIMARY, "Titulaire");
   assert.equal(WORKSPACE_ASSIGNMENT_ROLE_LABELS.CO_TEACHER, "Co-enseignant");
   assert.equal(WORKSPACE_ASSIGNMENT_ROLE_LABELS.REPLACEMENT, "Remplacement temporaire");

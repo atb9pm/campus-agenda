@@ -18,7 +18,7 @@ test("phase 0.3 — la vue par défaut de l'agenda enseignant est Mes éléments
 
   const workspace = createDefaultWorkspace(TEACHER_DEMO_ID, "classe-demo-tma-2a");
   assert.equal(workspace.agendaView, "mine");
-  assert.equal(workspace.activeSection, "mes-cours");
+  assert.equal(workspace.activeSection, "ma-semaine");
 
   const opened = openClassAgenda(workspace, "classe-demo-tma-1a");
   assert.equal(opened.selectedClassroomId, "classe-demo-tma-1a");

@@ -150,9 +150,9 @@ test("version 2.38.0 — planning semestriel, sans table dédiée", () => {
   assert.equal(APP_VERSION, "2.61.8");
   assert.equal(TEACHER_NAV_LABELS.controles, "Contrôles");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
+    "ma-semaine",
     "mes-cours",
     "controles",
-    "ma-semaine",
     "configuration",
     "administration",
   ]);
