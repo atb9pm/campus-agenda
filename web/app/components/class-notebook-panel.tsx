@@ -58,6 +58,7 @@ import { isStructuredAgendaPublication as isStructuredPublication } from "@campu
 import type { TeacherClassSetup } from "@campus/features/teacher-setup";
 import { fetchTeacherCourseTimelineApi } from "../../lib/api-client.ts";
 import { ControlsModal } from "./controls-modal.tsx";
+import { NotebookExportModal } from "./notebook-export-modal.tsx";
 import { ConfirmDialog } from "./confirm-dialog.tsx";
 import { RichDocEditor } from "./rich-doc-editor.tsx";
 import { RichDocView, lineViewKey } from "./rich-doc-view.tsx";
@@ -66,6 +67,7 @@ interface ClassNotebookPanelProps {
   classSetup: TeacherClassSetup;
   branchLabel?: string | null;
   annualCourseId?: string | null;
+  schoolYearLabel?: string | null;
   subjectId?: string | null;
   schoolWeeks: SchoolWeek[];
   centerWeekNumber: number;
@@ -135,6 +137,7 @@ export function ClassNotebookPanel({
   classSetup,
   branchLabel: selectedBranchLabel,
   annualCourseId,
+  schoolYearLabel,
   subjectId,
   schoolWeeks,
   centerWeekNumber,
@@ -156,6 +159,7 @@ export function ClassNotebookPanel({
 }: ClassNotebookPanelProps) {
   const [weekDisplayCount, setWeekDisplayCount] = useState<WeekDisplayCount>(3);
   const [controlsOpen, setControlsOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [clipboard, setClipboard] = useState<NotebookClipboard | null>(null);
   const [selection, setSelection] = useState<LineSelection | null>(null);
   const [dragPayload, setDragPayload] = useState<DragPayload | null>(null);
@@ -930,6 +934,11 @@ export function ClassNotebookPanel({
               Aperçu élève
             </button>
           ) : null}
+          {annualCourseId?.trim() ? (
+            <button type="button" className="workspace-action secondary" onClick={() => setExportOpen(true)}>
+              📄 Exporter le carnet
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -1411,6 +1420,16 @@ export function ClassNotebookPanel({
         }}
         onDelete={onDeleteControl}
       />
+      {annualCourseId?.trim() ? (
+        <NotebookExportModal
+          open={exportOpen}
+          annualCourseId={annualCourseId}
+          classLabel={classSetup.name}
+          branchLabel={branchLabel}
+          schoolYearLabel={schoolYearLabel?.trim() || ""}
+          onClose={() => setExportOpen(false)}
+        />
+      ) : null}
     </section>
   );
 }

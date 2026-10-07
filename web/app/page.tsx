@@ -1826,6 +1826,7 @@ export default function Home() {
             classSetup={openNotebookClass}
             branchLabel={openNotebookCourse?.branchLabel}
             annualCourseId={openNotebookCourse?.annualCourseId}
+            schoolYearLabel={teacherCoursesYearLabel}
             subjectId={notebookSubjectId}
             schoolWeeks={schoolWeeksMemo}
             centerWeekNumber={notebookCenterWeek}

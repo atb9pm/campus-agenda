@@ -81,6 +81,7 @@ test("IDOR — les routes mutantes recalculent teacherId depuis la session", asy
     "../web/app/api/teacher/setup/route.ts",
     "../web/app/api/teacher/courses/route.ts",
     "../web/app/api/teacher/course-timeline/route.ts",
+    "../web/app/api/teacher/notebook-export/route.ts",
     "../web/app/api/teacher/notebook-publications/route.ts",
     "../web/app/api/teacher/course-publications/route.ts",
     "../web/app/api/teacher/controls/route.ts",
