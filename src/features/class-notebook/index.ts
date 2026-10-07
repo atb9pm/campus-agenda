@@ -178,6 +178,8 @@ export {
   clampWeekDisplayCount,
   formatWeekColumnLabel,
   formatWeekColumnSubtitle,
+  NOTEBOOK_NARROW_VIEWPORT_MAX_PX,
+  notebookWeekDisplayCountForViewport,
   visibleSchoolWeeks,
   type WeekDisplayCount,
 } from "./week-window.ts";
