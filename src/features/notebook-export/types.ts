@@ -1,5 +1,5 @@
 import type { CourseSession } from "../course-sessions/types.ts";
-import type { QuickBlockKind } from "../class-notebook/rich-doc.ts";
+import type { QuickBlockKind, RichMarks } from "../class-notebook/rich-doc.ts";
 
 export const NOTEBOOK_EXPORT_PERIODS = ["year", "semester-1", "semester-2"] as const;
 export type NotebookExportPeriod = (typeof NOTEBOOK_EXPORT_PERIODS)[number];
@@ -17,13 +17,18 @@ export interface NotebookExportOptions {
   coverPage: boolean;
 }
 
+export interface NotebookExportRun {
+  text: string;
+  marks?: RichMarks;
+}
+
 export interface NotebookExportRichLine {
   kind: "heading" | "paragraph" | "bullet" | "ordered" | "check" | "callout";
   text: string;
+  runs: NotebookExportRun[];
   order?: number;
   checked?: boolean;
   calloutKind?: QuickBlockKind;
-  href?: string;
 }
 
 export interface NotebookExportSessionBlock {
@@ -31,6 +36,7 @@ export interface NotebookExportSessionBlock {
   weekLabel: string;
   dateLabel: string;
   longDateLabel: string;
+  summaryDateLabel: string;
   publications: NotebookExportRichLine[];
   controls: string[];
   notes: NotebookExportRichLine[];

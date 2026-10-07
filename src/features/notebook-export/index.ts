@@ -12,10 +12,20 @@ export {
   formatExportWeekLabel,
 } from "./assemble.ts";
 export {
+  compactLineText,
+  exportLineHasMark,
   exportLinesContainRawRichPayload,
+  inlinesToRuns,
   publicationToExportLines,
   richDocToExportLines,
 } from "./rich-lines.ts";
+export {
+  colorHexForMarks,
+  fontKindForMarks,
+  highlightHexForMarks,
+  underlineForMarks,
+} from "./rich-style.ts";
+export { formatSummaryDateLabel, summaryLinesForSession } from "./summary.ts";
 export { renderNotebookExportPdf } from "./pdf.ts";
 export {
   COURSE_TIMELINE_FORBIDDEN_REASON,

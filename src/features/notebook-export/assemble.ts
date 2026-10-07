@@ -8,6 +8,7 @@ import type { CourseSession } from "../course-sessions/types.ts";
 import { splitControlPlanningPeriods } from "../control-planning/periods.ts";
 import type { SchoolWeekEntry } from "../school-year/types.ts";
 import { publicationToExportLines, richDocToExportLines } from "./rich-lines.ts";
+import { formatSummaryDateLabel } from "./summary.ts";
 import type {
   NotebookExportDocument,
   NotebookExportOptions,
@@ -115,6 +116,7 @@ export function assembleNotebookExport(input: {
       weekLabel: formatExportWeekLabel(session),
       dateLabel: formatExportDateLabel(session),
       longDateLabel: formatExportLongDateLabel(session),
+      summaryDateLabel: formatSummaryDateLabel(session),
       publications,
       controls,
       notes,
@@ -133,7 +135,7 @@ export function assembleNotebookExport(input: {
     generatedOn: input.generatedOn,
     layout: input.options.layout,
     coverPage: input.options.coverPage,
-    sessionCount: blocks.length,
+    sessionCount: sessions.length,
     publicationCount,
     controlCount,
     noteCount: blocks.reduce((sum, block) => sum + (block.notes.length ? 1 : 0), 0),

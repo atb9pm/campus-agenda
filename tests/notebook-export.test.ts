@@ -4,6 +4,7 @@ import test from "node:test";
 
 import type { PrototypeAgendaItem } from "../src/features/agenda/demo-items.ts";
 import {
+  buildPublicationPayload,
   encodeRichDetail,
   fromPlainText,
   QUICK_BLOCK_LABELS,
@@ -16,14 +17,19 @@ import {
   assembleNotebookExport,
   COURSE_TIMELINE_FORBIDDEN_REASON,
   DEFAULT_NOTEBOOK_EXPORT_OPTIONS,
+  exportLineHasMark,
   exportLinesContainRawRichPayload,
   filterSessionsForExportPeriod,
+  fontKindForMarks,
   formatCourseScheduleSummary,
+  highlightHexForMarks,
   notebookExportFilename,
   parseNotebookExportOptions,
   publicationToExportLines,
   renderNotebookExportPdf,
   richDocToExportLines,
+  summaryLinesForSession,
+  underlineForMarks,
 } from "../src/features/notebook-export/index.ts";
 import type { SchoolWeekEntry } from "../src/features/school-year/types.ts";
 
@@ -245,9 +251,10 @@ test("export — CampusRichDoc structuré, callout Information dans la publicati
   assert.match(lines[1]?.text ?? "", /Apporter le dossier/);
   assert.equal(QUICK_BLOCK_LABELS.info, "Information");
   assert.equal(exportLinesContainRawRichPayload(lines), false);
-  const fromItem = publicationToExportLines("Titre", encodeRichDetail(doc));
+  const fromItem = publicationToExportLines("Titre synthétique", encodeRichDetail(doc));
   assert.equal(exportLinesContainRawRichPayload(fromItem), false);
   assert.doesNotMatch(fromItem.map((line) => line.text).join("\n"), /CAMPUS_RICH_V1/);
+  assert.equal(fromItem.some((line) => line.text.includes("Titre synthétique")), false);
 });
 
 test("export — brouillons et notes prof selon les cases", () => {
@@ -318,6 +325,18 @@ test("export — semestres, année complète, vide, nom de fichier, PDF valide",
     items: [item({ id: 1, type: "HOMEWORK", title: "Devoir", studentVisible: true })],
   });
   assert.ok(built);
+  assert.equal(built!.sessionCount, computed.length);
+  assert.equal(built!.sessions.length, 1);
+  const semester1 = assemble({
+    items: [item({ id: 1, type: "HOMEWORK", title: "Devoir", studentVisible: true })],
+    exportOptions: { period: "semester-1" },
+  });
+  const semester2 = assemble({
+    items: [item({ id: 2, type: "TEST", title: "C2", schoolWeekNumber: 10, day: 3 })],
+    exportOptions: { period: "semester-2" },
+  });
+  assert.equal(semester1?.sessionCount, s1.length);
+  assert.equal(semester2?.sessionCount, s2.length);
   const pdf = await renderNotebookExportPdf(built!);
   assert.equal(Buffer.from(pdf.slice(0, 5)).toString("latin1"), "%PDF-");
   assert.match(Buffer.from(pdf.slice(-32)).toString("latin1"), /%%EOF/);
@@ -349,3 +368,102 @@ test("export — sécurité enseignant, élève interdit, professeur non assign�
   const fromPlain = fromPlainText("ok");
   assert.ok(fromPlain.blocks.length);
 });
+
+test("export — marks riches conservés (gras, italique, souligné, surlignage, couleur, lien, combinaison)", () => {
+  const doc = {
+    format: "campus-rich-v1" as const,
+    blocks: [
+      {
+        type: "paragraph" as const,
+        inlines: [
+          { text: "gras", marks: { bold: true as const } },
+          { text: " " },
+          { text: "italique", marks: { italic: true as const } },
+          { text: " " },
+          { text: "souligné", marks: { underline: true as const } },
+          { text: " " },
+          { text: "surligné", marks: { highlight: true as const } },
+          { text: " " },
+          { text: "couleur", marks: { color: "red" as const } },
+          { text: " " },
+          { text: "lien", marks: { href: "https://campus.example/doc" } },
+          { text: " " },
+          { text: "combo", marks: { bold: true as const, italic: true as const, underline: true as const, highlight: true as const, color: "navy" as const, href: "https://campus.example/combo" } },
+        ],
+      },
+    ],
+  };
+  const [line] = richDocToExportLines(doc);
+  assert.ok(line);
+  assert.equal(exportLineHasMark(line!, "bold"), true);
+  assert.equal(exportLineHasMark(line!, "italic"), true);
+  assert.equal(exportLineHasMark(line!, "underline"), true);
+  assert.equal(exportLineHasMark(line!, "highlight"), true);
+  assert.equal(exportLineHasMark(line!, "color"), true);
+  assert.equal(exportLineHasMark(line!, "href"), true);
+  const combo = line!.runs.find((run) => run.text === "combo");
+  assert.equal(fontKindForMarks(combo?.marks), "boldItalic");
+  assert.equal(underlineForMarks(combo?.marks), true);
+  assert.ok(highlightHexForMarks(combo?.marks));
+  assert.equal(combo?.marks?.color, "navy");
+  assert.equal(combo?.marks?.href, "https://campus.example/combo");
+  assert.equal(line!.runs.find((run) => run.text === "gras")?.marks?.bold, true);
+  assert.equal(line!.runs.find((run) => run.text === "italique")?.marks?.italic, true);
+});
+
+test("export — publication riche via buildPublicationPayload sans titre dupliqué", () => {
+  const doc = {
+    format: "campus-rich-v1" as const,
+    blocks: [
+      { type: "heading" as const, inlines: [{ text: "Moteur" }] },
+      { type: "paragraph" as const, inlines: [{ text: "Terminer exercice 4" }] },
+      { type: "callout" as const, kind: "info" as const, inlines: [{ text: "apporter dossier" }] },
+    ],
+  };
+  const payload = buildPublicationPayload(doc);
+  assert.ok(payload);
+  assert.match(payload!.title, /Moteur/);
+  const lines = publicationToExportLines(payload!.title, payload!.detail);
+  const joined = lines.map((line) => line.text).join("\n");
+  assert.equal(joined.split("Moteur").length - 1, 1);
+  assert.equal(joined.split("Terminer exercice 4").length - 1, 1);
+  assert.equal(joined.includes(payload!.title) && payload!.title.includes("Terminer"), false);
+  assert.doesNotMatch(joined, /CAMPUS_RICH_V1/);
+  const legacy = publicationToExportLines("Devoir papier", "Lire le dossier");
+  assert.equal(legacy[0]?.text, "Devoir papier");
+  assert.equal(legacy[1]?.text, "Lire le dossier");
+});
+
+test("export — synthèse compacte distincte du carnet détaillé", async () => {
+  const rich = encodeRichDetail({
+    format: "campus-rich-v1",
+    blocks: [
+      { type: "heading", inlines: [{ text: "Moteur" }] },
+      { type: "paragraph", inlines: [{ text: "Terminer exercice moteur", marks: { bold: true } }] },
+      { type: "bulletList", items: [[{ text: "Revoir le schéma" }]] },
+      { type: "callout", kind: "info", inlines: [{ text: "apporter dossier" }] },
+    ],
+  });
+  const items = [
+    item({ id: 1, type: "HOMEWORK", title: "ignored-title", detail: rich, studentVisible: true }),
+    item({ id: 2, type: "TEST", title: "Injection", schoolWeekNumber: 6, day: 3 }),
+  ];
+  const summary = assemble({ items, exportOptions: { layout: "summary" } });
+  const detailed = assemble({ items, exportOptions: { layout: "detailed" } });
+  assert.ok(summary && detailed);
+  const compact = summaryLinesForSession(summary!.sessions[0]!);
+  assert.match(compact[0] ?? "", /SEM 06-B · Jeu\. 24\.09\.2026/);
+  assert.equal(compact.some((line) => line.startsWith("Publication élèves —")), true);
+  assert.equal(compact.some((line) => line.startsWith("Contrôle — Injection")), true);
+  assert.equal(compact.some((line) => line.includes("Information")), true);
+  assert.equal(compact.some((line) => line.includes("PUBLICATION ÉLÈVES")), false);
+  assert.equal(detailed!.sessions[0]?.publications.some((line) => line.kind === "heading" && line.text === "Moteur"), true);
+  assert.equal(detailed!.sessions[0]?.publications.some((line) => exportLineHasMark(line, "bold")), true);
+  assert.ok(compact.join("\n").length < detailed!.sessions[0]!.publications.map((line) => line.text).join("\n").length + 80);
+  const summaryPdf = await renderNotebookExportPdf(summary!);
+  const detailedPdf = await renderNotebookExportPdf(detailed!);
+  assert.equal(Buffer.from(summaryPdf.slice(0, 5)).toString("latin1"), "%PDF-");
+  assert.equal(Buffer.from(detailedPdf.slice(0, 5)).toString("latin1"), "%PDF-");
+  assert.notEqual(summaryPdf.byteLength, detailedPdf.byteLength);
+});
+

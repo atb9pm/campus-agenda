@@ -9,7 +9,17 @@ import {
   type PDFPage,
 } from "pdf-lib";
 
-import type { NotebookExportDocument, NotebookExportRichLine, NotebookExportSessionBlock } from "./types.ts";
+import type { NotebookExportDocument, NotebookExportRichLine, NotebookExportRun, NotebookExportSessionBlock } from "./types.ts";
+import {
+  colorHexForMarks,
+  fontKindForMarks,
+  hexToRgbParts,
+  highlightHexForMarks,
+  hrefForMarks,
+  underlineForMarks,
+  type NotebookExportFontKind,
+} from "./rich-style.ts";
+import { summaryLinesForSession } from "./summary.ts";
 
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
@@ -31,17 +41,11 @@ function winAnsi(text: string): string {
 }
 
 async function loadLogo(): Promise<Uint8Array | null> {
-  const candidates = [
-    new URL("../../../web/public/branding/campus-agenda-logo.png", import.meta.url),
-  ];
-  for (const url of candidates) {
-    try {
-      return new Uint8Array(await readFile(url));
-    } catch {
-      // try next
-    }
+  try {
+    return new Uint8Array(await readFile(new URL("../../../web/public/branding/campus-agenda-logo.png", import.meta.url)));
+  } catch {
+    return null;
   }
-  return null;
 }
 
 function wrap(font: PDFFont, text: string, size: number, maxWidth: number): string[] {
@@ -61,10 +65,17 @@ function wrap(font: PDFFont, text: string, size: number, maxWidth: number): stri
   return lines.length ? lines : [""];
 }
 
+function colorFromHex(hex: string) {
+  const { r, g, b } = hexToRgbParts(hex);
+  return rgb(r, g, b);
+}
+
 class PdfWriter {
   doc: PDFDocument;
   regular: PDFFont;
   bold: PDFFont;
+  italic: PDFFont;
+  boldItalic: PDFFont;
   logo: PDFImage | null;
   header: string;
   skipFirstFooter: boolean;
@@ -76,6 +87,8 @@ class PdfWriter {
     doc: PDFDocument,
     regular: PDFFont,
     bold: PDFFont,
+    italic: PDFFont,
+    boldItalic: PDFFont,
     logo: PDFImage | null,
     header: string,
     skipFirstFooter: boolean,
@@ -83,6 +96,8 @@ class PdfWriter {
     this.doc = doc;
     this.regular = regular;
     this.bold = bold;
+    this.italic = italic;
+    this.boldItalic = boldItalic;
     this.logo = logo;
     this.header = header;
     this.skipFirstFooter = skipFirstFooter;
@@ -90,6 +105,13 @@ class PdfWriter {
 
   contentWidth(): number {
     return PAGE_WIDTH - MARGIN * 2;
+  }
+
+  font(kind: NotebookExportFontKind): PDFFont {
+    if (kind === "boldItalic") return this.boldItalic;
+    if (kind === "bold") return this.bold;
+    if (kind === "italic") return this.italic;
+    return this.regular;
   }
 
   addPage(kind: "cover" | "content"): void {
@@ -163,6 +185,98 @@ class PdfWriter {
     this.y -= options.gap ?? 4;
   }
 
+  measure(text: string, marks: NotebookExportRun["marks"] | undefined, size: number, forceBold: boolean): number {
+    return this.font(fontKindForMarks(marks, forceBold)).widthOfTextAtSize(winAnsi(text), size);
+  }
+
+  wrapRuns(prefix: NotebookExportRun[], runs: readonly NotebookExportRun[], size: number, forceBold: boolean): NotebookExportRun[][] {
+    const maxWidth = this.contentWidth();
+    const tokens: NotebookExportRun[] = [];
+    for (const run of [...prefix, ...runs]) {
+      const text = winAnsi(run.text);
+      const parts = text.split(/(\s+)/);
+      for (const part of parts) {
+        if (!part) continue;
+        tokens.push(run.marks ? { text: part, marks: run.marks } : { text: part });
+      }
+    }
+    const rows: NotebookExportRun[][] = [];
+    let current: NotebookExportRun[] = [];
+    let width = 0;
+    const pushRow = () => {
+      if (current.length) rows.push(current);
+      current = [];
+      width = 0;
+    };
+    for (const token of tokens) {
+      const tokenWidth = this.measure(token.text, token.marks, size, forceBold);
+      if (current.length && width + tokenWidth > maxWidth && token.text.trim()) {
+        pushRow();
+      }
+      if (!current.length && !token.text.trim()) continue;
+      current.push(token);
+      width += tokenWidth;
+    }
+    pushRow();
+    return rows.length ? rows : [[{ text: "" }]];
+  }
+
+  paintRun(run: NotebookExportRun, x: number, baseline: number, size: number, forceBold: boolean): number {
+    if (!this.page) return 0;
+    const text = winAnsi(run.text);
+    const font = this.font(fontKindForMarks(run.marks, forceBold));
+    const width = font.widthOfTextAtSize(text, size);
+    const highlight = highlightHexForMarks(run.marks);
+    if (highlight && text.trim()) {
+      this.page.drawRectangle({
+        x,
+        y: baseline - 1.5,
+        width,
+        height: size + 2,
+        color: colorFromHex(highlight),
+        opacity: 0.7,
+      });
+    }
+    const colorHex = colorHexForMarks(run.marks);
+    this.page.drawText(text, {
+      x,
+      y: baseline,
+      size,
+      font,
+      color: colorHex ? colorFromHex(colorHex) : BLACK,
+    });
+    if (underlineForMarks(run.marks) || hrefForMarks(run.marks)) {
+      this.page.drawLine({
+        start: { x, y: baseline - 1.2 },
+        end: { x: x + width, y: baseline - 1.2 },
+        thickness: 0.6,
+        color: colorHex ? colorFromHex(colorHex) : NAVY,
+      });
+    }
+    const href = hrefForMarks(run.marks);
+    if (href) this.link(href, x, baseline - 1, width, size + 2);
+    return width;
+  }
+
+  drawRuns(
+    runs: readonly NotebookExportRun[],
+    options: { size: number; gap?: number; prefix?: NotebookExportRun[]; forceBold?: boolean },
+  ): void {
+    if (!this.page) return;
+    const size = options.size;
+    const forceBold = Boolean(options.forceBold);
+    for (const row of this.wrapRuns(options.prefix ?? [], runs, size, forceBold)) {
+      if (this.remaining() < size + 4) this.addPage("content");
+      const baseline = this.y - size;
+      let x = MARGIN;
+      for (const run of row) {
+        x += this.paintRun(run, x, baseline, size, forceBold);
+      }
+      this.y -= size + 3;
+    }
+    this.y -= options.gap ?? 4;
+  }
+
   rule(): void {
     if (!this.page) return;
     this.page.drawLine({
@@ -218,31 +332,37 @@ class PdfWriter {
   rich(lines: readonly NotebookExportRichLine[]): void {
     for (const line of lines) {
       if (line.kind === "heading") {
-        this.drawText(line.text, { size: 11, font: this.bold, gap: 4, href: line.href });
+        this.drawRuns(line.runs, { size: 11, gap: 4, forceBold: true });
       } else if (line.kind === "bullet") {
-        this.drawText(`- ${line.text}`, { size: 10, gap: 3, href: line.href });
+        this.drawRuns(line.runs, { size: 10, gap: 3, prefix: [{ text: "- " }] });
       } else if (line.kind === "ordered") {
-        this.drawText(`${line.order ?? 1}. ${line.text}`, { size: 10, gap: 3, href: line.href });
+        this.drawRuns(line.runs, { size: 10, gap: 3, prefix: [{ text: `${line.order ?? 1}. ` }] });
       } else if (line.kind === "check") {
-        this.drawText(`${line.checked ? "[x]" : "[ ]"} ${line.text}`, { size: 10, gap: 3, href: line.href });
+        this.drawRuns(line.runs, { size: 10, gap: 3, prefix: [{ text: `${line.checked ? "[x]" : "[ ]"} ` }] });
       } else if (line.kind === "callout") {
-        this.drawText(line.text, { size: 10, font: this.bold, gap: 3, href: line.href });
+        this.drawRuns(line.runs, { size: 10, gap: 3 });
       } else {
-        this.drawText(line.text, { size: 10, gap: 3, href: line.href });
+        this.drawRuns(line.runs, { size: 10, gap: 3 });
       }
-      if (line.href) this.drawText(line.href, { size: 8, color: MUTED, gap: 4, href: line.href });
     }
   }
 
-  session(block: NotebookExportSessionBlock, detailed: boolean): void {
-    this.ensure(72);
-    if (detailed) {
-      this.drawText(block.weekLabel.toUpperCase(), { size: 13, font: this.bold, color: NAVY, gap: 2 });
-      this.drawText(block.longDateLabel, { size: 10, color: MUTED, gap: 8 });
-      this.rule();
-    } else {
-      this.drawText(`${block.weekLabel} - ${block.dateLabel}`, { size: 11, font: this.bold, color: NAVY, gap: 8 });
+  sessionSummary(block: NotebookExportSessionBlock): void {
+    const lines = summaryLinesForSession(block);
+    this.ensure(16 * lines.length + 10);
+    const header = lines[0] ?? "";
+    this.drawText(header, { size: 10, font: this.bold, color: NAVY, gap: 2 });
+    for (const line of lines.slice(1)) {
+      this.drawText(line, { size: 9, color: BLACK, gap: 1 });
     }
+    this.y -= 8;
+  }
+
+  sessionDetailed(block: NotebookExportSessionBlock): void {
+    this.ensure(72);
+    this.drawText(block.weekLabel.toUpperCase(), { size: 13, font: this.bold, color: NAVY, gap: 2 });
+    this.drawText(block.longDateLabel, { size: 10, color: MUTED, gap: 8 });
+    this.rule();
     if (block.publications.length) {
       this.section("PUBLICATION ÉLÈVES");
       this.rich(block.publications);
@@ -295,14 +415,17 @@ export async function renderNotebookExportPdf(document: NotebookExportDocument):
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const italic = await pdf.embedFont(StandardFonts.HelveticaOblique);
+  const boldItalic = await pdf.embedFont(StandardFonts.HelveticaBoldOblique);
   const logoBytes = await loadLogo();
   const logo = logoBytes ? await pdf.embedPng(logoBytes).catch(() => null) : null;
   const header = `${document.classCode} · ${document.branchLabel} · ${document.schoolYearLabel}`;
-  const writer = new PdfWriter(pdf, regular, bold, logo, header, document.coverPage);
+  const writer = new PdfWriter(pdf, regular, bold, italic, boldItalic, logo, header, document.coverPage);
   if (document.coverPage) writer.cover(document);
   if (!writer.page || document.coverPage) writer.addPage("content");
   for (const session of document.sessions) {
-    writer.session(session, document.layout === "detailed");
+    if (document.layout === "detailed") writer.sessionDetailed(session);
+    else writer.sessionSummary(session);
   }
   writer.footers();
   return pdf.save();

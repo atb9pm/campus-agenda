@@ -5,15 +5,53 @@ import {
   decodeRichDetail,
   isEmptyRichDoc,
   type CampusRichDoc,
+  type RichInline,
+  type RichMarks,
 } from "../class-notebook/rich-doc.ts";
-import type { NotebookExportRichLine } from "./types.ts";
+import type { NotebookExportRichLine, NotebookExportRun } from "./types.ts";
 
-function inlinesText(inlines: ReadonlyArray<{ text: string; marks?: { href?: string } }>): {
-  text: string;
-  href?: string;
-} {
-  const href = inlines.find((entry) => entry.marks?.href)?.marks?.href;
-  return { text: inlines.map((entry) => entry.text).join(""), href };
+export function cloneMarks(marks?: RichMarks): RichMarks | undefined {
+  if (!marks) return undefined;
+  const next: RichMarks = {};
+  if (marks.bold) next.bold = true;
+  if (marks.italic) next.italic = true;
+  if (marks.underline) next.underline = true;
+  if (marks.highlight) next.highlight = true;
+  if (marks.color) next.color = marks.color;
+  if (marks.href) next.href = marks.href;
+  return Object.keys(next).length ? next : undefined;
+}
+
+export function inlinesToRuns(inlines: readonly RichInline[]): NotebookExportRun[] {
+  return inlines
+    .map((entry) => {
+      const marks = cloneMarks(entry.marks);
+      return marks ? { text: entry.text, marks } : { text: entry.text };
+    })
+    .filter((run) => run.text.length > 0);
+}
+
+export function runsPlainText(runs: readonly NotebookExportRun[]): string {
+  return runs.map((run) => run.text).join("");
+}
+
+export function lineFromRuns(
+  kind: NotebookExportRichLine["kind"],
+  runs: readonly NotebookExportRun[],
+  extra?: Pick<NotebookExportRichLine, "order" | "checked" | "calloutKind">,
+): NotebookExportRichLine | null {
+  const cleaned = [...runs];
+  if (!runsPlainText(cleaned).trim()) return null;
+  return {
+    kind,
+    runs: cleaned,
+    text: runsPlainText(cleaned),
+    ...extra,
+  };
+}
+
+function pushLine(lines: NotebookExportRichLine[], line: NotebookExportRichLine | null): void {
+  if (line) lines.push(line);
 }
 
 export function richDocToExportLines(doc: CampusRichDoc | null | undefined): NotebookExportRichLine[] {
@@ -21,47 +59,37 @@ export function richDocToExportLines(doc: CampusRichDoc | null | undefined): Not
   const lines: NotebookExportRichLine[] = [];
   for (const block of doc.blocks) {
     if (block.type === "heading") {
-      const { text, href } = inlinesText(block.inlines);
-      if (text.trim()) lines.push({ kind: "heading", text: text.trim(), href });
+      pushLine(lines, lineFromRuns("heading", inlinesToRuns(block.inlines)));
       continue;
     }
     if (block.type === "callout") {
-      const { text, href } = inlinesText(block.inlines);
       const label = QUICK_BLOCK_LABELS[block.kind];
-      const body = text.trim();
-      lines.push({
-        kind: "callout",
-        calloutKind: block.kind,
-        text: body ? `${label} : ${body}` : label,
-        href,
-      });
+      const body = inlinesToRuns(block.inlines);
+      const runs: NotebookExportRun[] = body.length
+        ? [{ text: `${label} : `, marks: { bold: true } }, ...body]
+        : [{ text: label, marks: { bold: true } }];
+      pushLine(lines, lineFromRuns("callout", runs, { calloutKind: block.kind }));
       continue;
     }
     if (block.type === "bulletList") {
       for (const item of block.items) {
-        const { text, href } = inlinesText(item);
-        if (text.trim()) lines.push({ kind: "bullet", text: text.trim(), href });
+        pushLine(lines, lineFromRuns("bullet", inlinesToRuns(item)));
       }
       continue;
     }
     if (block.type === "orderedList") {
       block.items.forEach((item, index) => {
-        const { text, href } = inlinesText(item);
-        if (text.trim()) lines.push({ kind: "ordered", text: text.trim(), order: index + 1, href });
+        pushLine(lines, lineFromRuns("ordered", inlinesToRuns(item), { order: index + 1 }));
       });
       continue;
     }
     if (block.type === "checklist") {
       for (const item of block.items) {
-        const { text, href } = inlinesText(item.inlines);
-        if (text.trim()) {
-          lines.push({ kind: "check", text: text.trim(), checked: item.checked, href });
-        }
+        pushLine(lines, lineFromRuns("check", inlinesToRuns(item.inlines), { checked: item.checked }));
       }
       continue;
     }
-    const { text, href } = inlinesText(block.inlines);
-    if (text.trim()) lines.push({ kind: "paragraph", text: text.trim(), href });
+    pushLine(lines, lineFromRuns("paragraph", inlinesToRuns(block.inlines)));
   }
   return lines;
 }
@@ -69,22 +97,44 @@ export function richDocToExportLines(doc: CampusRichDoc | null | undefined): Not
 export function publicationToExportLines(title: string, detail: string): NotebookExportRichLine[] {
   const rich = decodeRichDetail(detail);
   if (rich && !isEmptyRichDoc(rich)) {
-    const lines = richDocToExportLines(rich);
-    if (title.trim() && !lines.some((line) => line.kind === "heading" && line.text === title.trim())) {
-      return [{ kind: "heading", text: title.trim() }, ...lines];
-    }
-    return lines;
+    return richDocToExportLines(rich);
   }
   const lines: NotebookExportRichLine[] = [];
-  if (title.trim()) lines.push({ kind: "heading", text: title.trim() });
+  if (title.trim()) {
+    pushLine(lines, lineFromRuns("heading", [{ text: title.trim() }]));
+  }
   const plain = detail.trim();
   if (plain && !plain.startsWith(CAMPUS_RICH_DETAIL_PREFIX) && plain !== CAMPUS_RICH_FORMAT) {
-    lines.push({ kind: "paragraph", text: plain });
+    pushLine(lines, lineFromRuns("paragraph", [{ text: plain }]));
   }
   return lines;
+}
+
+export function exportLineHasMark(
+  line: NotebookExportRichLine,
+  mark: keyof Pick<RichMarks, "bold" | "italic" | "underline" | "highlight" | "href" | "color">,
+): boolean {
+  return line.runs.some((run) => {
+    if (mark === "href") return Boolean(run.marks?.href);
+    if (mark === "color") return Boolean(run.marks?.color);
+    return Boolean(run.marks?.[mark]);
+  });
 }
 
 export function exportLinesContainRawRichPayload(lines: readonly NotebookExportRichLine[]): boolean {
   const joined = lines.map((line) => line.text).join("\n");
   return joined.includes(CAMPUS_RICH_DETAIL_PREFIX) || joined.includes(`"${CAMPUS_RICH_FORMAT}"`);
+}
+
+export function compactLineText(line: NotebookExportRichLine): string {
+  if (line.kind === "bullet") return `- ${line.text.trim()}`;
+  if (line.kind === "ordered") return `${line.order ?? 1}. ${line.text.trim()}`;
+  if (line.kind === "check") return `${line.checked ? "[x]" : "[ ]"} ${line.text.trim()}`;
+  return line.text.replace(/\s+/g, " ").trim();
+}
+
+export function truncateExportText(value: string, maxLength = 110): string {
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (compact.length <= maxLength) return compact;
+  return `${compact.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
