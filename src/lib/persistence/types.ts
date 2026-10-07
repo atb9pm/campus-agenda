@@ -76,7 +76,20 @@ export interface AgendaStore {
   updateAgendaItem(
     itemId: number,
     actorTeacherId: string,
-    patch: Partial<Pick<CreateAgendaInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber" | "studentVisible">>,
+    patch: Partial<
+      Pick<
+        CreateAgendaInput,
+        | "title"
+        | "detail"
+        | "day"
+        | "hour"
+        | "subjectId"
+        | "schoolWeekNumber"
+        | "studentVisible"
+        | "courseSessionDate"
+        | "courseSessionKey"
+      >
+    >,
   ): Promise<AgendaMutationResult>;
   /** Mutation métier de déplacement structuré. Ne pas utiliser pour un PATCH libre. */
   moveStructuredControlPlacement(

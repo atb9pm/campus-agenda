@@ -11,12 +11,23 @@ export {
   findPublicationById,
   isAllowedPublicationType,
   isStructuredAgendaPublication,
+  notebookOwnedPublicationPatch,
   structuredAgendaPatchGuard,
   STRUCTURED_AGENDA_PATCH_FORBIDDEN_REASON,
   updatePublication,
   type PublicationInput,
   type PublicationPatch,
 } from "./publications.ts";
+export {
+  AGENDA_PLACEMENT_NO_DATE_REASON,
+  AGENDA_PLACEMENT_NO_SESSION_REASON,
+  AGENDA_PLACEMENT_YEAR_REASON,
+  buildAgendaItemUpdatePatch,
+  isAgendaPlacementChange,
+  normalizeAgendaPlacement,
+  type AgendaPlacementContext,
+  type NormalizedAgendaPlacement,
+} from "./placement.ts";
 export {
   legacyTmaPublicationDayAllowed,
   validateAgendaScheduleTarget,

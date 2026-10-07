@@ -24,8 +24,38 @@ export interface PublicationInput {
 }
 
 export type PublicationPatch = Partial<
-  Pick<PublicationInput, "title" | "detail" | "day" | "hour" | "subjectId" | "schoolWeekNumber" | "studentVisible">
+  Pick<
+    PublicationInput,
+    | "title"
+    | "detail"
+    | "day"
+    | "hour"
+    | "subjectId"
+    | "schoolWeekNumber"
+    | "studentVisible"
+    | "courseSessionDate"
+    | "courseSessionKey"
+  >
 >;
+
+/** PATCH Carnet : contenu et placement seulement. Jamais la branche ni la provenance. */
+export function notebookOwnedPublicationPatch(body: {
+  title?: string;
+  detail?: string;
+  day?: number;
+  hour?: number;
+  schoolWeekNumber?: number;
+  studentVisible?: boolean;
+}): PublicationPatch {
+  return {
+    title: body.title,
+    detail: body.detail,
+    day: body.day,
+    hour: body.hour,
+    schoolWeekNumber: body.schoolWeekNumber,
+    studentVisible: body.studentVisible,
+  };
+}
 
 export function isAllowedPublicationType(type: string): type is AgendaItemType {
   return (AGENDA_ITEM_TYPES as readonly string[]).includes(type);
@@ -39,9 +69,7 @@ export const STRUCTURED_AGENDA_PATCH_FORBIDDEN_REASON =
   "Les champs de provenance et de ciblage d’une publication structurée ne peuvent pas être modifiés.";
 
 const STRUCTURED_PATCH_FORBIDDEN_KEYS = [
-  "day",
   "hour",
-  "schoolWeekNumber",
   "subjectId",
   "annualCourseId",
   "courseSessionKey",
@@ -56,6 +84,9 @@ export function structuredAgendaPatchGuard(
 ): { ok: true } | { ok: false; reason: string } {
   if (!isStructuredAgendaPublication(item)) return { ok: true };
   if (STRUCTURED_PATCH_FORBIDDEN_KEYS.some((key) => body[key] !== undefined)) {
+    return { ok: false, reason: STRUCTURED_AGENDA_PATCH_FORBIDDEN_REASON };
+  }
+  if (item.type === "TEST" && (body.day !== undefined || body.schoolWeekNumber !== undefined)) {
     return { ok: false, reason: STRUCTURED_AGENDA_PATCH_FORBIDDEN_REASON };
   }
   return { ok: true };
@@ -146,6 +177,10 @@ export function updatePublication(
     templateId: existing.templateId ?? null,
     schoolYearId: existing.schoolYearId ?? null,
     studentVisible: patch.studentVisible ?? existing.studentVisible,
+    courseSessionDate:
+      patch.courseSessionDate !== undefined ? patch.courseSessionDate : existing.courseSessionDate,
+    courseSessionKey:
+      patch.courseSessionKey !== undefined ? patch.courseSessionKey : existing.courseSessionKey,
   };
 
   return {
