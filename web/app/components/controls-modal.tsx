@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items";
 import type { SchoolWeek } from "@campus/features/calendar";
@@ -70,9 +70,13 @@ export function ControlsModal({
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
 
+  const resolvedWeekNumber = schoolWeeks.some((week) => week.number === schoolWeekNumber)
+    ? schoolWeekNumber
+    : (schoolWeeks[0]?.number ?? 1);
+
   const selectedWeek = useMemo(
-    () => schoolWeeks.find((week) => week.number === schoolWeekNumber) ?? schoolWeeks[0],
-    [schoolWeekNumber, schoolWeeks],
+    () => schoolWeeks.find((week) => week.number === resolvedWeekNumber) ?? schoolWeeks[0],
+    [resolvedWeekNumber, schoolWeeks],
   );
 
   const dayOptions = useMemo(
@@ -80,17 +84,9 @@ export function ControlsModal({
     [courseSessions, selectedWeek],
   );
 
-  useEffect(() => {
-    if (!open) return;
-    const weekExists = schoolWeeks.some((week) => week.number === schoolWeekNumber);
-    const nextWeek = weekExists ? schoolWeekNumber : (schoolWeeks[0]?.number ?? 1);
-    if (nextWeek !== schoolWeekNumber) setSchoolWeekNumber(nextWeek);
-    const week = schoolWeeks.find((entry) => entry.number === nextWeek) ?? schoolWeeks[0];
-    const options = dayOptionsForWeek(week, courseSessions);
-    if (!options.some((option) => option.dayIndex === day)) {
-      setDay(options[0]?.dayIndex ?? 0);
-    }
-  }, [courseSessions, day, open, schoolWeekNumber, schoolWeeks]);
+  const resolvedDay = dayOptions.some((option) => option.dayIndex === day)
+    ? day
+    : (dayOptions[0]?.dayIndex ?? 0);
 
   if (!open) return null;
 
@@ -109,7 +105,7 @@ export function ControlsModal({
     setWorking(true);
     setError("");
     try {
-      await onSave({ schoolWeekNumber, day, title: trimmed });
+      await onSave({ schoolWeekNumber: resolvedWeekNumber, day: resolvedDay, title: trimmed });
       setTitle("");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Enregistrement impossible.");
@@ -136,7 +132,7 @@ export function ControlsModal({
             <label>
               Semaine
               <select
-                value={schoolWeekNumber}
+                value={resolvedWeekNumber}
                 onChange={(event) => {
                   const nextWeek = Number(event.target.value);
                   setSchoolWeekNumber(nextWeek);
@@ -156,7 +152,7 @@ export function ControlsModal({
             <label>
               Jour de cours
               <select
-                value={day}
+                value={resolvedDay}
                 onChange={(event) => setDay(Number(event.target.value))}
                 disabled={dayOptions.length === 0}
               >

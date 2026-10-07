@@ -164,30 +164,25 @@ export function ClassNotebookPanel({
     null,
   );
   const [courseSessions, setCourseSessions] = useState<CourseSession[] | null>(null);
-  const [sessionsLoading, setSessionsLoading] = useState(Boolean(annualCourseId?.trim()));
+  const [loadedCourseId, setLoadedCourseId] = useState<string | null>(null);
   const [sessionsError, setSessionsError] = useState("");
 
-  const structuredCourse = Boolean(annualCourseId?.trim());
+  const structuredCourseId = annualCourseId?.trim() || "";
+  const structuredCourse = Boolean(structuredCourseId);
+  const sessionsLoading = structuredCourse && loadedCourseId !== structuredCourseId;
 
   useEffect(() => {
     const courseId = annualCourseId?.trim() || "";
-    if (!courseId) {
-      setCourseSessions(null);
-      setSessionsLoading(false);
-      setSessionsError("");
-      return;
-    }
+    if (!courseId) return;
 
     const controller = new AbortController();
-    setSessionsLoading(true);
-    setSessionsError("");
-    setCourseSessions(null);
-
     void (async () => {
       try {
         const payload = await fetchTeacherCourseTimelineApi(courseId, controller.signal);
         if (controller.signal.aborted) return;
-        setCourseSessions(payload.timeline.entries.map((entry) => entry.courseSession));
+        const sessions = payload.timeline.entries.map((entry) => entry.courseSession);
+        setCourseSessions(sessions);
+        setLoadedCourseId(courseId);
         setSessionsError("");
       } catch (caught) {
         if (controller.signal.aborted) return;
@@ -195,8 +190,7 @@ export function ClassNotebookPanel({
         if (caught instanceof Error && caught.name === "AbortError") return;
         setSessionsError(caught instanceof Error ? caught.message : "Chargement des séances impossible.");
         setCourseSessions([]);
-      } finally {
-        if (!controller.signal.aborted) setSessionsLoading(false);
+        setLoadedCourseId(courseId);
       }
     })();
 
@@ -204,39 +198,35 @@ export function ClassNotebookPanel({
   }, [annualCourseId]);
 
   const eligibleWeeks = useMemo(() => {
-    if (!structuredCourse || courseSessions == null) return schoolWeeks;
+    if (!structuredCourse || sessionsLoading || courseSessions == null) return schoolWeeks;
     return eligibleSchoolWeeksForSessions(schoolWeeks, courseSessions);
-  }, [courseSessions, schoolWeeks, structuredCourse]);
+  }, [courseSessions, schoolWeeks, sessionsLoading, structuredCourse]);
 
   const eligibleWeekNumbers = useMemo(
-    () => (structuredCourse && courseSessions ? eligibleCourseWeekNumbers(courseSessions) : schoolWeeks.map((week) => week.number)),
-    [courseSessions, schoolWeeks, structuredCourse],
+    () =>
+      structuredCourse && !sessionsLoading && courseSessions
+        ? eligibleCourseWeekNumbers(courseSessions)
+        : schoolWeeks.map((week) => week.number),
+    [courseSessions, schoolWeeks, sessionsLoading, structuredCourse],
   );
 
-  useEffect(() => {
-    if (!structuredCourse || sessionsLoading || courseSessions == null) return;
-    if (!eligibleWeekNumbers.length) return;
-    if (eligibleWeekNumbers.includes(centerWeekNumber)) return;
-    const snapped = snapToEligibleCourseWeek(eligibleWeekNumbers, centerWeekNumber);
-    if (snapped != null) onCenterWeekChange(snapped);
-  }, [
-    centerWeekNumber,
-    courseSessions,
-    eligibleWeekNumbers,
-    onCenterWeekChange,
-    sessionsLoading,
-    structuredCourse,
-  ]);
+  const displayStartWeek =
+    structuredCourse && !sessionsLoading && eligibleWeekNumbers.length
+      ? eligibleWeekNumbers.includes(centerWeekNumber)
+        ? centerWeekNumber
+        : (snapToEligibleCourseWeek(eligibleWeekNumbers, centerWeekNumber) ?? centerWeekNumber)
+      : centerWeekNumber;
 
   const visibleWeeks = useMemo(() => {
     if (structuredCourse) {
       if (sessionsLoading || courseSessions == null) return [];
-      return visibleCourseWeeks(eligibleWeeks, centerWeekNumber, weekDisplayCount);
+      return visibleCourseWeeks(eligibleWeeks, displayStartWeek, weekDisplayCount);
     }
     return visibleSchoolWeeks(schoolWeeks, centerWeekNumber, weekDisplayCount);
   }, [
     centerWeekNumber,
     courseSessions,
+    displayStartWeek,
     eligibleWeeks,
     schoolWeeks,
     sessionsLoading,
@@ -246,7 +236,7 @@ export function ClassNotebookPanel({
 
   function shiftVisibleWeeks(direction: -1 | 1) {
     if (structuredCourse) {
-      const next = shiftEligibleCourseWeek(eligibleWeekNumbers, centerWeekNumber, direction);
+      const next = shiftEligibleCourseWeek(eligibleWeekNumbers, displayStartWeek, direction);
       if (next != null) onCenterWeekChange(next);
       return;
     }
@@ -958,7 +948,7 @@ export function ClassNotebookPanel({
               isPublicationLine(item) &&
               isStructuredPublication(item),
           );
-          const isActive = week.number === centerWeekNumber;
+          const isActive = week.number === displayStartWeek;
           const visibility = weekCarnetVisibility(weekCarnetPublications);
           const publicationSlots = lineSlotState("publication", week.number, canPublish);
           const notesSlots = lineSlotState("notes", week.number, true);
