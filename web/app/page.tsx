@@ -1237,13 +1237,14 @@ export default function Home() {
     showNotice("Contrôle planifié.");
   }
 
-  async function notebookCreatePublication(schoolWeekNumber: number, text: string) {
+  async function notebookCreatePublication(schoolWeekNumber: number, text: string, day?: number) {
     if (!openNotebookClass) return;
+    const publicationDay = day ?? weekdayToCourseDayIndex(openNotebookClass.dayOfWeek);
     const created = notebookPublishAnnualCourseId
       ? await createNotebookPublicationApi({
           annualCourseId: notebookPublishAnnualCourseId,
           schoolWeekNumber,
-          day: weekdayToCourseDayIndex(openNotebookClass.dayOfWeek),
+          day: publicationDay,
           type: "HOMEWORK",
           title: text.trim(),
           detail: "",
@@ -1252,7 +1253,7 @@ export default function Home() {
         ? await createAgendaItemApi({
             classroomId: notebookClassroomId,
             subjectId: notebookSubjectId,
-            day: weekdayToCourseDayIndex(openNotebookClass.dayOfWeek),
+            day: publicationDay,
             hour: 8,
             weekOffset: 0,
             schoolWeekNumber,
@@ -1269,12 +1270,13 @@ export default function Home() {
   async function notebookSaveWeekPublication(
     schoolWeekNumber: number,
     doc: CampusRichDoc,
-    options?: { studentVisible?: boolean },
+    options?: { studentVisible?: boolean; day?: number },
   ) {
     if (!openNotebookClass) return;
     if (!notebookPublishAnnualCourseId && (!notebookClassroomId || !notebookSubjectId)) return;
     const weekItems = notebookItems.filter((item) => item.schoolWeekNumber === schoolWeekNumber);
     const plan = planCarnetWeekPublicationSave(weekItems, doc);
+    const publicationDay = options?.day ?? weekdayToCourseDayIndex(openNotebookClass.dayOfWeek);
 
     if (plan.action === "clear") {
       for (const itemId of plan.deleteIds) {
@@ -1286,10 +1288,11 @@ export default function Home() {
     }
 
     if (plan.action === "update") {
-      const payload =
-        options?.studentVisible === undefined
-          ? plan.payload
-          : { ...plan.payload, studentVisible: options.studentVisible };
+      const payload = {
+        ...plan.payload,
+        ...(options?.studentVisible === undefined ? {} : { studentVisible: options.studentVisible }),
+        ...(options?.day != null ? { day: options.day } : {}),
+      };
       const updated = await updateAgendaItemApi(plan.updateId, payload);
       setItems((previous) => previous.map((item) => (item.id === plan.updateId ? updated : item)));
       for (const extraId of plan.deleteIds) {
@@ -1300,7 +1303,7 @@ export default function Home() {
       const created = await createNotebookPublicationApi({
         annualCourseId: notebookPublishAnnualCourseId,
         schoolWeekNumber,
-        day: weekdayToCourseDayIndex(openNotebookClass.dayOfWeek),
+        day: publicationDay,
         type: "HOMEWORK",
         title: plan.payload.title,
         detail: plan.payload.detail,
@@ -1311,7 +1314,7 @@ export default function Home() {
       const created = await createAgendaItemApi({
         classroomId: notebookClassroomId,
         subjectId: notebookSubjectId,
-        day: weekdayToCourseDayIndex(openNotebookClass.dayOfWeek),
+        day: publicationDay,
         hour: 8,
         weekOffset: 0,
         schoolWeekNumber,
@@ -1343,8 +1346,11 @@ export default function Home() {
     showNotice(studentVisible ? "Visible aux élèves." : "Repassé en brouillon.");
   }
 
-  async function notebookMovePublication(itemId: number, schoolWeekNumber: number) {
-    const updated = await updateAgendaItemApi(itemId, { schoolWeekNumber });
+  async function notebookMovePublication(itemId: number, schoolWeekNumber: number, day?: number) {
+    const updated = await updateAgendaItemApi(itemId, {
+      schoolWeekNumber,
+      ...(day != null ? { day } : {}),
+    });
     setItems((previous) => previous.map((item) => (item.id === itemId ? updated : item)));
   }
 

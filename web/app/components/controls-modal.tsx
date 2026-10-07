@@ -5,6 +5,12 @@ import { FormEvent, useMemo, useState } from "react";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items";
 import type { SchoolWeek } from "@campus/features/calendar";
 import { getCourseDayOptionsForSchoolWeek } from "@campus/features/calendar";
+import {
+  controlDayOptionsForCourseWeek,
+  formatControlSessionDayLabel,
+  weekdayLabelForCourseDayIndex,
+} from "@campus/features/class-notebook";
+import type { CourseSession } from "@campus/features/course-sessions";
 import { formatPedagogicalWeekLabel } from "@campus/features/school-year/official-course-weeks.ts";
 
 interface ControlsModalProps {
@@ -12,15 +18,38 @@ interface ControlsModalProps {
   classLabel: string;
   branchLabel: string;
   schoolWeeks: SchoolWeek[];
+  /** Séances calculées du AnnualCourse ouvert ; `null` = horaire générique legacy. */
+  courseSessions?: CourseSession[] | null;
   controls: PrototypeAgendaItem[];
   onClose: () => void;
   onSave: (input: { schoolWeekNumber: number; day: number; title: string; existingId?: number }) => Promise<void>;
   onDelete: (itemId: number) => Promise<void>;
 }
 
-function formatControlDay(week: SchoolWeek, dayIndex: number): string {
-  const options = getCourseDayOptionsForSchoolWeek(week.number);
-  return options.find((option) => option.dayIndex === dayIndex)?.label ?? (dayIndex === 3 ? "Jeudi" : "Lundi");
+function dayOptionsForWeek(week: SchoolWeek | undefined, sessions: CourseSession[] | null | undefined) {
+  if (!week) return [];
+  if (sessions) return controlDayOptionsForCourseWeek(sessions, week.number);
+  return getCourseDayOptionsForSchoolWeek(week.number);
+}
+
+function formatControlDay(
+  week: SchoolWeek | undefined,
+  dayIndex: number,
+  sessions: CourseSession[] | null | undefined,
+): string {
+  if (week && sessions) {
+    const match = sessions.find(
+      (session) => session.schoolWeekNumber === week.number && session.dayOfWeek - 1 === dayIndex,
+    );
+    if (match) return formatControlSessionDayLabel(match);
+  }
+  if (week) {
+    const options = getCourseDayOptionsForSchoolWeek(week.number);
+    const option = options.find((entry) => entry.dayIndex === dayIndex);
+    if (option) return option.label;
+  }
+  const weekday = weekdayLabelForCourseDayIndex(dayIndex);
+  return weekday ? weekday.charAt(0).toUpperCase() + weekday.slice(1) : `Jour ${dayIndex}`;
 }
 
 export function ControlsModal({
@@ -28,6 +57,7 @@ export function ControlsModal({
   classLabel,
   branchLabel,
   schoolWeeks,
+  courseSessions = null,
   controls,
   onClose,
   onSave,
@@ -40,15 +70,23 @@ export function ControlsModal({
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
 
+  const resolvedWeekNumber = schoolWeeks.some((week) => week.number === schoolWeekNumber)
+    ? schoolWeekNumber
+    : (schoolWeeks[0]?.number ?? 1);
+
   const selectedWeek = useMemo(
-    () => schoolWeeks.find((week) => week.number === schoolWeekNumber) ?? schoolWeeks[0],
-    [schoolWeekNumber, schoolWeeks],
+    () => schoolWeeks.find((week) => week.number === resolvedWeekNumber) ?? schoolWeeks[0],
+    [resolvedWeekNumber, schoolWeeks],
   );
 
   const dayOptions = useMemo(
-    () => (selectedWeek ? getCourseDayOptionsForSchoolWeek(selectedWeek.number) : []),
-    [selectedWeek],
+    () => dayOptionsForWeek(selectedWeek, courseSessions),
+    [courseSessions, selectedWeek],
   );
+
+  const resolvedDay = dayOptions.some((option) => option.dayIndex === day)
+    ? day
+    : (dayOptions[0]?.dayIndex ?? 0);
 
   if (!open) return null;
 
@@ -59,11 +97,15 @@ export function ControlsModal({
       setError("Indiquez un intitulé de contrôle.");
       return;
     }
+    if (!selectedWeek || dayOptions.length === 0) {
+      setError("Aucune séance de ce cours n’est disponible pour un contrôle.");
+      return;
+    }
 
     setWorking(true);
     setError("");
     try {
-      await onSave({ schoolWeekNumber, day, title: trimmed });
+      await onSave({ schoolWeekNumber: resolvedWeekNumber, day: resolvedDay, title: trimmed });
       setTitle("");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Enregistrement impossible.");
@@ -90,16 +132,15 @@ export function ControlsModal({
             <label>
               Semaine
               <select
-                value={schoolWeekNumber}
+                value={resolvedWeekNumber}
                 onChange={(event) => {
                   const nextWeek = Number(event.target.value);
                   setSchoolWeekNumber(nextWeek);
                   const week = schoolWeeks.find((entry) => entry.number === nextWeek);
-                  if (week) {
-                    const options = getCourseDayOptionsForSchoolWeek(week.number);
-                    setDay(options[0]?.dayIndex ?? 0);
-                  }
+                  const options = dayOptionsForWeek(week, courseSessions);
+                  setDay(options[0]?.dayIndex ?? 0);
                 }}
+                disabled={schoolWeeks.length === 0}
               >
                 {schoolWeeks.map((week) => (
                   <option key={week.number} value={week.number}>
@@ -110,7 +151,11 @@ export function ControlsModal({
             </label>
             <label>
               Jour de cours
-              <select value={day} onChange={(event) => setDay(Number(event.target.value))}>
+              <select
+                value={resolvedDay}
+                onChange={(event) => setDay(Number(event.target.value))}
+                disabled={dayOptions.length === 0}
+              >
                 {dayOptions.map((option) => (
                   <option key={option.dayIndex} value={option.dayIndex}>
                     {option.label}
@@ -132,7 +177,7 @@ export function ControlsModal({
           {error ? <p className="controls-modal-error">{error}</p> : null}
 
           <footer className="controls-modal-footer">
-            <button type="submit" disabled={working}>
+            <button type="submit" disabled={working || dayOptions.length === 0}>
               {working ? "Enregistrement…" : "Enregistrer"}
             </button>
           </footer>
@@ -149,7 +194,7 @@ export function ControlsModal({
                     <span>
                       {week ? formatPedagogicalWeekLabel(week).replace(/^Semaine /, "") : `Sem ${item.schoolWeekNumber}`}
                       {" · "}
-                      {week ? formatControlDay(week, item.day) : item.day === 3 ? "Jeudi" : "Lundi"}
+                      {formatControlDay(week, item.day, courseSessions)}
                     </span>
                     <strong>{item.title}</strong>
                     <button
