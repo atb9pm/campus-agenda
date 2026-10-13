@@ -38,3 +38,4 @@ Données de démonstration (`DEMO_CATALOG`) : tests, fixtures et seed locaux uni
 - [Feuille de route](docs/ROADMAP.md)
 - [Exploitation](docs/OPERATIONS.md)
 - [Déploiement Infomaniak](docs/infomaniak-deploy.md)
+- [Baseline d’installation](docs/INSTALLATION_BASELINE.md)
