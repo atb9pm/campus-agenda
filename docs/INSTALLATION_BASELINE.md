@@ -104,7 +104,15 @@ Ne jamais versionner le fichier de sauvegarde dans Git.
 
 Le backup **v4** peut contenir la table `teacher_mfa` (secret TOTP chiffré, empreintes de codes de récupération).
 
-Une restauration sur TEST qui utilise une **autre** `CAMPUS_MFA_ENCRYPTION_KEY` que celle de production rend ces secrets illisibles (fermeture sécurisée). Dans ce cas, réinitialiser la 2FA **sur le TEST** (`pnpm admin:reset-2fa`, puis nouvel enrôlement).
+Une restauration sur TEST qui utilise une **autre** `CAMPUS_MFA_ENCRYPTION_KEY` que celle de production rend ces secrets illisibles (fermeture sécurisée). Dans ce cas, réinitialiser la 2FA **sur le TEST**, puis faire un nouvel enrôlement.
+
+Sur Infomaniak, utiliser **npm** uniquement (pas `pnpm`). Depuis `web/`, sur le serveur TEST :
+
+```bash
+NODE_ENV=production CAMPUS_DEMO_SEED=false CAMPUS_STORE=sqlite CAMPUS_SQLITE_PATH=.data/campus-agenda-staging.sqlite npm run admin:reset-2fa -- ChF
+```
+
+`ChF` peut être remplacé par l’identifiant ou les initiales de l’administrateur concerné.
 
 **Ne jamais** copier automatiquement la clé MFA de production vers le TEST.
 
