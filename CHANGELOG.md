@@ -16,6 +16,11 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 - Planning des contrôles plus compact (dates, semaines A/B, lecture chronologique).
 - Interface élève mobile-first, sans modifier la vue professeur.
 
+### Corrigé
+
+- Secret TOTP admin illisible (clé MFA différente après restauration TEST) : nouvel enrôlement au lieu d’un blocage 503.
+- Saisie du code à 6 chiffres : plus de `pattern` HTML qui bloquait la validation sur iPhone.
+
 ### Conservé
 
 - Logique métier existante des contrôles (J-7, aujourd’hui, demain, cours précédents).

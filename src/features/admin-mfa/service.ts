@@ -17,14 +17,15 @@ import { otpauthQrDataUrl } from "../../lib/auth/mfa-qr.ts";
 import { generateTotpSecret, normalizeTotpInput, totpOtpauthUri, verifyTotpCode } from "../../lib/auth/totp.ts";
 import { logOperationalEvent } from "../../lib/observability/index.ts";
 import type { AdminMfaClientFlags, AdminMfaStore, TeacherMfaRecord } from "./types.ts";
-import { MFA_INVALID_CODE_REASON, MFA_UNAVAILABLE_REASON } from "./types.ts";
+import { resetAdminMfa } from "./reset.ts";
+import { MFA_INVALID_CODE_REASON, MFA_UNAVAILABLE_REASON, MFA_UNREADABLE_REASON } from "./types.ts";
 
 export const MFA_UNAVAILABLE_STATUS = 503;
 export const MFA_DENIED_STATUS = 403;
 export const MFA_INVALID_STATUS = 401;
 
 type MfaFailure =
-  | { ok: false; reason: string; status: number };
+  | { ok: false; reason: string; status: number; mfaSetupRequired?: boolean };
 
 function unavailable(): MfaFailure {
   return { ok: false, reason: MFA_UNAVAILABLE_REASON, status: MFA_UNAVAILABLE_STATUS };
@@ -76,6 +77,39 @@ export function adminHasVerifiedMfa(isAdmin: boolean, record: TeacherMfaRecord |
 
 export async function loadAdminMfa(store: AdminMfaStore, teacherId: string): Promise<TeacherMfaRecord | null> {
   return store.get(teacherId);
+}
+
+function unreadable(): MfaFailure {
+  return {
+    ok: false,
+    reason: MFA_UNREADABLE_REASON,
+    status: 409,
+    mfaSetupRequired: true,
+  };
+}
+
+/**
+ * Secret TOTP chiffré avec une autre clé (restauration TEST, rotation) :
+ * passer en reset_required pour un nouvel enrôlement. Sans clé serveur,
+ * ne pas toucher l'enregistrement (fail closed 503).
+ */
+export async function healUnreadableAdminMfa(
+  store: AdminMfaStore,
+  teacherId: string,
+): Promise<TeacherMfaRecord | null> {
+  const existing = await store.get(teacherId);
+  if (!existing || existing.status !== "enabled" || !existing.secretEncrypted) {
+    return existing;
+  }
+  if (!isMfaEncryptionReady()) return existing;
+  try {
+    await decryptTotpSecret(existing.secretEncrypted);
+    return existing;
+  } catch (error) {
+    if (!(error instanceof MfaKeyUnavailableError)) throw error;
+    await resetAdminMfa(store, teacherId);
+    return store.get(teacherId);
+  }
 }
 
 async function persist(store: AdminMfaStore, record: TeacherMfaRecord): Promise<void> {
@@ -200,7 +234,11 @@ export async function verifyAdminMfaChallenge(
     if (!verifyTotpCode(secret, code)) return invalidCode();
     return { ok: true, usedRecovery: false };
   } catch (error) {
-    if (error instanceof MfaKeyUnavailableError) return unavailable();
+    if (error instanceof MfaKeyUnavailableError) {
+      if (!isMfaEncryptionReady()) return unavailable();
+      await resetAdminMfa(store, teacherId);
+      return unreadable();
+    }
     throw error;
   }
 }
@@ -343,4 +381,4 @@ export function assertSecretsNotPlaintext(record: TeacherMfaRecord, plaintextSec
   return recoveryHashesLookSafe(record.recoveryHashes, codes);
 }
 
-export { MFA_INVALID_CODE_REASON, MFA_UNAVAILABLE_REASON };
+export { MFA_INVALID_CODE_REASON, MFA_UNAVAILABLE_REASON, MFA_UNREADABLE_REASON };

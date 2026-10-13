@@ -1071,6 +1071,12 @@ export default function Home() {
         await applyTeacherSession(session);
       } catch (error) {
         setMfaError(error instanceof Error ? error.message : "Code incorrect.");
+        if (error instanceof Error && (error as Error & { mfaSetupRequired?: boolean }).mfaSetupRequired) {
+          const nextSession = await fetchApiSession().catch(() => null);
+          if (nextSession?.kind === "teacher") {
+            await applyTeacherSession(nextSession);
+          }
+        }
       } finally {
         setLoginPending(false);
       }

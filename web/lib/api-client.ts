@@ -154,9 +154,18 @@ export async function verifyAdminMfaApi(code: string): Promise<ApiTeacherSession
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code }),
   });
-  const payload = await parseJson<{ ok: boolean; reason?: string; session?: ApiTeacherSession }>(response);
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    session?: ApiTeacherSession;
+    mfaSetupRequired?: boolean;
+  }>(response);
   if (!response.ok || !payload.ok || !payload.session) {
-    throw new Error(payload.reason ?? "Code incorrect.");
+    const error = new Error(payload.reason ?? "Code incorrect.");
+    if (payload.mfaSetupRequired) {
+      (error as Error & { mfaSetupRequired?: boolean }).mfaSetupRequired = true;
+    }
+    throw error;
   }
   return payload.session;
 }

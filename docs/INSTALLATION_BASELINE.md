@@ -104,7 +104,9 @@ Ne jamais versionner le fichier de sauvegarde dans Git.
 
 Le backup **v4** peut contenir la table `teacher_mfa` (secret TOTP chiffré, empreintes de codes de récupération).
 
-Une restauration sur TEST qui utilise une **autre** `CAMPUS_MFA_ENCRYPTION_KEY` que celle de production rend ces secrets illisibles (fermeture sécurisée). Dans ce cas, réinitialiser la 2FA **sur le TEST**, puis faire un nouvel enrôlement.
+Une restauration sur TEST qui utilise une **autre** `CAMPUS_MFA_ENCRYPTION_KEY` que celle de production rend ces secrets illisibles. À la connexion admin, l’application passe alors en **nouvel enrôlement** (état `reset_required`) au lieu de bloquer sur un code TOTP indéchiffrable. L’ancien téléphone / les anciens recovery de production ne s’appliquent pas au TEST.
+
+Si la clé `CAMPUS_MFA_ENCRYPTION_KEY` est **absente** du lancement Infomaniak, l’enrôlement reste fermé (503). La commande serveur ci-dessous reste disponible.
 
 Sur Infomaniak, utiliser **npm** uniquement (pas `pnpm`). Depuis `web/`, sur le serveur TEST :
 

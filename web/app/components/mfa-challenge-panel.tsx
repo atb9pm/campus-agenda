@@ -52,10 +52,12 @@ export function MfaChallengePanel({
                 className={useRecovery ? undefined : "totp-code-input"}
                 inputMode={useRecovery ? "text" : "numeric"}
                 autoComplete={useRecovery ? "off" : "one-time-code"}
-                pattern={useRecovery ? undefined : "[0-9]{6}"}
-                maxLength={useRecovery ? 12 : 6}
+                maxLength={useRecovery ? 12 : 8}
                 value={code}
-                onChange={(event) => setCode(event.target.value)}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setCode(useRecovery ? next : next.replace(/\D/g, "").slice(0, 6));
+                }}
                 required
               />
             </label>
