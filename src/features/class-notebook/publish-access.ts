@@ -12,6 +12,7 @@ export const NOTEBOOK_PUBLISH_ARCHIVED = "Ce cours est archivé.";
 export const NOTEBOOK_PUBLISH_CLASS_UNAVAILABLE = "Cette classe n’est pas disponible pour l’année active.";
 export const NOTEBOOK_PUBLISH_YEAR_INACTIVE =
   "Ce cours n’appartient pas à l’année scolaire active.";
+export const NOTEBOOK_PUBLISH_SELECT_COURSE = "Sélectionnez un cours avant de modifier le carnet.";
 
 export type NotebookPublishAccess =
   | { canPublish: true }
@@ -90,14 +91,6 @@ export function notebookPublishBlockedReason(options: {
   subjectId: string | null;
 }): string | undefined {
   if (!options.hasOpenClass) return undefined;
-  if (options.annualCourseId) {
-    return options.assignedToCourse ? undefined : NOTEBOOK_PUBLISH_NOT_ASSIGNED;
-  }
-  if (!options.classroomId) {
-    return "Cette classe n'est pas reliée au catalogue — publications élèves indisponibles.";
-  }
-  if (!options.subjectId) {
-    return "Aucune branche enseignée trouvée pour publier.";
-  }
-  return undefined;
+  if (!options.annualCourseId) return NOTEBOOK_PUBLISH_SELECT_COURSE;
+  return options.assignedToCourse ? undefined : NOTEBOOK_PUBLISH_NOT_ASSIGNED;
 }

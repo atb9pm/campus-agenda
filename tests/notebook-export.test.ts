@@ -989,16 +989,13 @@ test("export — Carnet structuré crée le contrôle via POST /api/teacher/cont
   assert.match(perform, /createTeacherControlApi/);
   assert.match(perform, /annualCourseId: input\.annualCourseId/);
   assert.match(perform, /courseSessionKey: input\.courseSessionKey/);
-  assert.match(save, /notebookPublishAnnualCourseId/);
+  assert.match(save, /requireNotebookAnnualCourseId/);
   assert.match(save, /courseSessionKey/);
   assert.match(save, /Ce cours n’a pas de séance à cette date/);
   assert.match(panel, /courseSessionForControlSlot/);
   assert.match(panel, /courseSessionKey: session\.key/);
-  const structuredSave = save.slice(
-    save.indexOf("if (notebookPublishAnnualCourseId)"),
-    save.indexOf("evaluateThirdTestAlert"),
-  );
-  assert.match(structuredSave, /performNotebookControl/);
-  assert.doesNotMatch(structuredSave, /createAgendaItemApi/);
+  assert.match(save, /performNotebookControl/);
+  assert.doesNotMatch(perform, /createAgendaItemApi/);
+  assert.doesNotMatch(save, /createAgendaItemApi/);
 });
 

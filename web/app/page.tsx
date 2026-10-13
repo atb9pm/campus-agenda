@@ -36,14 +36,12 @@ import {
   type SchoolWeek,
 } from "@campus/features/calendar";
 import {
-  evaluateThirdTestAlert,
   listFutureTestsForClass,
   type ThirdTestAlert,
 } from "@campus/features/evaluations";
 import type { AgendaItemType } from "@campus/types/agenda";
 import {
   changeTeacherPasswordApi,
-  createAgendaItemApi,
   createNotebookPublicationApi,
   createTeacherControlApi,
   ControlCoordinationRequiredError,
@@ -87,7 +85,6 @@ import {
   emptyTeacherSetup,
   loadTeacherSetupFromBrowser,
   type TeacherSetupConfig,
-  type TeacherClassSetup,
 } from "@campus/features/teacher-setup";
 import {
   displaySetupsFromAssignedCourses,
@@ -98,9 +95,9 @@ import {
   clearNotesFromBrowser,
   createEmptyNotesDocument,
   filterNotebookItemsForSubject,
-  implicitNotebookPublishCourse,
   loadNotesFromBrowser,
   notebookContextFromCourse,
+  NOTEBOOK_PUBLISH_SELECT_COURSE,
   notebookPublishBlockedReason,
   openCourseInWeekTarget,
   peekNotesFromBrowser,
@@ -297,10 +294,8 @@ export default function Home() {
     createEmptyNotesDocument(),
   );
   const [pendingNotebookControl, setPendingNotebookControl] = useState<{
-    classroomId?: string;
-    subjectId?: string;
-    annualCourseId?: string;
-    courseSessionKey?: string;
+    annualCourseId: string;
+    courseSessionKey: string;
     schoolWeekNumber: number;
     day: number;
     title: string;
@@ -695,12 +690,7 @@ export default function Home() {
       runtimeClassrooms,
     ],
   );
-  const implicitNotebookCourse = useMemo(
-    () => implicitNotebookPublishCourse(teacherCourses, openNotebookClass?.id),
-    [openNotebookClass, teacherCourses],
-  );
-  const notebookPublishAnnualCourseId =
-    openNotebookCourse?.annualCourseId ?? implicitNotebookCourse?.annualCourseId ?? null;
+  const notebookPublishAnnualCourseId = openNotebookCourse?.annualCourseId?.trim() || null;
   const maSemaineWeekSignals = useMemo(
     () => maSemaineSignalsByCourse(items, teacherCourses, selectedSchoolWeekNumber),
     [items, teacherCourses, selectedSchoolWeekNumber],
@@ -715,9 +705,7 @@ export default function Home() {
       restrictToSubject: Boolean(openNotebookCourse),
     });
   }, [currentTeacherId, items, notebookClassroomId, notebookSubjectId, openNotebookCourse]);
-  const notebookCanPublish = notebookPublishAnnualCourseId
-    ? workspaceAllowsNotebookPublish(teacherCourses, notebookPublishAnnualCourseId)
-    : Boolean(notebookClassroomId && notebookSubjectId);
+  const notebookCanPublish = workspaceAllowsNotebookPublish(teacherCourses, notebookPublishAnnualCourseId);
   const notebookBlockedReason = notebookPublishBlockedReason({
     hasOpenClass: Boolean(openNotebookClass),
     annualCourseId: notebookPublishAnnualCourseId,
@@ -1179,15 +1167,13 @@ export default function Home() {
     })();
   }
 
-  function openClassNotebook(classSetup: TeacherClassSetup) {
-    setOpenNotebookCourse(null);
-    setOpenNotebookClassId(classSetup.id);
-    setActiveSection("ma-semaine");
-    setNotebookCenterWeek(selectedSchoolWeekNumber);
-    const mappedClassroomId = resolveNotebookClassroomId(classSetup, runtimeClassrooms, EMPTY_CLASSROOM_CATALOG);
-    if (mappedClassroomId) {
-      setSelectedClassroomId(mappedClassroomId);
+  function requireNotebookAnnualCourseId(): string | null {
+    const id = openNotebookCourse?.annualCourseId?.trim() || "";
+    if (!id) {
+      showNotice(NOTEBOOK_PUBLISH_SELECT_COURSE);
+      return null;
     }
+    return id;
   }
 
   function openCourseInWeek(course: TeacherCourseWorkspaceEntry) {
@@ -1226,71 +1212,37 @@ export default function Home() {
 
   async function performNotebookControl(
     input: {
-      classroomId?: string;
-      subjectId?: string;
-      annualCourseId?: string;
-      courseSessionKey?: string;
+      annualCourseId: string;
+      courseSessionKey: string;
       schoolWeekNumber: number;
       day: number;
       title: string;
     },
     confirmCoordination = false,
   ) {
-    if (input.annualCourseId?.trim() && input.courseSessionKey?.trim()) {
-      const created = await createTeacherControlApi({
-        annualCourseId: input.annualCourseId,
-        courseSessionKey: input.courseSessionKey,
-        title: input.title.trim(),
-        detail: "",
-        confirmCoordination,
-      });
-      setItems((previous) => upsertAgendaItem(previous, created.item));
-      showNotice("Contrôle planifié.");
-      return;
-    }
-    if (!input.classroomId || !input.subjectId) return;
-    const created = await createAgendaItemApi({
-      classroomId: input.classroomId,
-      subjectId: input.subjectId,
-      day: input.day,
-      hour: 8,
-      weekOffset: 0,
-      schoolWeekNumber: input.schoolWeekNumber,
-      type: "TEST",
+    const created = await createTeacherControlApi({
+      annualCourseId: input.annualCourseId,
+      courseSessionKey: input.courseSessionKey,
       title: input.title.trim(),
       detail: "",
       confirmCoordination,
     });
-    setItems((previous) => upsertAgendaItem(previous, created));
+    setItems((previous) => upsertAgendaItem(previous, created.item));
     showNotice("Contrôle planifié.");
   }
 
   async function notebookCreatePublication(schoolWeekNumber: number, text: string, day?: number) {
-    if (!openNotebookClass) return;
+    const annualCourseId = requireNotebookAnnualCourseId();
+    if (!annualCourseId || !openNotebookClass) return;
     const publicationDay = day ?? weekdayToCourseDayIndex(openNotebookClass.dayOfWeek);
-    const created = notebookPublishAnnualCourseId
-      ? await createNotebookPublicationApi({
-          annualCourseId: notebookPublishAnnualCourseId,
-          schoolWeekNumber,
-          day: publicationDay,
-          type: "HOMEWORK",
-          title: text.trim(),
-          detail: "",
-        })
-      : notebookClassroomId && notebookSubjectId
-        ? await createAgendaItemApi({
-            classroomId: notebookClassroomId,
-            subjectId: notebookSubjectId,
-            day: publicationDay,
-            hour: 8,
-            weekOffset: 0,
-            schoolWeekNumber,
-            type: "HOMEWORK",
-            title: text.trim(),
-            detail: "",
-          })
-        : null;
-    if (!created) return;
+    const created = await createNotebookPublicationApi({
+      annualCourseId,
+      schoolWeekNumber,
+      day: publicationDay,
+      type: "HOMEWORK",
+      title: text.trim(),
+      detail: "",
+    });
     setItems((previous) => upsertAgendaItem(previous, created));
     showNotice("Publication ajoutée.");
   }
@@ -1300,8 +1252,8 @@ export default function Home() {
     doc: CampusRichDoc,
     options?: { studentVisible?: boolean; day?: number },
   ) {
-    if (!openNotebookClass) return;
-    if (!notebookPublishAnnualCourseId && (!notebookClassroomId || !notebookSubjectId)) return;
+    const annualCourseId = requireNotebookAnnualCourseId();
+    if (!annualCourseId || !openNotebookClass) return;
     const weekItems = notebookItems.filter((item) => item.schoolWeekNumber === schoolWeekNumber);
     const plan = planCarnetWeekPublicationSave(weekItems, doc);
     const publicationDay = options?.day ?? weekdayToCourseDayIndex(openNotebookClass.dayOfWeek);
@@ -1327,25 +1279,11 @@ export default function Home() {
         await deleteAgendaItemApi(extraId);
         setItems((previous) => previous.filter((entry) => entry.id !== extraId));
       }
-    } else if (notebookPublishAnnualCourseId) {
+    } else {
       const created = await createNotebookPublicationApi({
-        annualCourseId: notebookPublishAnnualCourseId,
+        annualCourseId,
         schoolWeekNumber,
         day: publicationDay,
-        type: "HOMEWORK",
-        title: plan.payload.title,
-        detail: plan.payload.detail,
-        studentVisible: options?.studentVisible ?? false,
-      });
-      setItems((previous) => upsertAgendaItem(previous, created));
-    } else if (notebookClassroomId && notebookSubjectId) {
-      const created = await createAgendaItemApi({
-        classroomId: notebookClassroomId,
-        subjectId: notebookSubjectId,
-        day: publicationDay,
-        hour: 8,
-        weekOffset: 0,
-        schoolWeekNumber,
         type: "HOMEWORK",
         title: plan.payload.title,
         detail: plan.payload.detail,
@@ -1363,6 +1301,7 @@ export default function Home() {
   }
 
   async function notebookSetWeekPublicationVisibility(schoolWeekNumber: number, studentVisible: boolean) {
+    if (!requireNotebookAnnualCourseId()) return;
     const weekItems = notebookItems.filter(
       (item) => item.schoolWeekNumber === schoolWeekNumber && isCarnetOwnedPublication(item),
     );
@@ -1375,6 +1314,7 @@ export default function Home() {
   }
 
   async function notebookMovePublication(itemId: number, schoolWeekNumber: number, day?: number) {
+    if (!requireNotebookAnnualCourseId()) return;
     const updated = await updateAgendaItemApi(itemId, {
       schoolWeekNumber,
       ...(day != null ? { day } : {}),
@@ -1383,6 +1323,7 @@ export default function Home() {
   }
 
   async function notebookDeletePublication(itemId: number) {
+    if (!requireNotebookAnnualCourseId()) return;
     await deleteAgendaItemApi(itemId);
     setItems((previous) => previous.filter((item) => item.id !== itemId));
   }
@@ -1393,43 +1334,20 @@ export default function Home() {
     title: string;
     courseSessionKey?: string;
   }) {
-    const classroomId = notebookClassroomId;
-    const subjectId = notebookSubjectId;
+    const annualCourseId = requireNotebookAnnualCourseId();
+    if (!annualCourseId) return;
+    const courseSessionKey = input.courseSessionKey?.trim() ?? "";
+    if (!courseSessionKey) {
+      showNotice("Ce cours n’a pas de séance à cette date.");
+      return;
+    }
     try {
-      if (notebookPublishAnnualCourseId) {
-        const courseSessionKey = input.courseSessionKey?.trim() ?? "";
-        if (!courseSessionKey) {
-          showNotice("Ce cours n’a pas de séance à cette date.");
-          return;
-        }
-        await performNotebookControl({
-          annualCourseId: notebookPublishAnnualCourseId,
-          courseSessionKey,
-          schoolWeekNumber: input.schoolWeekNumber,
-          day: input.day,
-          title: input.title,
-        });
-        return;
-      }
-      if (!classroomId || !subjectId) return;
-      const alert = evaluateThirdTestAlert(items, catalogFromRuntime(runtimeClassrooms), {
-        classroomId,
-        type: "TEST",
-        courseDay: { schoolWeekNumber: input.schoolWeekNumber, dayIndex: input.day },
-      });
-      if (alert.triggered) {
-        setControlAlert(alert);
-        setPendingNotebookControl({
-          classroomId,
-          subjectId,
-          ...input,
-        });
-        return;
-      }
       await performNotebookControl({
-        classroomId,
-        subjectId,
-        ...input,
+        annualCourseId,
+        courseSessionKey,
+        schoolWeekNumber: input.schoolWeekNumber,
+        day: input.day,
+        title: input.title,
       });
     } catch (error) {
       if (error instanceof ControlCoordinationRequiredError) {
@@ -1443,19 +1361,13 @@ export default function Home() {
             teacherName: entry.teacherName,
           })),
         });
-        setPendingNotebookControl(
-          notebookPublishAnnualCourseId && input.courseSessionKey
-            ? {
-                annualCourseId: notebookPublishAnnualCourseId,
-                courseSessionKey: input.courseSessionKey,
-                schoolWeekNumber: input.schoolWeekNumber,
-                day: input.day,
-                title: input.title,
-              }
-            : classroomId && subjectId
-              ? { classroomId, subjectId, ...input }
-              : null,
-        );
+        setPendingNotebookControl({
+          annualCourseId,
+          courseSessionKey,
+          schoolWeekNumber: input.schoolWeekNumber,
+          day: input.day,
+          title: input.title,
+        });
         return;
       }
       showNotice(error instanceof Error ? error.message : "Publication impossible.");
@@ -1856,8 +1768,6 @@ export default function Home() {
             schoolYearLabel={teacherCoursesYearLabel}
             loading={!teacherCoursesReady}
             error={teacherCoursesError || null}
-            displaySetups={assignedDisplaySetups}
-            onOpenClass={openClassNotebook}
             onOpenCourse={openCourseInWeek}
           />
         )}
@@ -1870,11 +1780,11 @@ export default function Home() {
           />
         )}
 
-        {activeSection === "ma-semaine" && openNotebookClass && (
+        {activeSection === "ma-semaine" && openNotebookClass && openNotebookCourse && (
           <ClassNotebookPanel
             classSetup={openNotebookClass}
-            branchLabel={openNotebookCourse?.branchLabel}
-            annualCourseId={openNotebookCourse?.annualCourseId}
+            branchLabel={openNotebookCourse.branchLabel}
+            annualCourseId={openNotebookCourse.annualCourseId}
             schoolYearLabel={teacherCoursesYearLabel}
             subjectId={notebookSubjectId}
             schoolWeeks={schoolWeeksMemo}
@@ -1897,7 +1807,7 @@ export default function Home() {
           />
         )}
 
-        {activeSection === "ma-semaine" && !openNotebookClass && (
+        {activeSection === "ma-semaine" && !(openNotebookClass && openNotebookCourse) && (
           <MaSemainePanel
             classes={assignedDisplaySetups}
             courses={teacherCourses}
