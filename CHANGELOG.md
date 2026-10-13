@@ -2,6 +2,26 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.0] — Tableau de bord élève devoirs et contrôles
+
+### Ajouté
+
+- Navigation élève **Tout / Devoirs / Contrôles**.
+- Tableau de bord desktop en deux colonnes : à faire à gauche, prochains contrôles à droite.
+- Aperçu compact des prochains contrôles, avec accès au planning complet.
+
+### Changé
+
+- Séparation visuelle claire entre devoirs, informations et contrôles.
+- Planning des contrôles plus compact (dates, semaines A/B, lecture chronologique).
+- Interface élève mobile-first, sans modifier la vue professeur.
+
+### Conservé
+
+- Logique métier existante des contrôles (J-7, aujourd’hui, demain, cours précédents).
+- Aucun changement de stockage, d’API métier ou de schéma SQLite.
+- Baseline officielle **v2.61.9** inchangée.
+
 ## [2.61.9] — Sélection automatique de Ma semaine
 
 ### Corrigé

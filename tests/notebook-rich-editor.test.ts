@@ -84,12 +84,13 @@ function sampleDoc(): CampusRichDoc {
 }
 
 test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async () => {
-  assert.equal(APP_VERSION, "2.61.9");
+  assert.equal(APP_VERSION, "2.62.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
-  const [panel, notesApi, studentPage] = await Promise.all([
+  const [panel, notesApi, studentPage, homeworkPanel] = await Promise.all([
     readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/api/teacher/notes/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/components/student-homework-panel.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(panel, /Publication élèves/);
   assert.match(panel, /Notes prof/);
@@ -101,8 +102,8 @@ test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async (
   assert.doesNotMatch(panel, /À faire[\s\S]*Contrôle/);
   assert.doesNotMatch(panel, /insertQuickBlock\([^\)]*control/);
   assert.match(notesApi, /requireTeacherSession/);
-  assert.match(studentPage, /RichDocView/);
-  assert.match(studentPage, /isPlaceholderDetail/);
+  assert.match(homeworkPanel, /RichDocView/);
+  assert.match(homeworkPanel, /isPlaceholderDetail/);
   assert.match(studentPage, /isCarnetOwnedPublication/);
   assert.match(studentPage, /planCarnetWeekPublicationSave/);
   assert.doesNotMatch(panel, /onCopyPreviousPublication/);

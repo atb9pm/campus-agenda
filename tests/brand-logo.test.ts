@@ -6,7 +6,7 @@ import { APP_VERSION } from "../src/lib/app-version.ts";
 import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 
 test("version 2.61.8 — logo Campus Agenda dans sidebar, login, MFA et vue élève", async () => {
-  assert.equal(APP_VERSION, "2.61.9");
+  assert.equal(APP_VERSION, "2.62.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
 
   const [

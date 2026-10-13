@@ -65,10 +65,11 @@ test("the rendered version matches the shared APP_VERSION", async () => {
 });
 
 test("keeps the validated teacher essentials and social preview", async () => {
-  const [page, layout, packageJson] = await Promise.all([
+  const [page, layout, packageJson, studentDashboard] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/student-dashboard.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /HOMEWORK: "Devoir"/);
@@ -80,10 +81,10 @@ test("keeps the validated teacher essentials and social preview", async () => {
   assert.match(page, /ClassNotebookPanel/);
   assert.match(page, /ConfigurationPanel/);
   assert.match(page, /AdministrationPanel/);
-  assert.match(page, /mobile-tab-bar/);
-  assert.match(page, /data-student-tab/);
+  assert.match(studentDashboard, /mobile-tab-bar/);
+  assert.match(studentDashboard, /data-student-tab/);
   assert.match(page, /Navigation enseignant/);
-  assert.match(page, /Navigation élève/);
+  assert.match(studentDashboard, /Navigation élève/);
   assert.match(page, /enterStudentWithCode/);
   assert.match(page, /fetchApiSession/);
   assert.match(page, /loginStudentApi/);

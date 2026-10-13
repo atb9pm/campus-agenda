@@ -233,16 +233,18 @@ test("sources — GET /api/agenda expose les libellés résolus", async () => {
 });
 
 test("sources — vue élève affiche le nom résolu, jamais l’ID ni le fallback", async () => {
-  const [page, css] = await Promise.all([
+  const [page, css, controls] = await Promise.all([
     readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/components/student-controls-panel.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(page, /setAgendaSubjects\(view\.subjects\)/);
-  assert.match(page, /student-upcoming-tests-branch/);
-  assert.match(page, /studentUpcomingPlainDetail/);
-  assert.match(page, /student-upcoming-tests-detail/);
+  assert.match(controls, /student-upcoming-tests-branch/);
+  assert.match(controls, /studentUpcomingPlainDetail/);
+  assert.match(controls, /student-upcoming-tests-detail/);
   assert.doesNotMatch(page, /studentUpcomingHeadline/);
   assert.doesNotMatch(page, /Branche non définie/);
+  assert.doesNotMatch(controls, /Branche non définie/);
   assert.doesNotMatch(page, /\$\{title\} · \$\{detail\}/);
   assert.doesNotMatch(page, /subjectName\} — \{entry\.item\.title/);
   assert.match(css, /\.student-course-day-app[\s\S]{0,80}font-family: var\(--carnet-font\)/);
