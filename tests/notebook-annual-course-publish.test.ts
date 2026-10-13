@@ -18,6 +18,7 @@ import {
   NOTEBOOK_PUBLISH_FUTURE,
   NOTEBOOK_PUBLISH_NOT_ASSIGNED,
   NOTEBOOK_PUBLISH_YEAR_INACTIVE,
+  NOTEBOOK_PUBLISH_SELECT_COURSE,
   authorizeNotebookOwnedItemMutation,
   createNotebookPublication,
   evaluateNotebookPublishAccess,
@@ -419,15 +420,15 @@ test("UI — un AnnualCourse ouvert n’affiche jamais « aucune branche enseign
     }),
     NOTEBOOK_PUBLISH_NOT_ASSIGNED,
   );
-  assert.match(
+  assert.equal(
     notebookPublishBlockedReason({
       hasOpenClass: true,
       annualCourseId: null,
       assignedToCourse: false,
       classroomId: "rt-1",
       subjectId: null,
-    }) ?? "",
-    /Aucune branche enseignée/,
+    }),
+    NOTEBOOK_PUBLISH_SELECT_COURSE,
   );
   assert.equal(workspaceAllowsNotebookPublish([{ annualCourseId: "ac-3a" }], "ac-3a"), true);
   assert.equal(workspaceAllowsNotebookPublish([{ annualCourseId: "ac-3a" }], "ac-3b"), false);

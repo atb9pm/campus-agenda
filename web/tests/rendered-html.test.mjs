@@ -99,8 +99,9 @@ test("keeps the validated teacher essentials and social preview", async () => {
   // Publication et coordination passent uniquement par le carnet de classe.
   assert.match(page, /notebookCreatePublication/);
   assert.match(page, /notebookSaveControl/);
-  assert.match(page, /evaluateThirdTestAlert/);
-  assert.match(page, /createAgendaItemApi/);
+  assert.match(page, /createTeacherControlApi/);
+  assert.match(page, /createNotebookPublicationApi/);
+  assert.doesNotMatch(page, /createAgendaItemApi/);
   assert.match(page, /updateAgendaItemApi/);
   assert.match(page, /deleteAgendaItemApi/);
 

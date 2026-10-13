@@ -23,6 +23,7 @@ export {
   NOTEBOOK_PUBLISH_FUTURE,
   NOTEBOOK_PUBLISH_NOT_ASSIGNED,
   NOTEBOOK_PUBLISH_YEAR_INACTIVE,
+  NOTEBOOK_PUBLISH_SELECT_COURSE,
   evaluateNotebookPublishAccess,
   implicitNotebookPublishCourse,
   notebookPublishBlockedReason,

@@ -192,7 +192,8 @@ test("A/B — Mes cours n’affiche plus Voir le déroulement, mais Ouvrir dans 
   assert.match(mesCours, /Ouvrir dans Ma semaine/);
   assert.match(mesCours, /mes-cours-open-week/);
   assert.match(mesCours, /onOpenCourse\(course\)/);
-  assert.match(mesCours, /Ouvrir le carnet/);
+  assert.doesNotMatch(mesCours, /Ouvrir le carnet/);
+  assert.doesNotMatch(mesCours, /onOpenClass/);
 });
 
 test("C — MECAUTO3A a trois cours distincts", () => {
@@ -438,7 +439,8 @@ test("sources — page.tsx ouvre le carnet avec le cours, plus le déroulement",
   assert.match(page, /workspaceAllowsNotebookPublish/);
   assert.match(page, /filterNotebookItemsForSubject/);
   assert.match(page, /restrictToSubject: Boolean\(openNotebookCourse\)/);
-  assert.match(page, /onOpenClass=\{openClassNotebook\}/);
+  assert.doesNotMatch(page, /openClassNotebook/);
+  assert.doesNotMatch(page, /onOpenClass/);
   assert.match(page, /courses=\{teacherCourses\}/);
   assert.match(page, /setOpenNotebookCourse\(null\)/);
   assert.match(page, /function closeClassNotebook/);
@@ -504,7 +506,7 @@ test("Ma semaine — 3 boutons de cours, chacun ouvre le bon AnnualCourse", asyn
   assert.match(page, /<MesCoursPanel[\s\S]*onOpenCourse=\{openCourseInWeek\}/);
   assert.match(notebook, /annualCourseId\?\.trim\(\) \? \(/);
   assert.match(notebook, /Exporter le carnet/);
-  assert.match(page, /annualCourseId=\{openNotebookCourse\?\.annualCourseId\}/);
+  assert.match(page, /annualCourseId=\{openNotebookCourse\.annualCourseId\}/);
 });
 
 test("implicitNotebookPublishCourse — 0 / 1 / plusieurs cours", () => {

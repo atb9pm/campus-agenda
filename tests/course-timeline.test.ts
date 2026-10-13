@@ -1113,7 +1113,7 @@ test("sources — GET enseignant lecture seule, pas d’ensurePath, pas de calen
   assert.match(nav, /"mes-cours"/);
   assert.doesNotMatch(mesCours, /Voir le déroulement/);
   assert.match(mesCours, /Ouvrir dans Ma semaine/);
-  assert.match(mesCours, /Ouvrir le carnet/);
+  assert.doesNotMatch(mesCours, /Ouvrir le carnet/);
   assert.match(mesCours, /Code d’accès classe/);
   assert.match(timelineUi, /Retour à Mes cours/);
   assert.match(timelineUi, /formatCourseSessionNumber/);
