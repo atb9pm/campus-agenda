@@ -35,7 +35,6 @@ import {
   listFutureTestsForClass,
   type ThirdTestAlert,
 } from "@campus/features/evaluations";
-import type { AgendaItemType } from "@campus/types/agenda";
 import {
   changeTeacherPasswordApi,
   createNotebookPublicationApi,
@@ -123,13 +122,6 @@ import { StudentDashboard, type StudentDashboardTab } from "./components/student
 
 type AppMode = "teacher" | "student";
 type StudentEntry = "code" | "teacher-preview";
-
-const TYPE_LABELS: Record<AgendaItemType, string> = {
-  HOMEWORK: "Devoir",
-  TEST: "Contrôle",
-  INFORMATION: "Information",
-};
-void TYPE_LABELS;
 
 const EMPTY_CLASSROOM_CATALOG: ClassroomCatalog = {
   classrooms: [],

@@ -448,6 +448,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   background: var(--navy);
   color: #fff;
   text-align: center;
+  animation: none;
 }
 .student-control-badge-label {
   font-size: 11px;
@@ -473,9 +474,20 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   background: var(--blue);
   color: #fff;
 }
-.student-control-badge.student-next-control-warn {
+.student-planning-date-visual {
   display: grid;
-  margin-right: 0;
+  justify-items: center;
+}
+.student-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .student-planning-row {
   display: grid;
@@ -484,6 +496,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   align-items: start;
 }
 .student-planning-date {
+  position: relative;
   display: grid;
   justify-items: center;
   color: var(--navy);

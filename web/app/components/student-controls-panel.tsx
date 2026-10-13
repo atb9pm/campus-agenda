@@ -37,11 +37,16 @@ function ControlCard({
       data-next-control=""
       data-control-id={entry.item.id}
     >
-      <div className={`student-control-badge${presentation.warn ? " student-next-control-warn" : ""}`}>
+      <div className="student-control-badge">
         <span className="student-control-badge-label">{presentation.badge}</span>
       </div>
       <div className="student-control-card-body">
-        <p className="student-item-type">CONTRÔLE</p>
+        <p className="student-item-type">
+          {presentation.warn ? (
+            <span className="student-next-control-warn" aria-hidden="true">⚠</span>
+          ) : null}
+          CONTRÔLE
+        </p>
         {entry.subjectName ? (
           <p className="student-upcoming-tests-branch">{entry.subjectName}</p>
         ) : null}
@@ -115,9 +120,12 @@ export function StudentControlsPanel({
                 const parts = planningDayParts(day.slot.date);
                 return (
                   <div className="student-control-planning-day student-planning-row" key={day.dateKey}>
-                    <div className="student-planning-date" aria-hidden="true">
-                      <span className="student-planning-day-number">{parts.dayNumber}</span>
-                      <span className="student-planning-weekday">{parts.weekday}</span>
+                    <div className="student-planning-date">
+                      <span className="student-planning-date-visual" aria-hidden="true">
+                        <span className="student-planning-day-number">{parts.dayNumber}</span>
+                        <span className="student-planning-weekday">{parts.weekday}</span>
+                      </span>
+                      <span className="student-visually-hidden">{formatCourseDayHeading(day.slot)}</span>
                     </div>
                     <div className="student-planning-rail" aria-hidden="true" />
                     <ol className="student-upcoming-tests-list">

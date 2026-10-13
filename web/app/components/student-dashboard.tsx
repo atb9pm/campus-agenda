@@ -71,7 +71,7 @@ export function StudentDashboard({
             <BrandLogo />
           </div>
           <div className="student-course-day-actions">
-            <div className="student-history-anchor">
+            <div className="student-history-anchor desktop-only">
               <button
                 type="button"
                 className="student-history-toggle"
@@ -124,17 +124,14 @@ export function StudentDashboard({
             )}
           </div>
 
-          <div className="student-view-tabs" role="tablist" aria-label="Vue élève">
+          <div className="student-view-tabs" aria-label="Vue élève">
             {TABS.map((entry) => {
               const selected = contentTab === entry.id && tab !== "historique";
               return (
                 <button
                   key={entry.id}
                   type="button"
-                  role="tab"
-                  id={`student-tab-${entry.id}`}
-                  aria-selected={selected}
-                  aria-controls={`student-panel-${entry.id}`}
+                  aria-pressed={selected}
                   className={selected ? "active" : ""}
                   onClick={() => onTabChange(entry.id)}
                 >
@@ -152,8 +149,6 @@ export function StudentDashboard({
                 className="student-dashboard-grid"
                 data-layout="tout"
                 id="student-panel-tout"
-                role="tabpanel"
-                aria-labelledby="student-tab-tout"
               >
                 <StudentHomeworkPanel sections={sections} mode="todo" />
                 {showControlsPreview ? (
@@ -169,13 +164,13 @@ export function StudentDashboard({
             ) : null}
 
             {tab === "devoirs" ? (
-              <div id="student-panel-devoirs" role="tabpanel" aria-labelledby="student-tab-devoirs">
+              <div id="student-panel-devoirs">
                 <StudentHomeworkPanel sections={sections} mode="homework" />
               </div>
             ) : null}
 
             {tab === "controles" ? (
-              <div id="student-panel-controles" role="tabpanel" aria-labelledby="student-tab-controles">
+              <div id="student-panel-controles">
                 <StudentControlsPanel
                   mode="planning"
                   futureTests={futureTests}

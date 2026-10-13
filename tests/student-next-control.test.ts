@@ -298,11 +298,18 @@ test("16 — aucune duplication du même contrôle dans l’onglet Cours", () =>
 });
 
 test("17 — prefers-reduced-motion désactive l’animation", async () => {
-  const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
+  const [css, controls] = await Promise.all([
+    readFile(new URL("../web/app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/components/student-controls-panel.tsx", import.meta.url), "utf8"),
+  ]);
   assert.match(css, /@keyframes student-control-warn-pulse/);
   assert.match(css, /prefers-reduced-motion: no-preference[\s\S]{0,180}\.student-next-control-warn[\s\S]{0,80}animation: student-control-warn-pulse/);
   assert.match(css, /prefers-reduced-motion: reduce[\s\S]{0,180}animation: none !important/);
   assert.doesNotMatch(css, /\.student-next-control \{[^}]*animation:/);
+  assert.match(css, /\.student-control-badge \{[\s\S]{0,220}animation: none/);
+  assert.doesNotMatch(controls, /student-control-badge\$\{presentation\.warn/);
+  assert.doesNotMatch(controls, /student-control-badge student-next-control-warn/);
+  assert.match(controls, /presentation\.warn \? \([\s\S]{0,120}student-next-control-warn/);
 });
 
 test("jours calendaires — J-7 à partir de la date locale, pas de l’heure", () => {
@@ -400,7 +407,8 @@ test("sources — Cours extrait le prochain contrôle, Planning réutilise les m
   assert.match(controls, /Planning des contrôles/);
   assert.match(dashboard, /onTabChange\("controles"\)/);
   assert.match(controls, /Voir tout le planning/);
-  assert.match(dashboard, /role="tablist"/);
+  assert.doesNotMatch(dashboard, /role="tablist"/);
+  assert.match(dashboard, /aria-pressed=\{selected\}/);
   assert.match(controls, /student-next-control/);
   assert.match(controls, /studentUpcomingPlainDetail/);
   assert.match(homework, /DEVOIR/);
@@ -467,11 +475,21 @@ test("présentation compacte — J-7, DEMAIN, AUJOURD’HUI, date sans urgence",
 });
 
 test("tableau de bord — aperçu professeur et cours précédents restent branchés", async () => {
-  const page = await readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8");
+  const [page, dashboard, controls] = await Promise.all([
+    readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/components/student-dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/components/student-controls-panel.tsx", import.meta.url), "utf8"),
+  ]);
   assert.match(page, /<StudentDashboard/);
   assert.match(page, /teacher-preview/);
   assert.match(page, /includeNextControls: studentFollowingCourseDay/);
   assert.match(page, /studentPreviousCourseDays/);
   assert.match(page, /onBackToCurrent/);
   assert.match(page, /onSelectCourseDay/);
+  assert.match(dashboard, /student-history-anchor desktop-only/);
+  assert.match(dashboard, />\s*Passés\s*</);
+  assert.match(controls, /student-visually-hidden/);
+  assert.match(controls, /formatCourseDayHeading\(day\.slot\)/);
+  assert.doesNotMatch(page, /TYPE_LABELS/);
+  assert.doesNotMatch(page, /void TYPE_LABELS/);
 });
