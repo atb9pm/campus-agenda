@@ -2,6 +2,13 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.61.9] — Sélection automatique de Ma semaine
+
+### Corrigé
+
+- Correction de la sélection automatique de « Ma semaine » pendant les vacances / interruptions du calendrier scolaire.
+- La prochaine semaine scolaire est maintenant sélectionnée au lieu de la dernière semaine de l’année.
+
 ## [Non publié] — Export Carnet : contrôles structurés
 
 ### Corrigé

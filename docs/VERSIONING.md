@@ -6,7 +6,7 @@ Campus Agenda suit une numérotation SemVer `MAJEURE.MINEURE.CORRECTIF`.
 - **MINEURE** : nouvelle fonctionnalité compatible.
 - **CORRECTIF** : correction compatible.
 
-La version applicative courante est `APP_VERSION` (aujourd’hui **2.61.8**). Elle est indépendante des données d’un établissement.
+La version applicative courante est `APP_VERSION` (aujourd’hui **2.61.9**). Elle est indépendante des données d’un établissement.
 
 ## Version publiée
 
@@ -14,7 +14,7 @@ Chaque version publiée doit :
 
 1. correspondre à un état **vérifié** de la branche `main` ;
 2. être résumée dans `CHANGELOG.md` ;
-3. recevoir un tag Git **annoté** `vX.Y.Z` (exemple : `v2.61.8`) ;
+3. recevoir un tag Git **annoté** `vX.Y.Z` (exemple : `v2.61.9`) ;
 4. ne contenir **aucun secret** ni **aucune donnée scolaire réelle** ;
 5. pouvoir être **installée sur une base vierge** sans données de démonstration.
 
