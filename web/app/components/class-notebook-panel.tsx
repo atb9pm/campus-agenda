@@ -13,6 +13,8 @@ import type { SchoolWeek } from "@campus/features/calendar";
 import {
   appendWeekNote,
   clampWeekDisplayCount,
+  NOTEBOOK_NARROW_VIEWPORT_MAX_PX,
+  notebookWeekDisplayCountForViewport,
   composeWeekNotesDoc,
   composeWeekPublicationDoc,
   copyLineToDoc,
@@ -118,6 +120,19 @@ type SelectedLine = {
 type DeleteTarget = { kind: LineSource; weekNumber: number };
 
 const CARNET_MOVE_PREFIX = "campus-carnet-move:";
+const NOTEBOOK_NARROW_MEDIA = `(max-width: ${NOTEBOOK_NARROW_VIEWPORT_MAX_PX}px)`;
+
+function useNotebookNarrowViewport(): boolean {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia(NOTEBOOK_NARROW_MEDIA);
+    const sync = () => setNarrow(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+  return narrow;
+}
 
 function encodeCarnetMove(payload: DragPayload): string {
   return `${CARNET_MOVE_PREFIX}${JSON.stringify(payload)}`;
@@ -163,6 +178,11 @@ export function ClassNotebookPanel({
   onPreviewStudent,
 }: ClassNotebookPanelProps) {
   const [weekDisplayCount, setWeekDisplayCount] = useState<WeekDisplayCount>(3);
+  const narrowViewport = useNotebookNarrowViewport();
+  const effectiveWeekDisplayCount = notebookWeekDisplayCountForViewport(
+    narrowViewport ? NOTEBOOK_NARROW_VIEWPORT_MAX_PX : NOTEBOOK_NARROW_VIEWPORT_MAX_PX + 1,
+    weekDisplayCount,
+  );
   const [controlsOpen, setControlsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [clipboard, setClipboard] = useState<NotebookClipboard | null>(null);
@@ -235,18 +255,18 @@ export function ClassNotebookPanel({
   const visibleWeeks = useMemo(() => {
     if (structuredCourse) {
       if (sessionsLoading || courseSessions == null) return [];
-      return visibleCourseWeeks(eligibleWeeks, displayStartWeek, weekDisplayCount);
+      return visibleCourseWeeks(eligibleWeeks, displayStartWeek, effectiveWeekDisplayCount);
     }
-    return visibleSchoolWeeks(schoolWeeks, centerWeekNumber, weekDisplayCount);
+    return visibleSchoolWeeks(schoolWeeks, centerWeekNumber, effectiveWeekDisplayCount);
   }, [
     centerWeekNumber,
     courseSessions,
     displayStartWeek,
+    effectiveWeekDisplayCount,
     eligibleWeeks,
     schoolWeeks,
     sessionsLoading,
     structuredCourse,
-    weekDisplayCount,
   ]);
 
   function shiftVisibleWeeks(direction: -1 | 1) {
@@ -987,7 +1007,7 @@ export function ClassNotebookPanel({
       ) : null}
 
       <div
-        className={`class-notebook-grid class-notebook-grid-${weekDisplayCount}`}
+        className={`class-notebook-grid class-notebook-grid-${effectiveWeekDisplayCount}`}
         style={{ gridTemplateColumns: `repeat(${Math.max(visibleWeeks.length, 1)}, minmax(0, 1fr))` }}
       >
         {visibleWeeks.map((week) => {
