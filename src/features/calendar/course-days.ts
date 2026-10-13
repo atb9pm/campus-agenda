@@ -11,10 +11,6 @@ function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12);
 }
 
-function isSameDay(left: Date, right: Date): boolean {
-  return startOfDay(left).getTime() === startOfDay(right).getTime();
-}
-
 export function buildSchoolWeeks(): SchoolWeek[] {
   return getActiveSchoolWeeks();
 }
@@ -24,6 +20,11 @@ export function findSchoolWeekForDate(date: Date, weeks = buildSchoolWeeks()): S
     throw new Error("Aucune semaine scolaire configurée.");
   }
   const target = startOfDay(date).getTime();
+  const firstMonday = startOfDay(weeks[0].monday).getTime();
+  if (target < firstMonday) {
+    return weeks[0];
+  }
+
   for (const week of weeks) {
     const monday = startOfDay(week.monday).getTime();
     const sunday = monday + 6 * 24 * 60 * 60 * 1000;
@@ -31,10 +32,9 @@ export function findSchoolWeekForDate(date: Date, weeks = buildSchoolWeeks()): S
       return week;
     }
   }
-  if (target < startOfDay(weeks[0].monday).getTime()) {
-    return weeks[0];
-  }
-  return weeks[weeks.length - 1];
+
+  const next = weeks.find((week) => startOfDay(week.monday).getTime() > target);
+  return next ?? weeks[weeks.length - 1];
 }
 
 export function courseDayKey(slot: CourseDaySlot): string {
@@ -88,26 +88,17 @@ export function resolveDisplayCourseDay(
   weeks = buildSchoolWeeks(),
   schedule: TmaCourseSchedule = DEFAULT_TMA_SCHEDULE,
 ): CourseDaySlot {
-  const week = findSchoolWeekForDate(today, weeks);
-  const courseDays = getCourseDaysForWeek(week, schedule);
-  const todayStart = startOfDay(today);
-
-  for (const slot of courseDays) {
-    if (isSameDay(slot.date, todayStart)) {
-      return slot;
-    }
+  const all = listAllCourseDays(weeks, schedule);
+  if (!all.length) {
+    throw new Error("Aucune semaine scolaire configurée.");
   }
-
-  if (week.kind === "B") {
-    const thursday = courseDays.find((slot) => slot.dayIndex === schedule.thursdayIndex);
-    if (thursday && todayStart.getTime() < startOfDay(thursday.date).getTime()) {
-      return thursday;
-    }
-  }
-
-  const weekIndex = weeks.findIndex((entry) => entry.number === week.number);
-  const nextWeek = weeks[Math.min(weekIndex + 1, weeks.length - 1)];
-  return getCourseDaysForWeek(nextWeek, schedule)[0];
+  const todayStart = startOfDay(today).getTime();
+  const onToday = all.find((slot) => startOfDay(slot.date).getTime() === todayStart);
+  if (onToday) return onToday;
+  const upcoming = all
+    .filter((slot) => startOfDay(slot.date).getTime() >= todayStart)
+    .sort((left, right) => left.date.getTime() - right.date.getTime());
+  return upcoming[0] ?? all[all.length - 1];
 }
 
 export function listPreviousCourseDays(
