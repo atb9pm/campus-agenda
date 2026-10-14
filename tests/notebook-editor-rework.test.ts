@@ -1261,6 +1261,89 @@ test("surface continue — orderedList adjacentes fusionnées, interruption puis
   );
 });
 
+test("fusion — listes adjacentes trop grandes ne perdent aucun item", () => {
+  const orderedItems = (count: number, prefix: string) =>
+    Array.from({ length: count }, (_, index) => [{ text: `${prefix}-${index + 1}` }]);
+  const checkItems = (count: number, prefix: string, checkedFrom = 0) =>
+    Array.from({ length: count }, (_, index) => ({
+      checked: index >= checkedFrom,
+      inlines: [{ text: `${prefix}-${index + 1}` }],
+    }));
+
+  const tooBig = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [
+      { type: "orderedList", items: orderedItems(30, "A") },
+      { type: "orderedList", items: orderedItems(20, "B") },
+    ],
+  });
+  assert.equal(tooBig.blocks.length, 2);
+  assert.deepEqual(
+    tooBig.blocks.map((block) => block.type),
+    ["orderedList", "orderedList"],
+  );
+  assert.equal(
+    tooBig.blocks.reduce((sum, block) => sum + ("items" in block ? block.items.length : 0), 0),
+    50,
+  );
+  assert.equal(inlinesPlainText((tooBig.blocks[0] as { items: { text: string }[][] }).items[0] ?? []), "A-1");
+  assert.equal(inlinesPlainText((tooBig.blocks[1] as { items: { text: string }[][] }).items[19] ?? []), "B-20");
+  const reloaded = decodeRichDetail(encodeRichDetail(tooBig));
+  assert.deepEqual(reloaded, tooBig);
+  assert.equal(
+    reloaded?.blocks.reduce((sum, block) => sum + ("items" in block ? block.items.length : 0), 0),
+    50,
+  );
+
+  const fits = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [
+      { type: "orderedList", items: orderedItems(20, "C") },
+      { type: "orderedList", items: orderedItems(20, "D") },
+    ],
+  });
+  assert.equal(fits.blocks.length, 1);
+  assert.equal(fits.blocks[0]?.type, "orderedList");
+  if (fits.blocks[0]?.type === "orderedList") {
+    assert.equal(fits.blocks[0].items.length, 40);
+    assert.equal(inlinesPlainText(fits.blocks[0].items[0] ?? []), "C-1");
+    assert.equal(inlinesPlainText(fits.blocks[0].items[39] ?? []), "D-20");
+  }
+
+  const bullets = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [
+      { type: "bulletList", items: orderedItems(35, "P") },
+      { type: "bulletList", items: orderedItems(10, "Q") },
+    ],
+  });
+  assert.equal(bullets.blocks.length, 2);
+  assert.equal(
+    bullets.blocks.reduce((sum, block) => sum + ("items" in block ? block.items.length : 0), 0),
+    45,
+  );
+  assert.equal(inlinesPlainText((bullets.blocks[1] as { items: { text: string }[][] }).items[9] ?? []), "Q-10");
+
+  const checks = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [
+      { type: "checklist", items: checkItems(30, "K", 30) },
+      { type: "checklist", items: checkItems(20, "L", 0) },
+    ],
+  });
+  assert.equal(checks.blocks.length, 2);
+  assert.equal(
+    checks.blocks.reduce((sum, block) => sum + ("items" in block ? block.items.length : 0), 0),
+    50,
+  );
+  if (checks.blocks[0]?.type === "checklist" && checks.blocks[1]?.type === "checklist") {
+    assert.equal(checks.blocks[0].items.every((item) => item.checked), false);
+    assert.equal(checks.blocks[1].items.every((item) => item.checked), true);
+    assert.equal(inlinesPlainText(checks.blocks[0].items[29]?.inlines ?? []), "K-30");
+    assert.equal(inlinesPlainText(checks.blocks[1].items[19]?.inlines ?? []), "L-20");
+  }
+});
+
 test("surface continue — canvas unique, pas de carte au focus, campus-rich-v1", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
   const { SQL_MIGRATION_FILES } = await import("../src/lib/persistence/sql/migrate.ts");

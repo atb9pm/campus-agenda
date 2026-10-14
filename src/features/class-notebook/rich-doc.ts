@@ -1079,13 +1079,15 @@ export function deleteLine(
 
 function mergeListBlocks(left: RichBlock, right: RichBlock): RichBlock | null {
   if (left.type === "checklist" && right.type === "checklist") {
-    return { type: "checklist", items: [...left.items, ...right.items].slice(0, MAX_LIST_ITEMS) };
+    if (left.items.length + right.items.length > MAX_LIST_ITEMS) return null;
+    return { type: "checklist", items: [...left.items, ...right.items] };
   }
   if (
     (left.type === "bulletList" || left.type === "orderedList") &&
     left.type === right.type
   ) {
-    return { type: left.type, items: [...left.items, ...right.items].slice(0, MAX_LIST_ITEMS) };
+    if (left.items.length + right.items.length > MAX_LIST_ITEMS) return null;
+    return { type: left.type, items: [...left.items, ...right.items] };
   }
   return null;
 }
