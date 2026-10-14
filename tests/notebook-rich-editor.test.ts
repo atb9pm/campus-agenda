@@ -111,7 +111,7 @@ test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async (
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.match(editor, /parseInlinesFromHtml/);
   assert.match(editor, /applyMarkToRange/);
-  assert.match(editor, /applyStructureToLine/);
+  assert.match(editor, /applyStructureAtVisualLine/);
   assert.match(editor, /marksInRange/);
   assert.match(editor, /setCharacterSelection/);
   assert.match(editor, /characterOffset/);

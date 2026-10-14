@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   CAMPUS_RICH_FORMAT,
   applyMarkToRange,
+  applyStructureAtVisualLine,
   applyStructureToLine,
   copyLineAsClip,
   encodeRichDetail,
@@ -195,10 +196,29 @@ test("liste numérotée — conversion depuis des puces, numéros recalculés", 
     blocks: [{ type: "bulletList", items: [[{ text: "un" }], [{ text: "deux" }], [{ text: "trois" }]] }],
   });
   const numbered = applyStructureToLine(bullets, 0, 1, "orderedList");
-  assert.equal(numbered.doc.blocks[0]?.type, "orderedList");
   assert.deepEqual(
-    richDocLines(numbered.doc).map((line) => line.ordinal),
-    [1, 2, 3],
+    numbered.doc.blocks.map((block) => block.type),
+    ["bulletList", "orderedList", "bulletList"],
+  );
+  assert.deepEqual(
+    richDocLines(numbered.doc).map((line) => [line.kind, inlinesPlainText(line.inlines), line.ordinal ?? null]),
+    [
+      ["bulletList", "un", 1],
+      ["orderedList", "deux", 1],
+      ["bulletList", "trois", 1],
+    ],
+  );
+
+  const thenTrois = applyStructureToLine(numbered.doc, 2, 0, "orderedList");
+  const thenUn = applyStructureToLine(thenTrois.doc, 0, 0, "orderedList");
+  assert.equal(thenUn.doc.blocks[0]?.type, "orderedList");
+  assert.deepEqual(
+    richDocLines(thenUn.doc).map((line) => [inlinesPlainText(line.inlines), line.ordinal]),
+    [
+      ["un", 1],
+      ["deux", 2],
+      ["trois", 3],
+    ],
   );
 });
 
@@ -822,6 +842,7 @@ test("éditeur 2.62.0 — structures génériques, callouts hérités neutres, l
   assert.match(editor, /text="Lien"/);
   assert.match(editor, /event\.key === "Enter" && event\.shiftKey/);
   assert.match(editor, /insertSoftBreak/);
+  assert.match(editor, /applyStructureAtVisualLine/);
   assert.match(editor, /splitLine/);
   assert.match(editor, /pasteRichClip/);
   assert.match(editor, /undoRichDocHistory/);
@@ -929,6 +950,185 @@ test("éditeur — puces, numéros et cases dans la zone de saisie commune", asy
       { type: "orderedList", items: [[{ text: "Ancien devoir" }]] },
       { type: "callout", kind: "todo", inlines: [{ text: "À faire encore" }] },
     ],
+  });
+  assert.deepEqual(decodeRichDetail(encodeRichDetail(historic)), historic);
+});
+
+test("ligne visuelle — Cases n’applique que la sous-ligne du curseur", () => {
+  const doc = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{ type: "paragraph", inlines: [{ text: "Devoir :\nLe moteur" }] }],
+  });
+  const offset = "Devoir :\n".length;
+  const result = applyStructureAtVisualLine(doc, 0, null, offset, "checklist");
+  assert.deepEqual(
+    result.doc.blocks.map((block) => block.type),
+    ["paragraph", "checklist"],
+  );
+  assert.deepEqual(
+    richDocLines(result.doc).map((line) => [line.kind, inlinesPlainText(line.inlines)]),
+    [
+      ["paragraph", "Devoir :"],
+      ["checklist", "Le moteur"],
+    ],
+  );
+  assert.equal(result.caret.blockIndex, 1);
+  assert.equal(result.caret.itemIndex, 0);
+});
+
+test("ligne visuelle — Puces scindent avant et après, puis fusionnent", () => {
+  const doc = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{ type: "paragraph", inlines: [{ text: "Devoir :\nLe moteur\nInjection" }] }],
+  });
+  const moteur = applyStructureAtVisualLine(doc, 0, null, "Devoir :\n".length, "bulletList");
+  assert.deepEqual(
+    moteur.doc.blocks.map((block) => block.type),
+    ["paragraph", "bulletList", "paragraph"],
+  );
+  assert.deepEqual(
+    richDocLines(moteur.doc).map((line) => inlinesPlainText(line.inlines)),
+    ["Devoir :", "Le moteur", "Injection"],
+  );
+
+  const both = applyStructureAtVisualLine(moteur.doc, 2, null, 0, "bulletList");
+  assert.deepEqual(
+    both.doc.blocks.map((block) => block.type),
+    ["paragraph", "bulletList"],
+  );
+  if (both.doc.blocks[1]?.type === "bulletList") {
+    assert.deepEqual(
+      both.doc.blocks[1].items.map((item) => inlinesPlainText(item)),
+      ["Le moteur", "Injection"],
+    );
+  }
+});
+
+test("ligne visuelle — numérotation automatique après fusion", () => {
+  const doc = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{ type: "paragraph", inlines: [{ text: "Devoir :\nMoteur\nInjection" }] }],
+  });
+  const moteur = applyStructureAtVisualLine(doc, 0, null, "Devoir :\n".length, "orderedList");
+  const injection = applyStructureAtVisualLine(moteur.doc, 2, null, 0, "orderedList");
+  assert.equal(injection.doc.blocks[0]?.type, "paragraph");
+  assert.equal(lineText(injection.doc, 0), "Devoir :");
+  assert.equal(injection.doc.blocks[1]?.type, "orderedList");
+  assert.deepEqual(
+    richDocLines(injection.doc)
+      .filter((line) => line.kind === "orderedList")
+      .map((line) => [inlinesPlainText(line.inlines), line.ordinal]),
+    [
+      ["Moteur", 1],
+      ["Injection", 2],
+    ],
+  );
+});
+
+test("ligne visuelle — Texte ne convertit que l’élément visé", () => {
+  const listed = applyStructureToLine(
+    sanitizeRichDoc({
+      format: CAMPUS_RICH_FORMAT,
+      blocks: [{ type: "checklist", items: [
+        { checked: false, inlines: [{ text: "Le moteur" }] },
+        { checked: false, inlines: [{ text: "Injection" }] },
+      ] }],
+    }),
+    0,
+    1,
+    "paragraph",
+  );
+  assert.deepEqual(
+    listed.doc.blocks.map((block) => block.type),
+    ["checklist", "paragraph"],
+  );
+  assert.deepEqual(
+    richDocLines(listed.doc).map((line) => [line.kind, inlinesPlainText(line.inlines)]),
+    [
+      ["checklist", "Le moteur"],
+      ["paragraph", "Injection"],
+    ],
+  );
+});
+
+test("ligne visuelle — Titre uniquement sur la sous-ligne du curseur", () => {
+  const doc = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{ type: "paragraph", inlines: [{ text: "Devoir :\nLe moteur" }] }],
+  });
+  const titled = applyStructureAtVisualLine(doc, 0, null, 0, "heading");
+  assert.equal(titled.doc.blocks[0]?.type, "heading");
+  assert.equal(titled.doc.blocks[1]?.type, "paragraph");
+  assert.equal(lineText(titled.doc, 0), "Devoir :");
+  assert.equal(lineText(titled.doc, 1), "Le moteur");
+});
+
+test("ligne visuelle — marks conservés au découpage", () => {
+  const doc = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{
+      type: "paragraph",
+      inlines: [
+        { text: "Devoir :\n", marks: { bold: true } },
+        {
+          text: "Le moteur",
+          marks: {
+            italic: true,
+            underline: true,
+            highlight: true,
+            color: "blue",
+            href: "https://campusagenda.ch",
+          },
+        },
+      ],
+    }],
+  });
+  const result = applyStructureAtVisualLine(doc, 0, null, "Devoir :\n".length, "checklist");
+  const heading = result.doc.blocks[0];
+  const item = result.doc.blocks[1];
+  assert.ok(heading && heading.type === "paragraph");
+  assert.ok(item && item.type === "checklist");
+  if (heading?.type === "paragraph") {
+    assert.equal(marksInRange(heading.inlines, 0, 8).bold, true);
+  }
+  if (item?.type === "checklist") {
+    const inlines = item.items[0]?.inlines ?? [];
+    assert.equal(marksInRange(inlines, 0, 9).italic, true);
+    assert.equal(marksInRange(inlines, 0, 9).underline, true);
+    assert.equal(marksInRange(inlines, 0, 9).highlight, true);
+    assert.equal(marksInRange(inlines, 0, 9).color, "blue");
+    assert.equal(marksInRange(inlines, 0, 9).href, "https://campusagenda.ch");
+  }
+});
+
+test("ligne visuelle — Maj+Entrée reste un retour souple, Entrée continue la liste", () => {
+  const listed = applyStructureToLine(paragraphDoc("Terminer la feuille"), 0, null, "bulletList");
+  const soft = insertTextAt([{ text: "Terminer la feuille" }], "Terminer".length, "\n");
+  const sameItem = setLineInlines(listed.doc, 0, 0, soft);
+  assert.equal(sameItem.blocks[0]?.type, "bulletList");
+  if (sameItem.blocks[0]?.type === "bulletList") {
+    assert.equal(sameItem.blocks[0].items.length, 1);
+    assert.equal(inlinesPlainText(sameItem.blocks[0].items[0] ?? []), "Terminer\n la feuille");
+  }
+
+  const nextItem = splitLine(listed.doc, 0, 0, "Terminer la feuille".length);
+  assert.equal(nextItem.doc.blocks[0]?.type, "bulletList");
+  if (nextItem.doc.blocks[0]?.type === "bulletList") {
+    assert.equal(nextItem.doc.blocks[0].items.length, 2);
+  }
+});
+
+test("ligne visuelle — campus-rich-v1 encode/decode sans perte", () => {
+  const doc = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{ type: "paragraph", inlines: [{ text: "Devoir :\nLe moteur" }] }],
+  });
+  const converted = applyStructureAtVisualLine(doc, 0, null, "Devoir :\n".length, "checklist");
+  assert.equal(converted.doc.format, "campus-rich-v1");
+  assert.deepEqual(decodeRichDetail(encodeRichDetail(converted.doc)), converted.doc);
+  const historic = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{ type: "callout", kind: "review", inlines: [{ text: "Ancien\nbloc" }] }],
   });
   assert.deepEqual(decodeRichDetail(encodeRichDetail(historic)), historic);
 });

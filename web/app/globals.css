@@ -2441,7 +2441,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  padding: 3px 8px;
+  padding: 2px 6px;
   border-radius: 6px;
   overflow: hidden;
 }
@@ -2460,7 +2460,12 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   user-select: none;
   pointer-events: none;
 }
-.rich-doc-line-check { flex: none; margin: 0.28em 0 0; }
+.rich-doc-line-check {
+  flex: none;
+  width: 0.92em;
+  height: 0.92em;
+  margin: calc((1em * var(--carnet-leading) - 0.92em) / 2) 0 0;
+}
 .rich-doc-line-input {
   flex: 1;
   min-width: 0;

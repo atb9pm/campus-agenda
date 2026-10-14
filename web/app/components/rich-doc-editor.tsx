@@ -9,7 +9,7 @@ import {
   RICH_TEXT_COLOR_IDS,
   RICH_TEXT_COLOR_LABELS,
   applyMarkToRange,
-  applyStructureToLine,
+  applyStructureAtVisualLine,
   copyLineAsClip,
   decodeRichClip,
   encodeRichClip,
@@ -740,8 +740,19 @@ export function RichDocEditor({
   const activeKind = activeLine?.kind ?? "paragraph";
 
   function applyStructure(type: RichStructureType) {
-    const current = selection ?? { blockIndex: 0, itemIndex: lines[0]?.itemIndex ?? null, start: 0, end: 0 };
-    const result = applyStructureToLine(docRef.current, current.blockIndex, current.itemIndex, type);
+    const live = liveTarget();
+    const current = live?.selection ?? selectionRef.current ?? fallbackSelection();
+    if (!current) return;
+    const withLive = live
+      ? setLineInlines(docRef.current, current.blockIndex, current.itemIndex, live.inlines)
+      : docRef.current;
+    const result = applyStructureAtVisualLine(
+      withLive,
+      current.blockIndex,
+      current.itemIndex,
+      current.start,
+      type,
+    );
     commit(result.doc, result.caret);
   }
 

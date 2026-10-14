@@ -105,6 +105,7 @@ export {
   type RichStructureType,
   type RichTextColorId,
   applyMarkToRange,
+  applyStructureAtVisualLine,
   applyStructureToLine,
   appendBlock,
   extractLine,

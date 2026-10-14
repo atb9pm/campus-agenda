@@ -1294,6 +1294,232 @@ function isListType(type: RichStructureType | RichBlock["type"]): boolean {
   return type === "bulletList" || type === "orderedList" || type === "checklist";
 }
 
+function visualLineSlices(inlines: readonly RichInline[]): { inlines: RichInline[]; start: number; end: number }[] {
+  const text = inlinesPlainText(inlines);
+  const slices: { inlines: RichInline[]; start: number; end: number }[] = [];
+  let start = 0;
+  for (let index = 0; index <= text.length; index += 1) {
+    if (index === text.length || text[index] === "\n") {
+      slices.push({ inlines: sliceInlines(inlines, start, index), start, end: index });
+      start = index + 1;
+    }
+  }
+  return slices.length ? slices : [{ inlines: normalizeInlines(inlines), start: 0, end: text.length }];
+}
+
+function visualSliceIndex(slices: readonly { start: number; end: number }[], offset: number): number {
+  if (slices.length <= 1) return 0;
+  const clamped = Math.max(0, offset);
+  for (let index = 0; index < slices.length; index += 1) {
+    const limit = index === slices.length - 1 ? Number.POSITIVE_INFINITY : slices[index + 1]!.start;
+    if (clamped < limit) return index;
+  }
+  return slices.length - 1;
+}
+
+function simpleBlockWithInlines(block: RichBlock, inlines: RichInline[]): RichBlock {
+  if (block.type === "callout") return { type: "callout", kind: block.kind, inlines };
+  if (block.type === "heading") return { type: "heading", inlines };
+  return { type: "paragraph", inlines };
+}
+
+function blockFromInlines(type: RichStructureType, inlines: RichInline[]): RichBlock {
+  if (type === "heading" || type === "paragraph") return { type, inlines };
+  if (type === "bulletList" || type === "orderedList") return { type, items: [inlines] };
+  return { type: "checklist", items: [{ checked: false, inlines }] };
+}
+
+function listItemCount(block: RichBlock): number {
+  if (block.type === "bulletList" || block.type === "orderedList" || block.type === "checklist") {
+    return block.items.length;
+  }
+  return 0;
+}
+
+function expandVisualLineAtCaret(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+  offset: number,
+): { doc: CampusRichDoc; blockIndex: number; itemIndex: number | null; offset: number } {
+  const blocks = doc.blocks.length ? [...doc.blocks] : [{ type: "paragraph" as const, inlines: [] }];
+  const index = Math.min(Math.max(0, blockIndex), blocks.length - 1);
+  const block = blocks[index];
+  if (!block) {
+    return { doc, blockIndex: index, itemIndex, offset };
+  }
+
+  const inlines = lineInlines({ format: CAMPUS_RICH_FORMAT, blocks }, index, itemIndex);
+  if (!inlinesPlainText(inlines).includes("\n")) {
+    return { doc: { format: CAMPUS_RICH_FORMAT, blocks }, blockIndex: index, itemIndex, offset };
+  }
+
+  const slices = visualLineSlices(inlines);
+  const vis = visualSliceIndex(slices, offset);
+  const localOffset = Math.max(0, offset - slices[vis]!.start);
+
+  if (block.type === "bulletList" || block.type === "orderedList") {
+    const items = block.items.length ? [...block.items] : [[]];
+    const at = itemIndex ?? 0;
+    items.splice(at, 1, ...slices.map((slice) => slice.inlines));
+    blocks[index] = { ...block, items: items.slice(0, MAX_LIST_ITEMS) };
+    return {
+      doc: { format: CAMPUS_RICH_FORMAT, blocks },
+      blockIndex: index,
+      itemIndex: Math.min(at + vis, MAX_LIST_ITEMS - 1),
+      offset: localOffset,
+    };
+  }
+
+  if (block.type === "checklist") {
+    const items = block.items.length ? [...block.items] : [{ checked: false, inlines: [] }];
+    const at = itemIndex ?? 0;
+    const checked = items[at]?.checked === true;
+    items.splice(
+      at,
+      1,
+      ...slices.map((slice, sliceIndex) => ({
+        checked: sliceIndex === vis ? checked : false,
+        inlines: slice.inlines,
+      })),
+    );
+    blocks[index] = { type: "checklist", items: items.slice(0, MAX_LIST_ITEMS) };
+    return {
+      doc: { format: CAMPUS_RICH_FORMAT, blocks },
+      blockIndex: index,
+      itemIndex: Math.min(at + vis, MAX_LIST_ITEMS - 1),
+      offset: localOffset,
+    };
+  }
+
+  const expanded = slices.map((slice) => simpleBlockWithInlines(block, slice.inlines));
+  blocks.splice(index, 1, ...expanded);
+  return {
+    doc: { format: CAMPUS_RICH_FORMAT, blocks: blocks.slice(0, MAX_BLOCKS) },
+    blockIndex: Math.min(index + vis, MAX_BLOCKS - 1),
+    itemIndex: null,
+    offset: localOffset,
+  };
+}
+
+function extractListItemAs(
+  block: RichBlock,
+  itemIndex: number,
+  target: RichStructureType,
+): { replacement: RichBlock[]; extractedIndex: number } | null {
+  if (block.type === "checklist") {
+    const before = block.items.slice(0, itemIndex);
+    const current = block.items[itemIndex];
+    if (!current) return null;
+    const after = block.items.slice(itemIndex + 1);
+    const replacement: RichBlock[] = [];
+    if (before.length) replacement.push({ type: "checklist", items: before });
+    replacement.push(blockFromInlines(target, current.inlines));
+    if (after.length) replacement.push({ type: "checklist", items: after });
+    return { replacement, extractedIndex: before.length ? 1 : 0 };
+  }
+  if (block.type === "bulletList" || block.type === "orderedList") {
+    const before = block.items.slice(0, itemIndex);
+    const current = block.items[itemIndex];
+    if (!current) return null;
+    const after = block.items.slice(itemIndex + 1);
+    const replacement: RichBlock[] = [];
+    if (before.length) replacement.push({ type: block.type, items: before });
+    replacement.push(blockFromInlines(target, current));
+    if (after.length) replacement.push({ type: block.type, items: after });
+    return { replacement, extractedIndex: before.length ? 1 : 0 };
+  }
+  return null;
+}
+
+function mergeAroundCaret(
+  blocks: RichBlock[],
+  caret: RichLinePosition,
+): { blocks: RichBlock[]; caret: RichLinePosition } {
+  let next = [...blocks];
+  let blockIndex = caret.blockIndex;
+  let itemIndex = caret.itemIndex;
+
+  if (blockIndex > 0) {
+    const merged = mergeListBlocks(next[blockIndex - 1]!, next[blockIndex]!);
+    if (merged) {
+      const previousCount = listItemCount(next[blockIndex - 1]!);
+      next.splice(blockIndex - 1, 2, merged);
+      if (itemIndex != null) itemIndex += previousCount;
+      blockIndex -= 1;
+    }
+  }
+
+  if (blockIndex + 1 < next.length) {
+    const merged = mergeListBlocks(next[blockIndex]!, next[blockIndex + 1]!);
+    if (merged) {
+      next.splice(blockIndex, 2, merged);
+    }
+  }
+
+  return {
+    blocks: next.slice(0, MAX_BLOCKS),
+    caret: {
+      blockIndex,
+      itemIndex: isListType(next[blockIndex]?.type ?? "paragraph") ? itemIndex ?? 0 : null,
+      offset: caret.offset,
+    },
+  };
+}
+
+/**
+ * Applique un type à la ligne visuelle contenant le curseur.
+ * Un paragraphe « Devoir :\\nLe moteur » ne convertit que la sous-ligne visée.
+ * Les listes adjacentes du même type sont ensuite fusionnées.
+ */
+export function applyStructureAtVisualLine(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+  offset: number,
+  type: RichStructureType,
+): { doc: CampusRichDoc; caret: RichLinePosition } {
+  const expanded = expandVisualLineAtCaret(doc, blockIndex, itemIndex, offset);
+  const blocks = expanded.doc.blocks.length
+    ? [...expanded.doc.blocks]
+    : [{ type: "paragraph" as const, inlines: [] }];
+  const index = Math.min(Math.max(0, expanded.blockIndex), blocks.length - 1);
+  const block = blocks[index] ?? { type: "paragraph" as const, inlines: [] };
+  const atItem = expanded.itemIndex;
+  const sameType = block.type === type;
+  const target: RichStructureType = sameType && type !== "paragraph" ? "paragraph" : type;
+  const localOffset = expanded.offset;
+
+  if (isListType(block.type) && atItem != null && target !== block.type) {
+    const extracted = extractListItemAs(block, atItem, target);
+    if (extracted) {
+      blocks.splice(index, 1, ...extracted.replacement);
+      const caret: RichLinePosition = {
+        blockIndex: index + extracted.extractedIndex,
+        itemIndex: isListType(target) ? 0 : null,
+        offset: localOffset,
+      };
+      const merged = mergeAroundCaret(blocks, caret);
+      return {
+        doc: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: merged.blocks }),
+        caret: merged.caret,
+      };
+    }
+  }
+
+  blocks[index] = convertBlock(block, target);
+  const caret: RichLinePosition = {
+    blockIndex: index,
+    itemIndex: isListType(target) ? Math.min(atItem ?? 0, MAX_LIST_ITEMS - 1) : null,
+    offset: localOffset,
+  };
+  const merged = mergeAroundCaret(blocks, caret);
+  return {
+    doc: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: merged.blocks }),
+    caret: merged.caret,
+  };
+}
+
 /**
  * Applique un type à la ligne active.
  * Sur une liste, passer à un titre ou un paragraphe n'extrait que la ligne visée :
@@ -1304,49 +1530,9 @@ export function applyStructureToLine(
   blockIndex: number,
   itemIndex: number | null,
   type: RichStructureType,
+  offset = 0,
 ): { doc: CampusRichDoc; caret: RichLinePosition } {
-  const blocks = doc.blocks.length ? [...doc.blocks] : [{ type: "paragraph" as const, inlines: [] }];
-  const index = Math.min(Math.max(0, blockIndex), blocks.length - 1);
-  const block = blocks[index] ?? { type: "paragraph" as const, inlines: [] };
-
-  const sameType = block.type === type;
-  const target: RichStructureType = sameType && type !== "paragraph" ? "paragraph" : type;
-
-  if (isListType(block.type) && !isListType(target) && itemIndex != null) {
-    const items = itemsFromBlock(block);
-    const before = items.slice(0, itemIndex);
-    const after = items.slice(itemIndex + 1);
-    const extracted: RichBlock = target === "heading"
-      ? { type: "heading", inlines: items[itemIndex] ?? [] }
-      : { type: "paragraph", inlines: items[itemIndex] ?? [] };
-
-    const replacement: RichBlock[] = [];
-    if (before.length) replacement.push(listBlockOfType(block, before));
-    replacement.push(extracted);
-    if (after.length) replacement.push(listBlockOfType(block, after));
-
-    blocks.splice(index, 1, ...replacement);
-    return {
-      doc: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: blocks.slice(0, MAX_BLOCKS) }),
-      caret: { blockIndex: before.length ? index + 1 : index, itemIndex: null, offset: 0 },
-    };
-  }
-
-  blocks[index] = convertBlock(block, target);
-  const nextDoc = sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks });
-  const caretItem = isListType(target) ? Math.min(itemIndex ?? 0, MAX_LIST_ITEMS - 1) : null;
-  return {
-    doc: nextDoc,
-    caret: { blockIndex: index, itemIndex: isListType(target) ? (caretItem ?? 0) : null, offset: 0 },
-  };
-}
-
-function listBlockOfType(source: RichBlock, items: RichInline[][]): RichBlock {
-  if (source.type === "checklist") {
-    return { type: "checklist", items: items.map((inlines) => ({ checked: false, inlines })) };
-  }
-  if (source.type === "orderedList") return { type: "orderedList", items };
-  return { type: "bulletList", items };
+  return applyStructureAtVisualLine(doc, blockIndex, itemIndex, offset, type);
 }
 
 export function applyStructureToDoc(
