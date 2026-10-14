@@ -278,6 +278,7 @@ export function RichDocEditor({
   const typingMarksRef = useRef<RichMarks>({});
   const pendingTyping = useRef(false);
   const softBreakLock = useRef(false);
+  const enterLock = useRef(false);
   const pasteLock = useRef(false);
   const linkTargetRef = useRef<EditorSelection | null>(null);
   const linkInputRef = useRef<HTMLInputElement | null>(null);
@@ -811,11 +812,20 @@ export function RichDocEditor({
   }
 
   function splitAtCaret(line: RichDocLine, element: HTMLElement) {
+    if (enterLock.current) return;
+    enterLock.current = true;
+    queueMicrotask(() => {
+      enterLock.current = false;
+    });
     const current = readSelection(line, element);
     const inlines = parseInlinesFromHtml(element.innerHTML);
     const withText = setLineInlines(docRef.current, line.blockIndex, line.itemIndex, inlines);
     const result = splitLine(withText, line.blockIndex, line.itemIndex, current?.start ?? 0);
     commit(result.doc, result.caret);
+  }
+
+  function isListLine(line: RichDocLine) {
+    return line.kind === "bulletList" || line.kind === "orderedList" || line.kind === "checklist";
   }
 
   function insertSoftBreak(line: RichDocLine, element: HTMLElement) {
@@ -845,7 +855,7 @@ export function RichDocEditor({
     if (handleHistoryKeys(event)) return;
     if (event.key === "Enter" && event.shiftKey) {
       event.preventDefault();
-      if (line.kind === "bulletList" || line.kind === "orderedList" || line.kind === "checklist") {
+      if (isListLine(line)) {
         splitAtCaret(line, element);
         return;
       }
@@ -875,7 +885,16 @@ export function RichDocEditor({
     if (!(native instanceof InputEvent)) return;
     if (native.inputType === "insertLineBreak") {
       event.preventDefault();
-      if (line.kind === "bulletList" || line.kind === "orderedList" || line.kind === "checklist") {
+      if (isListLine(line)) {
+        splitAtCaret(line, element);
+        return;
+      }
+      insertSoftBreak(line, element);
+      return;
+    }
+    if (native.inputType === "insertText" && (native.data === "\n" || native.data === "\r\n")) {
+      event.preventDefault();
+      if (isListLine(line)) {
         splitAtCaret(line, element);
         return;
       }
@@ -894,6 +913,7 @@ export function RichDocEditor({
     }
     if (native.inputType === "insertParagraph") {
       event.preventDefault();
+      splitAtCaret(line, element);
       return;
     }
     if (native.inputType !== "insertText" || !native.data) return;

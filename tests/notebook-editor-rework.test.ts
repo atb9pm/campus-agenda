@@ -1724,7 +1724,9 @@ test("éditeur — Maj+Entrée d’une liste crée un item, pas un retour souple
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.match(editor, /function splitAtCaret/);
   assert.match(editor, /event\.key === "Enter" && event\.shiftKey/);
-  assert.match(editor, /line\.kind === "bulletList" \|\| line\.kind === "orderedList" \|\| line\.kind === "checklist"/);
+  assert.match(editor, /function isListLine/);
+  assert.match(editor, /native\.inputType === "insertParagraph"/);
+  assert.match(editor, /insertParagraph[\s\S]{0,80}splitAtCaret\(line, element\)/);
   assert.match(editor, /splitAtCaret\(line, element\)/);
   assert.match(editor, /Dans une liste, Entrée et Maj \+ Entrée ajoutent la puce ou le numéro suivant/);
   assert.match(editor, /Maj \+ Entrée dans un texte normal va à la ligne dans le bloc/);
