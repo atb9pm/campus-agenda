@@ -4,9 +4,12 @@ import {
   QUICK_BLOCK_LABELS,
   RICH_HIGHLIGHT_HEX,
   RICH_TEXT_COLOR_HEX,
+  compactSummaryCards,
   isEmptyRichDoc,
+  listDisplayRows,
   visibleRichDocLines,
   type CampusRichDoc,
+  type CompactSummaryCard,
   type RichDocLine,
   type RichInline,
 } from "@campus/features/class-notebook";
@@ -208,8 +211,13 @@ export function RichDocView({
 
   if (compact) {
     const lines = visibleRichDocLines(doc);
-    const shown = interactive ? lines : lines.slice(0, COMPACT_LINE_LIMIT);
-    const hidden = lines.length - shown.length;
+    const cards = compactSummaryCards(lines);
+    const shown = interactive ? cards : cards.slice(0, COMPACT_LINE_LIMIT);
+    const hiddenCards = cards.slice(shown.length);
+    const hidden = hiddenCards.reduce(
+      (sum, card) => sum + (card.kind === "list" ? card.lines.length : 1),
+      0,
+    );
 
     const renderSlot = (at: number) => {
       if (!showInsertSlots || hiddenInsertSlots?.has(at)) return null;
@@ -226,83 +234,109 @@ export function RichDocView({
       );
     };
 
-    return (
-      <div className={`rich-doc-summary${insertSlotsDragging ? " is-insert-dragging" : ""}`}>
-        {renderSlot(0)}
-        {shown.map((line, index) => {
-          const key = lineViewKey(line);
-          const selected = selectedLineKey === key;
-          return (
-            <Fragment key={key}>
-              <div
-                className={`rich-doc-summary-line is-${line.kind}${interactive ? " is-interactive" : ""}${selected ? " is-selected" : ""}`}
-                data-carnet-line={interactive ? "" : undefined}
-                draggable={lineDraggable}
-                role={interactive ? "button" : undefined}
-                tabIndex={interactive ? 0 : undefined}
-                aria-pressed={interactive ? selected : undefined}
-                onClick={
-                  onLineClick
-                    ? (event) => {
-                        if ((event.target as HTMLElement).closest("a, .rich-doc-line-nudge")) return;
-                        event.stopPropagation();
-                        onLineClick(line);
-                      }
-                    : undefined
-                }
-                onKeyDown={
-                  onLineClick
-                    ? (event) => {
-                        if (event.key !== "Enter" && event.key !== " ") return;
-                        if ((event.target as HTMLElement).closest(".rich-doc-line-nudge")) return;
-                        event.preventDefault();
-                        onLineClick(line);
-                      }
-                    : undefined
-                }
-                onDragStart={
-                  onLineDragStart
-                    ? (event) => {
-                        onLineDragStart(line, event);
-                      }
-                    : undefined
-                }
-                onDragEnd={onLineDragEnd}
-              >
-                <SummaryLineBody line={line} navigateLinks={!interactive} />
-                {selected && onMoveLine ? (
-                  <div className="rich-doc-line-nudge">
-                    {index > 0 ? (
-                      <button
-                        type="button"
-                        aria-label="Monter d’une ligne"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onMoveLine(line, -1);
-                        }}
-                      >
-                        ↑
-                      </button>
+    const renderCard = (card: CompactSummaryCard, cardIndex: number) => {
+      const line = card.kind === "list" ? card.lines[0]! : card.line;
+      const key = lineViewKey(line);
+      const selected = selectedLineKey === key
+        || (card.kind === "list"
+          && card.lines.some((entry) => lineViewKey(entry) === selectedLineKey));
+      const afterSlot = card.kind === "list" ? card.lineIndex + card.lines.length : card.lineIndex + 1;
+      return (
+        <Fragment key={key}>
+          {cardIndex === 0 ? renderSlot(0) : null}
+          <div
+            className={`rich-doc-summary-line is-${line.kind}${card.kind === "list" ? " is-list-block" : ""}${interactive ? " is-interactive" : ""}${selected ? " is-selected" : ""}`}
+            data-carnet-line={interactive ? "" : undefined}
+            data-carnet-list-block={card.kind === "list" ? "" : undefined}
+            draggable={lineDraggable}
+            role={interactive ? "button" : undefined}
+            tabIndex={interactive ? 0 : undefined}
+            aria-pressed={interactive ? selected : undefined}
+            onClick={
+              onLineClick
+                ? (event) => {
+                    if ((event.target as HTMLElement).closest("a, .rich-doc-line-nudge")) return;
+                    event.stopPropagation();
+                    onLineClick(line);
+                  }
+                : undefined
+            }
+            onKeyDown={
+              onLineClick
+                ? (event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    if ((event.target as HTMLElement).closest(".rich-doc-line-nudge")) return;
+                    event.preventDefault();
+                    onLineClick(line);
+                  }
+                : undefined
+            }
+            onDragStart={
+              onLineDragStart
+                ? (event) => {
+                    onLineDragStart(line, event);
+                  }
+                : undefined
+            }
+            onDragEnd={onLineDragEnd}
+          >
+            {card.kind === "list" ? (
+              <div className="rich-doc-summary-list">
+                {listDisplayRows(card.lines).map((row, rowIndex) => (
+                  <div className={`rich-doc-summary-list-row is-${row.kind}`} key={`${key}-${rowIndex}`}>
+                    {row.kind === "bulletList" ? <span className="rich-doc-summary-marker">•</span> : null}
+                    {row.kind === "orderedList" ? (
+                      <span className="rich-doc-summary-marker">{row.ordinal}.</span>
                     ) : null}
-                    {index < shown.length - 1 ? (
-                      <button
-                        type="button"
-                        aria-label="Descendre d’une ligne"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onMoveLine(line, 1);
-                        }}
-                      >
-                        ↓
-                      </button>
+                    {row.kind === "checklist" ? (
+                      <span className="rich-doc-summary-marker">{row.checked ? "☑" : "☐"}</span>
                     ) : null}
+                    <span className="rich-doc-summary-text">
+                      <Inlines inlines={row.inlines} navigateLinks={!interactive} />
+                    </span>
                   </div>
+                ))}
+              </div>
+            ) : (
+              <SummaryLineBody line={line} navigateLinks={!interactive} />
+            )}
+            {selected && onMoveLine ? (
+              <div className="rich-doc-line-nudge">
+                {cardIndex > 0 ? (
+                  <button
+                    type="button"
+                    aria-label="Monter d’une ligne"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onMoveLine(line, -1);
+                    }}
+                  >
+                    ↑
+                  </button>
+                ) : null}
+                {cardIndex < shown.length - 1 ? (
+                  <button
+                    type="button"
+                    aria-label="Descendre d’une ligne"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onMoveLine(line, 1);
+                    }}
+                  >
+                    ↓
+                  </button>
                 ) : null}
               </div>
-              {renderSlot(index + 1)}
-            </Fragment>
-          );
-        })}
+            ) : null}
+          </div>
+          {renderSlot(afterSlot)}
+        </Fragment>
+      );
+    };
+
+    return (
+      <div className={`rich-doc-summary${insertSlotsDragging ? " is-insert-dragging" : ""}`}>
+        {shown.map((card, cardIndex) => renderCard(card, cardIndex))}
         {hidden > 0 ? (
           <p className="rich-doc-more">+ {hidden} ligne{hidden > 1 ? "s" : ""}</p>
         ) : null}

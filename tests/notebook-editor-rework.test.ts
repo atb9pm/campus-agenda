@@ -15,7 +15,14 @@ import {
   emptyRichDoc,
   emptyRichDocHistory,
   extractLine,
+  extractWeekUnit,
+  compactSummaryCards,
+  listDisplayRows,
+  adjacentWeekUnitInsertIndex,
   copyLineToDoc,
+  copyWeekUnitToDoc,
+  insertWeekUnitAt,
+  moveWeekUnitWithinDoc,
   deleteLine,
   inlinesPlainText,
   insertBlockAt,
@@ -314,6 +321,9 @@ test("vue compacte — résumé lisible, sans cases décalées ni cadres", async
   const view = await readFile(new URL("../web/app/components/rich-doc-view.tsx", import.meta.url), "utf8");
   assert.match(view, /rich-doc-summary/);
   assert.match(view, /visibleRichDocLines/);
+  assert.match(view, /compactSummaryCards/);
+  assert.match(view, /is-list-block/);
+  assert.match(view, /listDisplayRows/);
   assert.match(view, /COMPACT_LINE_LIMIT/);
   assert.match(view, /data-carnet-line/);
   assert.match(view, /is-interactive/);
@@ -332,14 +342,14 @@ test("vue compacte — résumé lisible, sans cases décalées ni cadres", async
   assert.doesNotMatch(panel, /class-notebook-line-handle/);
   assert.doesNotMatch(panel, /data-line-handle/);
   assert.match(panel, /selectAndCopyLine/);
-  assert.match(panel, /copyLineToDoc/);
+  assert.match(panel, /copyWeekUnitToDoc/);
   assert.match(panel, /onDragStart/);
-  assert.match(panel, /moveLineToDoc/);
+  assert.match(panel, /moveWeekUnitToDoc/);
   assert.match(panel, /encodeCarnetMove/);
   assert.match(panel, /Supprimer/);
   assert.match(panel, /placeCopiedLine/);
   assert.match(panel, /nudgeSelectedLine/);
-  assert.match(panel, /insertBlockAt|moveLineWithinDoc/);
+  assert.match(panel, /insertWeekUnitAt|moveWeekUnitWithinDoc/);
   assert.match(panel, /Insérer à cet endroit|showInsertSlots/);
   assert.match(view, /Monter d’une ligne/);
   assert.match(view, /Descendre d’une ligne/);
@@ -370,7 +380,7 @@ test("version 2.57.0 — curseur, menus notes, déplacement d’une ligne", asyn
   assert.match(editor, /Insérer un lien/);
   assert.match(editor, /event\.shiftKey/);
   assert.match(editor, /insertTextAt/);
-  assert.match(editor, /Maj \+ Entrée va à la ligne dans le bloc/);
+  assert.match(editor, /Maj \+ Entrée dans un texte normal va à la ligne dans le bloc/);
   assert.match(editor, /pastePlainText/);
   const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
   assert.match(panel, /selectAndCopyLine/);
@@ -1101,21 +1111,19 @@ test("ligne visuelle — marks conservés au découpage", () => {
   }
 });
 
-test("ligne visuelle — Maj+Entrée reste un retour souple, Entrée continue la liste", () => {
+test("ligne visuelle — Maj+Entrée dans une liste crée l’item suivant, Entrée aussi", () => {
   const listed = applyStructureToLine(paragraphDoc("Terminer la feuille"), 0, null, "bulletList");
-  const soft = insertTextAt([{ text: "Terminer la feuille" }], "Terminer".length, "\n");
-  const sameItem = setLineInlines(listed.doc, 0, 0, soft);
-  assert.equal(sameItem.blocks[0]?.type, "bulletList");
-  if (sameItem.blocks[0]?.type === "bulletList") {
-    assert.equal(sameItem.blocks[0].items.length, 1);
-    assert.equal(inlinesPlainText(sameItem.blocks[0].items[0] ?? []), "Terminer\n la feuille");
-  }
-
   const nextItem = splitLine(listed.doc, 0, 0, "Terminer la feuille".length);
   assert.equal(nextItem.doc.blocks[0]?.type, "bulletList");
   if (nextItem.doc.blocks[0]?.type === "bulletList") {
     assert.equal(nextItem.doc.blocks[0].items.length, 2);
   }
+
+  const paragraph = paragraphDoc("Devoir injection");
+  const soft = insertTextAt([{ text: "Devoir injection" }], "Devoir".length, "\n");
+  const sameBlock = setLineInlines(paragraph, 0, null, soft);
+  assert.equal(sameBlock.blocks[0]?.type, "paragraph");
+  assert.equal(inlinesPlainText(sameBlock.blocks[0] && "inlines" in sameBlock.blocks[0] ? sameBlock.blocks[0].inlines : []), "Devoir\n injection");
 });
 
 test("ligne visuelle — campus-rich-v1 encode/decode sans perte", () => {
@@ -1190,19 +1198,15 @@ test("surface continue — Enter sur item vide sort de la liste", () => {
   }
 });
 
-test("surface continue — Shift+Enter reste dans le même item", () => {
+test("surface continue — Shift+Enter dans une liste crée un nouvel item", () => {
   const listed = applyStructureToLine(paragraphDoc("Terminer la feuille"), 0, null, "orderedList");
-  const soft = setLineInlines(
-    listed.doc,
-    0,
-    0,
-    insertTextAt([{ text: "Terminer la feuille" }], "Terminer la feuille".length, "\n"),
-  );
-  assert.equal(soft.blocks.length, 1);
-  assert.equal(soft.blocks[0]?.type, "orderedList");
-  if (soft.blocks[0]?.type === "orderedList") {
-    assert.equal(soft.blocks[0].items.length, 1);
-    assert.equal(inlinesPlainText(soft.blocks[0].items[0] ?? []), "Terminer la feuille\n");
+  const split = splitLine(listed.doc, 0, 0, "Terminer la feuille".length);
+  assert.equal(split.doc.blocks.length, 1);
+  assert.equal(split.doc.blocks[0]?.type, "orderedList");
+  if (split.doc.blocks[0]?.type === "orderedList") {
+    assert.equal(split.doc.blocks[0].items.length, 2);
+    assert.equal(inlinesPlainText(split.doc.blocks[0].items[0] ?? []), "Terminer la feuille");
+    assert.equal(inlinesPlainText(split.doc.blocks[0].items[1] ?? []), "");
   }
 });
 
@@ -1572,4 +1576,167 @@ test("surface continue — canvas unique, pas de carte au focus, campus-rich-v1"
     ],
   });
   assert.deepEqual(decodeRichDetail(encodeRichDetail(historic)), historic);
+});
+
+test("liste — Maj+Entrée et \\n deviennent des items numérotés dans un seul bloc", () => {
+  const wrapped = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{ type: "bulletList", items: [[{ text: "Devoir :\nJdjd" }]] }],
+  });
+  assert.equal(wrapped.blocks.length, 1);
+  assert.equal(wrapped.blocks[0]?.type, "bulletList");
+  if (wrapped.blocks[0]?.type === "bulletList") {
+    assert.equal(wrapped.blocks[0].items.length, 2);
+    assert.equal(inlinesPlainText(wrapped.blocks[0].items[0] ?? []), "Devoir :");
+    assert.equal(inlinesPlainText(wrapped.blocks[0].items[1] ?? []), "Jdjd");
+  }
+
+  const numbered = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{
+      type: "orderedList",
+      items: [[{ text: "Premier\nDeuxième" }], [{ text: "Troisième" }]],
+    }],
+  });
+  assert.equal(numbered.blocks.length, 1);
+  if (numbered.blocks[0]?.type === "orderedList") {
+    assert.equal(numbered.blocks[0].items.length, 3);
+    assert.deepEqual(
+      numbered.blocks[0].items.map((item) => inlinesPlainText(item)),
+      ["Premier", "Deuxième", "Troisième"],
+    );
+  }
+  assert.deepEqual(
+    listDisplayRows(visibleRichDocLines(numbered)).map((row) => [row.ordinal, inlinesPlainText(row.inlines)]),
+    [
+      [1, "Premier"],
+      [2, "Deuxième"],
+      [3, "Troisième"],
+    ],
+  );
+
+  const paragraph = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [
+      { type: "paragraph", inlines: [{ text: "Intro" }] },
+      { type: "orderedList", items: [[{ text: "A" }], [{ text: "B" }], [{ text: "C" }]] },
+      { type: "paragraph", inlines: [{ text: "Fin" }] },
+    ],
+  });
+  const cards = compactSummaryCards(visibleRichDocLines(paragraph));
+  assert.equal(cards.length, 3);
+  assert.equal(cards[0]?.kind, "single");
+  assert.equal(cards[1]?.kind, "list");
+  assert.equal(cards[1]?.kind === "list" ? cards[1].lines.length : 0, 3);
+  assert.equal(cards[2]?.kind, "single");
+
+  const oneItem = extractLine(paragraph, 1, 1);
+  assert.equal(oneItem?.extracted.type, "orderedList");
+  if (oneItem?.extracted.type === "orderedList") {
+    assert.equal(oneItem.extracted.items.length, 1);
+    assert.equal(inlinesPlainText(oneItem.extracted.items[0] ?? []), "B");
+  }
+  const whole = extractWeekUnit(paragraph, 1, 1);
+  assert.equal(whole?.extracted.type, "orderedList");
+  if (whole?.extracted.type === "orderedList") {
+    assert.equal(whole.extracted.items.length, 3);
+  }
+  assert.equal(whole?.remaining.blocks.length, 2);
+
+  const copied = copyWeekUnitToDoc(
+    paragraph,
+    sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: [{ type: "paragraph", inlines: [{ text: "Cible" }] }] }),
+    1,
+    0,
+  );
+  assert.equal(copied?.blocks.length, 2);
+  assert.equal(copied?.blocks[1]?.type, "orderedList");
+  if (copied?.blocks[1]?.type === "orderedList") {
+    assert.equal(copied.blocks[1].items.length, 3);
+  }
+
+  const listed = applyStructureAtVisualLine(
+    sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: [{ type: "paragraph", inlines: [{ text: "Premier" }] }] }),
+    0,
+    null,
+    0,
+    "orderedList",
+  );
+  const second = splitLine(listed.doc, 0, 0, "Premier".length);
+  const withSecond = setLineInlines(second.doc, 0, 1, [{ text: "Deuxième" }]);
+  const third = splitLine(withSecond, 0, 1, "Deuxième".length);
+  const withThird = setLineInlines(third.doc, 0, 2, [{ text: "Troisième" }]);
+  const fourth = splitLine(withThird, 0, 2, "Troisième".length);
+  const complete = setLineInlines(fourth.doc, 0, 3, [{ text: "Quatrième" }]);
+  assert.equal(complete.blocks.length, 1);
+  assert.equal(complete.blocks[0]?.type, "orderedList");
+  if (complete.blocks[0]?.type === "orderedList") {
+    assert.deepEqual(
+      complete.blocks[0].items.map((item) => inlinesPlainText(item)),
+      ["Premier", "Deuxième", "Troisième", "Quatrième"],
+    );
+  }
+  assert.equal(compactSummaryCards(visibleRichDocLines(complete)).length, 1);
+
+  const alreadyListed = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{ type: "orderedList", items: [[{ text: "Ancien" }]] }],
+  });
+  const copiedBeside = copyWeekUnitToDoc(complete, alreadyListed, 0, 0);
+  assert.equal(copiedBeside?.blocks.length, 2);
+  assert.equal(copiedBeside?.blocks[0]?.type, "orderedList");
+  assert.equal(copiedBeside?.blocks[1]?.type, "orderedList");
+  if (copiedBeside?.blocks[1]?.type === "orderedList") {
+    assert.equal(copiedBeside.blocks[1].items.length, 4);
+  }
+
+  const stacked = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [
+      { type: "orderedList", items: [[{ text: "A1" }], [{ text: "A2" }]] },
+      { type: "paragraph", inlines: [{ text: "Milieu" }] },
+      { type: "orderedList", items: [[{ text: "B1" }], [{ text: "B2" }]] },
+    ],
+  });
+  assert.equal(adjacentWeekUnitInsertIndex(stacked, 0, 0, 1), 3);
+  const nudged = moveWeekUnitWithinDoc(stacked, 0, 0, 3);
+  assert.ok(nudged);
+  assert.deepEqual(
+    nudged!.blocks.map((block) => block.type),
+    ["paragraph", "orderedList", "orderedList"],
+  );
+  if (nudged!.blocks[1]?.type === "orderedList") {
+    assert.deepEqual(
+      nudged!.blocks[1].items.map((item) => inlinesPlainText(item)),
+      ["A1", "A2"],
+    );
+  }
+
+  const beside = insertWeekUnitAt(
+    alreadyListed,
+    { type: "orderedList", items: [[{ text: "Nouveau 1" }], [{ text: "Nouveau 2" }]] },
+    1,
+  );
+  assert.equal(beside.blocks.length, 2);
+});
+
+test("éditeur — Maj+Entrée d’une liste crée un item, pas un retour souple", async () => {
+  const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
+  assert.match(editor, /function splitAtCaret/);
+  assert.match(editor, /event\.key === "Enter" && event\.shiftKey/);
+  assert.match(editor, /line\.kind === "bulletList" \|\| line\.kind === "orderedList" \|\| line\.kind === "checklist"/);
+  assert.match(editor, /splitAtCaret\(line, element\)/);
+  assert.match(editor, /Dans une liste, Entrée et Maj \+ Entrée ajoutent la puce ou le numéro suivant/);
+  assert.match(editor, /Maj \+ Entrée dans un texte normal va à la ligne dans le bloc/);
+  const view = await readFile(new URL("../web/app/components/rich-doc-view.tsx", import.meta.url), "utf8");
+  assert.match(view, /data-carnet-list-block/);
+  const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /\.rich-doc-summary-list-row/);
+  const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
+  assert.match(panel, /extractWeekUnit/);
+  assert.match(panel, /copyWeekUnitToDoc/);
+  assert.match(panel, /insertWeekUnitAt/);
+  assert.match(panel, /adjacentWeekUnitInsertIndex/);
+  assert.match(panel, /Bloc sélectionné/);
+  assert.doesNotMatch(panel, /const extracted = extractLine\(/);
 });

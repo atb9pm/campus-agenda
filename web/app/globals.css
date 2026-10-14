@@ -2247,6 +2247,20 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .rich-doc-summary-line.is-heading { font-weight: 800; margin-top: 0.35em; }
 .rich-doc-summary-line.is-heading:first-child { margin-top: 0; }
 .rich-doc-summary-line.is-callout { align-items: flex-start; }
+.rich-doc-summary-line.is-list-block {
+  align-items: flex-start;
+}
+.rich-doc-summary-list {
+  display: grid;
+  gap: 0.12em;
+  min-width: 0;
+  flex: 1;
+}
+.rich-doc-summary-list-row {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
 .rich-doc-summary-line.is-bulletList,
 .rich-doc-summary-line.is-orderedList,
 .rich-doc-summary-line.is-checklist {

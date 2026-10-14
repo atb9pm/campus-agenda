@@ -810,6 +810,14 @@ export function RichDocEditor({
     setLinkDraft(null);
   }
 
+  function splitAtCaret(line: RichDocLine, element: HTMLElement) {
+    const current = readSelection(line, element);
+    const inlines = parseInlinesFromHtml(element.innerHTML);
+    const withText = setLineInlines(docRef.current, line.blockIndex, line.itemIndex, inlines);
+    const result = splitLine(withText, line.blockIndex, line.itemIndex, current?.start ?? 0);
+    commit(result.doc, result.caret);
+  }
+
   function insertSoftBreak(line: RichDocLine, element: HTMLElement) {
     if (softBreakLock.current) return;
     softBreakLock.current = true;
@@ -837,16 +845,16 @@ export function RichDocEditor({
     if (handleHistoryKeys(event)) return;
     if (event.key === "Enter" && event.shiftKey) {
       event.preventDefault();
+      if (line.kind === "bulletList" || line.kind === "orderedList" || line.kind === "checklist") {
+        splitAtCaret(line, element);
+        return;
+      }
       insertSoftBreak(line, element);
       return;
     }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      const current = readSelection(line, element);
-      const inlines = parseInlinesFromHtml(element.innerHTML);
-      const withText = setLineInlines(docRef.current, line.blockIndex, line.itemIndex, inlines);
-      const result = splitLine(withText, line.blockIndex, line.itemIndex, current?.start ?? 0);
-      commit(result.doc, result.caret);
+      splitAtCaret(line, element);
       return;
     }
     if (event.key === "Backspace") {
@@ -867,6 +875,10 @@ export function RichDocEditor({
     if (!(native instanceof InputEvent)) return;
     if (native.inputType === "insertLineBreak") {
       event.preventDefault();
+      if (line.kind === "bulletList" || line.kind === "orderedList" || line.kind === "checklist") {
+        splitAtCaret(line, element);
+        return;
+      }
       insertSoftBreak(line, element);
       return;
     }
@@ -1160,7 +1172,8 @@ export function RichDocEditor({
       </div>
 
       <p className="rich-doc-hint">
-        Entrée crée une ligne. Maj + Entrée va à la ligne dans le bloc. Ctrl+C copie, Ctrl+X coupe,
+        Entrée crée une ligne. Dans une liste, Entrée et Maj + Entrée ajoutent la puce ou le numéro suivant.
+        Maj + Entrée dans un texte normal va à la ligne dans le bloc. Ctrl+C copie, Ctrl+X coupe,
         Ctrl+V colle. Suppr efface la ligne en surbrillance dans la vue semaine. Souligné n’est pas un
         lien. Lien : sur la sélection, ou sur le mot sous le curseur. Ctrl+Z annule.
       </p>

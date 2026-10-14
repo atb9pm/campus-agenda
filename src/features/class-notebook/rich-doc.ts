@@ -278,7 +278,7 @@ function sanitizeBlock(raw: unknown): RichBlock | null {
     const items = Array.isArray((block as { items?: unknown }).items)
       ? (block as { items: unknown[] }).items.slice(0, MAX_LIST_ITEMS).map((item) => sanitizeInlines(item))
       : [];
-    return { type: block.type, items };
+    return { type: block.type, items: explodeListItemsOnNewlines(items) };
   }
   if (block.type === "checklist") {
     const items = Array.isArray((block as { items?: unknown }).items)
@@ -287,7 +287,7 @@ function sanitizeBlock(raw: unknown): RichBlock | null {
           return { checked: row.checked === true, inlines: sanitizeInlines(row.inlines) };
         })
       : [];
-    return { type: "checklist", items };
+    return { type: "checklist", items: explodeChecklistItemsOnNewlines(items) };
   }
   if (block.type === "callout") {
     const kind = (block as { kind?: unknown }).kind;
@@ -532,6 +532,46 @@ export function normalizeInlines(inlines: readonly RichInline[]): RichInline[] {
     result.push(marks ? { text: entry.text, marks } : { text: entry.text });
   }
   return result;
+}
+
+/** Coupe un item de liste sur chaque "\\n" : une ligne visuelle = une puce ou un numéro. */
+export function splitInlinesAtNewlines(inlines: readonly RichInline[]): RichInline[][] {
+  const rows: RichInline[][] = [[]];
+  for (const inline of inlines) {
+    const parts = inline.text.split("\n");
+    parts.forEach((part, partIndex) => {
+      if (partIndex > 0) rows.push([]);
+      if (!part) return;
+      rows[rows.length - 1]!.push(inline.marks ? { text: part, marks: inline.marks } : { text: part });
+    });
+  }
+  const filled = rows.map((row) => normalizeInlines(row)).filter((row) => row.length > 0);
+  return filled.length ? filled : [[]];
+}
+
+function explodeListItemsOnNewlines(items: RichInline[][]): RichInline[][] {
+  const exploded: RichInline[][] = [];
+  for (const item of items) {
+    for (const row of splitInlinesAtNewlines(item)) {
+      if (exploded.length >= MAX_LIST_ITEMS) return exploded;
+      exploded.push(row);
+    }
+  }
+  return exploded;
+}
+
+function explodeChecklistItemsOnNewlines(
+  items: Array<{ checked: boolean; inlines: RichInline[] }>,
+): Array<{ checked: boolean; inlines: RichInline[] }> {
+  const exploded: Array<{ checked: boolean; inlines: RichInline[] }> = [];
+  for (const item of items) {
+    const rows = splitInlinesAtNewlines(item.inlines);
+    rows.forEach((row, rowIndex) => {
+      if (exploded.length >= MAX_LIST_ITEMS) return;
+      exploded.push({ checked: rowIndex === 0 ? item.checked : false, inlines: row });
+    });
+  }
+  return exploded;
 }
 
 export type RichMarkName = "bold" | "italic" | "underline" | "highlight" | "color" | "href";
@@ -1053,6 +1093,43 @@ export function extractLine(
   return taken;
 }
 
+export function extractBlock(
+  doc: CampusRichDoc,
+  blockIndex: number,
+): { extracted: RichBlock; remaining: CampusRichDoc } | null {
+  const blocks = doc.blocks.length ? [...doc.blocks] : [];
+  const block = blocks[blockIndex];
+  if (!block || !blockHasText(block)) return null;
+  blocks.splice(blockIndex, 1);
+  return {
+    extracted: cloneBlock(block),
+    remaining: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks }),
+  };
+}
+
+export function extractWeekUnit(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+): { extracted: RichBlock; remaining: CampusRichDoc } | null {
+  if (isListBlock(doc.blocks[blockIndex])) return extractBlock(doc, blockIndex);
+  return extractLine(doc, blockIndex, itemIndex);
+}
+
+export function listBlockLineSpan(
+  lines: readonly RichDocLine[],
+  blockIndex: number,
+): { start: number; size: number } | null {
+  const start = lines.findIndex((line) => line.blockIndex === blockIndex);
+  if (start < 0) return null;
+  let size = 0;
+  for (let index = start; index < lines.length; index += 1) {
+    if (lines[index]!.blockIndex !== blockIndex) break;
+    size += 1;
+  }
+  return { start, size };
+}
+
 /**
  * Supprime une ligne, y compris la première. S’il n’en reste aucune, document vide
  * (l’éditeur affiche alors un paragraphe vide).
@@ -1103,8 +1180,71 @@ export function visibleRichDocLines(doc: CampusRichDoc): RichDocLine[] {
   return richDocLines(doc).filter((line) => line.inlines.length > 0);
 }
 
-function isListBlock(block: RichBlock): boolean {
-  return block.type === "bulletList" || block.type === "orderedList" || block.type === "checklist";
+export function isListLineKind(
+  kind: RichDocLine["kind"],
+): kind is "bulletList" | "orderedList" | "checklist" {
+  return kind === "bulletList" || kind === "orderedList" || kind === "checklist";
+}
+
+export type CompactSummaryCard =
+  | { kind: "single"; lineIndex: number; line: RichDocLine }
+  | { kind: "list"; lineIndex: number; lines: RichDocLine[] };
+
+/** Une carte semaine = un paragraphe/titre, ou toute une liste. */
+export function compactSummaryCards(lines: readonly RichDocLine[]): CompactSummaryCard[] {
+  const cards: CompactSummaryCard[] = [];
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index]!;
+    if (!isListLineKind(line.kind)) {
+      cards.push({ kind: "single", lineIndex: index, line });
+      index += 1;
+      continue;
+    }
+    const grouped = [line];
+    let cursor = index + 1;
+    while (
+      cursor < lines.length
+      && lines[cursor]!.blockIndex === line.blockIndex
+      && lines[cursor]!.kind === line.kind
+    ) {
+      grouped.push(lines[cursor]!);
+      cursor += 1;
+    }
+    cards.push({ kind: "list", lineIndex: index, lines: grouped });
+    index = cursor;
+  }
+  return cards;
+}
+
+export interface ListDisplayRow {
+  kind: RichDocLine["kind"];
+  inlines: RichInline[];
+  ordinal?: number;
+  checked?: boolean;
+}
+
+export function listDisplayRows(lines: readonly RichDocLine[]): ListDisplayRow[] {
+  const rows: ListDisplayRow[] = [];
+  let ordinal = 0;
+  for (const line of lines) {
+    for (const part of splitInlinesAtNewlines(line.inlines)) {
+      ordinal += 1;
+      rows.push({
+        kind: line.kind,
+        inlines: part,
+        ordinal: line.kind === "orderedList" ? ordinal : undefined,
+        checked: line.checked,
+      });
+    }
+  }
+  return rows;
+}
+
+export function isListBlock(block: RichBlock | undefined): boolean {
+  return Boolean(
+    block && (block.type === "bulletList" || block.type === "orderedList" || block.type === "checklist"),
+  );
 }
 
 function insertListItems(block: RichBlock, atItemIndex: number, incoming: RichBlock): RichBlock | null {
@@ -1219,6 +1359,81 @@ function placeExtractedBlock(target: CampusRichDoc, extracted: RichBlock, atLine
   return insertBlockAt(target, extracted, atLineIndex);
 }
 
+/** Insère un bloc semaine sans le fondre dans la liste voisine : une liste copiée reste une carte. */
+export function insertWeekUnitAt(doc: CampusRichDoc, block: RichBlock, atLineIndex: number): CampusRichDoc {
+  const incoming = cloneBlock(block);
+  if (!blockHasText(incoming)) return sanitizeRichDoc(doc);
+  if (isEmptyRichDoc(doc)) {
+    return sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: [incoming] });
+  }
+  const sanitized = sanitizeRichDoc(doc);
+  const lines = visibleRichDocLines(sanitized);
+  const at = Math.max(0, Math.min(atLineIndex, lines.length));
+  const blocks = [...sanitized.blocks];
+  if (at >= lines.length) {
+    blocks.push(incoming);
+    return sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: blocks.slice(0, MAX_BLOCKS) });
+  }
+  const next = lines[at]!;
+  const nextBlock = blocks[next.blockIndex];
+  if (isListBlock(nextBlock) && next.itemIndex != null && next.itemIndex > 0) {
+    const split = splitListBlock(nextBlock, next.itemIndex);
+    if (split) {
+      blocks.splice(next.blockIndex, 1, split.before, incoming, split.after);
+      return sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: blocks.slice(0, MAX_BLOCKS) });
+    }
+  }
+  blocks.splice(next.blockIndex, 0, incoming);
+  return sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: blocks.slice(0, MAX_BLOCKS) });
+}
+
+function placeWeekUnitBlock(target: CampusRichDoc, extracted: RichBlock, atLineIndex?: number): CampusRichDoc {
+  if (atLineIndex == null) {
+    const incoming = cloneBlock(extracted);
+    if (!blockHasText(incoming)) return sanitizeRichDoc(target);
+    if (isEmptyRichDoc(target)) {
+      return sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: [incoming] });
+    }
+    const blocks = [...sanitizeRichDoc(target).blocks];
+    blocks.push(incoming);
+    return sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: blocks.slice(0, MAX_BLOCKS) });
+  }
+  return insertWeekUnitAt(target, extracted, atLineIndex);
+}
+
+/** Index d’insertion pour monter/descendre une carte (liste entière ou ligne isolée). */
+export function adjacentWeekUnitInsertIndex(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+  direction: -1 | 1,
+): number | null {
+  const lines = visibleRichDocLines(doc);
+  const fromIndex = lines.findIndex(
+    (line) => line.blockIndex === blockIndex && line.itemIndex === itemIndex,
+  );
+  if (fromIndex < 0) return null;
+  const span = isListBlock(doc.blocks[blockIndex])
+    ? listBlockLineSpan(lines, blockIndex)
+    : { start: fromIndex, size: 1 };
+  if (!span) return null;
+  if (direction < 0) {
+    if (span.start <= 0) return null;
+    const prev = lines[span.start - 1]!;
+    const prevSpan = isListBlock(doc.blocks[prev.blockIndex])
+      ? listBlockLineSpan(lines, prev.blockIndex)
+      : { start: span.start - 1, size: 1 };
+    return prevSpan?.start ?? span.start - 1;
+  }
+  const nextIndex = span.start + span.size;
+  if (nextIndex >= lines.length) return null;
+  const next = lines[nextIndex]!;
+  const nextSpan = isListBlock(doc.blocks[next.blockIndex])
+    ? listBlockLineSpan(lines, next.blockIndex)
+    : { start: nextIndex, size: 1 };
+  return nextSpan ? nextSpan.start + nextSpan.size : nextIndex + 1;
+}
+
 /** Déplace une ligne d’un document vers un autre (fin, ou emplacement donné). */
 export function moveLineToDoc(
   source: CampusRichDoc,
@@ -1246,6 +1461,82 @@ export function copyLineToDoc(
   const extracted = extractLine(source, blockIndex, itemIndex);
   if (!extracted) return null;
   return placeExtractedBlock(target, extracted.extracted, atLineIndex);
+}
+
+export function copyWeekUnitToDoc(
+  source: CampusRichDoc,
+  target: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+  atLineIndex?: number,
+): CampusRichDoc | null {
+  const extracted = extractWeekUnit(source, blockIndex, itemIndex);
+  if (!extracted) return null;
+  return placeWeekUnitBlock(target, extracted.extracted, atLineIndex);
+}
+
+export function moveWeekUnitToDoc(
+  source: CampusRichDoc,
+  target: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+  atLineIndex?: number,
+): { source: CampusRichDoc; target: CampusRichDoc } | null {
+  const extracted = extractWeekUnit(source, blockIndex, itemIndex);
+  if (!extracted) return null;
+  return {
+    source: extracted.remaining,
+    target: placeWeekUnitBlock(target, extracted.extracted, atLineIndex),
+  };
+}
+
+export function moveWeekUnitWithinDoc(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+  atLineIndex: number,
+): CampusRichDoc | null {
+  const lines = visibleRichDocLines(doc);
+  if (isListBlock(doc.blocks[blockIndex])) {
+    const span = listBlockLineSpan(lines, blockIndex);
+    if (!span) return null;
+    if (atLineIndex === span.start || atLineIndex === span.start + span.size) return doc;
+    const extracted = extractBlock(doc, blockIndex);
+    if (!extracted) return null;
+    const adjusted = span.start < atLineIndex ? atLineIndex - span.size : atLineIndex;
+    return insertWeekUnitAt(extracted.remaining, extracted.extracted, adjusted);
+  }
+  const from = lines.findIndex((line) => line.blockIndex === blockIndex && line.itemIndex === itemIndex);
+  if (from < 0) return null;
+  if (atLineIndex === from || atLineIndex === from + 1) return doc;
+  const extracted = extractLine(doc, blockIndex, itemIndex);
+  if (!extracted) return null;
+  const adjusted = from < atLineIndex ? atLineIndex - 1 : atLineIndex;
+  return insertWeekUnitAt(extracted.remaining, extracted.extracted, adjusted);
+}
+
+export function deleteWeekUnit(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+): { doc: CampusRichDoc; caret: RichLinePosition } | null {
+  if (!isListBlock(doc.blocks[blockIndex])) return deleteLine(doc, blockIndex, itemIndex);
+  const lines = richDocLines(doc);
+  const position = lines.findIndex((line) => line.blockIndex === blockIndex);
+  const taken = extractBlock(doc, blockIndex);
+  if (!taken) return null;
+  const next = taken.remaining.blocks.length ? taken.remaining : emptyRichDoc();
+  const nextLines = richDocLines(next);
+  const caretLine = nextLines[Math.min(Math.max(0, position), Math.max(0, nextLines.length - 1))] ?? nextLines[0];
+  if (!caretLine) return { doc: next, caret: { blockIndex: 0, itemIndex: null, offset: 0 } };
+  return {
+    doc: next,
+    caret: {
+      blockIndex: caretLine.blockIndex,
+      itemIndex: caretLine.itemIndex,
+      offset: position === 0 ? 0 : inlinesPlainText(caretLine.inlines).length,
+    },
+  };
 }
 
 /**
