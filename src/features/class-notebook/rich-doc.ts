@@ -130,7 +130,7 @@ export function fromPlainLines(lines: readonly string[]): CampusRichDoc {
   return sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks });
 }
 
-/** Insère un bloc de semaine juste après le bloc actif (ou à la fin si non précisé). */
+/** Insère un callout historique. Conservé pour les documents déjà enregistrés ; plus proposé dans l’éditeur. */
 export function insertQuickBlock(
   doc: CampusRichDoc,
   kind: QuickBlockKind,

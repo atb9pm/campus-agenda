@@ -122,6 +122,9 @@ test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async (
   assert.match(editor, /Texte normal/);
   assert.match(editor, /rich-doc-link-bar/);
   assert.doesNotMatch(editor, /showExtended/);
+  assert.doesNotMatch(editor, /Blocs de la semaine/);
+  assert.doesNotMatch(editor, /insertQuickBlock/);
+  assert.doesNotMatch(editor, /rich-doc-quick/);
   assert.match(panel, /selectAndCopyLine/);
   assert.match(panel, /Supprimer/);
   assert.doesNotMatch(panel, /class-notebook-line-handle/);

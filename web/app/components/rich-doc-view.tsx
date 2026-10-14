@@ -58,7 +58,7 @@ function SummaryLineBody({ line, navigateLinks }: { line: RichDocLine; navigateL
   return (
     <>
       {line.kind === "callout" && line.calloutKind ? (
-        <span className={`rich-doc-summary-tag is-${line.calloutKind}`}>
+        <span className="rich-doc-summary-tag">
           {QUICK_BLOCK_LABELS[line.calloutKind]}
         </span>
       ) : null}
@@ -366,7 +366,7 @@ export function RichDocView({
           );
         }
         return (
-          <aside key={index} className={`rich-doc-callout is-${block.kind}`}>
+          <aside key={index} className="rich-doc-callout">
             <strong>{QUICK_BLOCK_LABELS[block.kind]}</strong>
             <p>
               <Inlines inlines={block.inlines} navigateLinks={!interactive} />

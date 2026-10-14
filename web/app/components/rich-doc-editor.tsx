@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
-  QUICK_BLOCK_KINDS,
   QUICK_BLOCK_LABELS,
   RICH_HIGHLIGHT_HEX,
   RICH_TEXT_COLOR_HEX,
@@ -17,7 +16,6 @@ import {
   emptyRichDoc,
   emptyRichDocHistory,
   inlinesPlainText,
-  insertQuickBlock,
   insertTextAt,
   lastRememberedRichClip,
   marksAtOffset,
@@ -43,7 +41,6 @@ import {
   undoRichDocHistory,
   withMark,
   type CampusRichDoc,
-  type QuickBlockKind,
   type RichDocHistory,
   type RichDocHistoryEntry,
   type RichDocLine,
@@ -748,12 +745,6 @@ export function RichDocEditor({
     commit(result.doc, result.caret);
   }
 
-  function addQuickBlock(kind: QuickBlockKind) {
-    const at = selection?.blockIndex ?? docRef.current.blocks.length - 1;
-    const next = insertQuickBlock(docRef.current, kind, at);
-    commit(next, { blockIndex: at + 1, itemIndex: null, offset: 0 });
-  }
-
   function openLinkBar() {
     const target = liveTarget();
     linkTargetRef.current = target?.selection ?? selectionRef.current;
@@ -1067,21 +1058,6 @@ export function RichDocEditor({
           {linkError ? <p className="rich-doc-link-error">{linkError}</p> : null}
         </div>
       ) : null}
-
-      <div className="rich-doc-quick" role="group" aria-label="Blocs de la semaine">
-        <span>Blocs de la semaine</span>
-        {QUICK_BLOCK_KINDS.map((kind) => (
-          <button
-            key={kind}
-            type="button"
-            className={`rich-doc-quick-chip is-${kind}`}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => addQuickBlock(kind)}
-          >
-            {QUICK_BLOCK_LABELS[kind]}
-          </button>
-        ))}
-      </div>
 
       <div className="rich-doc-canvas">
         {lines.map((line) => {

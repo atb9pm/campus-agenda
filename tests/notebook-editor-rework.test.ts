@@ -340,7 +340,11 @@ test("version 2.57.0 — curseur, menus notes, déplacement d’une ligne", asyn
   assert.match(editor, /rewriteDom: false/);
   assert.doesNotMatch(editor, /showExtended/);
   assert.doesNotMatch(editor, /\[lines, syncToken\]/);
-  assert.match(editor, /Blocs de la semaine/);
+  assert.doesNotMatch(editor, /Blocs de la semaine/);
+  assert.doesNotMatch(editor, /rich-doc-quick/);
+  assert.doesNotMatch(editor, /addQuickBlock/);
+  assert.doesNotMatch(editor, /insertQuickBlock/);
+  assert.doesNotMatch(editor, /QUICK_BLOCK_KINDS/);
   assert.match(editor, /label="Titre"/);
   assert.match(editor, /Insérer un lien/);
   assert.match(editor, /event\.shiftKey/);
@@ -788,4 +792,82 @@ test("version 2.61.0 — cadre semaine trait plein, plus de tiretés", async () 
   assert.doesNotMatch(css, /\.class-notebook-column\.is-drop-target \{[^}]*border-style: dashed/);
   assert.doesNotMatch(css, /\.class-notebook-zone-control \{[^}]*border-bottom: 1px dashed/);
   assert.doesNotMatch(css, /\.class-notebook-zone-publication \{[^}]*border-bottom: 1px dashed/);
+});
+
+test("éditeur 2.62.0 — structures génériques, callouts hérités neutres, listes compactes", async () => {
+  const { APP_VERSION } = await import("../src/lib/app-version.ts");
+  const { SQL_MIGRATION_FILES } = await import("../src/lib/persistence/sql/migrate.ts");
+  assert.equal(APP_VERSION, "2.62.0");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
+
+  const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
+  const view = await readFile(new URL("../web/app/components/rich-doc-view.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
+  const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
+
+  assert.doesNotMatch(editor, /Blocs de la semaine/);
+  assert.doesNotMatch(editor, /rich-doc-quick/);
+  assert.doesNotMatch(editor, /addQuickBlock/);
+  assert.doesNotMatch(editor, /insertQuickBlock/);
+  assert.doesNotMatch(editor, /QUICK_BLOCK_KINDS/);
+  assert.doesNotMatch(editor, /À terminer/);
+  assert.doesNotMatch(editor, /À apporter/);
+  assert.doesNotMatch(editor, /À lire/);
+  assert.match(editor, /text="Texte"/);
+  assert.match(editor, /label="Titre"/);
+  assert.match(editor, /text="Puces"/);
+  assert.match(editor, /Liste numérotée/);
+  assert.match(editor, /text="Cases"/);
+  assert.match(editor, /text="Lien"/);
+  assert.match(editor, /event\.key === "Enter" && event\.shiftKey/);
+  assert.match(editor, /insertSoftBreak/);
+  assert.match(editor, /splitLine/);
+  assert.match(editor, /pasteRichClip/);
+  assert.match(editor, /undoRichDocHistory/);
+  assert.match(editor, /redoRichDocHistory/);
+  assert.match(editor, /QUICK_BLOCK_LABELS/);
+
+  assert.match(view, /QUICK_BLOCK_LABELS/);
+  assert.match(view, /rich-doc-callout/);
+  assert.doesNotMatch(view, /is-\$\{block\.kind\}/);
+  assert.doesNotMatch(view, /is-\$\{line\.calloutKind\}/);
+
+  assert.match(css, /list-style-position: outside/);
+  assert.match(css, /\.rich-doc-view ul, \.rich-doc-view ol \{[\s\S]*padding: 0 0 0 1\.55em/);
+  assert.match(css, /\.rich-doc-view \{ display: grid; gap: 0\.28em;/);
+  assert.match(css, /\.rich-doc-line-marker \{[\s\S]*font-size: var\(--carnet-size\)/);
+  assert.match(css, /\.rich-doc-summary-text \{ min-width: 0; flex: 1;/);
+  assert.match(css, /\.rich-doc-line-body \{ display: flex; align-items: flex-start; gap: 0\.4em; \}/);
+  assert.match(css, /\.rich-doc-toolbar \{[\s\S]*flex-wrap: wrap/);
+  assert.match(css, /\.rich-doc-editor \{[\s\S]*overflow-x: hidden/);
+  assert.doesNotMatch(css, /rich-doc-quick/);
+  assert.doesNotMatch(css, /\.rich-doc-callout\.is-todo/);
+  assert.doesNotMatch(css, /\.rich-doc-summary-tag\.is-todo/);
+  assert.doesNotMatch(css, /\.rich-doc-line\.is-callout:has/);
+  assert.doesNotMatch(css, /\.rich-doc-view \{ display: grid; gap: 10px/);
+
+  assert.doesNotMatch(panel, /Blocs de la semaine/);
+  const publicationService = await readFile(
+    new URL("../src/features/class-notebook/notebook-publication-service.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(publicationService, /NOTEBOOK_PUBLICATION_TYPES = \["HOMEWORK", "INFORMATION"\]/);
+  assert.match(panel, /item\.type === "TEST"/);
+
+  const historic = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [
+      { type: "callout", kind: "review", inlines: [{ text: "Chapitre injection" }] },
+      { type: "bulletList", items: [[{ text: "Exercice 4" }]] },
+    ],
+  });
+  const encoded = encodeRichDetail(historic);
+  const reloaded = decodeRichDetail(encoded);
+  assert.equal(reloaded?.blocks[0]?.type, "callout");
+  if (reloaded?.blocks[0]?.type === "callout") {
+    assert.equal(reloaded.blocks[0].kind, "review");
+    assert.equal(inlinesPlainText(reloaded.blocks[0].inlines), "Chapitre injection");
+  }
+  const savedAgain = decodeRichDetail(encodeRichDetail(reloaded!));
+  assert.deepEqual(savedAgain, reloaded);
 });
