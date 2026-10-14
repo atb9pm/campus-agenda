@@ -394,23 +394,18 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   gap: 18px;
   min-width: 0;
 }
-.student-todo-panel {
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-}
+.student-todo-panel,
 .student-controls-preview {
   min-width: 0;
-  padding: 18px 18px 16px;
+  padding: 22px 22px 20px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: #fff;
   box-shadow: var(--shadow);
 }
+.student-todo-panel h2,
 .student-controls-preview h2 {
-  margin: 0 0 12px;
+  margin: 0 0 14px;
   color: var(--navy);
   font-size: 13px;
   font-weight: 800;
@@ -435,22 +430,49 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   outline: 2px solid var(--blue);
   outline-offset: 2px;
 }
-.student-control-preview-list { display: grid; gap: 0; }
-.student-control-row {
+.student-control-preview-list { display: grid; gap: 10px; }
+.student-control-card {
   display: grid;
-  gap: 2px;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
   margin: 0;
-  padding: 10px 0;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
+  padding: 10px;
 }
-.student-control-row:last-child { border-bottom: 0; padding-bottom: 2px; }
-.student-control-when {
-  margin: 0 0 2px;
-  color: var(--navy);
+.student-control-badge {
+  display: grid;
+  place-items: center;
+  min-height: 56px;
+  padding: 8px 6px;
+  border-radius: 10px;
+  background: var(--navy);
+  color: #fff;
+  text-align: center;
   animation: none;
+}
+.student-control-badge-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.student-control-card-body { min-width: 0; }
+.student-control-card .student-item-type { margin-bottom: 4px; }
+.student-next-control.urgency-later .student-control-badge { background: var(--navy); color: #fff; }
+.student-next-control.urgency-week .student-control-badge {
+  background: #fff4e5;
+  color: #9a3412;
+  border: 1px solid #fdba74;
+}
+.student-next-control.urgency-tomorrow .student-control-badge {
+  background: #ffedd5;
+  color: #9a3412;
+  border: 1px solid #fb923c;
+}
+.student-next-control.urgency-today .student-control-badge {
+  background: var(--blue);
+  color: #fff;
 }
 .student-planning-date-visual {
   display: grid;
@@ -488,14 +510,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   background: var(--line-strong);
   border-radius: 2px;
 }
-.student-control-timeline .student-upcoming-tests-list li {
-  padding: 8px 0;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
-}
-.student-control-timeline .student-upcoming-tests-list li:last-child { border-bottom: 0; }
+.student-control-timeline .student-upcoming-tests-list li { padding: 10px 12px; }
 @media (min-width: 880px) {
   .student-dashboard-grid[data-layout="tout"] {
     grid-template-columns: minmax(0, 1.7fr) minmax(260px, .9fr);
@@ -506,26 +521,18 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
     top: 16px;
   }
 }
-.student-branch-list { display: grid; gap: 18px; margin-top: 0; }
-.student-course-sheet {
-  padding: 20px 22px 18px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: #fff;
-  box-shadow: var(--shadow);
-}
+.student-branch-list { display: grid; gap: 18px; margin-top: 8px; }
 .student-branch-block h2,
-.student-branch-block h3 { margin: 0 0 12px; color: var(--navy); font-size: 15px; font-weight: 700; letter-spacing: .02em; text-transform: none; overflow-wrap: anywhere; }
+.student-branch-block h3 { margin: 0 0 10px; color: var(--navy); font-size: 13px; font-weight: 700; letter-spacing: .02em; text-transform: none; overflow-wrap: anywhere; }
 .student-branch-block h2:empty,
 .student-branch-block h3:empty { display: none; margin: 0; }
-.student-branch-block ul { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
-.student-branch-item { padding: 0; border: 0; background: transparent; }
-.student-branch-item.homework,
-.student-branch-item.test,
-.student-branch-item.information { border-left: 0; background: transparent; }
-.student-item-type { display: inline-block; margin-bottom: 4px; color: #64748b; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.student-branch-item strong,
-.student-sheet-heading { display: block; color: var(--navy); font-size: 16px; font-weight: 700; }
+.student-branch-block ul { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.student-branch-item { padding: 14px 16px; border: 1px solid var(--line); border-left: 4px solid var(--line-strong); border-radius: 10px; background: #fbfcfe; }
+.student-branch-item.homework { border-left-color: var(--blue); background: #f4f8ff; }
+.student-branch-item.test { border-left-color: var(--navy); }
+.student-branch-item.information { border-left-color: #98a7bc; background: #f7f8fb; }
+.student-item-type { display: inline-block; margin-bottom: 6px; color: #64748b; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.student-branch-item strong { display: block; color: var(--navy); font-size: 16px; font-weight: 700; }
 .student-branch-item p { margin: 6px 0 0; color: var(--navy); font-family: var(--carnet-font); font-size: 13px; font-weight: 400; }
 .student-branch-item .rich-doc-view,
 .student-branch-item .rich-doc-view p,
@@ -540,12 +547,12 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   font-size: var(--carnet-title-size);
 }
 .student-next-control {
-  margin: 0;
-  padding: 10px 0;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-  background: transparent;
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--navy);
+  border-radius: 8px;
+  background: #fbfcfe;
 }
 .student-next-control-kicker {
   margin: 0;
@@ -590,12 +597,13 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   font-weight: 400;
   overflow-wrap: anywhere;
 }
-.student-next-control.urgency-week .student-control-when,
-.student-next-control.urgency-tomorrow .student-control-when {
-  color: #9a3412;
+.student-next-control.urgency-week,
+.student-next-control.urgency-tomorrow {
+  background: #fff8ef;
+  border-left-color: #c2410c;
 }
-.student-next-control.urgency-today .student-control-when {
-  color: var(--blue);
+.student-next-control.urgency-today {
+  background: #eef4ff;
 }
 @keyframes student-control-warn-pulse {
   0%, 100% { opacity: 1; }
@@ -2295,35 +2303,6 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .rich-doc-callout.is-info { background: #f8fafc; border-left-color: #475467; }
 .rich-doc-callout.is-bring { background: #f0fdf4; border-left-color: #15803d; }
 .rich-doc-callout.is-read { background: #faf5ff; border-left-color: #7e22ce; }
-.student-app .rich-doc-callout,
-.student-app .rich-doc-callout.is-todo,
-.student-app .rich-doc-callout.is-finish,
-.student-app .rich-doc-callout.is-review,
-.student-app .rich-doc-callout.is-info,
-.student-app .rich-doc-callout.is-bring,
-.student-app .rich-doc-callout.is-read {
-  padding: 2px 0 2px 10px;
-  border: 0;
-  border-left: 2px solid var(--line-strong);
-  border-radius: 0;
-  background: transparent;
-}
-.student-app .rich-doc-callout strong {
-  color: var(--navy);
-  font-size: 10px;
-  letter-spacing: .06em;
-}
-.student-app .rich-doc-summary-tag,
-.student-app .rich-doc-summary-tag.is-todo,
-.student-app .rich-doc-summary-tag.is-finish,
-.student-app .rich-doc-summary-tag.is-review,
-.student-app .rich-doc-summary-tag.is-info,
-.student-app .rich-doc-summary-tag.is-bring,
-.student-app .rich-doc-summary-tag.is-read {
-  background: transparent;
-  color: var(--navy);
-  padding: 0 6px 0 0;
-}
 .rich-doc-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 18px; background: rgba(15, 32, 67, .28); }
 .rich-doc-overlay-card {
   width: min(760px, 100%);
@@ -2747,8 +2726,8 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   .student-app[data-student-tab="historique"] .student-history-panel {
     display: block;
   }
+  .student-control-card { grid-template-columns: 76px minmax(0, 1fr); }
   .student-view-tabs button { font-size: 12px; }
-  .student-course-sheet { padding: 16px 16px 14px; border-radius: 12px; }
 
   .student-course-day-header { margin-bottom: 16px; }
   .student-course-day-main { padding: 18px 16px 24px; }

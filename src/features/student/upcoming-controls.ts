@@ -40,11 +40,6 @@ export interface ControlPlanningWeek {
   days: ControlPlanningDay[];
 }
 
-/** Titre générique du carnet (« Devoir », « Devoirs : ») à masquer si le corps est un document riche. */
-export function isGenericHomeworkTitle(title: string): boolean {
-  return /^devoirs?\s*:?$/i.test(title.trim());
-}
-
 const PUBLICATION_RANK: Record<PrototypeAgendaItem["type"], number> = {
   HOMEWORK: 0,
   INFORMATION: 1,

@@ -33,24 +33,29 @@ function ControlCard({
   const detail = studentUpcomingPlainDetail(entry.item);
   return (
     <article
-      className={`student-next-control student-control-row urgency-${presentation.urgency}`}
+      className={`student-next-control student-control-card urgency-${presentation.urgency}`}
       data-next-control=""
       data-control-id={entry.item.id}
     >
-      <p className="student-control-when student-item-type">
-        {presentation.warn ? (
-          <span className="student-next-control-warn" aria-hidden="true">⚠</span>
+      <div className="student-control-badge">
+        <span className="student-control-badge-label">{presentation.badge}</span>
+      </div>
+      <div className="student-control-card-body">
+        <p className="student-item-type">
+          {presentation.warn ? (
+            <span className="student-next-control-warn" aria-hidden="true">⚠</span>
+          ) : null}
+          CONTRÔLE
+        </p>
+        {entry.subjectName ? (
+          <p className="student-upcoming-tests-branch">{entry.subjectName}</p>
         ) : null}
-        {presentation.badge}
-      </p>
-      {entry.subjectName ? (
-        <p className="student-upcoming-tests-branch">{entry.subjectName}</p>
-      ) : null}
-      <strong>{entry.item.title}</strong>
-      {detail ? <span className="student-next-control-detail student-upcoming-tests-detail">{detail}</span> : null}
-      {compact && presentation.urgency === "week" ? (
-        <p className="student-next-control-date">{formatCourseDayHeading(entry.slot)}</p>
-      ) : null}
+        <strong>{entry.item.title}</strong>
+        {detail ? <span className="student-next-control-detail student-upcoming-tests-detail">{detail}</span> : null}
+        {compact && presentation.urgency === "week" ? (
+          <p className="student-next-control-date">{formatCourseDayHeading(entry.slot)}</p>
+        ) : null}
+      </div>
     </article>
   );
 }
