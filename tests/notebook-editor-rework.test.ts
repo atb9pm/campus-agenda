@@ -1214,17 +1214,13 @@ test("surface continue — orderedList adjacentes fusionnées, interruption puis
       { type: "orderedList", items: [[{ text: "Injection" }]] },
     ],
   });
-  assert.equal(adjacent.blocks.length, 1);
-  assert.equal(adjacent.blocks[0]?.type, "orderedList");
-  if (adjacent.blocks[0]?.type === "orderedList") {
-    assert.deepEqual(
-      adjacent.blocks[0].items.map((item) => inlinesPlainText(item)),
-      ["Moteur", "Injection"],
-    );
-  }
+  assert.equal(adjacent.blocks.length, 2);
   assert.deepEqual(
-    richDocLines(adjacent).map((line) => line.ordinal),
-    [1, 2],
+    richDocLines(adjacent).map((line) => [inlinesPlainText(line.inlines), line.ordinal]),
+    [
+      ["Moteur", 1],
+      ["Injection", 1],
+    ],
   );
 
   const interrupted = sanitizeRichDoc({
@@ -1302,12 +1298,32 @@ test("fusion — listes adjacentes trop grandes ne perdent aucun item", () => {
       { type: "orderedList", items: orderedItems(20, "D") },
     ],
   });
-  assert.equal(fits.blocks.length, 1);
-  assert.equal(fits.blocks[0]?.type, "orderedList");
-  if (fits.blocks[0]?.type === "orderedList") {
-    assert.equal(fits.blocks[0].items.length, 40);
-    assert.equal(inlinesPlainText(fits.blocks[0].items[0] ?? []), "C-1");
-    assert.equal(inlinesPlainText(fits.blocks[0].items[39] ?? []), "D-20");
+  assert.equal(fits.blocks.length, 2);
+  assert.equal(
+    fits.blocks.reduce((sum, block) => sum + ("items" in block ? block.items.length : 0), 0),
+    40,
+  );
+  const mergedByEdit = applyStructureAtVisualLine(
+    sanitizeRichDoc({
+      format: CAMPUS_RICH_FORMAT,
+      blocks: [
+        { type: "orderedList", items: orderedItems(20, "C") },
+        { type: "paragraph", inlines: [{ text: "jointure" }] },
+        { type: "orderedList", items: orderedItems(10, "D") },
+      ],
+    }),
+    1,
+    null,
+    0,
+    "orderedList",
+  );
+  assert.equal(mergedByEdit.doc.blocks.length, 1);
+  assert.equal(mergedByEdit.doc.blocks[0]?.type, "orderedList");
+  if (mergedByEdit.doc.blocks[0]?.type === "orderedList") {
+    assert.equal(mergedByEdit.doc.blocks[0].items.length, 31);
+    assert.equal(inlinesPlainText(mergedByEdit.doc.blocks[0].items[0] ?? []), "C-1");
+    assert.equal(inlinesPlainText(mergedByEdit.doc.blocks[0].items[20] ?? []), "jointure");
+    assert.equal(inlinesPlainText(mergedByEdit.doc.blocks[0].items[30] ?? []), "D-10");
   }
 
   const bullets = sanitizeRichDoc({
@@ -1341,6 +1357,117 @@ test("fusion — listes adjacentes trop grandes ne perdent aucun item", () => {
     assert.equal(checks.blocks[1].items.every((item) => item.checked), true);
     assert.equal(inlinesPlainText(checks.blocks[0].items[29]?.inlines ?? []), "K-30");
     assert.equal(inlinesPlainText(checks.blocks[1].items[19]?.inlines ?? []), "L-20");
+  }
+});
+
+test("sanitize — listes historiques adjacentes restent deux blocs", () => {
+  for (const type of ["orderedList", "bulletList"] as const) {
+    const historic = sanitizeRichDoc({
+      format: CAMPUS_RICH_FORMAT,
+      blocks: [
+        { type, items: [[{ text: "Premier" }], [{ text: "Deuxième" }]] },
+        { type, items: [[{ text: "Nouveau chapitre" }], [{ text: "Suite" }]] },
+      ],
+    });
+    assert.equal(historic.blocks.length, 2);
+    assert.deepEqual(
+      historic.blocks.map((block) => block.type),
+      [type, type],
+    );
+    const reloaded = decodeRichDetail(encodeRichDetail(historic));
+    assert.deepEqual(reloaded, historic);
+    assert.equal(reloaded?.blocks.length, 2);
+    if (type === "orderedList") {
+      assert.deepEqual(
+        richDocLines(reloaded!).map((line) => line.ordinal),
+        [1, 2, 1, 2],
+      );
+    }
+  }
+
+  const checks = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [
+      { type: "checklist", items: [
+        { checked: true, inlines: [{ text: "Premier" }] },
+        { checked: false, inlines: [{ text: "Deuxième" }] },
+      ] },
+      { type: "checklist", items: [
+        { checked: true, inlines: [{ text: "Nouveau chapitre" }] },
+        { checked: false, inlines: [{ text: "Suite" }] },
+      ] },
+    ],
+  });
+  assert.equal(checks.blocks.length, 2);
+  const reloadedChecks = decodeRichDetail(encodeRichDetail(checks));
+  assert.deepEqual(reloadedChecks, checks);
+  if (reloadedChecks?.blocks[0]?.type === "checklist" && reloadedChecks.blocks[1]?.type === "checklist") {
+    assert.equal(reloadedChecks.blocks[0].items[0]?.checked, true);
+    assert.equal(reloadedChecks.blocks[1].items[0]?.checked, true);
+  }
+});
+
+test("splitLine — liste déjà à 40 items ne perd aucun contenu", () => {
+  const texts = Array.from({ length: 40 }, (_, index) => `item-${index + 1}`);
+  const ordered = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{ type: "orderedList", items: texts.map((text) => [{ text }]) }],
+  });
+  const splitOrdered = splitLine(ordered, 0, 20, 2);
+  assert.equal(splitOrdered.doc.blocks.length, 1);
+  if (splitOrdered.doc.blocks[0]?.type === "orderedList") {
+    assert.equal(splitOrdered.doc.blocks[0].items.length, 40);
+    assert.deepEqual(
+      splitOrdered.doc.blocks[0].items.map((item) => inlinesPlainText(item)),
+      texts,
+    );
+  }
+  assert.deepEqual(splitOrdered.caret, { blockIndex: 0, itemIndex: 20, offset: 2 });
+
+  const bullets = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{ type: "bulletList", items: texts.map((text) => [{ text }]) }],
+  });
+  const splitBullets = splitLine(bullets, 0, 10, 1);
+  if (splitBullets.doc.blocks[0]?.type === "bulletList") {
+    assert.equal(splitBullets.doc.blocks[0].items.length, 40);
+    assert.deepEqual(
+      splitBullets.doc.blocks[0].items.map((item) => inlinesPlainText(item)),
+      texts,
+    );
+  }
+
+  const checkItems = texts.map((text, index) => ({
+    checked: index % 2 === 0,
+    inlines: [{ text }],
+  }));
+  const checks = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{ type: "checklist", items: checkItems }],
+  });
+  const splitChecks = splitLine(checks, 0, 15, 3);
+  if (splitChecks.doc.blocks[0]?.type === "checklist") {
+    assert.equal(splitChecks.doc.blocks[0].items.length, 40);
+    assert.deepEqual(
+      splitChecks.doc.blocks[0].items.map((item) => [inlinesPlainText(item.inlines), item.checked]),
+      checkItems.map((item) => [item.inlines[0]?.text, item.checked]),
+    );
+  }
+
+  const thirtyNine = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{
+      type: "orderedList",
+      items: Array.from({ length: 39 }, (_, index) => [{ text: `n-${index + 1}` }]),
+    }],
+  });
+  const grew = splitLine(thirtyNine, 0, 38, "n-39".length);
+  assert.equal(grew.doc.blocks[0]?.type, "orderedList");
+  if (grew.doc.blocks[0]?.type === "orderedList") {
+    assert.equal(grew.doc.blocks[0].items.length, 40);
+    assert.equal(inlinesPlainText(grew.doc.blocks[0].items[0] ?? []), "n-1");
+    assert.equal(inlinesPlainText(grew.doc.blocks[0].items[38] ?? []), "n-39");
+    assert.equal(inlinesPlainText(grew.doc.blocks[0].items[39] ?? []), "");
   }
 });
 

@@ -228,7 +228,7 @@ export function sanitizeRichDoc(input: unknown): CampusRichDoc {
     const block = sanitizeBlock(raw);
     if (block) blocks.push(block);
   }
-  return { format: CAMPUS_RICH_FORMAT, blocks: mergeAdjacentListBlocks(blocks) };
+  return { format: CAMPUS_RICH_FORMAT, blocks };
 }
 
 function clippedText(value: string): string {
@@ -860,9 +860,12 @@ export function splitLine(
     if (isEmptyInlines(items[at] ?? [])) {
       return exitEmptyListItem(blocks, blockIndex, { ...block, items }, at);
     }
+    if (items.length >= MAX_LIST_ITEMS) {
+      return { doc, caret: { blockIndex, itemIndex: at, offset } };
+    }
     const [before, after] = splitInlinesAt(items[at] ?? [], offset);
     items.splice(at, 1, before, after);
-    blocks[blockIndex] = { ...block, items: items.slice(0, MAX_LIST_ITEMS) };
+    blocks[blockIndex] = { ...block, items };
     return {
       doc: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks }),
       caret: { blockIndex, itemIndex: at + 1, offset: 0 },
@@ -875,9 +878,12 @@ export function splitLine(
     if (isEmptyInlines(items[at]?.inlines ?? [])) {
       return exitEmptyListItem(blocks, blockIndex, { ...block, items }, at);
     }
+    if (items.length >= MAX_LIST_ITEMS) {
+      return { doc, caret: { blockIndex, itemIndex: at, offset } };
+    }
     const [before, after] = splitInlinesAt(items[at]?.inlines ?? [], offset);
     items.splice(at, 1, { checked: items[at]?.checked ?? false, inlines: before }, { checked: false, inlines: after });
-    blocks[blockIndex] = { ...block, items: items.slice(0, MAX_LIST_ITEMS) };
+    blocks[blockIndex] = { ...block, items };
     return {
       doc: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks }),
       caret: { blockIndex, itemIndex: at + 1, offset: 0 },
@@ -1090,17 +1096,6 @@ function mergeListBlocks(left: RichBlock, right: RichBlock): RichBlock | null {
     return { type: left.type, items: [...left.items, ...right.items] };
   }
   return null;
-}
-
-function mergeAdjacentListBlocks(blocks: readonly RichBlock[]): RichBlock[] {
-  const out: RichBlock[] = [];
-  for (const block of blocks) {
-    const last = out[out.length - 1];
-    const merged = last ? mergeListBlocks(last, block) : null;
-    if (merged) out[out.length - 1] = merged;
-    else out.push(block);
-  }
-  return out;
 }
 
 /** Lignes visibles dans la colonne semaine (texte non vide). */
