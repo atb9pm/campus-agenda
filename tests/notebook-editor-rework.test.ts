@@ -1407,6 +1407,84 @@ test("sanitize — listes historiques adjacentes restent deux blocs", () => {
   }
 });
 
+test("fusion — édition éloignée ne recolle pas les listes historiques adjacentes", () => {
+  const historic = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [
+      { type: "orderedList", items: [[{ text: "Premier" }], [{ text: "Deuxième" }]] },
+      { type: "orderedList", items: [[{ text: "Nouveau chapitre" }], [{ text: "Suite" }]] },
+      { type: "paragraph", inlines: [{ text: "Note éloignée" }] },
+    ],
+  });
+  assert.equal(historic.blocks.length, 3);
+
+  const remoteHeading = applyStructureAtVisualLine(historic, 2, null, 0, "heading");
+  assert.deepEqual(
+    remoteHeading.doc.blocks.map((block) => block.type),
+    ["orderedList", "orderedList", "heading"],
+  );
+  assert.equal(remoteHeading.doc.blocks.length, 3);
+  if (
+    remoteHeading.doc.blocks[0]?.type === "orderedList"
+    && remoteHeading.doc.blocks[1]?.type === "orderedList"
+  ) {
+    assert.equal(remoteHeading.doc.blocks[0].items.length, 2);
+    assert.equal(remoteHeading.doc.blocks[1].items.length, 2);
+    assert.equal(inlinesPlainText(remoteHeading.doc.blocks[0].items[0] ?? []), "Premier");
+    assert.equal(inlinesPlainText(remoteHeading.doc.blocks[1].items[0] ?? []), "Nouveau chapitre");
+  }
+  assert.deepEqual(
+    richDocLines(remoteHeading.doc).map((line) => line.ordinal ?? null),
+    [1, 2, 1, 2, null],
+  );
+
+  const afterLists = applyStructureAtVisualLine(historic, 2, null, 0, "orderedList");
+  assert.equal(afterLists.doc.blocks.length, 2);
+  assert.deepEqual(
+    afterLists.doc.blocks.map((block) => block.type),
+    ["orderedList", "orderedList"],
+  );
+  if (
+    afterLists.doc.blocks[0]?.type === "orderedList"
+    && afterLists.doc.blocks[1]?.type === "orderedList"
+  ) {
+    assert.equal(afterLists.doc.blocks[0].items.length, 2);
+    assert.deepEqual(
+      afterLists.doc.blocks[0].items.map((item) => inlinesPlainText(item)),
+      ["Premier", "Deuxième"],
+    );
+    assert.equal(afterLists.doc.blocks[1].items.length, 3);
+    assert.deepEqual(
+      afterLists.doc.blocks[1].items.map((item) => inlinesPlainText(item)),
+      ["Nouveau chapitre", "Suite", "Note éloignée"],
+    );
+  }
+
+  const before = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [
+      { type: "paragraph", inlines: [{ text: "Avant" }] },
+      { type: "orderedList", items: [[{ text: "Premier" }], [{ text: "Deuxième" }]] },
+      { type: "orderedList", items: [[{ text: "Nouveau chapitre" }], [{ text: "Suite" }]] },
+    ],
+  });
+  const beforeLists = applyStructureAtVisualLine(before, 0, null, 0, "orderedList");
+  assert.equal(beforeLists.doc.blocks.length, 2);
+  if (
+    beforeLists.doc.blocks[0]?.type === "orderedList"
+    && beforeLists.doc.blocks[1]?.type === "orderedList"
+  ) {
+    assert.deepEqual(
+      beforeLists.doc.blocks[0].items.map((item) => inlinesPlainText(item)),
+      ["Avant", "Premier", "Deuxième"],
+    );
+    assert.deepEqual(
+      beforeLists.doc.blocks[1].items.map((item) => inlinesPlainText(item)),
+      ["Nouveau chapitre", "Suite"],
+    );
+  }
+});
+
 test("splitLine — liste déjà à 40 items ne perd aucun contenu", () => {
   const texts = Array.from({ length: 40 }, (_, index) => `item-${index + 1}`);
   const ordered = sanitizeRichDoc({

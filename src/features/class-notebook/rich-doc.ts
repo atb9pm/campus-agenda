@@ -1482,34 +1482,38 @@ function extractListItemAs(
   return null;
 }
 
-function mergeAdjacentListsTrackingCaret(
+/** Fusionne uniquement le bloc du curseur avec son voisin précédent, puis suivant. */
+function mergeEditedBlockWithNeighbors(
   blocks: RichBlock[],
   caret: RichLinePosition,
 ): { blocks: RichBlock[]; caret: RichLinePosition } {
-  const out: RichBlock[] = [];
-  const indexMap: number[] = [];
-  const itemOffsets: number[] = [];
-  for (let index = 0; index < blocks.length; index += 1) {
-    const last = out[out.length - 1];
-    const merged = last ? mergeListBlocks(last, blocks[index]!) : null;
+  let next = [...blocks];
+  let blockIndex = Math.min(Math.max(0, caret.blockIndex), Math.max(0, next.length - 1));
+  let itemIndex = caret.itemIndex;
+
+  if (blockIndex > 0) {
+    const merged = mergeListBlocks(next[blockIndex - 1]!, next[blockIndex]!);
     if (merged) {
-      itemOffsets[index] = listItemCount(last);
-      out[out.length - 1] = merged;
-      indexMap[index] = out.length - 1;
-    } else {
-      itemOffsets[index] = 0;
-      out.push(blocks[index]!);
-      indexMap[index] = out.length - 1;
+      const previousCount = listItemCount(next[blockIndex - 1]!);
+      next.splice(blockIndex - 1, 2, merged);
+      if (itemIndex != null) itemIndex += previousCount;
+      blockIndex -= 1;
     }
   }
-  const mapped = indexMap[caret.blockIndex] ?? 0;
-  const mappedBlock = out[mapped];
-  const shifted = (caret.itemIndex ?? 0) + (itemOffsets[caret.blockIndex] ?? 0);
+
+  if (blockIndex + 1 < next.length) {
+    const merged = mergeListBlocks(next[blockIndex]!, next[blockIndex + 1]!);
+    if (merged) {
+      next.splice(blockIndex, 2, merged);
+    }
+  }
+
+  const mappedBlock = next[blockIndex];
   return {
-    blocks: out.slice(0, MAX_BLOCKS),
+    blocks: next.slice(0, MAX_BLOCKS),
     caret: {
-      blockIndex: mapped,
-      itemIndex: isListType(mappedBlock?.type ?? "paragraph") ? shifted : null,
+      blockIndex,
+      itemIndex: isListType(mappedBlock?.type ?? "paragraph") ? itemIndex ?? 0 : null,
       offset: caret.offset,
     },
   };
@@ -1518,7 +1522,7 @@ function mergeAdjacentListsTrackingCaret(
 /**
  * Applique un type à la ligne visuelle contenant le curseur.
  * Un paragraphe « Devoir :\\nLe moteur » ne convertit que la sous-ligne visée.
- * Les listes adjacentes du même type sont ensuite fusionnées.
+ * Seules les listes voisines du bloc édité (précédent puis suivant) sont fusionnées.
  */
 export function applyStructureAtVisualLine(
   doc: CampusRichDoc,
@@ -1547,7 +1551,7 @@ export function applyStructureAtVisualLine(
         itemIndex: isListType(target) ? 0 : null,
         offset: localOffset,
       };
-      const merged = mergeAdjacentListsTrackingCaret(blocks, caret);
+      const merged = mergeEditedBlockWithNeighbors(blocks, caret);
       return {
         doc: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: merged.blocks }),
         caret: merged.caret,
@@ -1561,7 +1565,7 @@ export function applyStructureAtVisualLine(
     itemIndex: isListType(target) ? Math.min(atItem ?? 0, MAX_LIST_ITEMS - 1) : null,
     offset: localOffset,
   };
-  const merged = mergeAdjacentListsTrackingCaret(blocks, caret);
+  const merged = mergeEditedBlockWithNeighbors(blocks, caret);
   return {
     doc: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: merged.blocks }),
     caret: merged.caret,
