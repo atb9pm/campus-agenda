@@ -18,6 +18,7 @@ import {
   buildStudentCourseDaySections,
   compactControlPresentation,
   compareStudentPublications,
+  isGenericHomeworkTitle,
   formatCompactControlDate,
   formatNextControlHeadline,
   groupControlPlanning,
@@ -306,9 +307,10 @@ test("17 — prefers-reduced-motion désactive l’animation", async () => {
   assert.match(css, /prefers-reduced-motion: no-preference[\s\S]{0,180}\.student-next-control-warn[\s\S]{0,80}animation: student-control-warn-pulse/);
   assert.match(css, /prefers-reduced-motion: reduce[\s\S]{0,180}animation: none !important/);
   assert.doesNotMatch(css, /\.student-next-control \{[^}]*animation:/);
-  assert.match(css, /\.student-control-badge \{[\s\S]{0,220}animation: none/);
-  assert.doesNotMatch(controls, /student-control-badge\$\{presentation\.warn/);
-  assert.doesNotMatch(controls, /student-control-badge student-next-control-warn/);
+  assert.match(css, /\.student-control-when \{[\s\S]{0,220}animation: none/);
+  assert.doesNotMatch(css, /\.student-control-badge/);
+  assert.doesNotMatch(controls, /student-control-badge/);
+  assert.doesNotMatch(controls, />\s*CONTRÔLE\s*</);
   assert.match(controls, /presentation\.warn \? \([\s\S]{0,120}student-next-control-warn/);
 });
 
@@ -411,7 +413,13 @@ test("sources — Cours extrait le prochain contrôle, Planning réutilise les m
   assert.match(dashboard, /aria-pressed=\{selected\}/);
   assert.match(controls, /student-next-control/);
   assert.match(controls, /studentUpcomingPlainDetail/);
-  assert.match(homework, /DEVOIR/);
+  assert.match(controls, /student-control-row/);
+  assert.doesNotMatch(homework, /HOMEWORK: "DEVOIR"/);
+  assert.doesNotMatch(homework, />DEVOIR</);
+  assert.match(homework, /isGenericHomeworkTitle/);
+  assert.match(homework, /Ce cours/);
+  assert.match(homework, /student-course-sheet/);
+  assert.match(homework, /Information/);
   assert.match(homework, /INFORMATION/);
   assert.doesNotMatch(page, /useMemo\(\(\) => new Date\(\), \[\]\)/);
   assert.doesNotMatch(page, /studentUpcomingHeadline/);
@@ -453,6 +461,31 @@ test("tableau de bord — aperçu limité à 3 contrôles, planning complet ensu
   const planning = groupControlPlanning(entries);
   const plannedIds = planning.flatMap((week) => week.days.flatMap((day) => day.entries.map((entry) => entry.item.id)));
   assert.deepEqual(plannedIds, entries.map((entry) => entry.item.id));
+});
+
+test("ligne graphique — feuille de cours, rail neutre, contrôles en ligne", async () => {
+  const [css, homework, controls] = await Promise.all([
+    readFile(new URL("../web/app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/components/student-homework-panel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/components/student-controls-panel.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(css, /\.student-course-sheet \{/);
+  assert.match(css, /\.student-app \.rich-doc-callout[\s\S]{0,480}border-left: 2px solid var\(--line-strong\)/);
+  assert.match(css, /\.student-app \.rich-doc-callout[\s\S]{0,520}background: transparent/);
+  assert.doesNotMatch(css, /grid-template-columns: 88px/);
+  assert.doesNotMatch(css, /\.student-control-badge/);
+  assert.doesNotMatch(homework, />À faire</);
+  assert.match(homework, /Publications du cours/);
+  assert.match(controls, /presentation\.badge/);
+  assert.doesNotMatch(controls, /student-control-card/);
+});
+
+test("titre générique devoir — masqué seulement s’il est Devoir / Devoirs :", () => {
+  assert.equal(isGenericHomeworkTitle("Devoir"), true);
+  assert.equal(isGenericHomeworkTitle("devoirs :"), true);
+  assert.equal(isGenericHomeworkTitle("Devoirs"), true);
+  assert.equal(isGenericHomeworkTitle("Moteur"), false);
+  assert.equal(isGenericHomeworkTitle("Devoir moteur"), false);
 });
 
 test("présentation compacte — J-7, DEMAIN, AUJOURD’HUI, date sans urgence", () => {

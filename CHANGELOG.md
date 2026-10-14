@@ -12,12 +12,17 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
 ### Changé
 
-- Séparation visuelle claire entre devoirs, informations et contrôles.
+- Vue élève **Feuille de cours** : une surface par matière, sans carte dans la carte ni pastille DEVOIR.
+- Titre de colonne « À faire » retiré ; le nom de la matière (ou « Ce cours ») sert d’en-tête.
+- Encadrés du carnet aplatis côté élève (ligne étiquetée + rail neutre) ; l’éditeur professeur conserve les couleurs.
+- Titre générique « Devoir / Devoirs : » masqué lorsque le corps est un document riche.
+- Prochains contrôles en lignes compactes date + titre (plus de tampon 88 px ni kicker CONTRÔLE).
 - Planning des contrôles plus compact (dates, semaines A/B, lecture chronologique).
 - Interface élève mobile-first, sans modifier la vue professeur.
 
 ### Corrigé
 
+- Superposition graphique « DEVOIR » / « À FAIRE » / encadrés colorés / tampon CONTRÔLE, trop lourde sur TEST 2.62.0.
 - Secret TOTP admin illisible (clé MFA différente après restauration TEST) : nouvel enrôlement au lieu d’un blocage 503.
 - Saisie du code à 6 chiffres : plus de `pattern` HTML qui bloquait la validation sur iPhone.
 

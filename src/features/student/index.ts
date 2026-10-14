@@ -16,6 +16,7 @@ export {
   buildStudentCourseDaySections,
   compactControlPresentation,
   compareStudentPublications,
+  isGenericHomeworkTitle,
   formatCompactControlDate,
   formatNextControlHeadline,
   groupControlPlanning,
