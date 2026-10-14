@@ -83,7 +83,6 @@ import {
 } from "@campus/features/teacher-setup";
 import {
   displaySetupsFromAssignedCourses,
-  maSemaineSignalsByCourse,
   type TeacherCourseWorkspaceEntry,
 } from "@campus/features/teacher-workspace";
 import {
@@ -672,10 +671,6 @@ export default function Home() {
     ],
   );
   const notebookPublishAnnualCourseId = openNotebookCourse?.annualCourseId?.trim() || null;
-  const maSemaineWeekSignals = useMemo(
-    () => maSemaineSignalsByCourse(items, teacherCourses, selectedSchoolWeekNumber),
-    [items, teacherCourses, selectedSchoolWeekNumber],
-  );
   const notebookItems = useMemo(() => {
     if (!notebookClassroomId) return [];
     return filterNotebookItemsForSubject(items, {
@@ -1565,7 +1560,6 @@ export default function Home() {
           <MaSemainePanel
             classes={assignedDisplaySetups}
             courses={teacherCourses}
-            weekSignals={maSemaineWeekSignals}
             schoolWeeks={schoolWeeksMemo}
             selectedSchoolWeekNumber={selectedSchoolWeekNumber}
             onSelectSchoolWeek={setSelectedSchoolWeekNumber}

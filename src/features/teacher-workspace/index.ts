@@ -24,10 +24,6 @@ export {
 } from "./queries.ts";
 export { matchSetupPreference, workspaceEntryClassMeta } from "./setup-match.ts";
 export {
-  maSemaineSignalsByCourse,
-  summarizeMaSemaineCourseWeek,
-} from "./week-signals.ts";
-export {
   listTeacherCourses,
   schoolYearIdFromSearchParams,
   sessionTeacherIdForCoursesApi,
