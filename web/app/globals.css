@@ -2430,33 +2430,45 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   gap: 2px;
   align-content: start;
 }
-.rich-doc-line { display: grid; gap: 2px; }
+.rich-doc-line { display: grid; gap: 2px; min-width: 0; max-width: 100%; }
 .rich-doc-line.is-heading { margin: 0.4em 0 0.08em; }
 .rich-doc-line.is-heading:first-child { margin-top: 0; }
-.rich-doc-line.is-bulletList,
-.rich-doc-line.is-orderedList,
-.rich-doc-line.is-checklist {
-  padding-left: 0.75em;
+.rich-doc-line-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4em;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 6px;
+  overflow: hidden;
 }
-.rich-doc-line-body { display: flex; align-items: flex-start; gap: 0.4em; }
+.rich-doc-line-body:focus-within {
+  background: #f4f8ff;
+  box-shadow: inset 0 0 0 1px #c9daf3;
+}
 .rich-doc-line-marker {
   flex: none;
-  min-width: 1.35em;
+  min-width: 1.15em;
   color: var(--navy);
   font-family: var(--carnet-font);
   font-size: var(--carnet-size);
   line-height: var(--carnet-leading);
   text-align: right;
   user-select: none;
+  pointer-events: none;
 }
-.rich-doc-line-check { flex: none; margin: 0.32em 0 0; }
+.rich-doc-line-check { flex: none; margin: 0.28em 0 0; }
 .rich-doc-line-input {
   flex: 1;
   min-width: 0;
   min-height: 1.6em;
   padding: 0;
-  border-radius: 6px;
+  border-radius: 0;
   outline: none;
+  background: transparent;
   color: var(--navy);
   font-family: var(--carnet-font);
   font-size: var(--carnet-size);
@@ -2469,7 +2481,11 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   color: #a7b3c6;
   pointer-events: none;
 }
-.rich-doc-line-input:focus { background: #f4f8ff; box-shadow: inset 0 0 0 1px #c9daf3; }
+.rich-doc-line-input:focus {
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
 .rich-doc-line.is-heading .rich-doc-line-input { font-size: var(--carnet-title-size); font-weight: 700; }
 .rich-doc-line.is-callout { padding: 0; background: transparent; }
 .rich-doc-line-badge {

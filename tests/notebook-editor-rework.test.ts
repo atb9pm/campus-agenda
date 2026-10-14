@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
+  CAMPUS_RICH_FORMAT,
   applyMarkToRange,
   applyStructureToLine,
   copyLineAsClip,
@@ -837,7 +838,7 @@ test("éditeur 2.62.0 — structures génériques, callouts hérités neutres, l
   assert.match(css, /\.rich-doc-view \{ display: grid; gap: 0\.28em;/);
   assert.match(css, /\.rich-doc-line-marker \{[\s\S]*font-size: var\(--carnet-size\)/);
   assert.match(css, /\.rich-doc-summary-text \{ min-width: 0; flex: 1;/);
-  assert.match(css, /\.rich-doc-line-body \{ display: flex; align-items: flex-start; gap: 0\.4em; \}/);
+  assert.match(css, /\.rich-doc-line-body \{[\s\S]*display: flex;[\s\S]*align-items: flex-start;[\s\S]*gap: 0\.4em;/);
   assert.match(css, /\.rich-doc-toolbar \{[\s\S]*flex-wrap: wrap/);
   assert.match(css, /\.rich-doc-editor \{[\s\S]*overflow-x: hidden/);
   assert.doesNotMatch(css, /rich-doc-quick/);
@@ -870,4 +871,64 @@ test("éditeur 2.62.0 — structures génériques, callouts hérités neutres, l
   }
   const savedAgain = decodeRichDetail(encodeRichDetail(reloaded!));
   assert.deepEqual(savedAgain, reloaded);
+});
+
+test("éditeur — puces, numéros et cases dans la zone de saisie commune", async () => {
+  const { APP_VERSION } = await import("../src/lib/app-version.ts");
+  const { SQL_MIGRATION_FILES } = await import("../src/lib/persistence/sql/migrate.ts");
+  assert.equal(APP_VERSION, "2.62.0");
+  assert.equal(CAMPUS_RICH_FORMAT, "campus-rich-v1");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
+
+  const bullets = applyStructureToLine(paragraphDoc("Devoir :"), 0, null, "bulletList");
+  assert.equal(bullets.doc.blocks[0]?.type, "bulletList");
+  const numbered = applyStructureToLine(paragraphDoc("Devoir :"), 0, null, "orderedList");
+  assert.equal(numbered.doc.blocks[0]?.type, "orderedList");
+  const checks = applyStructureToLine(paragraphDoc("Apporter la calculatrice"), 0, null, "checklist");
+  assert.equal(checks.doc.blocks[0]?.type, "checklist");
+  assert.equal(inlinesPlainText(richDocLines(bullets.doc)[0]!.inlines), "Devoir :");
+
+  const afterEnter = splitLine(numbered.doc, 0, 0, "Devoir :".length);
+  assert.equal(afterEnter.doc.blocks[0]?.type, "orderedList");
+  if (afterEnter.doc.blocks[0]?.type === "orderedList") {
+    assert.equal(afterEnter.doc.blocks[0].items.length, 2);
+  }
+
+  const withBreak = insertTextAt([{ text: "Devoir :" }], "Devoir".length, "\n");
+  assert.equal(inlinesPlainText(withBreak), "Devoir\n :");
+
+  const wrapped = applyStructureToLine(
+    paragraphDoc("Terminer la feuille « Base N°6 » et apprendre les formules."),
+    0,
+    null,
+    "bulletList",
+  );
+  assert.equal(wrapped.doc.blocks[0]?.type, "bulletList");
+  assert.equal(
+    inlinesPlainText(richDocLines(wrapped.doc)[0]!.inlines),
+    "Terminer la feuille « Base N°6 » et apprendre les formules.",
+  );
+
+  const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
+  assert.match(editor, /className="rich-doc-line-body"/);
+  assert.match(editor, /rich-doc-line-marker/);
+  assert.match(editor, /rich-doc-line-check/);
+  assert.match(editor, /className="rich-doc-line-input"/);
+  assert.doesNotMatch(editor, /contentEditable[\s\S]{0,80}rich-doc-line-marker/);
+  assert.match(css, /\.rich-doc-line-body:focus-within/);
+  assert.match(css, /\.rich-doc-line-body \{[\s\S]*width: 100%/);
+  assert.match(css, /\.rich-doc-line-input \{[\s\S]*flex: 1;[\s\S]*min-width: 0;/);
+  assert.match(css, /\.rich-doc-line-marker \{[\s\S]*pointer-events: none/);
+  assert.doesNotMatch(css, /\.rich-doc-line-input:focus \{ background: #f4f8ff/);
+  assert.doesNotMatch(css, /\.rich-doc-line-input:focus \{[\s\S]{0,80}box-shadow: inset 0 0 0 1px #c9daf3/);
+
+  const historic = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [
+      { type: "orderedList", items: [[{ text: "Ancien devoir" }]] },
+      { type: "callout", kind: "todo", inlines: [{ text: "À faire encore" }] },
+    ],
+  });
+  assert.deepEqual(decodeRichDetail(encodeRichDetail(historic)), historic);
 });
