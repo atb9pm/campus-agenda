@@ -859,7 +859,7 @@ test("éditeur 2.62.0 — structures génériques, callouts hérités neutres, l
   assert.match(css, /\.rich-doc-view \{ display: grid; gap: 0\.28em;/);
   assert.match(css, /\.rich-doc-line-marker \{[\s\S]*font-size: var\(--carnet-size\)/);
   assert.match(css, /\.rich-doc-summary-text \{ min-width: 0; flex: 1;/);
-  assert.match(css, /\.rich-doc-line-body \{[\s\S]*display: flex;[\s\S]*align-items: flex-start;[\s\S]*gap: 0\.4em;/);
+  assert.match(css, /\.rich-doc-line-body \{[\s\S]*display: flex;[\s\S]*align-items: flex-start;[\s\S]*gap: 0\.35em;/);
   assert.match(css, /\.rich-doc-toolbar \{[\s\S]*flex-wrap: wrap/);
   assert.match(css, /\.rich-doc-editor \{[\s\S]*overflow-x: hidden/);
   assert.doesNotMatch(css, /rich-doc-quick/);
@@ -937,7 +937,7 @@ test("éditeur — puces, numéros et cases dans la zone de saisie commune", asy
   assert.match(editor, /rich-doc-line-check/);
   assert.match(editor, /className="rich-doc-line-input"/);
   assert.doesNotMatch(editor, /contentEditable[\s\S]{0,80}rich-doc-line-marker/);
-  assert.match(css, /\.rich-doc-line-body:focus-within/);
+  assert.doesNotMatch(css, /\.rich-doc-line-body:focus-within/);
   assert.match(css, /\.rich-doc-line-body \{[\s\S]*width: 100%/);
   assert.match(css, /\.rich-doc-line-input \{[\s\S]*flex: 1;[\s\S]*min-width: 0;/);
   assert.match(css, /\.rich-doc-line-marker \{[\s\S]*pointer-events: none/);
@@ -1129,6 +1129,159 @@ test("ligne visuelle — campus-rich-v1 encode/decode sans perte", () => {
   const historic = sanitizeRichDoc({
     format: CAMPUS_RICH_FORMAT,
     blocks: [{ type: "callout", kind: "review", inlines: [{ text: "Ancien\nbloc" }] }],
+  });
+  assert.deepEqual(decodeRichDetail(encodeRichDetail(historic)), historic);
+});
+
+test("surface continue — Enter prolonge orderedList, puces et cases", () => {
+  const numbered = applyStructureToLine(paragraphDoc("Moteur"), 0, null, "orderedList");
+  const second = splitLine(numbered.doc, 0, 0, "Moteur".length);
+  assert.equal(second.doc.blocks.length, 1);
+  assert.equal(second.doc.blocks[0]?.type, "orderedList");
+  if (second.doc.blocks[0]?.type === "orderedList") {
+    assert.equal(second.doc.blocks[0].items.length, 2);
+  }
+  const withInjection = setLineInlines(second.doc, 0, 1, [{ text: "Injection" }]);
+  assert.deepEqual(
+    richDocLines(withInjection).map((line) => [inlinesPlainText(line.inlines), line.ordinal]),
+    [
+      ["Moteur", 1],
+      ["Injection", 2],
+    ],
+  );
+  const third = splitLine(withInjection, 0, 1, "Injection".length);
+  assert.equal(third.doc.blocks[0]?.type, "orderedList");
+  if (third.doc.blocks[0]?.type === "orderedList") {
+    assert.equal(third.doc.blocks[0].items.length, 3);
+    assert.equal(inlinesPlainText(third.doc.blocks[0].items[2] ?? []), "");
+  }
+
+  const bullets = applyStructureToLine(paragraphDoc("Moteur"), 0, null, "bulletList");
+  const nextBullet = splitLine(bullets.doc, 0, 0, "Moteur".length);
+  assert.equal(nextBullet.doc.blocks.length, 1);
+  assert.equal(nextBullet.doc.blocks[0]?.type, "bulletList");
+  if (nextBullet.doc.blocks[0]?.type === "bulletList") {
+    assert.equal(nextBullet.doc.blocks[0].items.length, 2);
+  }
+
+  const checks = applyStructureToLine(paragraphDoc("Moteur"), 0, null, "checklist");
+  const nextCheck = splitLine(checks.doc, 0, 0, "Moteur".length);
+  assert.equal(nextCheck.doc.blocks[0]?.type, "checklist");
+  if (nextCheck.doc.blocks[0]?.type === "checklist") {
+    assert.equal(nextCheck.doc.blocks[0].items.length, 2);
+    assert.equal(nextCheck.doc.blocks[0].items[1]?.checked, false);
+  }
+});
+
+test("surface continue — Enter sur item vide sort de la liste", () => {
+  for (const type of ["orderedList", "bulletList", "checklist"] as const) {
+    const listed = applyStructureToLine(paragraphDoc("Moteur"), 0, null, type);
+    const emptyItem = splitLine(listed.doc, 0, 0, "Moteur".length);
+    const exited = splitLine(emptyItem.doc, 0, 1, 0);
+    assert.equal(exited.doc.blocks[0]?.type, type);
+    assert.equal(exited.doc.blocks[1]?.type, "paragraph");
+    assert.equal(inlinesPlainText(richDocLines(exited.doc)[0]!.inlines), "Moteur");
+    assert.equal(inlinesPlainText(richDocLines(exited.doc)[1]!.inlines), "");
+    assert.equal(exited.caret.blockIndex, 1);
+    assert.equal(exited.caret.itemIndex, null);
+    if (exited.doc.blocks[0] && "items" in exited.doc.blocks[0]) {
+      assert.equal(exited.doc.blocks[0].items.length, 1);
+    }
+  }
+});
+
+test("surface continue — Shift+Enter reste dans le même item", () => {
+  const listed = applyStructureToLine(paragraphDoc("Terminer la feuille"), 0, null, "orderedList");
+  const soft = setLineInlines(
+    listed.doc,
+    0,
+    0,
+    insertTextAt([{ text: "Terminer la feuille" }], "Terminer la feuille".length, "\n"),
+  );
+  assert.equal(soft.blocks.length, 1);
+  assert.equal(soft.blocks[0]?.type, "orderedList");
+  if (soft.blocks[0]?.type === "orderedList") {
+    assert.equal(soft.blocks[0].items.length, 1);
+    assert.equal(inlinesPlainText(soft.blocks[0].items[0] ?? []), "Terminer la feuille\n");
+  }
+});
+
+test("surface continue — orderedList adjacentes fusionnées, interruption puis recolle", () => {
+  const adjacent = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [
+      { type: "orderedList", items: [[{ text: "Moteur" }]] },
+      { type: "orderedList", items: [[{ text: "Injection" }]] },
+    ],
+  });
+  assert.equal(adjacent.blocks.length, 1);
+  assert.equal(adjacent.blocks[0]?.type, "orderedList");
+  if (adjacent.blocks[0]?.type === "orderedList") {
+    assert.deepEqual(
+      adjacent.blocks[0].items.map((item) => inlinesPlainText(item)),
+      ["Moteur", "Injection"],
+    );
+  }
+  assert.deepEqual(
+    richDocLines(adjacent).map((line) => line.ordinal),
+    [1, 2],
+  );
+
+  const interrupted = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [
+      { type: "orderedList", items: [[{ text: "Moteur" }]] },
+      { type: "checklist", items: [{ checked: false, inlines: [{ text: "Injection" }] }] },
+      { type: "orderedList", items: [[{ text: "Dépollution" }]] },
+    ],
+  });
+  assert.deepEqual(
+    interrupted.blocks.map((block) => block.type),
+    ["orderedList", "checklist", "orderedList"],
+  );
+  assert.deepEqual(
+    richDocLines(interrupted).map((line) => [line.kind, inlinesPlainText(line.inlines), line.ordinal ?? null]),
+    [
+      ["orderedList", "Moteur", 1],
+      ["checklist", "Injection", null],
+      ["orderedList", "Dépollution", 1],
+    ],
+  );
+
+  const restored = applyStructureAtVisualLine(interrupted, 1, 0, 0, "orderedList");
+  assert.equal(restored.doc.blocks.length, 1);
+  assert.equal(restored.doc.blocks[0]?.type, "orderedList");
+  assert.deepEqual(
+    richDocLines(restored.doc).map((line) => [inlinesPlainText(line.inlines), line.ordinal]),
+    [
+      ["Moteur", 1],
+      ["Injection", 2],
+      ["Dépollution", 3],
+    ],
+  );
+});
+
+test("surface continue — canvas unique, pas de carte au focus, campus-rich-v1", async () => {
+  const { APP_VERSION } = await import("../src/lib/app-version.ts");
+  const { SQL_MIGRATION_FILES } = await import("../src/lib/persistence/sql/migrate.ts");
+  assert.equal(APP_VERSION, "2.62.0");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
+  assert.equal(CAMPUS_RICH_FORMAT, "campus-rich-v1");
+
+  const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /\.rich-doc-canvas \{[\s\S]*border: 1px solid var\(--line\)/);
+  assert.doesNotMatch(css, /\.rich-doc-line-body:focus-within/);
+  assert.doesNotMatch(css, /\.rich-doc-line-body:focus-within \{[\s\S]*box-shadow/);
+  assert.doesNotMatch(css, /\.rich-doc-line-body:focus-within \{[\s\S]*background: #f4f8ff/);
+  assert.doesNotMatch(css, /\.rich-doc-line-input:focus \{ background: #f4f8ff/);
+  assert.match(css, /\.rich-doc-line-input:focus \{[\s\S]*outline: none/);
+
+  const historic = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [
+      { type: "callout", kind: "bring", inlines: [{ text: "Ancien bloc" }] },
+      { type: "paragraph", inlines: [{ text: "Toujours lisible" }] },
+    ],
   });
   assert.deepEqual(decodeRichDetail(encodeRichDetail(historic)), historic);
 });

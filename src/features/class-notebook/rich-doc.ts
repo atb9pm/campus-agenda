@@ -228,7 +228,7 @@ export function sanitizeRichDoc(input: unknown): CampusRichDoc {
     const block = sanitizeBlock(raw);
     if (block) blocks.push(block);
   }
-  return { format: CAMPUS_RICH_FORMAT, blocks };
+  return { format: CAMPUS_RICH_FORMAT, blocks: mergeAdjacentListBlocks(blocks) };
 }
 
 function clippedText(value: string): string {
@@ -803,9 +803,45 @@ export interface RichLinePosition {
   offset: number;
 }
 
+function isEmptyInlines(inlines: readonly RichInline[]): boolean {
+  return inlinesPlainText(inlines) === "";
+}
+
+function exitEmptyListItem(
+  blocks: RichBlock[],
+  blockIndex: number,
+  block: Extract<RichBlock, { type: "bulletList" | "orderedList" | "checklist" }>,
+  itemIndex: number,
+): { doc: CampusRichDoc; caret: RichLinePosition } {
+  const beforeCount = itemIndex;
+  const afterStart = itemIndex + 1;
+  const replacement: RichBlock[] = [];
+  if (block.type === "checklist") {
+    const before = block.items.slice(0, beforeCount);
+    const after = block.items.slice(afterStart);
+    if (before.length) replacement.push({ type: "checklist", items: before });
+    replacement.push({ type: "paragraph", inlines: [] });
+    if (after.length) replacement.push({ type: "checklist", items: after });
+  } else {
+    const before = block.items.slice(0, beforeCount);
+    const after = block.items.slice(afterStart);
+    if (before.length) replacement.push({ type: block.type, items: before });
+    replacement.push({ type: "paragraph", inlines: [] });
+    if (after.length) replacement.push({ type: block.type, items: after });
+  }
+  const next = [...blocks];
+  next.splice(blockIndex, 1, ...replacement);
+  const paragraphIndex = beforeCount > 0 ? blockIndex + 1 : blockIndex;
+  return {
+    doc: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: next.slice(0, MAX_BLOCKS) }),
+    caret: { blockIndex: paragraphIndex, itemIndex: null, offset: 0 },
+  };
+}
+
 /**
  * Entrée : nouvelle ligne au même niveau.
- * Dans une liste, un nouvel élément. Ailleurs, un nouveau paragraphe.
+ * Dans une liste, un nouvel élément du même bloc. Un item vide + Entrée
+ * sort de la liste vers un paragraphe normal.
  * Un titre ou un bloc de semaine passe au paragraphe suivant : le titre ne contamine plus la suite.
  */
 export function splitLine(
@@ -821,11 +857,14 @@ export function splitLine(
   if (block.type === "bulletList" || block.type === "orderedList") {
     const items = block.items.length ? [...block.items] : [[]];
     const at = itemIndex ?? 0;
+    if (isEmptyInlines(items[at] ?? [])) {
+      return exitEmptyListItem(blocks, blockIndex, { ...block, items }, at);
+    }
     const [before, after] = splitInlinesAt(items[at] ?? [], offset);
     items.splice(at, 1, before, after);
     blocks[blockIndex] = { ...block, items: items.slice(0, MAX_LIST_ITEMS) };
     return {
-      doc: { format: CAMPUS_RICH_FORMAT, blocks },
+      doc: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks }),
       caret: { blockIndex, itemIndex: at + 1, offset: 0 },
     };
   }
@@ -833,11 +872,14 @@ export function splitLine(
   if (block.type === "checklist") {
     const items = block.items.length ? [...block.items] : [{ checked: false, inlines: [] }];
     const at = itemIndex ?? 0;
+    if (isEmptyInlines(items[at]?.inlines ?? [])) {
+      return exitEmptyListItem(blocks, blockIndex, { ...block, items }, at);
+    }
     const [before, after] = splitInlinesAt(items[at]?.inlines ?? [], offset);
     items.splice(at, 1, { checked: items[at]?.checked ?? false, inlines: before }, { checked: false, inlines: after });
     blocks[blockIndex] = { ...block, items: items.slice(0, MAX_LIST_ITEMS) };
     return {
-      doc: { format: CAMPUS_RICH_FORMAT, blocks },
+      doc: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks }),
       caret: { blockIndex, itemIndex: at + 1, offset: 0 },
     };
   }
@@ -1046,6 +1088,17 @@ function mergeListBlocks(left: RichBlock, right: RichBlock): RichBlock | null {
     return { type: left.type, items: [...left.items, ...right.items].slice(0, MAX_LIST_ITEMS) };
   }
   return null;
+}
+
+function mergeAdjacentListBlocks(blocks: readonly RichBlock[]): RichBlock[] {
+  const out: RichBlock[] = [];
+  for (const block of blocks) {
+    const last = out[out.length - 1];
+    const merged = last ? mergeListBlocks(last, block) : null;
+    if (merged) out[out.length - 1] = merged;
+    else out.push(block);
+  }
+  return out;
 }
 
 /** Lignes visibles dans la colonne semaine (texte non vide). */
@@ -1432,36 +1485,34 @@ function extractListItemAs(
   return null;
 }
 
-function mergeAroundCaret(
+function mergeAdjacentListsTrackingCaret(
   blocks: RichBlock[],
   caret: RichLinePosition,
 ): { blocks: RichBlock[]; caret: RichLinePosition } {
-  let next = [...blocks];
-  let blockIndex = caret.blockIndex;
-  let itemIndex = caret.itemIndex;
-
-  if (blockIndex > 0) {
-    const merged = mergeListBlocks(next[blockIndex - 1]!, next[blockIndex]!);
+  const out: RichBlock[] = [];
+  const indexMap: number[] = [];
+  const itemOffsets: number[] = [];
+  for (let index = 0; index < blocks.length; index += 1) {
+    const last = out[out.length - 1];
+    const merged = last ? mergeListBlocks(last, blocks[index]!) : null;
     if (merged) {
-      const previousCount = listItemCount(next[blockIndex - 1]!);
-      next.splice(blockIndex - 1, 2, merged);
-      if (itemIndex != null) itemIndex += previousCount;
-      blockIndex -= 1;
+      itemOffsets[index] = listItemCount(last);
+      out[out.length - 1] = merged;
+      indexMap[index] = out.length - 1;
+    } else {
+      itemOffsets[index] = 0;
+      out.push(blocks[index]!);
+      indexMap[index] = out.length - 1;
     }
   }
-
-  if (blockIndex + 1 < next.length) {
-    const merged = mergeListBlocks(next[blockIndex]!, next[blockIndex + 1]!);
-    if (merged) {
-      next.splice(blockIndex, 2, merged);
-    }
-  }
-
+  const mapped = indexMap[caret.blockIndex] ?? 0;
+  const mappedBlock = out[mapped];
+  const shifted = (caret.itemIndex ?? 0) + (itemOffsets[caret.blockIndex] ?? 0);
   return {
-    blocks: next.slice(0, MAX_BLOCKS),
+    blocks: out.slice(0, MAX_BLOCKS),
     caret: {
-      blockIndex,
-      itemIndex: isListType(next[blockIndex]?.type ?? "paragraph") ? itemIndex ?? 0 : null,
+      blockIndex: mapped,
+      itemIndex: isListType(mappedBlock?.type ?? "paragraph") ? shifted : null,
       offset: caret.offset,
     },
   };
@@ -1499,7 +1550,7 @@ export function applyStructureAtVisualLine(
         itemIndex: isListType(target) ? 0 : null,
         offset: localOffset,
       };
-      const merged = mergeAroundCaret(blocks, caret);
+      const merged = mergeAdjacentListsTrackingCaret(blocks, caret);
       return {
         doc: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: merged.blocks }),
         caret: merged.caret,
@@ -1513,7 +1564,7 @@ export function applyStructureAtVisualLine(
     itemIndex: isListType(target) ? Math.min(atItem ?? 0, MAX_LIST_ITEMS - 1) : null,
     offset: localOffset,
   };
-  const merged = mergeAroundCaret(blocks, caret);
+  const merged = mergeAdjacentListsTrackingCaret(blocks, caret);
   return {
     doc: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: merged.blocks }),
     caret: merged.caret,
