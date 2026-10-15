@@ -122,6 +122,8 @@ test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async (
   assert.match(editor, /data-color-swatch/);
   assert.match(editor, /Liste numérotée/);
   assert.match(editor, /Texte normal/);
+  assert.doesNotMatch(editor, /label="Titre"/);
+  assert.doesNotMatch(editor, /text="Titre"/);
   assert.match(editor, /rich-doc-link-bar/);
   assert.doesNotMatch(editor, /showExtended/);
   assert.doesNotMatch(editor, /Blocs de la semaine/);
