@@ -378,7 +378,7 @@ test("version 2.57.0 — curseur, menus notes, déplacement d’une ligne", asyn
   assert.doesNotMatch(editor, /addQuickBlock/);
   assert.doesNotMatch(editor, /insertQuickBlock/);
   assert.doesNotMatch(editor, /QUICK_BLOCK_KINDS/);
-  assert.match(editor, /label="Titre"/);
+  assert.doesNotMatch(editor, /label="Titre"/);
   assert.match(editor, /Insérer un lien/);
   assert.match(editor, /event\.shiftKey/);
   assert.match(editor, /insertTextAt/);
@@ -847,7 +847,9 @@ test("éditeur 2.62.0 — structures génériques, callouts hérités neutres, l
   assert.doesNotMatch(editor, /À apporter/);
   assert.doesNotMatch(editor, /À lire/);
   assert.match(editor, /text="Texte"/);
-  assert.match(editor, /label="Titre"/);
+  assert.doesNotMatch(editor, /label="Titre"/);
+  assert.doesNotMatch(editor, /text="Titre"/);
+  assert.doesNotMatch(editor, /applyStructure\("heading"\)/);
   assert.match(editor, /text="Puces"/);
   assert.match(editor, /Liste numérotée/);
   assert.match(editor, /text="Cases"/);
@@ -2006,4 +2008,44 @@ test("Enter liste + paragraph ensuite = deux cartes Ma semaine", () => {
   }
   assert.equal(withText.format, "campus-rich-v1");
 });
+
+test("éditeur — bouton Titre retiré, heading historique conservé", async () => {
+  const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
+  const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
+  const view = await readFile(new URL("../web/app/components/rich-doc-view.tsx", import.meta.url), "utf8");
+
+  assert.doesNotMatch(editor, /label="Titre"/);
+  assert.doesNotMatch(editor, /text="Titre"/);
+  assert.doesNotMatch(editor, /applyStructure\("heading"\)/);
+  assert.match(editor, /text="Texte"/);
+  assert.match(editor, /text="Puces"/);
+  assert.match(editor, /text="1\. 2\. 3\."/);
+  assert.match(editor, /text="Cases"/);
+  assert.match(editor, /text="Lien"/);
+  assert.match(editor, /applyStructure\("paragraph"\)/);
+
+  assert.match(panel, /variant=\{editor\.kind === "publication" \? "publication" : "notes"\}/);
+  assert.match(panel, /<RichDocEditor/);
+  assert.equal([...panel.matchAll(/<RichDocEditor/g)].length, 1);
+
+  assert.match(view, /block\.type === "heading"/);
+
+  const historic = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{ type: "heading", inlines: [{ text: "Moteur", marks: { bold: true } }] }],
+  });
+  assert.equal(historic.format, "campus-rich-v1");
+  assert.equal(historic.blocks[0]?.type, "heading");
+  const reloaded = decodeRichDetail(encodeRichDetail(historic));
+  assert.deepEqual(reloaded, historic);
+  if (reloaded?.blocks[0]?.type === "heading") {
+    assert.equal(inlinesPlainText(reloaded.blocks[0].inlines), "Moteur");
+    assert.equal(reloaded.blocks[0].inlines[0]?.marks?.bold, true);
+  }
+
+  const asText = applyStructureToLine(historic, 0, null, "paragraph");
+  assert.equal(asText.doc.blocks[0]?.type, "paragraph");
+  assert.equal(lineText(asText.doc, 0), "Moteur");
+});
+
 

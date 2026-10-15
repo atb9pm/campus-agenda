@@ -1033,12 +1033,6 @@ export function RichDocEditor({
             onClick={() => applyStructure("paragraph")}
           />
           <ToolButton
-            label="Titre"
-            text="Titre"
-            active={activeKind === "heading"}
-            onClick={() => applyStructure("heading")}
-          />
-          <ToolButton
             label="Liste à puces"
             text="Puces"
             active={activeKind === "bulletList"}
