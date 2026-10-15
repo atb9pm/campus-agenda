@@ -819,7 +819,7 @@ export function RichDocEditor({
         exitListAtCaretLine(line, element);
         return;
       }
-      insertSoftBreak(line, element);
+      splitAtCaret(line, element);
       return;
     }
     if (
@@ -1096,8 +1096,10 @@ export function RichDocEditor({
       </div>
 
       <p className="rich-doc-hint">
-        Entrée crée un nouveau paragraphe. Maj + Entrée ajoute un retour à la ligne.
-        Ctrl+C copie, Ctrl+X coupe, Ctrl+V colle, Ctrl+Z annule.
+        Entrée termine le bloc courant et crée un nouveau bloc indépendant.
+        Maj + Entrée ajoute un retour à la ligne dans le même bloc.
+        Les blocs peuvent ensuite être déplacés ou réorganisés dans le Carnet.
+        Ctrl+C copie, Ctrl+X coupe, Ctrl+V colle et Ctrl+Z annule.
         Ctrl+B met en gras, Ctrl+I en italique et Ctrl+U souligne.
         Le lien peut être appliqué au texte sélectionné ou au mot sous le curseur.
       </p>

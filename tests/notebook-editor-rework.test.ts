@@ -1741,8 +1741,13 @@ test("éditeur — Maj+Entrée d’une liste crée un item, Entrée sort du bloc
   assert.match(editor, /splitAtCaret\(line, element\)/);
   assert.doesNotMatch(editor, /Entrée termine la liste et crée un nouveau bloc/);
   assert.doesNotMatch(editor, /Maj \+ Entrée ajoute la puce, le numéro ou la case suivante/);
-  assert.match(editor, /Entrée crée un nouveau paragraphe/);
-  assert.match(editor, /Maj \+ Entrée ajoute un retour à la ligne/);
+  assert.match(editor, /Entrée termine le bloc courant et crée un nouveau bloc indépendant/);
+  assert.match(editor, /Maj \+ Entrée ajoute un retour à la ligne dans le même bloc/);
+  assert.match(editor, /Les blocs peuvent ensuite être déplacés ou réorganisés dans le Carnet/);
+  assert.match(editor, /Ctrl\+C copie, Ctrl\+X coupe, Ctrl\+V colle et Ctrl\+Z annule/);
+  assert.match(editor, /Ctrl\+B met en gras, Ctrl\+I en italique et Ctrl\+U souligne/);
+  assert.match(editor, /Le lien peut être appliqué au texte sélectionné ou au mot sous le curseur/);
+  assert.doesNotMatch(editor, /Entrée crée un nouveau paragraphe/);
   const view = await readFile(new URL("../web/app/components/rich-doc-view.tsx", import.meta.url), "utf8");
   assert.match(view, /data-carnet-list-block/);
   const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
@@ -1972,7 +1977,7 @@ test("M–T — éditeur : Enter sort, Maj+Entrée continue, iPhone et lock", as
   assert.match(beforeInput, /insertText[\s\S]*"\\n"[\s\S]*isListLine\(line\)[\s\S]*exitListAtCaretLine\(line, element\)/);
   assert.match(beforeInput, /insertParagraph[\s\S]*splitAtCaret\(line, element\)/);
   assert.match(beforeInput, /insertLineBreak[\s\S]*insertSoftBreak\(line, element\)/);
-  assert.match(beforeInput, /insertText[\s\S]*insertSoftBreak\(line, element\)/);
+  assert.match(beforeInput, /insertText[\s\S]*"\\n"[\s\S]*splitAtCaret\(line, element\)/);
 
   assert.match(editor, /function applyEnterOp/);
   assert.match(editor, /if \(enterLock\.current\) return;/);
@@ -2105,5 +2110,100 @@ test("collage — text/plain externe prioritaire sur lastRememberedRichClip", ()
 
   const encodedPlain = resolveClipboardPaste(encodeRichClip({ kind: "inlines", inlines: [{ text: "interne" }] }));
   assert.equal(encodedPlain?.mode, "rich");
+});
+
+test("Entrée — Premier / Deuxième / Troisième = trois blocs paragraph indépendants", () => {
+  let doc = paragraphDoc("Premier");
+  assert.equal(doc.blocks.length, 1);
+  assert.equal(doc.blocks[0]?.type, "paragraph");
+
+  const afterFirst = splitLine(doc, 0, null, "Premier".length);
+  assert.equal(afterFirst.caret.blockIndex, 1);
+  doc = setLineInlines(afterFirst.doc, afterFirst.caret.blockIndex, afterFirst.caret.itemIndex, [
+    { text: "Deuxième" },
+  ]);
+
+  const afterSecond = splitLine(doc, 1, null, "Deuxième".length);
+  assert.equal(afterSecond.caret.blockIndex, 2);
+  doc = setLineInlines(afterSecond.doc, afterSecond.caret.blockIndex, afterSecond.caret.itemIndex, [
+    { text: "Troisième" },
+  ]);
+
+  assert.equal(doc.blocks.length, 3);
+  assert.deepEqual(
+    doc.blocks.map((block) => block.type),
+    ["paragraph", "paragraph", "paragraph"],
+  );
+  assert.equal(lineText(doc, 0), "Premier");
+  assert.equal(lineText(doc, 1), "Deuxième");
+  assert.equal(lineText(doc, 2), "Troisième");
+
+  doc = setLineInlines(doc, 1, null, [{ text: "Modifié" }]);
+  assert.equal(lineText(doc, 0), "Premier");
+  assert.equal(lineText(doc, 1), "Modifié");
+  assert.equal(lineText(doc, 2), "Troisième");
+});
+
+test("Maj+Entrée — Premier puis Deuxième restent un seul bloc", () => {
+  const broken = insertTextAt([{ text: "Premier" }], "Premier".length, "\n");
+  const withSecond = insertTextAt(broken, "Premier\n".length, "Deuxième");
+  const doc = setLineInlines(paragraphDoc("Premier"), 0, null, withSecond);
+
+  assert.equal(doc.blocks.length, 1);
+  assert.equal(doc.blocks[0]?.type, "paragraph");
+  if (doc.blocks[0]?.type === "paragraph") {
+    assert.equal(inlinesPlainText(doc.blocks[0].inlines), "Premier\nDeuxième");
+  }
+});
+
+test("éditeur — Entrée/Maj+Entrée identiques publication et notes, blocs Carnet intacts", async () => {
+  const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
+  const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
+
+  assert.match(editor, /variant: "publication" \| "notes"/);
+  assert.equal([...panel.matchAll(/<RichDocEditor/g)].length, 1);
+  assert.match(panel, /variant=\{editor\.kind === "publication" \? "publication" : "notes"\}/);
+
+  const keyDownStart = editor.indexOf("function handleKeyDown");
+  const beforeStart = editor.indexOf("function handleBeforeInput");
+  const keyDown = editor.slice(keyDownStart, beforeStart);
+  assert.match(keyDown, /event\.key === "Enter" && !event\.shiftKey[\s\S]*splitAtCaret\(line, element\)/);
+  assert.match(keyDown, /event\.key === "Enter" && event\.shiftKey[\s\S]*insertSoftBreak\(line, element\)/);
+  assert.match(editor, /applyEnterOp\(line, element, splitLine\)/);
+  assert.match(editor, /insertTextAt\(inlines, offset, "\\n"/);
+
+  assert.match(panel, /function selectAndCopyLine/);
+  assert.match(panel, /function placeCopiedLine/);
+  assert.match(panel, /function nudgeSelectedLine/);
+  assert.match(panel, /copyWeekUnitToDoc/);
+  assert.match(panel, /moveWeekUnitWithinDoc/);
+  assert.match(panel, /insertWeekUnitAt/);
+  assert.match(panel, /extractWeekUnit/);
+
+  const source = paragraphDoc("Alpha");
+  const target = paragraphDoc("Beta");
+  const copied = copyLineToDoc(source, target, 0, null, 1);
+  assert.ok(copied);
+  assert.deepEqual(
+    visibleRichDocLines(copied!).map((line) => inlinesPlainText(line.inlines)),
+    ["Beta", "Alpha"],
+  );
+  assert.equal(source.blocks.length, 1);
+  assert.equal(lineText(source, 0), "Alpha");
+
+  const moved = moveLineToDoc(paragraphDoc("Delta"), paragraphDoc("Gamma"), 0, null, 1);
+  assert.ok(moved);
+  assert.deepEqual(
+    visibleRichDocLines(moved.target).map((line) => inlinesPlainText(line.inlines)),
+    ["Gamma", "Delta"],
+  );
+
+  const weekUnit = extractWeekUnit(paragraphDoc("Semaine A"), 0, null);
+  assert.ok(weekUnit);
+  const otherWeek = copyWeekUnitToDoc(paragraphDoc("Semaine A"), paragraphDoc("Semaine B"), 0, null, 1);
+  assert.ok(otherWeek);
+  assert.equal(otherWeek.blocks.length, 2);
+  assert.equal(lineText(otherWeek, 0), "Semaine B");
+  assert.equal(lineText(otherWeek, 1), "Semaine A");
 });
 
