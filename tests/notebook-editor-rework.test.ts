@@ -50,6 +50,8 @@ import {
   setLineInlines,
   splitInlinesAt,
   splitLine,
+  continueListAtCaret,
+  exitListAtCaret,
   undoRichDocHistory,
   visibleRichDocLines,
   wordRangeAtOffset,
@@ -380,7 +382,7 @@ test("version 2.57.0 — curseur, menus notes, déplacement d’une ligne", asyn
   assert.match(editor, /Insérer un lien/);
   assert.match(editor, /event\.shiftKey/);
   assert.match(editor, /insertTextAt/);
-  assert.match(editor, /Maj \+ Entrée dans un texte normal va à la ligne dans le bloc/);
+  assert.match(editor, /Maj \+ Entrée ajoute un retour à la ligne dans le même bloc/);
   assert.match(editor, /pastePlainText/);
   const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
   assert.match(panel, /selectAndCopyLine/);
@@ -1111,13 +1113,17 @@ test("ligne visuelle — marks conservés au découpage", () => {
   }
 });
 
-test("ligne visuelle — Maj+Entrée dans une liste crée l’item suivant, Entrée aussi", () => {
+test("ligne visuelle — Maj+Entrée dans une liste crée l’item suivant, Entrée sort", () => {
   const listed = applyStructureToLine(paragraphDoc("Terminer la feuille"), 0, null, "bulletList");
-  const nextItem = splitLine(listed.doc, 0, 0, "Terminer la feuille".length);
+  const nextItem = continueListAtCaret(listed.doc, 0, 0, "Terminer la feuille".length);
   assert.equal(nextItem.doc.blocks[0]?.type, "bulletList");
   if (nextItem.doc.blocks[0]?.type === "bulletList") {
     assert.equal(nextItem.doc.blocks[0].items.length, 2);
   }
+  const exited = exitListAtCaret(listed.doc, 0, 0, "Terminer la feuille".length);
+  assert.equal(exited.doc.blocks[0]?.type, "bulletList");
+  assert.equal(exited.doc.blocks[1]?.type, "paragraph");
+  assert.deepEqual(exited.caret, { blockIndex: 1, itemIndex: null, offset: 0 });
 
   const paragraph = paragraphDoc("Devoir injection");
   const soft = insertTextAt([{ text: "Devoir injection" }], "Devoir".length, "\n");
@@ -1141,7 +1147,7 @@ test("ligne visuelle — campus-rich-v1 encode/decode sans perte", () => {
   assert.deepEqual(decodeRichDetail(encodeRichDetail(historic)), historic);
 });
 
-test("surface continue — Enter prolonge orderedList, puces et cases", () => {
+test("surface continue — Maj+Entrée prolonge orderedList, puces et cases", () => {
   const numbered = applyStructureToLine(paragraphDoc("Moteur"), 0, null, "orderedList");
   const second = splitLine(numbered.doc, 0, 0, "Moteur".length);
   assert.equal(second.doc.blocks.length, 1);
@@ -1184,8 +1190,8 @@ test("surface continue — Enter prolonge orderedList, puces et cases", () => {
 test("surface continue — Enter sur item vide sort de la liste", () => {
   for (const type of ["orderedList", "bulletList", "checklist"] as const) {
     const listed = applyStructureToLine(paragraphDoc("Moteur"), 0, null, type);
-    const emptyItem = splitLine(listed.doc, 0, 0, "Moteur".length);
-    const exited = splitLine(emptyItem.doc, 0, 1, 0);
+    const emptyItem = continueListAtCaret(listed.doc, 0, 0, "Moteur".length);
+    const exited = exitListAtCaret(emptyItem.doc, 0, 1, 0);
     assert.equal(exited.doc.blocks[0]?.type, type);
     assert.equal(exited.doc.blocks[1]?.type, "paragraph");
     assert.equal(inlinesPlainText(richDocLines(exited.doc)[0]!.inlines), "Moteur");
@@ -1720,16 +1726,17 @@ test("liste — Maj+Entrée et \\n deviennent des items numérotés dans un seul
   assert.equal(beside.blocks.length, 2);
 });
 
-test("éditeur — Maj+Entrée d’une liste crée un item, pas un retour souple", async () => {
+test("éditeur — Maj+Entrée d’une liste crée un item, Entrée sort du bloc", async () => {
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.match(editor, /function splitAtCaret/);
   assert.match(editor, /event\.key === "Enter" && event\.shiftKey/);
   assert.match(editor, /function isListLine/);
   assert.match(editor, /native\.inputType === "insertParagraph"/);
-  assert.match(editor, /insertParagraph[\s\S]{0,80}splitAtCaret\(line, element\)/);
+  assert.match(editor, /insertParagraph[\s\S]{0,220}exitListAtCaretLine\(line, element\)/);
   assert.match(editor, /splitAtCaret\(line, element\)/);
-  assert.match(editor, /Dans une liste, Entrée et Maj \+ Entrée ajoutent la puce ou le numéro suivant/);
-  assert.match(editor, /Maj \+ Entrée dans un texte normal va à la ligne dans le bloc/);
+  assert.match(editor, /Entrée termine la liste et crée un nouveau bloc/);
+  assert.match(editor, /Maj \+ Entrée ajoute la puce, le numéro ou la case suivante/);
+  assert.match(editor, /Maj \+ Entrée ajoute un retour à la ligne dans le même bloc/);
   const view = await readFile(new URL("../web/app/components/rich-doc-view.tsx", import.meta.url), "utf8");
   assert.match(view, /data-carnet-list-block/);
   const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
@@ -1742,3 +1749,261 @@ test("éditeur — Maj+Entrée d’une liste crée un item, pas un retour souple
   assert.match(panel, /Bloc sélectionné/);
   assert.doesNotMatch(panel, /const extracted = extractLine\(/);
 });
+
+function listTexts(block: CampusRichDoc["blocks"][number] | undefined): string[] {
+  if (!block) return [];
+  if (block.type === "bulletList" || block.type === "orderedList") {
+    return block.items.map((item) => inlinesPlainText(item));
+  }
+  if (block.type === "checklist") {
+    return block.items.map((item) => inlinesPlainText(item.inlines));
+  }
+  if ("inlines" in block) return [inlinesPlainText(block.inlines)];
+  return [];
+}
+
+test("A — bulletList 1 item + Shift+Enter reste le même bloc à 2 items", () => {
+  const listed = applyStructureToLine(paragraphDoc("Moteur"), 0, null, "bulletList");
+  const next = continueListAtCaret(listed.doc, 0, 0, "Moteur".length);
+  assert.equal(next.doc.blocks.length, 1);
+  assert.equal(next.doc.blocks[0]?.type, "bulletList");
+  assert.deepEqual(listTexts(next.doc.blocks[0]), ["Moteur", ""]);
+  assert.deepEqual(next.caret, { blockIndex: 0, itemIndex: 1, offset: 0 });
+});
+
+test("B — orderedList 1 item + Shift+Enter garde 1. puis 2.", () => {
+  const listed = applyStructureToLine(paragraphDoc("Moteur"), 0, null, "orderedList");
+  const next = continueListAtCaret(listed.doc, 0, 0, "Moteur".length);
+  assert.equal(next.doc.blocks.length, 1);
+  assert.equal(next.doc.blocks[0]?.type, "orderedList");
+  assert.deepEqual(listTexts(next.doc.blocks[0]), ["Moteur", ""]);
+  assert.deepEqual(
+    richDocLines(next.doc).map((line) => [inlinesPlainText(line.inlines), line.ordinal]),
+    [
+      ["Moteur", 1],
+      ["", 2],
+    ],
+  );
+});
+
+test("C — checklist 1 item + Shift+Enter, second item unchecked", () => {
+  const listed = applyStructureToLine(paragraphDoc("Moteur"), 0, null, "checklist");
+  const checked = setChecklistChecked(listed.doc, 0, 0, true);
+  const next = continueListAtCaret(checked, 0, 0, "Moteur".length);
+  assert.equal(next.doc.blocks[0]?.type, "checklist");
+  if (next.doc.blocks[0]?.type === "checklist") {
+    assert.equal(next.doc.blocks[0].items.length, 2);
+    assert.equal(next.doc.blocks[0].items[0]?.checked, true);
+    assert.equal(next.doc.blocks[0].items[1]?.checked, false);
+    assert.equal(inlinesPlainText(next.doc.blocks[0].items[1]?.inlines ?? []), "");
+  }
+});
+
+test("D — bulletList dernier item + Enter → paragraph vide après", () => {
+  const listed = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{ type: "bulletList", items: [[{ text: "Moteur" }], [{ text: "Injection" }]] }],
+  });
+  const exited = exitListAtCaret(listed, 0, 1, "Injection".length);
+  assert.deepEqual(exited.doc.blocks.map((block) => block.type), ["bulletList", "paragraph"]);
+  assert.deepEqual(listTexts(exited.doc.blocks[0]), ["Moteur", "Injection"]);
+  assert.equal(listTexts(exited.doc.blocks[1])[0], "");
+  assert.deepEqual(exited.caret, { blockIndex: 1, itemIndex: null, offset: 0 });
+  assert.equal(compactSummaryCards(visibleRichDocLines(exited.doc)).filter((card) => card.kind === "list").length, 1);
+});
+
+test("E — orderedList dernier item + Enter → paragraph après, pas de 4.", () => {
+  const listed = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{
+      type: "orderedList",
+      items: [[{ text: "Moteur" }], [{ text: "Injection" }], [{ text: "Dépollution" }]],
+    }],
+  });
+  const exited = exitListAtCaret(listed, 0, 2, "Dépollution".length);
+  assert.deepEqual(exited.doc.blocks.map((block) => block.type), ["orderedList", "paragraph"]);
+  assert.deepEqual(listTexts(exited.doc.blocks[0]), ["Moteur", "Injection", "Dépollution"]);
+  assert.equal(richDocLines(exited.doc).filter((line) => line.kind === "orderedList").length, 3);
+  assert.deepEqual(exited.caret, { blockIndex: 1, itemIndex: null, offset: 0 });
+});
+
+test("F — checklist dernier item + Enter → paragraph après", () => {
+  const listed = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{
+      type: "checklist",
+      items: [
+        { checked: true, inlines: [{ text: "Moteur" }] },
+        { checked: false, inlines: [{ text: "Injection" }] },
+      ],
+    }],
+  });
+  const exited = exitListAtCaret(listed, 0, 1, "Injection".length);
+  assert.deepEqual(exited.doc.blocks.map((block) => block.type), ["checklist", "paragraph"]);
+  if (exited.doc.blocks[0]?.type === "checklist") {
+    assert.equal(exited.doc.blocks[0].items[0]?.checked, true);
+    assert.equal(exited.doc.blocks[0].items[1]?.checked, false);
+  }
+});
+
+test("G — Enter au milieu du dernier item, zéro perte", () => {
+  const listed = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{ type: "bulletList", items: [[{ text: "Moteur et injection" }]] }],
+  });
+  const cut = "Moteur et".length;
+  const exited = exitListAtCaret(listed, 0, 0, cut);
+  assert.deepEqual(exited.doc.blocks.map((block) => block.type), ["bulletList", "paragraph"]);
+  assert.equal(listTexts(exited.doc.blocks[0])[0], "Moteur et");
+  assert.equal(listTexts(exited.doc.blocks[1])[0], " injection");
+  assert.equal(
+    listTexts(exited.doc.blocks[0])[0] + listTexts(exited.doc.blocks[1])[0],
+    "Moteur et injection",
+  );
+});
+
+test("H — Enter sur un item intermédiaire coupe la liste, zéro perte", () => {
+  const listed = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{
+      type: "orderedList",
+      items: [[{ text: "Moteur" }], [{ text: "Injection" }], [{ text: "Dépollution" }]],
+    }],
+  });
+  const exited = exitListAtCaret(listed, 0, 1, "Injection".length);
+  assert.deepEqual(exited.doc.blocks.map((block) => block.type), ["orderedList", "paragraph", "orderedList"]);
+  assert.deepEqual(listTexts(exited.doc.blocks[0]), ["Moteur", "Injection"]);
+  assert.equal(listTexts(exited.doc.blocks[1])[0], "");
+  assert.deepEqual(listTexts(exited.doc.blocks[2]), ["Dépollution"]);
+  if (exited.doc.blocks[2]?.type === "orderedList") {
+    assert.equal(richDocLines(exited.doc).find((line) => line.blockIndex === 2)?.ordinal, 1);
+  }
+  assert.equal(
+    [...listTexts(exited.doc.blocks[0]), ...listTexts(exited.doc.blocks[2])].join("|"),
+    "Moteur|Injection|Dépollution",
+  );
+});
+
+test("I — Enter sur item vide le retire et pose un paragraph", () => {
+  const listed = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{
+      type: "orderedList",
+      items: [[{ text: "Moteur" }], [], [{ text: "Injection" }]],
+    }],
+  });
+  const exited = exitListAtCaret(listed, 0, 1, 0);
+  assert.deepEqual(exited.doc.blocks.map((block) => block.type), ["orderedList", "paragraph", "orderedList"]);
+  assert.deepEqual(listTexts(exited.doc.blocks[0]), ["Moteur"]);
+  assert.equal(listTexts(exited.doc.blocks[1])[0], "");
+  assert.deepEqual(listTexts(exited.doc.blocks[2]), ["Injection"]);
+  assert.deepEqual(exited.caret, { blockIndex: 1, itemIndex: null, offset: 0 });
+});
+
+test("J — liste avec seul item vide + Enter → paragraph unique", () => {
+  const listed = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{ type: "orderedList", items: [[]] }],
+  });
+  const exited = exitListAtCaret(listed, 0, 0, 0);
+  assert.equal(exited.doc.blocks.length, 1);
+  assert.equal(exited.doc.blocks[0]?.type, "paragraph");
+  assert.equal(listTexts(exited.doc.blocks[0])[0], "");
+  assert.deepEqual(exited.caret, { blockIndex: 0, itemIndex: null, offset: 0 });
+});
+
+test("K — Shift+Enter au milieu d’un item → deux items du même bloc", () => {
+  const listed = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{ type: "orderedList", items: [[{ text: "Moteur" }]] }],
+  });
+  const split = continueListAtCaret(listed, 0, 0, "Mo".length);
+  assert.equal(split.doc.blocks.length, 1);
+  assert.equal(split.doc.blocks[0]?.type, "orderedList");
+  assert.deepEqual(listTexts(split.doc.blocks[0]), ["Mo", "teur"]);
+});
+
+test("L — checklist : checked des anciens items conservé à la sortie", () => {
+  const listed = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{
+      type: "checklist",
+      items: [
+        { checked: true, inlines: [{ text: "Moteur" }] },
+        { checked: true, inlines: [{ text: "Injection" }] },
+        { checked: false, inlines: [{ text: "Dépollution" }] },
+      ],
+    }],
+  });
+  const exited = exitListAtCaret(listed, 0, 1, "Injec".length);
+  assert.deepEqual(exited.doc.blocks.map((block) => block.type), ["checklist", "paragraph", "checklist"]);
+  if (exited.doc.blocks[0]?.type === "checklist") {
+    assert.equal(exited.doc.blocks[0].items[0]?.checked, true);
+    assert.equal(exited.doc.blocks[0].items[1]?.checked, true);
+    assert.equal(inlinesPlainText(exited.doc.blocks[0].items[1]?.inlines ?? []), "Injec");
+  }
+  assert.equal(listTexts(exited.doc.blocks[1])[0], "tion");
+  if (exited.doc.blocks[2]?.type === "checklist") {
+    assert.equal(exited.doc.blocks[2].items[0]?.checked, false);
+    assert.equal(inlinesPlainText(exited.doc.blocks[2].items[0]?.inlines ?? []), "Dépollution");
+  }
+});
+
+test("M–T — éditeur : Enter sort, Maj+Entrée continue, iPhone et lock", async () => {
+  const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
+  const keyDownStart = editor.indexOf("function handleKeyDown");
+  const beforeStart = editor.indexOf("function handleBeforeInput");
+  const keyDown = editor.slice(keyDownStart, beforeStart);
+  const beforeInput = editor.slice(beforeStart, editor.indexOf("\n  return (", beforeStart));
+
+  assert.match(keyDown, /event\.key === "Enter" && !event\.shiftKey[\s\S]*isListLine\(line\)[\s\S]*exitListAtCaretLine\(line, element\)/);
+  assert.match(keyDown, /event\.key === "Enter" && event\.shiftKey[\s\S]*isListLine\(line\)[\s\S]*continueListAtCaretLine\(line, element\)/);
+  assert.match(keyDown, /event\.key === "Enter" && !event\.shiftKey[\s\S]*splitAtCaret\(line, element\)/);
+  assert.match(keyDown, /event\.key === "Enter" && event\.shiftKey[\s\S]*insertSoftBreak\(line, element\)/);
+
+  assert.match(beforeInput, /insertParagraph[\s\S]*isListLine\(line\)[\s\S]*exitListAtCaretLine\(line, element\)/);
+  assert.match(beforeInput, /insertLineBreak[\s\S]*isListLine\(line\)[\s\S]*continueListAtCaretLine\(line, element\)/);
+  assert.match(beforeInput, /insertText[\s\S]*"\\n"[\s\S]*isListLine\(line\)[\s\S]*exitListAtCaretLine\(line, element\)/);
+  assert.match(beforeInput, /insertParagraph[\s\S]*splitAtCaret\(line, element\)/);
+  assert.match(beforeInput, /insertLineBreak[\s\S]*insertSoftBreak\(line, element\)/);
+  assert.match(beforeInput, /insertText[\s\S]*insertSoftBreak\(line, element\)/);
+
+  assert.match(editor, /function applyEnterOp/);
+  assert.match(editor, /if \(enterLock\.current\) return;/);
+  assert.match(editor, /enterLock\.current = true;/);
+  assert.match(editor, /enterLock\.current = false;/);
+  assert.match(editor, /applyEnterOp\(line, element, continueListAtCaret\)/);
+  assert.match(editor, /applyEnterOp\(line, element, exitListAtCaret\)/);
+  assert.match(editor, /applyEnterOp\(line, element, splitLine\)/);
+  assert.doesNotMatch(editor, /insertParagraph[\s\S]{0,120}continueListAtCaretLine/);
+  assert.doesNotMatch(editor, /insertText" && \(native\.data === "\\n"[\s\S]{0,180}continueListAtCaretLine/);
+});
+
+test("Enter liste + paragraph ensuite = deux cartes Ma semaine", () => {
+  const listed = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [{
+      type: "orderedList",
+      items: [[{ text: "Moteur" }], [{ text: "Injection" }], [{ text: "Dépollution" }]],
+    }],
+  });
+  const exited = exitListAtCaret(listed, 0, 2, "Dépollution".length);
+  const withText = setLineInlines(exited.doc, 1, null, [{ text: "Apporter le classeur" }]);
+  const cards = compactSummaryCards(visibleRichDocLines(withText));
+  assert.equal(cards.length, 2);
+  assert.equal(cards[0]?.kind, "list");
+  if (cards[0]?.kind === "list") {
+    assert.equal(cards[0].lines.length, 3);
+    assert.deepEqual(cards[0].lines.map((line) => inlinesPlainText(line.inlines)), [
+      "Moteur",
+      "Injection",
+      "Dépollution",
+    ]);
+  }
+  assert.equal(cards[1]?.kind, "single");
+  if (cards[1]?.kind === "single") {
+    assert.equal(inlinesPlainText(cards[1].line.inlines), "Apporter le classeur");
+  }
+  assert.equal(withText.format, "campus-rich-v1");
+});
+

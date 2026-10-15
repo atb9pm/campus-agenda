@@ -147,6 +147,8 @@ export {
   sliceInlines,
   insertInlinesAt,
   splitLine,
+  continueListAtCaret,
+  exitListAtCaret,
   type RichDocLine,
   type RichLinePosition,
   type RichMarkName,

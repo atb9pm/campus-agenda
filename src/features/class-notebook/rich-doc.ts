@@ -879,10 +879,9 @@ function exitEmptyListItem(
 }
 
 /**
- * Entrée : nouvelle ligne au même niveau.
- * Dans une liste, un nouvel élément du même bloc. Un item vide + Entrée
- * sort de la liste vers un paragraphe normal.
- * Un titre ou un bloc de semaine passe au paragraphe suivant : le titre ne contamine plus la suite.
+ * Maj+Entrée dans une liste, ou Entrée hors liste : nouvelle ligne au même niveau.
+ * Dans une liste, un nouvel élément du même bloc — jamais un paragraphe.
+ * Un titre ou un callout passe au paragraphe suivant : le titre ne contamine plus la suite.
  */
 export function splitLine(
   doc: CampusRichDoc,
@@ -897,9 +896,6 @@ export function splitLine(
   if (block.type === "bulletList" || block.type === "orderedList") {
     const items = block.items.length ? [...block.items] : [[]];
     const at = itemIndex ?? 0;
-    if (isEmptyInlines(items[at] ?? [])) {
-      return exitEmptyListItem(blocks, blockIndex, { ...block, items }, at);
-    }
     if (items.length >= MAX_LIST_ITEMS) {
       return { doc, caret: { blockIndex, itemIndex: at, offset } };
     }
@@ -915,9 +911,6 @@ export function splitLine(
   if (block.type === "checklist") {
     const items = block.items.length ? [...block.items] : [{ checked: false, inlines: [] }];
     const at = itemIndex ?? 0;
-    if (isEmptyInlines(items[at]?.inlines ?? [])) {
-      return exitEmptyListItem(blocks, blockIndex, { ...block, items }, at);
-    }
     if (items.length >= MAX_LIST_ITEMS) {
       return { doc, caret: { blockIndex, itemIndex: at, offset } };
     }
@@ -937,6 +930,87 @@ export function splitLine(
   blocks.splice(blockIndex, 1, head, { type: "paragraph", inlines: after });
   return {
     doc: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: blocks.slice(0, MAX_BLOCKS) }),
+    caret: { blockIndex: blockIndex + 1, itemIndex: null, offset: 0 },
+  };
+}
+
+/** Maj+Entrée dans une liste : nouvel item dans le même RichBlock. */
+export function continueListAtCaret(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+  offset: number,
+): { doc: CampusRichDoc; caret: RichLinePosition } {
+  return splitLine(doc, blockIndex, itemIndex, offset);
+}
+
+/**
+ * Entrée dans une liste : quitter le bloc courant.
+ * Le texte après le curseur part dans un paragraphe immédiat.
+ * Les items suivants restent une seconde liste, sans fusion à travers le paragraphe.
+ */
+export function exitListAtCaret(
+  doc: CampusRichDoc,
+  blockIndex: number,
+  itemIndex: number | null,
+  offset: number,
+): { doc: CampusRichDoc; caret: RichLinePosition } {
+  const blocks = doc.blocks.length ? [...doc.blocks] : [{ type: "paragraph" as const, inlines: [] }];
+  const block = blocks[blockIndex];
+  if (!block) return { doc, caret: { blockIndex, itemIndex, offset } };
+  if (block.type !== "bulletList" && block.type !== "orderedList" && block.type !== "checklist") {
+    return splitLine(doc, blockIndex, itemIndex, offset);
+  }
+
+  const at = itemIndex ?? 0;
+
+  if (block.type === "checklist") {
+    const items = block.items.length ? [...block.items] : [{ checked: false, inlines: [] }];
+    if (at < 0 || at >= items.length) {
+      return { doc, caret: { blockIndex, itemIndex, offset } };
+    }
+    const current = items[at]!;
+    if (isEmptyInlines(current.inlines)) {
+      return exitEmptyListItem(blocks, blockIndex, { ...block, items }, at);
+    }
+    const [before, after] = splitInlinesAt(current.inlines, offset);
+    const head = items.slice(0, at);
+    head.push({ checked: current.checked, inlines: before });
+    const tail = items.slice(at + 1);
+    const replacement: RichBlock[] = [
+      { type: "checklist", items: head },
+      { type: "paragraph", inlines: after },
+    ];
+    if (tail.length) replacement.push({ type: "checklist", items: tail });
+    const next = [...blocks];
+    next.splice(blockIndex, 1, ...replacement);
+    return {
+      doc: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: next.slice(0, MAX_BLOCKS) }),
+      caret: { blockIndex: blockIndex + 1, itemIndex: null, offset: 0 },
+    };
+  }
+
+  const items = block.items.length ? [...block.items] : [[]];
+  if (at < 0 || at >= items.length) {
+    return { doc, caret: { blockIndex, itemIndex, offset } };
+  }
+  const current = items[at] ?? [];
+  if (isEmptyInlines(current)) {
+    return exitEmptyListItem(blocks, blockIndex, { ...block, items }, at);
+  }
+  const [before, after] = splitInlinesAt(current, offset);
+  const head = items.slice(0, at);
+  head.push(before);
+  const tail = items.slice(at + 1);
+  const replacement: RichBlock[] = [
+    { type: block.type, items: head },
+    { type: "paragraph", inlines: after },
+  ];
+  if (tail.length) replacement.push({ type: block.type, items: tail });
+  const next = [...blocks];
+  next.splice(blockIndex, 1, ...replacement);
+  return {
+    doc: sanitizeRichDoc({ format: CAMPUS_RICH_FORMAT, blocks: next.slice(0, MAX_BLOCKS) }),
     caret: { blockIndex: blockIndex + 1, itemIndex: null, offset: 0 },
   };
 }

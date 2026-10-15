@@ -38,6 +38,8 @@ import {
   sliceInlines,
   splitInlinesAt,
   splitLine,
+  continueListAtCaret,
+  exitListAtCaret,
   undoRichDocHistory,
   withMark,
   type CampusRichDoc,
@@ -811,7 +813,11 @@ export function RichDocEditor({
     setLinkDraft(null);
   }
 
-  function splitAtCaret(line: RichDocLine, element: HTMLElement) {
+  function applyEnterOp(
+    line: RichDocLine,
+    element: HTMLElement,
+    op: typeof splitLine,
+  ) {
     if (enterLock.current) return;
     enterLock.current = true;
     queueMicrotask(() => {
@@ -820,8 +826,20 @@ export function RichDocEditor({
     const current = readSelection(line, element);
     const inlines = parseInlinesFromHtml(element.innerHTML);
     const withText = setLineInlines(docRef.current, line.blockIndex, line.itemIndex, inlines);
-    const result = splitLine(withText, line.blockIndex, line.itemIndex, current?.start ?? 0);
+    const result = op(withText, line.blockIndex, line.itemIndex, current?.start ?? 0);
     commit(result.doc, result.caret);
+  }
+
+  function splitAtCaret(line: RichDocLine, element: HTMLElement) {
+    applyEnterOp(line, element, splitLine);
+  }
+
+  function continueListAtCaretLine(line: RichDocLine, element: HTMLElement) {
+    applyEnterOp(line, element, continueListAtCaret);
+  }
+
+  function exitListAtCaretLine(line: RichDocLine, element: HTMLElement) {
+    applyEnterOp(line, element, exitListAtCaret);
   }
 
   function isListLine(line: RichDocLine) {
@@ -856,7 +874,7 @@ export function RichDocEditor({
     if (event.key === "Enter" && event.shiftKey) {
       event.preventDefault();
       if (isListLine(line)) {
-        splitAtCaret(line, element);
+        continueListAtCaretLine(line, element);
         return;
       }
       insertSoftBreak(line, element);
@@ -864,6 +882,10 @@ export function RichDocEditor({
     }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
+      if (isListLine(line)) {
+        exitListAtCaretLine(line, element);
+        return;
+      }
       splitAtCaret(line, element);
       return;
     }
@@ -886,7 +908,7 @@ export function RichDocEditor({
     if (native.inputType === "insertLineBreak") {
       event.preventDefault();
       if (isListLine(line)) {
-        splitAtCaret(line, element);
+        continueListAtCaretLine(line, element);
         return;
       }
       insertSoftBreak(line, element);
@@ -895,7 +917,7 @@ export function RichDocEditor({
     if (native.inputType === "insertText" && (native.data === "\n" || native.data === "\r\n")) {
       event.preventDefault();
       if (isListLine(line)) {
-        splitAtCaret(line, element);
+        exitListAtCaretLine(line, element);
         return;
       }
       insertSoftBreak(line, element);
@@ -913,6 +935,10 @@ export function RichDocEditor({
     }
     if (native.inputType === "insertParagraph") {
       event.preventDefault();
+      if (isListLine(line)) {
+        exitListAtCaretLine(line, element);
+        return;
+      }
       splitAtCaret(line, element);
       return;
     }
@@ -1192,10 +1218,10 @@ export function RichDocEditor({
       </div>
 
       <p className="rich-doc-hint">
-        Entrée crée une ligne. Dans une liste, Entrée et Maj + Entrée ajoutent la puce ou le numéro suivant.
-        Maj + Entrée dans un texte normal va à la ligne dans le bloc. Ctrl+C copie, Ctrl+X coupe,
-        Ctrl+V colle. Suppr efface la ligne en surbrillance dans la vue semaine. Souligné n’est pas un
-        lien. Lien : sur la sélection, ou sur le mot sous le curseur. Ctrl+Z annule.
+        Dans une liste : Entrée termine la liste et crée un nouveau bloc. Maj + Entrée ajoute la puce, le numéro ou la case suivante.
+        Hors liste, Entrée crée une ligne. Maj + Entrée ajoute un retour à la ligne dans le même bloc.
+        Ctrl+C copie, Ctrl+X coupe, Ctrl+V colle. Suppr efface la ligne en surbrillance dans la vue semaine.
+        Souligné n’est pas un lien. Lien : sur la sélection, ou sur le mot sous le curseur. Ctrl+Z annule.
       </p>
     </div>
   );

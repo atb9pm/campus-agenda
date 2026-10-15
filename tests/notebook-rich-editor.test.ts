@@ -116,6 +116,8 @@ test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async (
   assert.match(editor, /setCharacterSelection/);
   assert.match(editor, /characterOffset/);
   assert.match(editor, /splitLine/);
+  assert.match(editor, /continueListAtCaret/);
+  assert.match(editor, /exitListAtCaret/);
   assert.match(editor, /removeLine/);
   assert.match(editor, /data-color-swatch/);
   assert.match(editor, /Liste numérotée/);
