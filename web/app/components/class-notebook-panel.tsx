@@ -33,6 +33,7 @@ import {
   isListBlock,
   listBlockLineSpan,
   courseSessionForControlSlot,
+  courseSessionsForWeek,
   isEmptyRichDoc,
   isPublicationLine,
   lineIndexAfterMove,
@@ -50,6 +51,7 @@ import {
   visibleRichDocLines,
   weekCarnetVisibility,
   weekdayLabelForCourseDayIndex,
+  formatControlSessionDayLabel,
   type CampusRichDoc,
   type ClassNotesDocument,
   type NotebookClipboard,
@@ -58,10 +60,26 @@ import {
   weekNotesKey,
   visibleSchoolWeeks,
 } from "@campus/features/class-notebook";
-import type { CourseSession } from "@campus/features/course-sessions";
+import { formatCourseSessionPeriods, type CourseSession } from "@campus/features/course-sessions";
+import {
+  classDayControlsForPlacementOption,
+  confirmationRequiredForPlacementOption,
+} from "@campus/features/control-planning";
+import type { ControlCoordinationSummary } from "@campus/features/evaluations";
 import { isStructuredAgendaPublication as isStructuredPublication } from "@campus/features/agenda/publications";
 import type { TeacherClassSetup } from "@campus/features/teacher-setup";
-import { fetchTeacherCourseTimelineApi } from "../../lib/api-client.ts";
+import {
+  ControlCoordinationRequiredError,
+  fetchTeacherControlPlanningApi,
+  fetchTeacherCourseTimelineApi,
+} from "../../lib/api-client.ts";
+import {
+  ControlEditorModal,
+  controlEditorDetailValue,
+  formatControlEditorCourseCaption,
+  formatControlEditorDateLabel,
+  type ControlCoordinationLine,
+} from "./control-editor-modal.tsx";
 import { ControlsModal } from "./controls-modal.tsx";
 import { NotebookExportModal } from "./notebook-export-modal.tsx";
 import { ConfirmDialog } from "./confirm-dialog.tsx";
@@ -92,12 +110,17 @@ interface ClassNotebookPanelProps {
   ) => Promise<void>;
   onSetWeekPublicationVisibility: (schoolWeekNumber: number, studentVisible: boolean) => Promise<void>;
   onMovePublication: (itemId: number, schoolWeekNumber: number, day?: number) => Promise<void>;
+  classroomId?: string | null;
   onSaveControl: (input: {
     schoolWeekNumber: number;
     day: number;
     title: string;
+    detail?: string;
     courseSessionKey?: string;
+    annualCourseId?: string;
+    confirmCoordination?: boolean;
   }) => Promise<void>;
+  onUpdateControl: (itemId: number, input: { title: string; detail: string }) => Promise<void>;
   onDeleteControl: (itemId: number) => Promise<void>;
   onPreviewStudent?: () => void;
 }
@@ -176,7 +199,9 @@ export function ClassNotebookPanel({
   onSaveWeekPublication: persistSaveWeekPublication,
   onSetWeekPublicationVisibility,
   onMovePublication: persistMovePublication,
+  classroomId = null,
   onSaveControl,
+  onUpdateControl,
   onDeleteControl,
   onPreviewStudent,
 }: ClassNotebookPanelProps) {
@@ -189,7 +214,7 @@ export function ClassNotebookPanel({
   const [controlsOpen, setControlsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [clipboard, setClipboard] = useState<NotebookClipboard | null>(null);
-  const [selection, setSelection] = useState<LineSelection | null>(null);
+  const [selection] = useState<LineSelection | null>(null);
   const [dragPayload, setDragPayload] = useState<DragPayload | null>(null);
   const [editor, setEditor] = useState<{ kind: EditorKind; weekNumber: number } | null>(null);
   const [editorDoc, setEditorDoc] = useState<CampusRichDoc>(emptyRichDoc());
@@ -204,6 +229,20 @@ export function ClassNotebookPanel({
   const [courseSessions, setCourseSessions] = useState<CourseSession[] | null>(null);
   const [loadedCourseId, setLoadedCourseId] = useState<string | null>(null);
   const [sessionsError, setSessionsError] = useState("");
+  const [controlPickerSessions, setControlPickerSessions] = useState<CourseSession[] | null>(null);
+  const [controlEditor, setControlEditor] = useState<
+    | { mode: "create"; session: CourseSession }
+    | { mode: "edit"; item: PrototypeAgendaItem; session: CourseSession | null }
+    | null
+  >(null);
+  const [controlTitle, setControlTitle] = useState("");
+  const [controlDetail, setControlDetail] = useState("");
+  const [controlSubmitting, setControlSubmitting] = useState(false);
+  const [controlError, setControlError] = useState("");
+  const [controlServerCoordination, setControlServerCoordination] = useState<ControlCoordinationSummary | null>(null);
+  const [controlPreviewDay, setControlPreviewDay] = useState<ControlCoordinationLine[]>([]);
+  const [controlPreviewWeek, setControlPreviewWeek] = useState<ControlCoordinationLine[]>([]);
+  const [controlPreviewConfirm, setControlPreviewConfirm] = useState(false);
 
   const structuredCourseId = annualCourseId?.trim() || "";
   const structuredCourse = Boolean(structuredCourseId);
@@ -939,6 +978,160 @@ export function ClassNotebookPanel({
     : "empty";
   const unpublishTargetWeek = unpublishWeek != null ? schoolWeeks.find((week) => week.number === unpublishWeek) : undefined;
 
+  function closeControlEditor() {
+    setControlEditor(null);
+    setControlPickerSessions(null);
+    setControlTitle("");
+    setControlDetail("");
+    setControlError("");
+    setControlSubmitting(false);
+    setControlServerCoordination(null);
+    setControlPreviewDay([]);
+    setControlPreviewWeek([]);
+    setControlPreviewConfirm(false);
+  }
+
+  function sessionForItem(item: PrototypeAgendaItem): CourseSession | null {
+    if (!courseSessions) return null;
+    if (item.courseSessionKey) {
+      return courseSessions.find((session) => session.key === item.courseSessionKey) ?? null;
+    }
+    return courseSessionForControlSlot(courseSessions, item.schoolWeekNumber, item.day);
+  }
+
+  async function loadCreateCoordination(session: CourseSession) {
+    try {
+      const view = await fetchTeacherControlPlanningApi({
+        classroomId: classroomId ?? undefined,
+        week: session.schoolWeekNumber,
+        view: "week",
+        mode: "class-all",
+      });
+      const day = view.week?.days.find((entry) => entry.dayIndex === session.dayOfWeek - 1);
+      const option =
+        day?.placementOptions.find((entry) => entry.courseSessionKey === session.key) ??
+        (classroomId
+          ? {
+              classroomId,
+              classroomName: classSetup.name,
+              annualCourseId: session.annualCourseId,
+              courseSessionKey: session.key,
+              date: session.date,
+              schoolWeekNumber: session.schoolWeekNumber,
+              dayIndex: session.dayOfWeek - 1,
+              branchLabel,
+            }
+          : null);
+      const classDay = option && day ? classDayControlsForPlacementOption(day.classDayControls, option) : [];
+      setControlPreviewDay(classDay);
+      setControlPreviewWeek(view.teacherWeekControls);
+      setControlPreviewConfirm(
+        option ? confirmationRequiredForPlacementOption(day?.classDayControls ?? [], option) : false,
+      );
+    } catch {
+      setControlPreviewDay([]);
+      setControlPreviewWeek([]);
+      setControlPreviewConfirm(false);
+    }
+  }
+
+  function openCreateForSession(session: CourseSession) {
+    setControlPickerSessions(null);
+    setControlsOpen(false);
+    setControlEditor({ mode: "create", session });
+    setControlTitle("");
+    setControlDetail("");
+    setControlError("");
+    setControlServerCoordination(null);
+    setControlPreviewDay([]);
+    setControlPreviewWeek([]);
+    setControlPreviewConfirm(false);
+    void loadCreateCoordination(session);
+  }
+
+  function openEditControl(item: PrototypeAgendaItem) {
+    setControlsOpen(false);
+    setControlPickerSessions(null);
+    setControlEditor({ mode: "edit", item, session: sessionForItem(item) });
+    setControlTitle(item.title);
+    setControlDetail(controlEditorDetailValue(item.detail));
+    setControlError("");
+    setControlServerCoordination(null);
+  }
+
+  function startPlanForWeek(weekNumber: number) {
+    if (!structuredCourse || !courseSessions) return;
+    const weekSessions = courseSessionsForWeek(courseSessions, weekNumber);
+    if (weekSessions.length === 0) return;
+    if (weekSessions.length === 1) {
+      openCreateForSession(weekSessions[0]!);
+      return;
+    }
+    setControlPickerSessions(weekSessions);
+  }
+
+  async function submitControlEditor(confirm: boolean) {
+    if (!controlEditor || controlSubmitting) return;
+    const trimmed = controlTitle.trim();
+    if (!trimmed) {
+      setControlError("Le titre du contrôle est obligatoire.");
+      return;
+    }
+    setControlSubmitting(true);
+    setControlError("");
+    try {
+      if (controlEditor.mode === "create") {
+        const session = controlEditor.session;
+        await onSaveControl({
+          annualCourseId: session.annualCourseId,
+          courseSessionKey: session.key,
+          schoolWeekNumber: session.schoolWeekNumber,
+          day: session.dayOfWeek - 1,
+          title: trimmed,
+          detail: controlDetail,
+          confirmCoordination: confirm,
+        });
+        closeControlEditor();
+        return;
+      }
+      await onUpdateControl(controlEditor.item.id, { title: trimmed, detail: controlDetail });
+      closeControlEditor();
+    } catch (caught) {
+      if (caught instanceof ControlCoordinationRequiredError) {
+        setControlServerCoordination(caught.coordination);
+        setControlError(caught.message);
+      } else {
+        setControlError(caught instanceof Error ? caught.message : "Enregistrement impossible.");
+      }
+    } finally {
+      setControlSubmitting(false);
+    }
+  }
+
+  const editorSession = controlEditor?.mode === "create" ? controlEditor.session : controlEditor?.session ?? null;
+  const editorWeekday = editorSession
+    ? formatControlSessionDayLabel(editorSession).split(" ")[0] ?? ""
+    : weekdayLabelForCourseDayIndex(controlEditor?.mode === "edit" ? controlEditor.item.day : 0);
+  const editorDateLabel = editorSession
+    ? formatControlSessionDayLabel(editorSession)
+    : formatControlEditorDateLabel(
+        editorWeekday.charAt(0).toUpperCase() + editorWeekday.slice(1),
+        controlEditor?.mode === "edit" ? controlEditor.item.courseSessionDate : null,
+      );
+  const editorCourseCaption = formatControlEditorCourseCaption(
+    branchLabel,
+    editorSession ? formatCourseSessionPeriods(editorSession.segments) : null,
+  );
+  const editorConfirmation = controlServerCoordination
+    ? Boolean(controlServerCoordination.confirmationRequired)
+    : controlPreviewConfirm;
+  const editorClassDay = controlServerCoordination
+    ? controlServerCoordination.classDayControls
+    : controlPreviewDay;
+  const editorTeacherWeek = controlServerCoordination
+    ? controlServerCoordination.teacherWeekControls
+    : controlPreviewWeek;
+
   return (
     <section
       className="teacher-workspace class-notebook"
@@ -1075,20 +1268,24 @@ export function ClassNotebookPanel({
                     {weekControls.map((item) => (
                       <li
                         key={item.id}
+                        className="class-notebook-control-line"
+                        data-control-line=""
                         draggable
                         onDragStart={(event) => handlePublicationDragStart(event, item.id, week.number)}
                       >
                         <button
                           type="button"
-                          onClick={() =>
-                            setSelection({ kind: "publication", itemId: item.id, weekNumber: week.number })
-                          }
+                          className="class-notebook-control-open"
+                          onClick={() => openEditControl(item)}
                         >
-                          <span>📅 {item.title}</span>
+                          <span className="class-notebook-control-title">{item.title}</span>
+                          <span className="class-notebook-control-day">
+                            {weekdayLabelForCourseDayIndex(item.day) || (item.day === 3 ? "jeudi" : "lundi")}
+                          </span>
                         </button>
-                        <small>{weekdayLabelForCourseDayIndex(item.day) || (item.day === 3 ? "jeudi" : "lundi")}</small>
                         <button
                           type="button"
+                          className="class-notebook-control-delete"
                           aria-label={`Supprimer le contrôle ${item.title}`}
                           onClick={(event) => {
                             event.stopPropagation();
@@ -1100,11 +1297,19 @@ export function ClassNotebookPanel({
                       </li>
                     ))}
                   </ul>
-                ) : (
-                  <button type="button" className="class-notebook-plan-link" onClick={() => setControlsOpen(true)}>
+                ) : null}
+                {structuredCourse &&
+                courseSessions &&
+                courseSessionsForWeek(courseSessions, week.number).length > 0 ? (
+                  <button
+                    type="button"
+                    className="class-notebook-plan-link"
+                    data-control-plan-week=""
+                    onClick={() => startPlanForWeek(week.number)}
+                  >
                     Planifier →
                   </button>
-                )}
+                ) : null}
               </section>
 
               <section
@@ -1442,23 +1647,57 @@ export function ClassNotebookPanel({
         courseSessions={structuredCourse ? courseSessions : null}
         controls={classControls}
         onClose={() => setControlsOpen(false)}
-        onSave={async (input) => {
-          if (structuredCourse && courseSessions) {
-            const session = courseSessionForControlSlot(
-              courseSessions,
-              input.schoolWeekNumber,
-              input.day,
-            );
-            if (!session) {
-              throw new Error("Ce cours n’a pas de séance à cette date.");
-            }
-            await onSaveControl({ ...input, courseSessionKey: session.key });
-            return;
-          }
-          await onSaveControl(input);
-        }}
+        onSelect={openEditControl}
         onDelete={onDeleteControl}
       />
+      {controlPickerSessions ? (
+        <div className="technical-modal-backdrop" role="presentation">
+          <section className="technical-modal control-plan-modal" role="dialog" aria-modal="true">
+            <header>
+              <div>
+                <span className="eyebrow">SÉANCE</span>
+                <h2>Choisir le cours</h2>
+              </div>
+              <button type="button" onClick={() => setControlPickerSessions(null)} aria-label="Fermer">
+                ×
+              </button>
+            </header>
+            <ul className="control-plan-options" data-control-session-picker="">
+              {controlPickerSessions.map((session) => (
+                <li key={session.key}>
+                  <button type="button" data-course-session-key={session.key} onClick={() => openCreateForSession(session)}>
+                    {formatControlEditorCourseCaption(
+                      branchLabel,
+                      formatCourseSessionPeriods(session.segments),
+                    )}{" "}
+                    · {formatControlSessionDayLabel(session)}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
+      ) : null}
+      {controlEditor ? (
+        <ControlEditorModal
+          mode={controlEditor.mode}
+          classroomName={classSetup.name}
+          dateLabel={editorDateLabel}
+          weekdayLabel={editorWeekday}
+          courseCaption={editorCourseCaption}
+          classDayControls={editorClassDay}
+          teacherWeekControls={editorTeacherWeek}
+          submitting={controlSubmitting}
+          error={controlError}
+          confirmationRequired={editorConfirmation}
+          title={controlTitle}
+          detail={controlDetail}
+          onTitle={setControlTitle}
+          onDetail={setControlDetail}
+          onClose={closeControlEditor}
+          onSubmit={(confirm) => void submitControlEditor(confirm)}
+        />
+      ) : null}
       {annualCourseId?.trim() ? (
         <NotebookExportModal
           open={exportOpen}

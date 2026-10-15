@@ -21,6 +21,7 @@ import {
   manualControlIdsFromBody,
   publishManualControlToAgenda,
   publishReferenceItemToAgenda,
+  updateStructuredControlContent,
   type StructuredPublishDeps,
 } from "../src/features/course-publications/index.ts";
 import { listComputedCourseSessions } from "../src/features/course-sessions/index.ts";
@@ -617,5 +618,52 @@ test("remplacement hors période — aucune publication", async () => {
     assert.equal(denied.ok, false);
     if (!denied.ok) assert.equal(denied.status, 403);
   }
+  });
+});
+
+test("unification — même agenda_item title+detail depuis le service partagé", async () => {
+  await withSqliteWorld(async (world) => {
+    const seeded = await seedCourse(world);
+    const session = await firstSession(world, seeded.course.id);
+    const created = await publishManualControlToAgenda(world.publishDeps, {
+      teacherId: seeded.teacher.id,
+      annualCourseId: seeded.course.id,
+      courseSessionKey: session.key,
+      title: "Contrôle 1",
+      detail: "Injection\nDépollution",
+    });
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+    assert.equal(created.item.title, "Contrôle 1");
+    assert.match(created.item.detail, /Injection/);
+    assert.match(created.item.detail, /Dépollution/);
+    assert.equal(created.item.annualCourseId, seeded.course.id);
+    assert.equal(created.item.courseSessionKey, session.key);
+    assert.equal(created.item.courseSessionDate, session.date);
+
+    const updated = await updateStructuredControlContent(world.publishDeps, {
+      teacherId: seeded.teacher.id,
+      agendaItemId: created.item.id,
+      title: "Contrôle injection",
+      detail: "Injection directe\nDépollution",
+    });
+    assert.equal(updated.ok, true);
+    if (!updated.ok) return;
+    assert.equal(updated.item.title, "Contrôle injection");
+    assert.equal(updated.item.detail, "Injection directe\nDépollution");
+    assert.equal(updated.item.annualCourseId, created.item.annualCourseId);
+    assert.equal(updated.item.courseSessionKey, created.item.courseSessionKey);
+    assert.equal(updated.item.courseSessionDate, created.item.courseSessionDate);
+
+    const emptyDetail = await publishManualControlToAgenda(world.publishDeps, {
+      teacherId: seeded.teacher.id,
+      annualCourseId: seeded.course.id,
+      courseSessionKey: session.key,
+      title: "Contrôle 2",
+    });
+    assert.equal(emptyDetail.ok, true);
+    if (emptyDetail.ok) {
+      assert.ok(emptyDetail.item.detail === "" || emptyDetail.item.detail === "Aucune précision");
+    }
   });
 });

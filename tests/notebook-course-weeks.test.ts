@@ -648,7 +648,7 @@ test("carnet — pas de règle hardcodée classe / branche / jour", async () => 
   assert.match(panel, /courseSessionForControlSlot/);
   assert.match(panel, /findCarnetPublicationItemForSave/);
   assert.match(panel, /Aucune séance planifiée pour ce cours dans l’horaire/);
-  assert.match(modal, /controlDayOptionsForCourseWeek/);
+  assert.match(helper, /controlDayOptionsForCourseWeek/);
   assert.match(modal, /courseSessions/);
   assert.match(page, /publicationDay = day \?\? weekdayToCourseDayIndex/);
   assert.match(page, /notebookMovePublication\(itemId: number, schoolWeekNumber: number, day\?: number\)/);
