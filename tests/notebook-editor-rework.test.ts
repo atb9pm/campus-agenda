@@ -37,7 +37,9 @@ import {
   parseInlinesFromHtml,
   pastePlainText,
   pasteRichClip,
+  lastRememberedRichClip,
   rememberRichClip,
+  resolveClipboardPaste,
   resolveLinkRange,
   sanitizeHref,
   sliceInlines,
@@ -378,11 +380,11 @@ test("version 2.57.0 — curseur, menus notes, déplacement d’une ligne", asyn
   assert.doesNotMatch(editor, /addQuickBlock/);
   assert.doesNotMatch(editor, /insertQuickBlock/);
   assert.doesNotMatch(editor, /QUICK_BLOCK_KINDS/);
-  assert.match(editor, /label="Titre"/);
+  assert.doesNotMatch(editor, /label="Titre"/);
   assert.match(editor, /Insérer un lien/);
   assert.match(editor, /event\.shiftKey/);
   assert.match(editor, /insertTextAt/);
-  assert.match(editor, /Maj \+ Entrée ajoute un retour à la ligne dans le même bloc/);
+  assert.match(editor, /Maj \+ Entrée ajoute un retour à la ligne/);
   assert.match(editor, /pastePlainText/);
   const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
   assert.match(panel, /selectAndCopyLine/);
@@ -570,8 +572,8 @@ test("version 2.58.0 — couleur sur la sélection, Annuler / Rétablir", async 
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
   assert.equal(APP_VERSION, "2.62.0");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
-  assert.match(editor, /Annuler \(Ctrl\+Z\)/);
-  assert.match(editor, /Rétablir \(Ctrl\+Y\)/);
+  assert.doesNotMatch(editor, /Annuler \(Ctrl\+Z\)/);
+  assert.doesNotMatch(editor, /Rétablir \(Ctrl\+Y\)/);
   assert.match(editor, /pushRichDocHistory/);
   assert.match(editor, /onBeforeInput/);
   assert.match(editor, /liveTarget/);
@@ -579,14 +581,16 @@ test("version 2.58.0 — couleur sur la sélection, Annuler / Rétablir", async 
   assert.doesNotMatch(editor, /collapsed \? \{ \.\.\.current, start: 0, end: length \}/);
   assert.match(editor, /data-padding/);
   assert.match(editor, /insertSoftBreak/);
-  assert.match(editor, /Copier le bloc \(Ctrl\+C\)/);
-  assert.match(editor, /Couper le bloc \(Ctrl\+X\)/);
-  assert.match(editor, /Coller \(Ctrl\+V\)/);
+  assert.doesNotMatch(editor, /Copier le bloc \(Ctrl\+C\)/);
+  assert.doesNotMatch(editor, /Couper le bloc \(Ctrl\+X\)/);
+  assert.doesNotMatch(editor, /text="Coller"/);
   assert.match(editor, /pasteRichClip/);
   assert.match(editor, /insertFromPaste/);
   assert.match(editor, /fallbackSelection/);
-  assert.match(editor, /cutCurrent/);
+  assert.match(editor, /cutSelection/);
   assert.match(editor, /onCut/);
+  assert.match(editor, /undoRichDocHistory/);
+  assert.match(editor, /redoRichDocHistory/);
   assert.doesNotMatch(editor, /disabled=\{!canPaste\}/);
   const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
   assert.match(panel, /if \(editor\) return;/);
@@ -747,7 +751,8 @@ test("version 2.59.1 — souligné ≠ lien, Lien visible sur le mot", async () 
   assert.match(editor, /applyHrefToFrozenTarget/);
   assert.match(editor, /resolveLinkRange/);
   assert.match(editor, /openLinkBar/);
-  assert.match(editor, /Souligné n’est pas un[\s\S]*lien/);
+  assert.match(editor, /Le lien peut être appliqué au texte sélectionné ou au mot sous le curseur/);
+  assert.doesNotMatch(editor, /Souligné n’est pas un lien/);
   assert.match(editor, /Adresse invalide/);
   assert.doesNotMatch(editor, /type="url"/);
   assert.doesNotMatch(editor, /autoFocus/);
@@ -846,15 +851,15 @@ test("éditeur 2.62.0 — structures génériques, callouts hérités neutres, l
   assert.doesNotMatch(editor, /À terminer/);
   assert.doesNotMatch(editor, /À apporter/);
   assert.doesNotMatch(editor, /À lire/);
-  assert.match(editor, /text="Texte"/);
-  assert.match(editor, /label="Titre"/);
-  assert.match(editor, /text="Puces"/);
-  assert.match(editor, /Liste numérotée/);
-  assert.match(editor, /text="Cases"/);
+  assert.doesNotMatch(editor, /text="Texte"/);
+  assert.doesNotMatch(editor, /label="Titre"/);
+  assert.doesNotMatch(editor, /text="Puces"/);
+  assert.doesNotMatch(editor, /Liste numérotée/);
+  assert.doesNotMatch(editor, /text="Cases"/);
   assert.match(editor, /text="Lien"/);
   assert.match(editor, /event\.key === "Enter" && event\.shiftKey/);
   assert.match(editor, /insertSoftBreak/);
-  assert.match(editor, /applyStructureAtVisualLine/);
+  assert.doesNotMatch(editor, /applyStructure\(/);
   assert.match(editor, /splitLine/);
   assert.match(editor, /pasteRichClip/);
   assert.match(editor, /undoRichDocHistory/);
@@ -1734,9 +1739,15 @@ test("éditeur — Maj+Entrée d’une liste crée un item, Entrée sort du bloc
   assert.match(editor, /native\.inputType === "insertParagraph"/);
   assert.match(editor, /insertParagraph[\s\S]{0,220}exitListAtCaretLine\(line, element\)/);
   assert.match(editor, /splitAtCaret\(line, element\)/);
-  assert.match(editor, /Entrée termine la liste et crée un nouveau bloc/);
-  assert.match(editor, /Maj \+ Entrée ajoute la puce, le numéro ou la case suivante/);
+  assert.doesNotMatch(editor, /Entrée termine la liste et crée un nouveau bloc/);
+  assert.doesNotMatch(editor, /Maj \+ Entrée ajoute la puce, le numéro ou la case suivante/);
+  assert.match(editor, /Entrée termine le bloc courant et crée un nouveau bloc indépendant/);
   assert.match(editor, /Maj \+ Entrée ajoute un retour à la ligne dans le même bloc/);
+  assert.match(editor, /Les blocs peuvent ensuite être déplacés ou réorganisés dans le Carnet/);
+  assert.match(editor, /Ctrl\+C copie, Ctrl\+X coupe, Ctrl\+V colle et Ctrl\+Z annule/);
+  assert.match(editor, /Ctrl\+B met en gras, Ctrl\+I en italique et Ctrl\+U souligne/);
+  assert.match(editor, /Le lien peut être appliqué au texte sélectionné ou au mot sous le curseur/);
+  assert.doesNotMatch(editor, /Entrée crée un nouveau paragraphe/);
   const view = await readFile(new URL("../web/app/components/rich-doc-view.tsx", import.meta.url), "utf8");
   assert.match(view, /data-carnet-list-block/);
   const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
@@ -1966,7 +1977,7 @@ test("M–T — éditeur : Enter sort, Maj+Entrée continue, iPhone et lock", as
   assert.match(beforeInput, /insertText[\s\S]*"\\n"[\s\S]*isListLine\(line\)[\s\S]*exitListAtCaretLine\(line, element\)/);
   assert.match(beforeInput, /insertParagraph[\s\S]*splitAtCaret\(line, element\)/);
   assert.match(beforeInput, /insertLineBreak[\s\S]*insertSoftBreak\(line, element\)/);
-  assert.match(beforeInput, /insertText[\s\S]*insertSoftBreak\(line, element\)/);
+  assert.match(beforeInput, /insertText[\s\S]*"\\n"[\s\S]*splitAtCaret\(line, element\)/);
 
   assert.match(editor, /function applyEnterOp/);
   assert.match(editor, /if \(enterLock\.current\) return;/);
@@ -2005,5 +2016,194 @@ test("Enter liste + paragraph ensuite = deux cartes Ma semaine", () => {
     assert.equal(inlinesPlainText(cards[1].line.inlines), "Apporter le classeur");
   }
   assert.equal(withText.format, "campus-rich-v1");
+});
+
+test("éditeur — toolbar simplifiée, raccourcis, collage externe prioritaire", async () => {
+  const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
+  const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
+  const view = await readFile(new URL("../web/app/components/rich-doc-view.tsx", import.meta.url), "utf8");
+
+  for (const removed of [
+    'text="Annuler"',
+    'text="Rétablir"',
+    'text="Copier"',
+    'text="Couper"',
+    'text="Coller"',
+    'text="Texte"',
+    'text="Titre"',
+    'text="Puces"',
+    'text="1. 2. 3."',
+    'text="Cases"',
+  ]) {
+    assert.doesNotMatch(editor, new RegExp(removed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  assert.match(editor, /label="Gras"/);
+  assert.match(editor, /label="Italique"/);
+  assert.match(editor, /label="Souligné"/);
+  assert.match(editor, /label="Surligner"/);
+  assert.match(editor, /data-color-swatch/);
+  assert.match(editor, /text="Lien"/);
+  assert.match(editor, /rich-doc-toolbar-link/);
+  assert.match(editor, /key === "b"/);
+  assert.match(editor, /applyMark\("bold"/);
+  assert.match(editor, /key === "i"/);
+  assert.match(editor, /applyMark\("italic"/);
+  assert.match(editor, /key === "u"/);
+  assert.match(editor, /applyMark\("underline"/);
+  assert.match(editor, /resolveClipboardPaste/);
+  assert.doesNotMatch(editor, /lastRememberedRichClip\(\)/);
+  assert.match(editor, /variant: "publication" \| "notes"/);
+  assert.equal([...panel.matchAll(/<RichDocEditor/g)].length, 1);
+  assert.match(panel, /variant=\{editor\.kind === "publication" \? "publication" : "notes"\}/);
+
+  assert.match(view, /block\.type === "heading"/);
+  assert.match(view, /block\.type === "bulletList"/);
+  assert.match(view, /block\.type === "orderedList"/);
+  assert.match(view, /block\.type === "checklist"/);
+
+  const historic = sanitizeRichDoc({
+    format: CAMPUS_RICH_FORMAT,
+    blocks: [
+      { type: "heading", inlines: [{ text: "Moteur" }] },
+      { type: "bulletList", items: [[{ text: "Injection" }]] },
+      { type: "orderedList", items: [[{ text: "Dépollution" }]] },
+      { type: "checklist", items: [{ checked: true, inlines: [{ text: "Contrôle" }] }] },
+    ],
+  });
+  const reloaded = decodeRichDetail(encodeRichDetail(historic));
+  assert.deepEqual(reloaded, historic);
+
+  const typed = setLineInlines(splitLine(paragraphDoc("1. écrire"), 0, null, "1. écrire".length).doc, 1, null, [
+    { text: "2. penser" },
+  ]);
+  assert.deepEqual(typed.blocks.map((block) => block.type), ["paragraph", "paragraph"]);
+  assert.equal(lineText(typed, 0), "1. écrire");
+  assert.equal(lineText(typed, 1), "2. penser");
+});
+
+test("collage — text/plain externe prioritaire sur lastRememberedRichClip", () => {
+  rememberRichClip({ kind: "inlines", inlines: [{ text: "ANCIEN CLIP" }] });
+  const remembered = lastRememberedRichClip();
+  assert.equal(remembered?.kind, "inlines");
+  if (remembered?.kind === "inlines") {
+    assert.equal(inlinesPlainText(remembered.inlines), "ANCIEN CLIP");
+  }
+
+  const fromWord = resolveClipboardPaste("Révision moteur jeudi");
+  assert.equal(fromWord?.mode, "plain");
+  if (fromWord?.mode === "plain") assert.equal(fromWord.text, "Révision moteur jeudi");
+
+  const override = resolveClipboardPaste("TEXTE WORD");
+  assert.equal(override?.mode, "plain");
+  if (override?.mode === "plain") assert.equal(override.text, "TEXTE WORD");
+  assert.notEqual(override?.mode === "plain" ? override.text : "", "ANCIEN CLIP");
+
+  const lines = resolveClipboardPaste("une\ndeux\n\ntrois");
+  assert.equal(lines?.mode, "plain");
+  if (lines?.mode === "plain") assert.equal(lines.text, "une\ndeux\n\ntrois");
+
+  const campus = resolveClipboardPaste("ignore", encodeRichClip({ kind: "inlines", inlines: [{ text: "riche" }] }));
+  assert.equal(campus?.mode, "rich");
+  if (campus?.mode === "rich" && campus.clip.kind === "inlines") {
+    assert.equal(inlinesPlainText(campus.clip.inlines), "riche");
+  }
+
+  const encodedPlain = resolveClipboardPaste(encodeRichClip({ kind: "inlines", inlines: [{ text: "interne" }] }));
+  assert.equal(encodedPlain?.mode, "rich");
+});
+
+test("Entrée — Premier / Deuxième / Troisième = trois blocs paragraph indépendants", () => {
+  let doc = paragraphDoc("Premier");
+  assert.equal(doc.blocks.length, 1);
+  assert.equal(doc.blocks[0]?.type, "paragraph");
+
+  const afterFirst = splitLine(doc, 0, null, "Premier".length);
+  assert.equal(afterFirst.caret.blockIndex, 1);
+  doc = setLineInlines(afterFirst.doc, afterFirst.caret.blockIndex, afterFirst.caret.itemIndex, [
+    { text: "Deuxième" },
+  ]);
+
+  const afterSecond = splitLine(doc, 1, null, "Deuxième".length);
+  assert.equal(afterSecond.caret.blockIndex, 2);
+  doc = setLineInlines(afterSecond.doc, afterSecond.caret.blockIndex, afterSecond.caret.itemIndex, [
+    { text: "Troisième" },
+  ]);
+
+  assert.equal(doc.blocks.length, 3);
+  assert.deepEqual(
+    doc.blocks.map((block) => block.type),
+    ["paragraph", "paragraph", "paragraph"],
+  );
+  assert.equal(lineText(doc, 0), "Premier");
+  assert.equal(lineText(doc, 1), "Deuxième");
+  assert.equal(lineText(doc, 2), "Troisième");
+
+  doc = setLineInlines(doc, 1, null, [{ text: "Modifié" }]);
+  assert.equal(lineText(doc, 0), "Premier");
+  assert.equal(lineText(doc, 1), "Modifié");
+  assert.equal(lineText(doc, 2), "Troisième");
+});
+
+test("Maj+Entrée — Premier puis Deuxième restent un seul bloc", () => {
+  const broken = insertTextAt([{ text: "Premier" }], "Premier".length, "\n");
+  const withSecond = insertTextAt(broken, "Premier\n".length, "Deuxième");
+  const doc = setLineInlines(paragraphDoc("Premier"), 0, null, withSecond);
+
+  assert.equal(doc.blocks.length, 1);
+  assert.equal(doc.blocks[0]?.type, "paragraph");
+  if (doc.blocks[0]?.type === "paragraph") {
+    assert.equal(inlinesPlainText(doc.blocks[0].inlines), "Premier\nDeuxième");
+  }
+});
+
+test("éditeur — Entrée/Maj+Entrée identiques publication et notes, blocs Carnet intacts", async () => {
+  const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
+  const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
+
+  assert.match(editor, /variant: "publication" \| "notes"/);
+  assert.equal([...panel.matchAll(/<RichDocEditor/g)].length, 1);
+  assert.match(panel, /variant=\{editor\.kind === "publication" \? "publication" : "notes"\}/);
+
+  const keyDownStart = editor.indexOf("function handleKeyDown");
+  const beforeStart = editor.indexOf("function handleBeforeInput");
+  const keyDown = editor.slice(keyDownStart, beforeStart);
+  assert.match(keyDown, /event\.key === "Enter" && !event\.shiftKey[\s\S]*splitAtCaret\(line, element\)/);
+  assert.match(keyDown, /event\.key === "Enter" && event\.shiftKey[\s\S]*insertSoftBreak\(line, element\)/);
+  assert.match(editor, /applyEnterOp\(line, element, splitLine\)/);
+  assert.match(editor, /insertTextAt\(inlines, offset, "\\n"/);
+
+  assert.match(panel, /function selectAndCopyLine/);
+  assert.match(panel, /function placeCopiedLine/);
+  assert.match(panel, /function nudgeSelectedLine/);
+  assert.match(panel, /copyWeekUnitToDoc/);
+  assert.match(panel, /moveWeekUnitWithinDoc/);
+  assert.match(panel, /insertWeekUnitAt/);
+  assert.match(panel, /extractWeekUnit/);
+
+  const source = paragraphDoc("Alpha");
+  const target = paragraphDoc("Beta");
+  const copied = copyLineToDoc(source, target, 0, null, 1);
+  assert.ok(copied);
+  assert.deepEqual(
+    visibleRichDocLines(copied!).map((line) => inlinesPlainText(line.inlines)),
+    ["Beta", "Alpha"],
+  );
+  assert.equal(source.blocks.length, 1);
+  assert.equal(lineText(source, 0), "Alpha");
+
+  const moved = moveLineToDoc(paragraphDoc("Delta"), paragraphDoc("Gamma"), 0, null, 1);
+  assert.ok(moved);
+  assert.deepEqual(
+    visibleRichDocLines(moved.target).map((line) => inlinesPlainText(line.inlines)),
+    ["Gamma", "Delta"],
+  );
+
+  const weekUnit = extractWeekUnit(paragraphDoc("Semaine A"), 0, null);
+  assert.ok(weekUnit);
+  const otherWeek = copyWeekUnitToDoc(paragraphDoc("Semaine A"), paragraphDoc("Semaine B"), 0, null, 1);
+  assert.ok(otherWeek);
+  assert.equal(otherWeek.blocks.length, 2);
+  assert.equal(lineText(otherWeek, 0), "Semaine B");
+  assert.equal(lineText(otherWeek, 1), "Semaine A");
 });
 

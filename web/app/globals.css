@@ -2371,14 +2371,24 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .rich-doc-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 14px;
+  gap: 6px 10px;
   align-items: center;
   max-width: 100%;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: #f4f7fb;
   overflow-x: hidden;
+}
+.rich-doc-toolbar-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  min-width: 0;
+}
+.rich-doc-toolbar-link {
+  margin-left: auto;
 }
 .rich-doc-tool-group {
   display: flex;
@@ -2387,7 +2397,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   align-items: center;
 }
 .rich-doc-tool-group + .rich-doc-tool-group {
-  padding-left: 12px;
+  padding-left: 10px;
   border-left: 1px solid #d7e0ec;
 }
 .rich-doc-toolbar button {
@@ -2518,7 +2528,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .rich-doc-link-bar label { display: grid; gap: 4px; flex: 1; min-width: 220px; color: #8793a9; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .rich-doc-link-bar input { padding: 9px 10px; border: 1px solid var(--line-strong); border-radius: 8px; font-size: 12px; }
 .rich-doc-link-error { flex: 1 0 100%; margin: 0; color: #b42318; font-size: 11px; }
-.rich-doc-hint { margin: 0; color: #8793a9; font-size: 10px; }
+.rich-doc-hint { margin: 0; color: #8793a9; font-size: 10px; line-height: 1.35; }
 .rich-doc-swatch.is-active { box-shadow: 0 0 0 2px #1d3557; }
 .rich-doc-editor.is-notes .rich-doc-canvas { background: #fafafa; }
 

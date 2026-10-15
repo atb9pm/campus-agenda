@@ -175,6 +175,7 @@ export {
   lastRememberedRichClip,
   pasteRichClip,
   rememberRichClip,
+  resolveClipboardPaste,
   richClipPlainText,
   type RichClip,
 } from "./rich-doc-clip.ts";
