@@ -60,6 +60,24 @@ export function decodeRichClip(raw: string): RichClip | null {
   }
 }
 
+/**
+ * Décide le collage à partir du presse-papiers système.
+ * Un RichClip Campus valide l’emporte ; sinon le text/plain fourni par l’événement paste.
+ * Ne consulte jamais lastRememberedRichClip() : un texte externe (Word, Teams, …)
+ * ne doit pas être remplacé par un ancien clip interne.
+ */
+export function resolveClipboardPaste(
+  plain: string,
+  campusEncoded?: string | null,
+): { mode: "rich"; clip: RichClip } | { mode: "plain"; text: string } | null {
+  const campus = decodeRichClip(campusEncoded ?? "");
+  if (campus) return { mode: "rich", clip: campus };
+  const fromPlain = decodeRichClip(plain);
+  if (fromPlain) return { mode: "rich", clip: fromPlain };
+  if (plain) return { mode: "plain", text: plain };
+  return null;
+}
+
 export function copyLineAsClip(
   doc: CampusRichDoc,
   blockIndex: number,

@@ -9,15 +9,11 @@ import {
   RICH_TEXT_COLOR_IDS,
   RICH_TEXT_COLOR_LABELS,
   applyMarkToRange,
-  applyStructureAtVisualLine,
-  copyLineAsClip,
-  decodeRichClip,
   encodeRichClip,
   emptyRichDoc,
   emptyRichDocHistory,
   inlinesPlainText,
   insertTextAt,
-  lastRememberedRichClip,
   marksAtOffset,
   marksEqual,
   marksInRange,
@@ -28,8 +24,9 @@ import {
   redoRichDocHistory,
   rememberRichClip,
   removeLine,
-  deleteLine,
+  resolveClipboardPaste,
   resolveLinkRange,
+  richClipPlainText,
   richDocLines,
   sanitizeHref,
   sanitizeRichDoc,
@@ -51,7 +48,6 @@ import {
   type RichLinePosition,
   type RichMarkName,
   type RichMarks,
-  type RichStructureType,
   type RichTextColorId,
 } from "@campus/features/class-notebook";
 
@@ -267,8 +263,6 @@ export function RichDocEditor({
   const [typingMarks, setTypingMarks] = useState<RichMarks>({});
   const [linkDraft, setLinkDraft] = useState<string | null>(null);
   const [syncToken, setSyncToken] = useState(0);
-  const [canUndo, setCanUndo] = useState(false);
-  const [canRedo, setCanRedo] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
 
   const docRef = useRef(doc);
@@ -284,9 +278,6 @@ export function RichDocEditor({
   const pasteLock = useRef(false);
   const linkTargetRef = useRef<EditorSelection | null>(null);
   const linkInputRef = useRef<HTMLInputElement | null>(null);
-  const copyCurrentRef = useRef<() => void>(() => undefined);
-  const cutCurrentRef = useRef<() => void>(() => undefined);
-  const pasteCurrentRef = useRef<(line?: RichDocLine, element?: HTMLElement) => void>(() => undefined);
 
   function setTypingMarksBoth(marks: RichMarks) {
     typingMarksRef.current = marks;
@@ -296,11 +287,6 @@ export function RichDocEditor({
   function rememberSelection(next: EditorSelection | null) {
     selectionRef.current = next;
     setSelection(next);
-  }
-
-  function syncHistoryButtons() {
-    setCanUndo(historyRef.current.undo.length > 0);
-    setCanRedo(historyRef.current.redo.length > 0);
   }
 
   function currentHistoryEntry(): RichDocHistoryEntry {
@@ -325,7 +311,6 @@ export function RichDocEditor({
     pendingTyping.current = false;
     setTypingMarksBoth({});
     rememberSelection(null);
-    syncHistoryButtons();
     setDoc(clean);
     setSyncToken((token) => token + 1);
   }, [value]);
@@ -361,35 +346,6 @@ export function RichDocEditor({
     });
   }, [syncToken]);
 
-  useEffect(() => {
-    function onDocKey(event: KeyboardEvent) {
-      if (!(event.ctrlKey || event.metaKey)) return;
-      const target = event.target;
-      if (target instanceof HTMLElement && target.closest("input, textarea")) return;
-      const inLine = target instanceof HTMLElement && target.closest("[data-inline-editor]");
-      const key = event.key.toLowerCase();
-      if (key === "c" && !inLine) {
-        event.preventDefault();
-        event.stopPropagation();
-        copyCurrentRef.current();
-        return;
-      }
-      if (key === "x" && !inLine) {
-        event.preventDefault();
-        event.stopPropagation();
-        cutCurrentRef.current();
-        return;
-      }
-      if (key === "v" && !inLine) {
-        event.preventDefault();
-        event.stopPropagation();
-        pasteCurrentRef.current();
-      }
-    }
-    document.addEventListener("keydown", onDocKey, true);
-    return () => document.removeEventListener("keydown", onDocKey, true);
-  }, []);
-
   const commit = useCallback(
     (
       next: CampusRichDoc,
@@ -399,7 +355,6 @@ export function RichDocEditor({
       const historyKind = options?.history === undefined ? "action" : options.history;
       if (historyKind) {
         historyRef.current = pushRichDocHistory(historyRef.current, currentHistoryEntry(), historyKind);
-        syncHistoryButtons();
       }
       const clean = sanitizeRichDoc(next);
       const result = clean.blocks.length ? clean : emptyRichDoc();
@@ -547,7 +502,6 @@ export function RichDocEditor({
     const result = undoRichDocHistory(historyRef.current, currentHistoryEntry());
     if (!result) return;
     historyRef.current = result.history;
-    syncHistoryButtons();
     restoreHistoryEntry(result.entry);
   }
 
@@ -555,7 +509,6 @@ export function RichDocEditor({
     const result = redoRichDocHistory(historyRef.current, currentHistoryEntry());
     if (!result) return;
     historyRef.current = result.history;
-    syncHistoryButtons();
     restoreHistoryEntry(result.entry);
   }
 
@@ -566,19 +519,15 @@ export function RichDocEditor({
     return { blockIndex: line.blockIndex, itemIndex: line.itemIndex, start: 0, end: 0 };
   }
 
-  function buildClip(): RichClip | null {
+  function buildSelectionClip(): RichClip | null {
     const target = liveTarget();
-    const current = target?.selection ?? fallbackSelection();
-    if (!current) return null;
+    const current = target?.selection ?? selectionRef.current;
+    if (!current || current.start === current.end) return null;
     const inlines = target?.inlines ?? lineFromSelection(current)?.inlines;
     if (!inlines) return null;
-    if (current.start !== current.end) {
-      const sliced = sliceInlines(inlines, current.start, current.end);
-      if (!sliced.length) return null;
-      return { kind: "inlines", inlines: sliced };
-    }
-    const synced = setLineInlines(docRef.current, current.blockIndex, current.itemIndex, inlines);
-    return copyLineAsClip(synced, current.blockIndex, current.itemIndex);
+    const sliced = sliceInlines(inlines, current.start, current.end);
+    if (!sliced.length) return null;
+    return { kind: "inlines", inlines: sliced };
   }
 
   function lineFromSelection(current: EditorSelection) {
@@ -587,39 +536,30 @@ export function RichDocEditor({
     );
   }
 
-  function storeClip(clip: RichClip) {
+  function writeClipToEvent(event: React.ClipboardEvent, clip: RichClip) {
     rememberRichClip(clip);
-    const encoded = encodeRichClip(clip);
-    const clipboard = typeof navigator !== "undefined" ? navigator.clipboard : undefined;
-    if (clipboard?.writeText) void clipboard.writeText(encoded).catch(() => undefined);
-  }
-
-  function copyCurrent() {
-    const clip = buildClip();
-    if (!clip) return;
-    storeClip(clip);
-  }
-
-  function cutCurrent() {
-    const target = liveTarget();
-    const current = target?.selection ?? fallbackSelection();
-    const clip = buildClip();
-    if (!clip || !current) return;
-    storeClip(clip);
-    if (current.start !== current.end) {
-      const inlines = target?.inlines ?? lineFromSelection(current)?.inlines;
-      if (!inlines) return;
-      const [before] = splitInlinesAt(inlines, current.start);
-      const [, after] = splitInlinesAt(inlines, current.end);
-      commit(setLineInlines(docRef.current, current.blockIndex, current.itemIndex, [...before, ...after]), {
-        blockIndex: current.blockIndex,
-        itemIndex: current.itemIndex,
-        offset: current.start,
-      });
-      return;
+    const plain = richClipPlainText(clip);
+    event.clipboardData.setData("text/plain", plain);
+    try {
+      event.clipboardData.setData("text/campus-rich-clip", encodeRichClip(clip));
+    } catch {
+      /* certains navigateurs n’acceptent qu’un jeu restreint de types MIME */
     }
-    const result = deleteLine(docRef.current, current.blockIndex, current.itemIndex);
-    if (result) commit(result.doc, result.caret);
+  }
+
+  function cutSelection() {
+    const target = liveTarget();
+    const current = target?.selection;
+    if (!current || current.start === current.end) return;
+    const inlines = target?.inlines ?? lineFromSelection(current)?.inlines;
+    if (!inlines) return;
+    const [before] = splitInlinesAt(inlines, current.start);
+    const [, after] = splitInlinesAt(inlines, current.end);
+    commit(setLineInlines(docRef.current, current.blockIndex, current.itemIndex, [...before, ...after]), {
+      blockIndex: current.blockIndex,
+      itemIndex: current.itemIndex,
+      offset: current.start,
+    });
   }
 
   function applyClip(
@@ -662,101 +602,60 @@ export function RichDocEditor({
     commit(result.doc, result.caret);
   }
 
-  function ingestPastedText(raw: string, line?: RichDocLine, element?: HTMLElement) {
+  function ingestPastedText(plain: string, line?: RichDocLine, element?: HTMLElement, campusEncoded?: string) {
     if (pasteLock.current) return;
     pasteLock.current = true;
     queueMicrotask(() => {
       pasteLock.current = false;
     });
-    const clip = decodeRichClip(raw) ?? lastRememberedRichClip();
-    if (clip) {
-      applyClip(clip, line, element);
+    const resolved = resolveClipboardPaste(plain, campusEncoded);
+    if (!resolved) return;
+    if (resolved.mode === "rich") {
+      applyClip(resolved.clip, line, element);
       return;
     }
-    if (!raw || !line || !element) return;
-    pastePlainIntoLine(line, element, raw);
+    if (!line || !element) return;
+    pastePlainIntoLine(line, element, resolved.text);
   }
-
-  function pasteCurrent(line?: RichDocLine, element?: HTMLElement) {
-    const clip = lastRememberedRichClip();
-    if (!clip) return;
-    applyClip(clip, line, element);
-  }
-
-  useEffect(() => {
-    copyCurrentRef.current = copyCurrent;
-    cutCurrentRef.current = cutCurrent;
-    pasteCurrentRef.current = pasteCurrent;
-  });
 
   function handleHistoryKeys(event: React.KeyboardEvent) {
     const target = event.target;
     if (target instanceof HTMLElement && target.closest("input, textarea")) return false;
     const modifier = event.ctrlKey || event.metaKey;
     if (!modifier) return false;
-    if (event.key.toLowerCase() === "z") {
+    const key = event.key.toLowerCase();
+    if (key === "z") {
       event.preventDefault();
       event.stopPropagation();
       if (event.shiftKey) redo();
       else undo();
       return true;
     }
-    if (event.key.toLowerCase() === "y") {
+    if (key === "y") {
       event.preventDefault();
       event.stopPropagation();
       redo();
       return true;
     }
-    if (event.key.toLowerCase() === "c") {
-      const inEditor =
-        event.target instanceof HTMLElement && event.target.closest("[data-inline-editor]");
-      if (inEditor) return false;
+    if (key === "b") {
       event.preventDefault();
       event.stopPropagation();
-      copyCurrent();
+      applyMark("bold", !typingMarksRef.current.bold);
       return true;
     }
-    if (event.key.toLowerCase() === "x") {
-      const inEditor =
-        event.target instanceof HTMLElement && event.target.closest("[data-inline-editor]");
-      if (inEditor) return false;
+    if (key === "i") {
       event.preventDefault();
       event.stopPropagation();
-      cutCurrent();
+      applyMark("italic", !typingMarksRef.current.italic);
       return true;
     }
-    if (event.key.toLowerCase() === "v") {
-      const inEditor =
-        event.target instanceof HTMLElement && event.target.closest("[data-inline-editor]");
-      if (inEditor) return false;
+    if (key === "u") {
       event.preventDefault();
       event.stopPropagation();
-      void pasteCurrent();
+      applyMark("underline", !typingMarksRef.current.underline);
       return true;
     }
     return false;
-  }
-
-  const activeLine = selection
-    ? lines.find((entry) => entry.blockIndex === selection.blockIndex && entry.itemIndex === selection.itemIndex)
-    : undefined;
-  const activeKind = activeLine?.kind ?? "paragraph";
-
-  function applyStructure(type: RichStructureType) {
-    const live = liveTarget();
-    const current = live?.selection ?? selectionRef.current ?? fallbackSelection();
-    if (!current) return;
-    const withLive = live
-      ? setLineInlines(docRef.current, current.blockIndex, current.itemIndex, live.inlines)
-      : docRef.current;
-    const result = applyStructureAtVisualLine(
-      withLive,
-      current.blockIndex,
-      current.itemIndex,
-      current.start,
-      type,
-    );
-    commit(result.doc, result.caret);
   }
 
   function openLinkBar() {
@@ -929,8 +828,15 @@ export function RichDocEditor({
       native.inputType === "insertFromDrop"
     ) {
       event.preventDefault();
-      const raw = native.dataTransfer?.getData("text/plain") || native.data || "";
-      ingestPastedText(raw, line, element);
+      const transfer = native.dataTransfer;
+      let campus = "";
+      try {
+        campus = transfer?.getData("text/campus-rich-clip") ?? "";
+      } catch {
+        campus = "";
+      }
+      const raw = transfer?.getData("text/plain") || native.data || "";
+      ingestPastedText(raw, line, element, campus);
       return;
     }
     if (native.inputType === "insertParagraph") {
@@ -974,91 +880,53 @@ export function RichDocEditor({
         aria-label="Mise en forme"
         onKeyDown={(event) => handleHistoryKeys(event)}
       >
-        <div className="rich-doc-tool-group" role="group" aria-label="Historique">
-          <ToolButton label="Annuler (Ctrl+Z)" text="Annuler" disabled={!canUndo} onClick={undo} />
-          <ToolButton label="Rétablir (Ctrl+Y)" text="Rétablir" disabled={!canRedo} onClick={redo} />
-          <ToolButton label="Copier le bloc (Ctrl+C)" text="Copier" onClick={copyCurrent} />
-          <ToolButton label="Couper le bloc (Ctrl+X)" text="Couper" onClick={cutCurrent} />
-          <ToolButton label="Coller (Ctrl+V)" text="Coller" onClick={() => pasteCurrent()} />
-        </div>
-        <div className="rich-doc-tool-group" role="group" aria-label="Texte">
-          <ToolButton label="Gras" active={Boolean(activeMarks.bold)} onClick={() => applyMark("bold", !activeMarks.bold)}>
-            <strong>B</strong>
-          </ToolButton>
-          <ToolButton
-            label="Italique"
-            active={Boolean(activeMarks.italic)}
-            onClick={() => applyMark("italic", !activeMarks.italic)}
-          >
-            <em>I</em>
-          </ToolButton>
-          <ToolButton
-            label="Souligné"
-            active={Boolean(activeMarks.underline)}
-            onClick={() => applyMark("underline", !activeMarks.underline)}
-          >
-            <u>S</u>
-          </ToolButton>
-          <ToolButton
-            label="Surligner"
-            active={Boolean(activeMarks.highlight)}
-            onClick={() => applyMark("highlight", !activeMarks.highlight)}
-          >
-            <span className="rich-doc-highlight-mark">Abc</span>
-          </ToolButton>
+        <div className="rich-doc-toolbar-main">
+          <div className="rich-doc-tool-group" role="group" aria-label="Texte">
+            <ToolButton label="Gras" active={Boolean(activeMarks.bold)} onClick={() => applyMark("bold", !activeMarks.bold)}>
+              <strong>B</strong>
+            </ToolButton>
+            <ToolButton
+              label="Italique"
+              active={Boolean(activeMarks.italic)}
+              onClick={() => applyMark("italic", !activeMarks.italic)}
+            >
+              <em>I</em>
+            </ToolButton>
+            <ToolButton
+              label="Souligné"
+              active={Boolean(activeMarks.underline)}
+              onClick={() => applyMark("underline", !activeMarks.underline)}
+            >
+              <u>S</u>
+            </ToolButton>
+            <ToolButton
+              label="Surligner"
+              active={Boolean(activeMarks.highlight)}
+              onClick={() => applyMark("highlight", !activeMarks.highlight)}
+            >
+              <span className="rich-doc-highlight-mark">Abc</span>
+            </ToolButton>
+          </div>
+
+          <div className="rich-doc-tool-group" role="group" aria-label="Couleur du texte">
+            {RICH_TEXT_COLOR_IDS.map((color) => (
+              <button
+                key={color}
+                type="button"
+                className={`rich-doc-swatch${activeMarks.color === color ? " is-active" : ""}`}
+                title={RICH_TEXT_COLOR_LABELS[color]}
+                aria-label={RICH_TEXT_COLOR_LABELS[color]}
+                aria-pressed={activeMarks.color === color}
+                data-color-swatch={color}
+                style={{ background: RICH_TEXT_COLOR_HEX[color] }}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => applyMark("color", activeMarks.color === color ? undefined : color)}
+              />
+            ))}
+          </div>
         </div>
 
-        <div className="rich-doc-tool-group" role="group" aria-label="Couleur du texte">
-          {RICH_TEXT_COLOR_IDS.map((color) => (
-            <button
-              key={color}
-              type="button"
-              className={`rich-doc-swatch${activeMarks.color === color ? " is-active" : ""}`}
-              title={RICH_TEXT_COLOR_LABELS[color]}
-              aria-label={RICH_TEXT_COLOR_LABELS[color]}
-              aria-pressed={activeMarks.color === color}
-              data-color-swatch={color}
-              style={{ background: RICH_TEXT_COLOR_HEX[color] }}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => applyMark("color", activeMarks.color === color ? undefined : color)}
-            />
-          ))}
-        </div>
-
-        <div className="rich-doc-tool-group" role="group" aria-label="Ligne">
-          <ToolButton
-            label="Texte normal"
-            text="Texte"
-            active={activeKind === "paragraph"}
-            onClick={() => applyStructure("paragraph")}
-          />
-          <ToolButton
-            label="Titre"
-            text="Titre"
-            active={activeKind === "heading"}
-            onClick={() => applyStructure("heading")}
-          />
-          <ToolButton
-            label="Liste à puces"
-            text="Puces"
-            active={activeKind === "bulletList"}
-            onClick={() => applyStructure("bulletList")}
-          />
-          <ToolButton
-            label="Liste numérotée"
-            text="1. 2. 3."
-            active={activeKind === "orderedList"}
-            onClick={() => applyStructure("orderedList")}
-          />
-          <ToolButton
-            label="Liste à cocher"
-            text="Cases"
-            active={activeKind === "checklist"}
-            onClick={() => applyStructure("checklist")}
-          />
-        </div>
-
-        <div className="rich-doc-tool-group" role="group" aria-label="Lien">
+        <div className="rich-doc-toolbar-link rich-doc-tool-group" role="group" aria-label="Lien">
           <ToolButton
             label="Insérer un lien"
             text="Lien"
@@ -1193,22 +1061,32 @@ export function RichDocEditor({
                   onFocus={(event) => syncCaretFromLine(line, event.currentTarget)}
                   onKeyDown={(event) => handleKeyDown(line, event.currentTarget, event)}
                   onCopy={(event) => {
-                    const clip = buildClip();
+                    const clip = buildSelectionClip();
                     if (!clip) return;
                     event.preventDefault();
-                    storeClip(clip);
-                    event.clipboardData.setData("text/plain", encodeRichClip(clip));
+                    writeClipToEvent(event, clip);
                   }}
                   onCut={(event) => {
-                    const clip = buildClip();
+                    const clip = buildSelectionClip();
                     if (!clip) return;
                     event.preventDefault();
-                    event.clipboardData.setData("text/plain", encodeRichClip(clip));
-                    cutCurrent();
+                    writeClipToEvent(event, clip);
+                    cutSelection();
                   }}
                   onPaste={(event) => {
                     event.preventDefault();
-                    ingestPastedText(event.clipboardData.getData("text/plain"), line, event.currentTarget);
+                    let campus = "";
+                    try {
+                      campus = event.clipboardData.getData("text/campus-rich-clip");
+                    } catch {
+                      campus = "";
+                    }
+                    ingestPastedText(
+                      event.clipboardData.getData("text/plain") || "",
+                      line,
+                      event.currentTarget,
+                      campus,
+                    );
                   }}
                 />
               </div>
@@ -1218,10 +1096,10 @@ export function RichDocEditor({
       </div>
 
       <p className="rich-doc-hint">
-        Dans une liste : Entrée termine la liste et crée un nouveau bloc. Maj + Entrée ajoute la puce, le numéro ou la case suivante.
-        Hors liste, Entrée crée une ligne. Maj + Entrée ajoute un retour à la ligne dans le même bloc.
-        Ctrl+C copie, Ctrl+X coupe, Ctrl+V colle. Suppr efface la ligne en surbrillance dans la vue semaine.
-        Souligné n’est pas un lien. Lien : sur la sélection, ou sur le mot sous le curseur. Ctrl+Z annule.
+        Entrée crée un nouveau paragraphe. Maj + Entrée ajoute un retour à la ligne.
+        Ctrl+C copie, Ctrl+X coupe, Ctrl+V colle, Ctrl+Z annule.
+        Ctrl+B met en gras, Ctrl+I en italique et Ctrl+U souligne.
+        Le lien peut être appliqué au texte sélectionné ou au mot sous le curseur.
       </p>
     </div>
   );

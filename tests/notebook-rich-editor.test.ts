@@ -111,7 +111,7 @@ test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async (
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.match(editor, /parseInlinesFromHtml/);
   assert.match(editor, /applyMarkToRange/);
-  assert.match(editor, /applyStructureAtVisualLine/);
+  assert.doesNotMatch(editor, /applyStructure\(/);
   assert.match(editor, /marksInRange/);
   assert.match(editor, /setCharacterSelection/);
   assert.match(editor, /characterOffset/);
@@ -120,8 +120,11 @@ test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async (
   assert.match(editor, /exitListAtCaret/);
   assert.match(editor, /removeLine/);
   assert.match(editor, /data-color-swatch/);
-  assert.match(editor, /Liste numérotée/);
-  assert.match(editor, /Texte normal/);
+  assert.doesNotMatch(editor, /Liste numérotée/);
+  assert.doesNotMatch(editor, /Texte normal/);
+  assert.doesNotMatch(editor, /text="Titre"/);
+  assert.doesNotMatch(editor, /text="Annuler"/);
+  assert.doesNotMatch(editor, /text="Copier"/);
   assert.match(editor, /rich-doc-link-bar/);
   assert.doesNotMatch(editor, /showExtended/);
   assert.doesNotMatch(editor, /Blocs de la semaine/);

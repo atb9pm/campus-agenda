@@ -2371,14 +2371,24 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .rich-doc-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 14px;
+  gap: 6px 10px;
   align-items: center;
   max-width: 100%;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: #f4f7fb;
   overflow-x: hidden;
+}
+.rich-doc-toolbar-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  min-width: 0;
+}
+.rich-doc-toolbar-link {
+  margin-left: auto;
 }
 .rich-doc-tool-group {
   display: flex;
@@ -2387,7 +2397,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   align-items: center;
 }
 .rich-doc-tool-group + .rich-doc-tool-group {
-  padding-left: 12px;
+  padding-left: 10px;
   border-left: 1px solid #d7e0ec;
 }
 .rich-doc-toolbar button {
