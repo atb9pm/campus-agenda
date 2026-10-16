@@ -435,32 +435,51 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 }
 .student-zone-icon { display: inline-flex; color: var(--navy); }
 .student-panel-empty { margin: 0; color: #7b879c; font-size: 15px; }
-.student-control-preview-list { display: grid; gap: 0; }
+.student-control-preview-list { display: grid; gap: 0; min-width: 0; }
 .student-control-row {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
   align-items: start;
   margin: 0;
-  padding: 14px 0;
+  padding: 16px 0;
   border: 0;
   border-bottom: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
+  min-width: 0;
 }
 .student-control-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.student-control-row.student-next-control {
+  padding: 16px 0;
+}
+.student-control-row:last-child.student-next-control { padding-bottom: 0; }
+.student-control-row > .student-course-chip {
+  margin: 0;
+  width: fit-content;
+  max-width: 100%;
+  justify-self: start;
+  overflow-wrap: anywhere;
+}
+.student-control-main {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  min-width: 0;
+}
 .student-control-date { display: grid; justify-items: start; color: var(--navy); }
 .student-control-day { font-size: 22px; font-weight: 700; line-height: 1; }
 .student-control-month { margin-top: 2px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: lowercase; }
-.student-control-card-body { min-width: 0; }
+.student-control-card-body { min-width: 0; overflow-wrap: anywhere; }
 .student-control-row.urgency-today .student-control-date,
-.student-control-row.urgency-today strong,
+.student-control-row.urgency-today .student-control-card-body > strong,
 .student-control-row.urgency-soon .student-control-date,
-.student-control-row.urgency-soon strong {
+.student-control-row.urgency-soon .student-control-card-body > strong {
   color: #9b1c1c;
 }
 .student-control-row.urgency-later .student-control-date,
-.student-control-row.urgency-later strong { color: var(--navy); }
+.student-control-row.urgency-later .student-control-card-body > strong { color: var(--navy); }
 .student-planning-date-visual {
   display: grid;
   justify-items: center;
@@ -744,9 +763,8 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .student-upcoming-tests { margin-top: 0; padding: 22px 24px; border: 1px solid var(--line); border-radius: 18px; background: #fff; box-shadow: none; }
 .student-upcoming-tests-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 0; }
 .student-upcoming-tests-date { display: block; color: var(--blue); font-size: 10px; font-weight: 700; letter-spacing: .05em; }
-.student-control-row .student-upcoming-tests-branch { display: inline-flex; margin: 8px 0 0; }
 .student-upcoming-tests-branch:empty { display: none; }
-.student-control-row strong { display: block; margin: 0; color: var(--navy); font-size: 16px; font-weight: 700; }
+.student-control-row strong { display: block; margin: 0; font-size: 16px; font-weight: 700; }
 .student-upcoming-tests-detail { display: block; margin-top: 2px; color: #52627f; font-size: 14px; font-weight: 400; }
 .student-upcoming-tests-empty { margin: 0; color: #7b879c; font-size: 15px; }
 
@@ -2830,11 +2848,17 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   .student-controls-preview,
   .student-upcoming-tests,
   .student-history-panel { padding: 18px 16px; border-radius: 14px; }
-  .student-next-control { padding: 12px 0; }
+  .student-control-row.student-next-control { padding: 12px 0; }
   .student-control-row strong { font-size: 15px; }
+  .student-controls-preview,
+  .student-upcoming-tests,
+  .student-control-row,
+  .student-control-main { max-width: 100%; overflow-x: hidden; }
+  .student-course-chip { max-width: 100%; }
   .student-branch-block h2,
   .student-upcoming-tests-branch,
-  .student-control-row strong { overflow-wrap: anywhere; }
+  .student-control-row strong,
+  .student-control-row > .student-course-chip { overflow-wrap: anywhere; }
   .student-course-day-card h1 { font-size: 32px; }
   .student-branch-item .rich-doc-view,
   .student-branch-item .rich-doc-view p,

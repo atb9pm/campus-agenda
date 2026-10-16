@@ -234,6 +234,23 @@ test("sources — Cours du jour, Contrôles à venir, RichDoc unique, aucun À v
   assert.match(controls, /Aucun contrôle planifié/);
   assert.match(controls, /futureTests\.map/);
   assert.doesNotMatch(controls, /Voir tout le planning/);
+  assert.equal([...controls.matchAll(/function ControlRow/g)].length, 1);
+  assert.match(controls, /ControlRow key=\{entry\.item\.id\}/);
+  const chipAt = controls.indexOf("student-course-chip");
+  const timeAt = controls.indexOf("<time");
+  const titleAt = controls.indexOf("{entry.item.title}");
+  assert.ok(chipAt > 0 && chipAt < timeAt, "branche avant la date");
+  assert.ok(timeAt < titleAt, "date avant le titre");
+  assert.match(controls, /student-visually-hidden/);
+  assert.match(controls, /dateTime=\{entry\.slot\.date\.toISOString\(\)\}/);
+  assert.match(css, /\.student-control-main \{[\s\S]{0,160}grid-template-columns: 52px minmax\(0, 1fr\)/);
+  assert.match(css, /\.student-control-row > \.student-course-chip \{[\s\S]{0,220}width: fit-content/);
+  assert.match(css, /\.student-control-row > \.student-course-chip \{[\s\S]{0,220}justify-self: start/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.student-control-row[\s\S]{0,160}overflow-x: hidden/);
+  assert.doesNotMatch(
+    css,
+    /@media \(max-width: 760px\)[\s\S]*\.student-course-chip \{ max-width: 100%; overflow-x: hidden; \}/,
+  );
   assert.doesNotMatch(dashboard, />À venir</);
   assert.doesNotMatch(dashboard, /Prochainement/);
   assert.doesNotMatch(homework, />À venir</);
