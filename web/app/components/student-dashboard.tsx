@@ -20,7 +20,6 @@ const TABS: { id: Exclude<StudentDashboardTab, "historique">; label: string }[] 
 export function StudentDashboard({
   appVersion,
   classroomName,
-  sessionLabel,
   displayCourseDay,
   followingCourseDay,
   historyOpen,
@@ -57,7 +56,7 @@ export function StudentDashboard({
   onTabChange: (tab: StudentDashboardTab) => void;
 }) {
   const contentTab = tab === "historique" ? "tout" : tab;
-  const showControlsPreview = followingCourseDay && contentTab === "tout";
+  const showControlsPreview = contentTab === "tout";
 
   return (
     <div
@@ -108,9 +107,7 @@ export function StudentDashboard({
 
         <section className="student-course-day-card student-dashboard-hero" aria-labelledby="student-course-day-title">
           <div className="student-dashboard-hero-copy">
-            <p className="eyebrow">
-              {classroomName} · {sessionLabel}
-            </p>
+            <p className="eyebrow">{classroomName}</p>
             {displayCourseDay ? (
               <>
                 <p className="student-week-label">{formatSchoolWeekLabel(displayCourseDay)}</p>
@@ -157,7 +154,6 @@ export function StudentDashboard({
                     futureTests={futureTests}
                     planning={planning}
                     today={today}
-                    onSeeAll={() => onTabChange("controles")}
                   />
                 ) : null}
               </div>

@@ -5,10 +5,7 @@ import {
   type UpcomingTestEntry,
 } from "@campus/features/evaluations";
 import {
-  compactControlPresentation,
-  planningDayParts,
-  previewUpcomingControls,
-  STUDENT_CONTROL_PREVIEW_LIMIT,
+  controlAgendaDateParts,
   type ControlPlanningWeek,
 } from "@campus/features/student";
 import { decodeRichDetail, isPlaceholderDetail } from "@campus/features/class-notebook";
@@ -19,41 +16,38 @@ export function studentUpcomingPlainDetail(item: PrototypeAgendaItem): string | 
   return detail || null;
 }
 
-function ControlCard({
+function ControlRow({
   entry,
   today,
-  compact,
 }: {
   entry: UpcomingTestEntry;
   today: Date;
-  compact: boolean;
 }) {
   const daysUntil = calendarDaysBetween(today, entry.slot.date);
-  const presentation = compactControlPresentation(daysUntil, entry.slot.date);
+  const parts = controlAgendaDateParts(entry.slot.date);
   const detail = studentUpcomingPlainDetail(entry.item);
+  const urgency = daysUntil <= 0 ? "today" : daysUntil <= 7 ? "soon" : "later";
+  const dateLabel = formatCourseDayHeading(entry.slot);
   return (
     <article
-      className={`student-next-control student-control-card urgency-${presentation.urgency}`}
+      className={`student-next-control student-control-row urgency-${urgency}`}
       data-next-control=""
       data-control-id={entry.item.id}
     >
-      <div className="student-control-badge">
-        <span className="student-control-badge-label">{presentation.badge}</span>
-      </div>
+      <time className="student-control-date" dateTime={entry.slot.date.toISOString()}>
+        <span className="student-control-day" aria-hidden="true">
+          {parts.day}
+        </span>
+        <span className="student-control-month" aria-hidden="true">
+          {parts.month}
+        </span>
+        <span className="student-visually-hidden">{dateLabel}</span>
+      </time>
       <div className="student-control-card-body">
-        <p className="student-item-type">
-          {presentation.warn ? (
-            <span className="student-next-control-warn" aria-hidden="true">⚠</span>
-          ) : null}
-          CONTRÔLE
-        </p>
-        {entry.subjectName ? (
-          <p className="student-upcoming-tests-branch">{entry.subjectName}</p>
-        ) : null}
         <strong>{entry.item.title}</strong>
         {detail ? <span className="student-next-control-detail student-upcoming-tests-detail">{detail}</span> : null}
-        {compact && presentation.urgency === "week" ? (
-          <p className="student-next-control-date">{formatCourseDayHeading(entry.slot)}</p>
+        {entry.subjectName ? (
+          <p className="student-upcoming-tests-branch student-course-chip">{entry.subjectName}</p>
         ) : null}
       </div>
     </article>
@@ -65,7 +59,6 @@ export function StudentControlsPanel({
   futureTests,
   planning,
   today,
-  onSeeAll,
 }: {
   mode: "preview" | "planning";
   futureTests: UpcomingTestEntry[];
@@ -73,84 +66,39 @@ export function StudentControlsPanel({
   today: Date;
   onSeeAll?: () => void;
 }) {
-  if (mode === "preview") {
-    const preview = previewUpcomingControls(futureTests);
-    const extra = futureTests.length > STUDENT_CONTROL_PREVIEW_LIMIT;
-    return (
-      <aside
-        className="student-controls-preview"
-        data-panel="prochains-controles"
-        aria-labelledby="student-next-controls-title"
-      >
-        <h2 id="student-next-controls-title">Prochains contrôles</h2>
-        {preview.length ? (
-          <div className="student-control-preview-list">
-            {preview.map((entry) => (
-              <ControlCard key={entry.item.id} entry={entry} today={today} compact />
-            ))}
-          </div>
-        ) : (
-          <p className="student-upcoming-tests-empty">Aucun contrôle planifié à venir pour votre classe.</p>
-        )}
-        {extra && onSeeAll ? (
-          <button type="button" className="student-see-all-controls" onClick={onSeeAll}>
-            Voir tout le planning
-          </button>
-        ) : null}
-      </aside>
-    );
-  }
+  const title = mode === "preview" ? "Contrôles à venir" : "Contrôles";
+  const headingId = mode === "preview" ? "student-next-controls-title" : "student-upcoming-tests-title";
+  void planning;
 
   return (
     <section
-      className="student-upcoming-tests student-control-timeline"
-      data-panel="controles"
-      aria-labelledby="student-upcoming-tests-title"
+      className={mode === "preview" ? "student-controls-preview" : "student-upcoming-tests student-control-timeline"}
+      data-panel={mode === "preview" ? "prochains-controles" : "controles"}
+      aria-labelledby={headingId}
     >
-      <h2 id="student-upcoming-tests-title">Planning des contrôles</h2>
-      {planning.length ? (
-        <div className="student-control-planning">
-          {planning.map((week) => (
-            <section
-              className="student-control-planning-week"
-              key={`${week.schoolWeekNumber}-${week.weekKind ?? ""}`}
-            >
-              <h3 className="student-week-label">{week.weekLabel}</h3>
-              {week.days.map((day) => {
-                const parts = planningDayParts(day.slot.date);
-                return (
-                  <div className="student-control-planning-day student-planning-row" key={day.dateKey}>
-                    <div className="student-planning-date">
-                      <span className="student-planning-date-visual" aria-hidden="true">
-                        <span className="student-planning-day-number">{parts.dayNumber}</span>
-                        <span className="student-planning-weekday">{parts.weekday}</span>
-                      </span>
-                      <span className="student-visually-hidden">{formatCourseDayHeading(day.slot)}</span>
-                    </div>
-                    <div className="student-planning-rail" aria-hidden="true" />
-                    <ol className="student-upcoming-tests-list">
-                      {day.entries.map((entry) => (
-                        <li key={entry.item.id} data-control-id={entry.item.id}>
-                          {entry.subjectName ? (
-                            <span className="student-upcoming-tests-branch">{entry.subjectName}</span>
-                          ) : null}
-                          <strong>{entry.item.title}</strong>
-                          {studentUpcomingPlainDetail(entry.item) ? (
-                            <span className="student-upcoming-tests-detail">
-                              {studentUpcomingPlainDetail(entry.item)}
-                            </span>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                );
-              })}
-            </section>
+      <h2 id={headingId}>
+        {mode === "preview" ? (
+          <span className="student-zone-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M7 3.5v3M17 3.5v3M4.5 8h15M6 5.5h12A1.5 1.5 0 0 1 19.5 7v12A1.5 1.5 0 0 1 18 20.5H6A1.5 1.5 0 0 1 4.5 19V7A1.5 1.5 0 0 1 6 5.5Z"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
+        ) : null}
+        {title}
+      </h2>
+      {futureTests.length ? (
+        <div className="student-control-preview-list">
+          {futureTests.map((entry) => (
+            <ControlRow key={entry.item.id} entry={entry} today={today} />
           ))}
         </div>
       ) : (
-        <p className="student-upcoming-tests-empty">Aucun contrôle planifié à venir pour votre classe.</p>
+        <p className="student-upcoming-tests-empty">Aucun contrôle planifié.</p>
       )}
     </section>
   );

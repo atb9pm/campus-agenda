@@ -74,9 +74,11 @@ test("keeps the validated teacher essentials and social preview", async () => {
     readFile(new URL("../app/components/student-controls-panel.tsx", import.meta.url), "utf8"),
   ]);
 
-  assert.match(homeworkPanel, /HOMEWORK: "DEVOIR"/);
-  assert.match(controlsPanel, /CONTRÔLE/);
-  assert.match(homeworkPanel, /INFORMATION: "INFORMATION"/);
+  assert.match(homeworkPanel, /Cours du jour/);
+  assert.match(homeworkPanel, /RichDocView/);
+  assert.match(controlsPanel, /Contrôles à venir/);
+  assert.doesNotMatch(homeworkPanel, /HOMEWORK: "DEVOIR"/);
+  assert.doesNotMatch(homeworkPanel, /INFORMATION: "INFORMATION"/);
   assert.match(page, /MesCoursPanel/);
   assert.match(page, /ControlPlanningPanel/);
   assert.match(page, /MaSemainePanel/);

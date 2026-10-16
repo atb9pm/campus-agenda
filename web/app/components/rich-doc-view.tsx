@@ -18,16 +18,25 @@ const COMPACT_LINE_LIMIT = 6;
 
 function InlineView({ inline, navigateLinks }: { inline: RichInline; navigateLinks: boolean }) {
   const marks = inline.marks;
+  const markStyle = {
+    ...(marks?.color ? { color: RICH_TEXT_COLOR_HEX[marks.color] } : {}),
+    ...(marks?.highlight ? { background: RICH_HIGHLIGHT_HEX } : {}),
+  };
   let node: ReactNode = inline.text;
+  if (marks?.color || marks?.highlight) {
+    node = marks?.highlight ? (
+      <mark data-rich-mark="highlight" style={markStyle}>
+        {node}
+      </mark>
+    ) : (
+      <span data-rich-mark="color" style={markStyle}>
+        {node}
+      </span>
+    );
+  }
   if (marks?.bold) node = <strong>{node}</strong>;
   if (marks?.italic) node = <em>{node}</em>;
   if (marks?.underline) node = <u>{node}</u>;
-  if (marks?.highlight) {
-    node = <mark style={{ background: RICH_HIGHLIGHT_HEX }}>{node}</mark>;
-  }
-  if (marks?.color) {
-    node = <span style={{ color: RICH_TEXT_COLOR_HEX[marks.color] }}>{node}</span>;
-  }
   if (marks?.href) {
     node = navigateLinks ? (
       <a className="rich-doc-hyperlink" href={marks.href} target="_blank" rel="noreferrer">

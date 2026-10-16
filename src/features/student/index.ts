@@ -16,6 +16,7 @@ export {
   buildStudentCourseDaySections,
   compactControlPresentation,
   compareStudentPublications,
+  controlAgendaDateParts,
   formatCompactControlDate,
   formatNextControlHeadline,
   groupControlPlanning,

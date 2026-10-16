@@ -279,10 +279,14 @@ export function collectClassTestEntries(
     if (item.classroomId !== classroomId || item.type !== "TEST") continue;
     const week = weeks.find((entry) => entry.number === item.schoolWeekNumber);
     if (!week || !Number.isInteger(item.day) || item.day < 0 || item.day > 4) continue;
+    const annual = item.annualCourseId?.trim() || "";
+    const byAnnual = annual
+      ? catalog.subjects.find((subject) => subject.annualCourseId === annual)
+      : undefined;
     entries.push({
       item,
       slot: slotFromWeekAndDay(week, item.day),
-      subjectName: displayBranchLabel(getSubjectById(catalog, item.subjectId)?.name),
+      subjectName: displayBranchLabel(byAnnual?.name ?? getSubjectById(catalog, item.subjectId)?.name),
       teacherName: getTeacherById(catalog, item.authorTeacherId)?.displayName ?? "Enseignant",
     });
   }
