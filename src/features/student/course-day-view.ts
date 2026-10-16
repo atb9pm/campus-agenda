@@ -17,38 +17,64 @@ export function filterItemsForCourseDay(
   );
 }
 
+function publicationGroupKey(item: PrototypeAgendaItem): string {
+  return item.annualCourseId?.trim() || item.subjectId;
+}
+
+function subjectForPublicationGroup(
+  key: string,
+  sample: PrototypeAgendaItem,
+  subjects: Subject[],
+): Subject {
+  const byAnnual = subjects.find((subject) => subject.annualCourseId === key);
+  if (byAnnual) return byAnnual;
+  const byId = subjects.find((subject) => subject.id === sample.subjectId || subject.id === key);
+  if (byId) return byId;
+  return {
+    id: key,
+    classroomId: sample.classroomId,
+    name: "",
+    annualCourseId: sample.annualCourseId ?? null,
+  };
+}
+
 export function groupItemsBySubject(
   items: PrototypeAgendaItem[],
   subjects: Subject[],
 ): SubjectAgendaGroup[] {
-  const subjectById = new Map(subjects.map((subject) => [subject.id, subject]));
   const grouped = new Map<string, PrototypeAgendaItem[]>();
+  const subjectByKey = new Map<string, Subject>();
 
   for (const item of items) {
-    if (!subjectById.has(item.subjectId)) {
-      subjectById.set(item.subjectId, {
-        id: item.subjectId,
-        classroomId: item.classroomId,
-        name: "",
-      });
+    const key = publicationGroupKey(item);
+    if (!subjectByKey.has(key)) {
+      subjectByKey.set(key, subjectForPublicationGroup(key, item, subjects));
     }
-    const bucket = grouped.get(item.subjectId) ?? [];
+    const bucket = grouped.get(key) ?? [];
     bucket.push(item);
-    grouped.set(item.subjectId, bucket);
+    grouped.set(key, bucket);
   }
 
-  const ordered = [...subjects];
-  for (const subject of subjectById.values()) {
-    if (!ordered.some((entry) => entry.id === subject.id)) ordered.push(subject);
+  const orderedKeys: string[] = [];
+  for (const subject of subjects) {
+    const key = subject.annualCourseId?.trim() || subject.id;
+    if (grouped.has(key) && !orderedKeys.includes(key)) orderedKeys.push(key);
+    if (grouped.has(subject.id) && !orderedKeys.includes(subject.id)) orderedKeys.push(subject.id);
+  }
+  for (const key of grouped.keys()) {
+    if (!orderedKeys.includes(key)) orderedKeys.push(key);
   }
 
-  return ordered
-    .map((subject) => ({
-      subject: {
-        ...subject,
-        name: displayBranchLabel(subject.name),
-      },
-      items: grouped.get(subject.id) ?? [],
-    }))
+  return orderedKeys
+    .map((key) => {
+      const subject = subjectByKey.get(key)!;
+      return {
+        subject: {
+          ...subject,
+          name: displayBranchLabel(subject.name),
+        },
+        items: grouped.get(key) ?? [],
+      };
+    })
     .filter((group) => group.items.length > 0);
 }

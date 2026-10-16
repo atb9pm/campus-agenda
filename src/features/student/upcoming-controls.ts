@@ -214,6 +214,16 @@ export function formatCompactControlDate(date: Date): string {
   return `${day} ${month}`;
 }
 
+export function controlAgendaDateParts(date: Date): { day: string; month: string } {
+  const day = new Intl.DateTimeFormat("fr-CH", { day: "numeric" }).format(date);
+  const month = new Intl.DateTimeFormat("fr-CH", { month: "short" })
+    .format(date)
+    .replace(".", "")
+    .trim()
+    .toLowerCase();
+  return { day, month };
+}
+
 export function planningDayParts(date: Date): { dayNumber: string; weekday: string } {
   const dayNumber = new Intl.DateTimeFormat("fr-CH", { day: "numeric" }).format(date);
   const weekday = new Intl.DateTimeFormat("fr-CH", { weekday: "short" })

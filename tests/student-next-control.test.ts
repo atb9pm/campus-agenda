@@ -14,7 +14,6 @@ import {
 import { APP_VERSION } from "../src/lib/app-version.ts";
 import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 import {
-  STUDENT_CONTROL_PREVIEW_LIMIT,
   buildStudentCourseDaySections,
   compactControlPresentation,
   compareStudentPublications,
@@ -24,7 +23,6 @@ import {
   msUntilNextLocalMidnight,
   nextControlHeadlineForEntries,
   nextControlsForSubject,
-  previewUpcomingControls,
   studentHomeworkOnlySections,
   studentTodoSections,
   studentCalendarDateNeedsRefresh,
@@ -303,13 +301,10 @@ test("17 — prefers-reduced-motion désactive l’animation", async () => {
     readFile(new URL("../web/app/components/student-controls-panel.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(css, /@keyframes student-control-warn-pulse/);
-  assert.match(css, /prefers-reduced-motion: no-preference[\s\S]{0,180}\.student-next-control-warn[\s\S]{0,80}animation: student-control-warn-pulse/);
   assert.match(css, /prefers-reduced-motion: reduce[\s\S]{0,180}animation: none !important/);
   assert.doesNotMatch(css, /\.student-next-control \{[^}]*animation:/);
-  assert.match(css, /\.student-control-badge \{[\s\S]{0,220}animation: none/);
-  assert.doesNotMatch(controls, /student-control-badge\$\{presentation\.warn/);
-  assert.doesNotMatch(controls, /student-control-badge student-next-control-warn/);
-  assert.match(controls, /presentation\.warn \? \([\s\S]{0,120}student-next-control-warn/);
+  assert.match(controls, /student-visually-hidden/);
+  assert.match(controls, /controlAgendaDateParts/);
 });
 
 test("jours calendaires — J-7 à partir de la date locale, pas de l’heure", () => {
@@ -404,15 +399,17 @@ test("sources — Cours extrait le prochain contrôle, Planning réutilise les m
   assert.match(page, /visibilitychange/);
   assert.match(page, /msUntilNextLocalMidnight/);
   assert.match(page, /useState<StudentDashboardTab>\("tout"\)/);
-  assert.match(controls, /Planning des contrôles/);
-  assert.match(dashboard, /onTabChange\("controles"\)/);
-  assert.match(controls, /Voir tout le planning/);
+  assert.match(controls, /Contrôles à venir/);
+  assert.match(controls, /"Contrôles"/);
+  assert.match(dashboard, /onTabChange=\{setStudentMobileTab\}|onTabChange/);
+  assert.doesNotMatch(controls, /Voir tout le planning/);
   assert.doesNotMatch(dashboard, /role="tablist"/);
   assert.match(dashboard, /aria-pressed=\{selected\}/);
   assert.match(controls, /student-next-control/);
   assert.match(controls, /studentUpcomingPlainDetail/);
-  assert.match(homework, /DEVOIR/);
-  assert.match(homework, /INFORMATION/);
+  assert.match(homework, /Cours du jour/);
+  assert.doesNotMatch(homework, /DEVOIR/);
+  assert.doesNotMatch(homework, /INFORMATION/);
   assert.doesNotMatch(page, /useMemo\(\(\) => new Date\(\), \[\]\)/);
   assert.doesNotMatch(page, /studentUpcomingHeadline/);
   assert.doesNotMatch(page, /Branche non définie/);
@@ -421,7 +418,7 @@ test("sources — Cours extrait le prochain contrôle, Planning réutilise les m
   assert.doesNotMatch(logic, /title\.localeCompare\(right\.title, "fr"\)/);
 });
 
-test("tableau de bord — Tout n’affiche pas les TEST dans À faire", () => {
+test("tableau de bord — Tout n’affiche pas les TEST dans Cours du jour", () => {
   const today = monday("2026-09-28");
   const sections = buildStudentCourseDaySections(
     [HOMEWORK_MOTEUR, INFO, REVISION],
@@ -442,14 +439,11 @@ test("tableau de bord — Tout n’affiche pas les TEST dans À faire", () => {
   assert.ok(!homework.some((section) => section.publications.some((entry) => entry.type === "TEST")));
 });
 
-test("tableau de bord — aperçu limité à 3 contrôles, planning complet ensuite", () => {
+test("tableau de bord — colonne Contrôles à venir liste tous les futurs, chrono", () => {
   const today = monday("2026-09-28");
   const entries = future(today);
   assert.ok(entries.length >= 3);
-  const preview = previewUpcomingControls(entries);
-  assert.equal(preview.length, STUDENT_CONTROL_PREVIEW_LIMIT);
-  assert.equal(preview[0]?.item.title, "Révision");
-  assert.equal(preview.length < entries.length, true);
+  assert.equal(entries[0]?.item.title, "Révision");
   const planning = groupControlPlanning(entries);
   const plannedIds = planning.flatMap((week) => week.days.flatMap((day) => day.entries.map((entry) => entry.item.id)));
   assert.deepEqual(plannedIds, entries.map((entry) => entry.item.id));
@@ -489,7 +483,7 @@ test("tableau de bord — aperçu professeur et cours précédents restent branc
   assert.match(dashboard, /student-history-anchor desktop-only/);
   assert.match(dashboard, />\s*Passés\s*</);
   assert.match(controls, /student-visually-hidden/);
-  assert.match(controls, /formatCourseDayHeading\(day\.slot\)/);
+  assert.match(controls, /formatCourseDayHeading\(entry\.slot\)/);
   assert.doesNotMatch(page, /TYPE_LABELS/);
   assert.doesNotMatch(page, /void TYPE_LABELS/);
 });
