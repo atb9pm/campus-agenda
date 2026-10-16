@@ -408,7 +408,10 @@ test("sources — Cours extrait le prochain contrôle, Planning réutilise les m
   assert.match(controls, /student-next-control/);
   assert.match(controls, /studentUpcomingPlainDetail/);
   assert.equal([...controls.matchAll(/function ControlRow/g)].length, 1);
+  assert.match(controls, /ControlRow key=\{entry\.item\.id\}/);
+  assert.equal([...controls.matchAll(/<ControlRow /g)].length, 1);
   assert.ok(controls.indexOf("student-course-chip") < controls.indexOf("<time"));
+  assert.ok(controls.indexOf("{entry.item.title}") > controls.indexOf("<time"));
   assert.match(homework, /Cours du jour/);
   assert.doesNotMatch(homework, /DEVOIR/);
   assert.doesNotMatch(homework, /INFORMATION/);

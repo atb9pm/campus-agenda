@@ -450,13 +450,16 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   min-width: 0;
 }
 .student-control-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.student-control-row.student-next-control {
+  padding: 16px 0;
+}
+.student-control-row:last-child.student-next-control { padding-bottom: 0; }
 .student-control-row > .student-course-chip {
   margin: 0;
+  width: fit-content;
   max-width: 100%;
   justify-self: start;
   overflow-wrap: anywhere;
-  color: var(--navy);
-  background: #eef3fb;
 }
 .student-control-main {
   display: grid;
@@ -761,7 +764,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .student-upcoming-tests-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 0; }
 .student-upcoming-tests-date { display: block; color: var(--blue); font-size: 10px; font-weight: 700; letter-spacing: .05em; }
 .student-upcoming-tests-branch:empty { display: none; }
-.student-control-row strong { display: block; margin: 0; color: var(--navy); font-size: 16px; font-weight: 700; }
+.student-control-row strong { display: block; margin: 0; font-size: 16px; font-weight: 700; }
 .student-upcoming-tests-detail { display: block; margin-top: 2px; color: #52627f; font-size: 14px; font-weight: 400; }
 .student-upcoming-tests-empty { margin: 0; color: #7b879c; font-size: 15px; }
 
@@ -2845,13 +2848,13 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   .student-controls-preview,
   .student-upcoming-tests,
   .student-history-panel { padding: 18px 16px; border-radius: 14px; }
-  .student-next-control { padding: 12px 0; }
+  .student-control-row.student-next-control { padding: 12px 0; }
   .student-control-row strong { font-size: 15px; }
   .student-controls-preview,
   .student-upcoming-tests,
   .student-control-row,
-  .student-control-main,
-  .student-course-chip { max-width: 100%; overflow-x: hidden; }
+  .student-control-main { max-width: 100%; overflow-x: hidden; }
+  .student-course-chip { max-width: 100%; }
   .student-branch-block h2,
   .student-upcoming-tests-branch,
   .student-control-row strong,
