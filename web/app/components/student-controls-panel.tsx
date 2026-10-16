@@ -28,27 +28,33 @@ function ControlRow({
   const detail = studentUpcomingPlainDetail(entry.item);
   const urgency = daysUntil <= 0 ? "today" : daysUntil <= 7 ? "soon" : "later";
   const dateLabel = formatCourseDayHeading(entry.slot);
+  const urgencyLabel = urgency === "today" ? "Aujourd’hui. " : urgency === "soon" ? "Proche. " : "";
   return (
     <article
       className={`student-next-control student-control-row urgency-${urgency}`}
       data-next-control=""
       data-control-id={entry.item.id}
     >
-      <time className="student-control-date" dateTime={entry.slot.date.toISOString()}>
-        <span className="student-control-day" aria-hidden="true">
-          {parts.day}
-        </span>
-        <span className="student-control-month" aria-hidden="true">
-          {parts.month}
-        </span>
-        <span className="student-visually-hidden">{dateLabel}</span>
-      </time>
-      <div className="student-control-card-body">
-        <strong>{entry.item.title}</strong>
-        {detail ? <span className="student-next-control-detail student-upcoming-tests-detail">{detail}</span> : null}
-        {entry.subjectName ? (
-          <p className="student-upcoming-tests-branch student-course-chip">{entry.subjectName}</p>
-        ) : null}
+      {entry.subjectName ? (
+        <p className="student-course-chip student-upcoming-tests-branch">{entry.subjectName}</p>
+      ) : null}
+      <div className="student-control-main">
+        <time className="student-control-date" dateTime={entry.slot.date.toISOString()}>
+          <span className="student-control-day" aria-hidden="true">
+            {parts.day}
+          </span>
+          <span className="student-control-month" aria-hidden="true">
+            {parts.month}
+          </span>
+          <span className="student-visually-hidden">
+            {urgencyLabel}
+            {dateLabel}
+          </span>
+        </time>
+        <div className="student-control-card-body">
+          <strong>{entry.item.title}</strong>
+          {detail ? <span className="student-next-control-detail student-upcoming-tests-detail">{detail}</span> : null}
+        </div>
       </div>
     </article>
   );
