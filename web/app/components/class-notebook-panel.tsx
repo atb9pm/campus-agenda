@@ -140,6 +140,8 @@ interface ClassNotebookPanelProps {
     session?: { key: string; date: string; schoolWeekNumber: number; dayOfWeek: number },
   ) => Promise<void>;
   classroomId?: string | null;
+  /** AnnualCourse de la classe (attribution V1 uniquement si la liste a un seul cours). */
+  classAnnualCourseIds?: readonly string[];
   onSaveControl: (input: {
     schoolWeekNumber: number;
     day: number;
@@ -246,6 +248,7 @@ export function ClassNotebookPanel({
   onSetWeekPublicationVisibility,
   onMovePublication: persistMovePublication,
   classroomId = null,
+  classAnnualCourseIds = [],
   onSaveControl,
   onUpdateControl,
   onDeleteControl,
@@ -357,12 +360,25 @@ export function ClassNotebookPanel({
         : centerWeekNumber;
 
   useEffect(() => {
-    if (!structuredCourse || !courseSessions?.length) return;
-    const migrated = migrateClassNotesToSessions(notesDocument, courseSessions, classSetup.id);
+    if (!structuredCourse || sessionsLoading || courseSessions == null || sessionsError) return;
+    const migrated = migrateClassNotesToSessions(notesDocument, courseSessions, classSetup.id, {
+      annualCourseId: structuredCourseId,
+      classAnnualCourseIds,
+    });
     if (migrated.changed && !notesDocumentsEquivalent(notesDocument, migrated.document)) {
       onNotesChange(migrated.document);
     }
-  }, [classSetup.id, courseSessions, notesDocument, onNotesChange, structuredCourse]);
+  }, [
+    classAnnualCourseIds,
+    classSetup.id,
+    courseSessions,
+    notesDocument,
+    onNotesChange,
+    sessionsError,
+    sessionsLoading,
+    structuredCourse,
+    structuredCourseId,
+  ]);
 
   const visibleWeeks = useMemo(() => {
     if (structuredCourse) {
@@ -1504,6 +1520,18 @@ export function ClassNotebookPanel({
       {structuredCourse && !sessionsLoading && !sessionsError && courseSessions?.length === 0 ? (
         <p className="class-notebook-empty">Aucune séance planifiée pour ce cours dans l’horaire.</p>
       ) : null}
+      {structuredCourse && !sessionsLoading && structuredCourseId && courseSessions?.length === 0
+        ? orphanedSessionNotesForCourse(notesDocument, structuredCourseId).map((entry) => (
+            <div
+              key={entry.sessionKey}
+              className="class-notebook-pending-notes"
+              data-orphaned-session-notes={entry.sessionKey}
+            >
+              <p>Note d’une séance disparue — à réattribuer</p>
+              <RichDocView doc={composeWeekNotesDoc(entry.notes)} compact emptyLabel="" />
+            </div>
+          ))
+        : null}
       {structuredCourse && courseSessions
         ? pendingWeekNotesWithoutSession(notesDocument, classSetup.id, courseSessions).map((entry) => (
             <div

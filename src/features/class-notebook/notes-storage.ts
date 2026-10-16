@@ -534,6 +534,42 @@ export function stripClassNotesForClassrooms(
   return stripClassNotesForCatalog(document, { classroomIds });
 }
 
+export interface MigrateClassNotesToSessionsOptions {
+  /** AnnualCourse actuellement ouvert. Requis pour orpheliner les clés disparues, même si `sessions` est vide. */
+  annualCourseId?: string;
+  /**
+   * AnnualCourse actifs de la classe.
+   * Une note V1 `${classSetupId}:${week}` n’est auto-attribuée que si cette liste
+   * contient exactement un cours (appartenance non ambiguë).
+   */
+  classAnnualCourseIds?: readonly string[];
+}
+
+function uniqueCourseIds(ids: readonly string[]): string[] {
+  return [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+}
+
+/**
+ * Identifiants AnnualCourse de la classe (cours attribués + sujets runtime + cours ouvert).
+ * Une note V1 n’est auto-attribuée que si cette liste contient exactement un cours.
+ */
+export function collectClassAnnualCourseIds(
+  teacherAnnualCourseIds: readonly string[] = [],
+  subjectAnnualCourseIds: readonly (string | null | undefined)[] = [],
+  openedAnnualCourseId?: string | null,
+): string[] {
+  return uniqueCourseIds([
+    openedAnnualCourseId ?? "",
+    ...teacherAnnualCourseIds,
+    ...subjectAnnualCourseIds.map((id) => id ?? ""),
+  ]);
+}
+
+/** V1 / pending : auto seulement si la classe n’a qu’un AnnualCourse (jamais déduit du seul cours ouvert). */
+export function classNotesWeekCanAutoBind(classAnnualCourseIds: readonly string[] | undefined): boolean {
+  return uniqueCourseIds(classAnnualCourseIds ?? []).length === 1;
+}
+
 function placeWeekNotes(
   sessionsBag: Record<string, TeacherWeekNote[]>,
   pendingWeeks: Record<string, TeacherWeekNote[]>,
@@ -541,6 +577,7 @@ function placeWeekNotes(
   notes: TeacherWeekNote[],
   sessions: readonly CourseSession[],
   classPrefix: string,
+  allowAutoAssign: boolean,
 ): boolean {
   if (!weekKey.startsWith(classPrefix)) {
     pendingWeeks[weekKey] = [...(pendingWeeks[weekKey] ?? []), ...notes];
@@ -548,7 +585,7 @@ function placeWeekNotes(
   }
   const weekNumber = Number(weekKey.slice(classPrefix.length));
   const weekSessions = sessions.filter((session) => session.schoolWeekNumber === weekNumber);
-  if (weekSessions.length === 1) {
+  if (allowAutoAssign && weekSessions.length === 1) {
     const key = weekSessions[0]!.key;
     sessionsBag[key] = [...(sessionsBag[key] ?? []), ...notes];
     return true;
@@ -558,19 +595,24 @@ function placeWeekNotes(
 }
 
 /**
- * Migration incrémentale vers V2, scoped au classSetupId ouvert.
- * V2 : retravaille uniquement les pendingWeeks de cette classe.
- * Clés de séance du cours ouvert devenues introuvables → orphanedSessions
- * (jamais de suppression silencieuse ; pas de remappage si plusieurs séances restent).
+ * Migration incrémentale vers V2, scoped au classSetupId et à l’AnnualCourse ouverts.
+ * V1 / pendingWeeks : auto-attribution seulement si la classe n’a qu’un cours
+ * et la semaine une seule CourseSession.
+ * Clés `sessions` du cours ouvert absentes de l’horaire actuel (y compris 0 séance)
+ * → orphanedSessions. Jamais de suppression silencieuse.
  */
 export function migrateClassNotesToSessions(
   document: ClassNotesDocument,
   sessions: readonly CourseSession[],
   classSetupId: string,
+  options: string | MigrateClassNotesToSessionsOptions = "",
 ): { document: ClassNotesDocumentV2; changed: boolean } {
+  const opts: MigrateClassNotesToSessionsOptions =
+    typeof options === "string" ? { annualCourseId: options } : options;
+  const openedCourseId = opts.annualCourseId?.trim() || "";
+  const allowAutoAssign = classNotesWeekCanAutoBind(opts.classAnnualCourseIds);
   const prefix = `${classSetupId}:`;
   const currentKeys = new Set(sessions.map((session) => session.key));
-  const courseIds = new Set(sessions.map((session) => session.annualCourseId));
   let changed = false;
   const sessionsBag: Record<string, TeacherWeekNote[]> = {};
   const pendingWeeks: Record<string, TeacherWeekNote[]> = {};
@@ -581,39 +623,43 @@ export function migrateClassNotesToSessions(
     for (const [weekKey, notes] of Object.entries(document.weeks ?? {})) {
       const cleaned = cleanNotesList(notes);
       if (!cleaned.length) continue;
-      placeWeekNotes(sessionsBag, pendingWeeks, weekKey, cleaned, sessions, prefix);
+      placeWeekNotes(sessionsBag, pendingWeeks, weekKey, cleaned, sessions, prefix, allowAutoAssign);
     }
   } else {
     Object.assign(sessionsBag, document.sessions);
     Object.assign(pendingWeeks, document.pendingWeeks ?? {});
     Object.assign(orphanedSessions, document.orphanedSessions ?? {});
-    for (const weekKey of Object.keys(pendingWeeks)) {
-      if (!weekKey.startsWith(prefix)) continue;
-      const notes = cleanNotesList(pendingWeeks[weekKey]);
-      if (!notes.length) {
+    if (allowAutoAssign) {
+      for (const weekKey of Object.keys(pendingWeeks)) {
+        if (!weekKey.startsWith(prefix)) continue;
+        const notes = cleanNotesList(pendingWeeks[weekKey]);
+        if (!notes.length) {
+          delete pendingWeeks[weekKey];
+          changed = true;
+          continue;
+        }
+        const weekNumber = Number(weekKey.slice(prefix.length));
+        const weekSessions = sessions.filter((session) => session.schoolWeekNumber === weekNumber);
+        if (weekSessions.length !== 1) continue;
         delete pendingWeeks[weekKey];
+        const key = weekSessions[0]!.key;
+        sessionsBag[key] = [...(sessionsBag[key] ?? []), ...notes];
         changed = true;
-        continue;
       }
-      const weekNumber = Number(weekKey.slice(prefix.length));
-      const weekSessions = sessions.filter((session) => session.schoolWeekNumber === weekNumber);
-      if (weekSessions.length !== 1) continue;
-      delete pendingWeeks[weekKey];
-      const key = weekSessions[0]!.key;
-      sessionsBag[key] = [...(sessionsBag[key] ?? []), ...notes];
-      changed = true;
     }
   }
 
-  for (const sessionKey of Object.keys(sessionsBag)) {
-    const notes = sessionsBag[sessionKey] ?? [];
-    const parsed = parseCourseSessionKey(sessionKey);
-    const courseId = parsed?.annualCourseId;
-    if (!courseId || !courseIds.has(courseId)) continue;
-    if (currentKeys.has(sessionKey)) continue;
-    delete sessionsBag[sessionKey];
-    orphanedSessions[sessionKey] = [...(orphanedSessions[sessionKey] ?? []), ...notes];
-    changed = true;
+  if (openedCourseId) {
+    for (const sessionKey of Object.keys(sessionsBag)) {
+      const notes = sessionsBag[sessionKey] ?? [];
+      const parsed = parseCourseSessionKey(sessionKey);
+      const courseId = parsed?.annualCourseId;
+      if (courseId !== openedCourseId && !sessionKey.includes(`|${openedCourseId}|`)) continue;
+      if (currentKeys.has(sessionKey)) continue;
+      delete sessionsBag[sessionKey];
+      orphanedSessions[sessionKey] = [...(orphanedSessions[sessionKey] ?? []), ...notes];
+      changed = true;
+    }
   }
 
   const next = finishV2(sessionsBag, pendingWeeks, orphanedSessions);

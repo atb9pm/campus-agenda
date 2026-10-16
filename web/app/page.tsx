@@ -84,6 +84,7 @@ import {
 } from "@campus/features/teacher-setup";
 import {
   displaySetupsFromAssignedCourses,
+  teacherCoursesForClass,
   type TeacherCourseWorkspaceEntry,
 } from "@campus/features/teacher-workspace";
 import {
@@ -100,6 +101,7 @@ import {
   resolveNotebookSubjectId,
   workspaceAllowsNotebookPublish,
   weekdayToCourseDayIndex,
+  collectClassAnnualCourseIds,
   isCarnetOwnedPublication,
   planCarnetWeekPublicationSave,
   type CampusRichDoc,
@@ -684,6 +686,18 @@ export default function Home() {
     });
   }, [currentTeacherId, items, notebookClassroomId, notebookSubjectId, openNotebookCourse]);
   const notebookCanPublish = workspaceAllowsNotebookPublish(teacherCourses, notebookPublishAnnualCourseId);
+  const notebookClassAnnualCourseIds = useMemo(
+    () =>
+      collectClassAnnualCourseIds(
+        teacherCoursesForClass(
+          teacherCourses,
+          openNotebookCourse?.classId ?? openNotebookClass?.id,
+        ).map((course) => course.annualCourseId),
+        (notebookRuntimeSubjects ?? []).map((subject) => subject.annualCourseId),
+        openNotebookCourse?.annualCourseId,
+      ),
+    [notebookRuntimeSubjects, openNotebookClass?.id, openNotebookCourse, teacherCourses],
+  );
   const notebookBlockedReason = notebookPublishBlockedReason({
     hasOpenClass: Boolean(openNotebookClass),
     annualCourseId: notebookPublishAnnualCourseId,
@@ -1605,6 +1619,7 @@ export default function Home() {
             onSetWeekPublicationVisibility={notebookSetWeekPublicationVisibility}
             onMovePublication={notebookMovePublication}
             classroomId={notebookClassroomId}
+            classAnnualCourseIds={notebookClassAnnualCourseIds}
             onSaveControl={notebookSaveControl}
             onUpdateControl={notebookUpdateControl}
             onDeleteControl={notebookDeletePublication}

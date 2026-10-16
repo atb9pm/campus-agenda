@@ -8,6 +8,8 @@ import {
   assignOrphanedSessionNotes,
   assignPendingWeekNotes,
   classNotesTouchCatalog,
+  classNotesWeekCanAutoBind,
+  collectClassAnnualCourseIds,
   formatCourseSessionCardSubtitle,
   isClassNotesPayload,
   itemsForCourseSession,
@@ -31,6 +33,13 @@ import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 
 const YEAR = "SY-2026-27";
 const COURSE = { id: "ac-electro", classId: "class-mecauto3a", contextId: "ctx-electro" };
+const CP2 = "ac-transmission";
+const CP3 = "ac-chassis";
+const SINGLE_COURSE_OPTS = { annualCourseId: COURSE.id, classAnnualCourseIds: [COURSE.id] };
+const MULTI_COURSE_OPTS = {
+  annualCourseId: COURSE.id,
+  classAnnualCourseIds: [COURSE.id, CP2, CP3],
+};
 
 function schoolWeeksFromEntries(entries: SchoolWeekEntry[]): SchoolWeek[] {
   return entries.map((entry) => {
@@ -138,7 +147,7 @@ test("carnet — notes V1 une séance → migration automatique", () => {
     version: 1 as const,
     weeks: { [week10]: [{ id: "n1", text: "Prévoir multimètres" }] },
   };
-  const migrated = migrateClassNotesToSessions(v1, sessions, "class-mecauto3a");
+  const migrated = migrateClassNotesToSessions(v1, sessions, "class-mecauto3a", SINGLE_COURSE_OPTS);
   assert.equal(migrated.changed, true);
   const session10 = sessions.find((session) => session.schoolWeekNumber === 10)!;
   assert.equal(listSessionNotes(migrated.document, session10.key)[0]?.text, "Prévoir multimètres");
@@ -152,7 +161,7 @@ test("carnet — notes V1 deux séances → pas d’attribution silencieuse", ()
     version: 1 as const,
     weeks: { [week9]: [{ id: "n9", text: "Note semaine 9" }] },
   };
-  const migrated = migrateClassNotesToSessions(v1, sessions, "class-mecauto3a");
+  const migrated = migrateClassNotesToSessions(v1, sessions, "class-mecauto3a", SINGLE_COURSE_OPTS);
   const monday = sessions.find((session) => session.schoolWeekNumber === 9 && session.dayOfWeek === 1)!;
   const thursday = sessions.find((session) => session.schoolWeekNumber === 9 && session.dayOfWeek === 4)!;
   assert.equal(listSessionNotes(migrated.document, monday.key).length, 0);
@@ -187,6 +196,12 @@ test("carnet — UI une carte = une CourseSession, Planifier sans picker", async
   assert.doesNotMatch(panel, /Choisir le cours/);
   assert.match(panel, /\{count\} séance/);
   assert.match(panel, /data-pending-week-notes/);
+  assert.match(panel, /classAnnualCourseIds/);
+  assert.doesNotMatch(panel, /if \(!structuredCourse \|\| !courseSessions\?\.length\) return;/);
+  assert.match(panel, /courseSessions == null \|\| sessionsError/);
+  const page = await readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /classAnnualCourseIds=\{notebookClassAnnualCourseIds\}/);
+  assert.match(page, /collectClassAnnualCourseIds/);
 });
 
 test("carnet — aucune table SQL CourseSession", () => {
@@ -320,14 +335,14 @@ test("carnet — migration V1 incrémentale par classe", () => {
       [weekB]: [{ id: "nb", text: "Note classe B" }],
     },
   };
-  const afterA = migrateClassNotesToSessions(v1, sessions, "class-a");
+  const afterA = migrateClassNotesToSessions(v1, sessions, "class-a", SINGLE_COURSE_OPTS);
   assert.equal(afterA.document.version, 2);
   assert.equal(listPendingWeekNotes(afterA.document, weekA)[0]?.text, "Note classe A");
   assert.equal(listPendingWeekNotes(afterA.document, weekB)[0]?.text, "Note classe B");
   const session10 = sessions.find((session) => session.schoolWeekNumber === 10)!;
   assert.equal(listSessionNotes(afterA.document, session10.key).length, 0);
 
-  const afterB = migrateClassNotesToSessions(afterA.document, sessions, "class-b");
+  const afterB = migrateClassNotesToSessions(afterA.document, sessions, "class-b", SINGLE_COURSE_OPTS);
   assert.equal(listSessionNotes(afterB.document, session10.key)[0]?.text, "Note classe B");
   assert.equal(listPendingWeekNotes(afterB.document, weekB).length, 0);
   assert.equal(listPendingWeekNotes(afterB.document, weekA)[0]?.text, "Note classe A");
@@ -345,7 +360,7 @@ test("carnet — pending V2 d’une semaine à une séance migrée, jamais dispa
       [week9]: [{ id: "p9", text: "héritée 9" }],
     },
   };
-  const migrated = migrateClassNotesToSessions(v2, sessions, "class-mecauto3a");
+  const migrated = migrateClassNotesToSessions(v2, sessions, "class-mecauto3a", SINGLE_COURSE_OPTS);
   const session10 = sessions.find((session) => session.schoolWeekNumber === 10)!;
   assert.equal(listSessionNotes(migrated.document, session10.key)[0]?.text, "héritée 10");
   assert.equal(listPendingWeekNotes(migrated.document, week10).length, 0);
@@ -360,7 +375,7 @@ test("carnet — pending sans séance reste visible", () => {
     sessions: {},
     pendingWeeks: { [week10]: [{ id: "p10", text: "sans séance" }] },
   };
-  const migrated = migrateClassNotesToSessions(v2, sessions, "class-mecauto3a");
+  const migrated = migrateClassNotesToSessions(v2, sessions, "class-mecauto3a", SINGLE_COURSE_OPTS);
   assert.equal(listPendingWeekNotes(migrated.document, week10)[0]?.text, "sans séance");
   assert.equal(pendingWeekNotesWithoutSession(migrated.document, "class-mecauto3a", sessions).length, 1);
 });
@@ -377,7 +392,7 @@ test("carnet — note d’une CourseSession disparue reste orpheline et réattri
       [monday.key]: [{ id: "ok", text: "actuelle" }],
     },
   };
-  const migrated = migrateClassNotesToSessions(v2, sessions, "class-mecauto3a");
+  const migrated = migrateClassNotesToSessions(v2, sessions, "class-mecauto3a", SINGLE_COURSE_OPTS);
   assert.equal(listSessionNotes(migrated.document, goneKey).length, 0);
   assert.equal(listOrphanedSessionNotes(migrated.document, goneKey)[0]?.text, "Ancienne séance");
   assert.equal(listSessionNotes(migrated.document, monday.key)[0]?.text, "actuelle");
@@ -411,4 +426,73 @@ test("carnet — suppression catalogue retire les notes session du cours visé",
   assert.equal(stripped.document.sessions[dropKey], undefined);
   assert.equal(stripped.document.pendingWeeks?.["class-drop:9"], undefined);
   assert.equal(stripped.document.orphanedSessions?.[`${YEAR}|ac-drop|2019-01-01`], undefined);
+});
+
+test("carnet — 0 CourseSession : notes du cours ouvert → orphanedSessions", () => {
+  const oldKey = `${YEAR}|${COURSE.id}|2026-10-26`;
+  const otherKey = `${YEAR}|${CP2}|2026-10-26`;
+  const v2 = {
+    version: 2 as const,
+    sessions: {
+      [oldKey]: [{ id: "cp1", text: "note CP1 disparue" }],
+      [otherKey]: [{ id: "cp2", text: "note CP2 intacte" }],
+    },
+  };
+  const migrated = migrateClassNotesToSessions(v2, [], "class-mecauto3a", {
+    annualCourseId: COURSE.id,
+    classAnnualCourseIds: [COURSE.id],
+  });
+  assert.equal(migrated.changed, true);
+  assert.equal(listSessionNotes(migrated.document, oldKey).length, 0);
+  assert.equal(listOrphanedSessionNotes(migrated.document, oldKey)[0]?.text, "note CP1 disparue");
+  assert.equal(listSessionNotes(migrated.document, otherKey)[0]?.text, "note CP2 intacte");
+  assert.equal(listOrphanedSessionNotes(migrated.document, otherKey).length, 0);
+});
+
+test("carnet — V1 classe multi-AnnualCourse : pas d’auto-attribution", () => {
+  const sessions = electroSessions();
+  const week10 = weekNotesKey("class-mecauto3a", 10);
+  const v1 = {
+    version: 1 as const,
+    weeks: { [week10]: [{ id: "n10", text: "ancienne note" }] },
+  };
+  assert.equal(classNotesWeekCanAutoBind(MULTI_COURSE_OPTS.classAnnualCourseIds), false);
+  assert.equal(classNotesWeekCanAutoBind(SINGLE_COURSE_OPTS.classAnnualCourseIds), true);
+  assert.equal(classNotesWeekCanAutoBind(undefined), false);
+
+  const openedCp1 = migrateClassNotesToSessions(v1, sessions, "class-mecauto3a", MULTI_COURSE_OPTS);
+  const session10 = sessions.find((session) => session.schoolWeekNumber === 10)!;
+  assert.equal(listSessionNotes(openedCp1.document, session10.key).length, 0);
+  assert.equal(listPendingWeekNotes(openedCp1.document, week10)[0]?.text, "ancienne note");
+
+  const cp2Key = `${YEAR}|${CP2}|2026-11-02`;
+  const assigned = assignPendingWeekNotes(openedCp1.document, week10, cp2Key);
+  assert.equal(listSessionNotes(assigned, cp2Key)[0]?.text, "ancienne note");
+  assert.equal(listSessionNotes(assigned, session10.key).length, 0);
+  assert.equal(listPendingWeekNotes(assigned, week10).length, 0);
+});
+
+test("carnet — V1 classe un seul AnnualCourse + une séance semaine 10 → auto", () => {
+  const sessions = electroSessions();
+  const week10 = weekNotesKey("class-mecauto3a", 10);
+  const v1 = {
+    version: 1 as const,
+    weeks: { [week10]: [{ id: "n10", text: "ancienne note" }] },
+  };
+  const migrated = migrateClassNotesToSessions(v1, sessions, "class-mecauto3a", SINGLE_COURSE_OPTS);
+  const session10 = sessions.find((session) => session.schoolWeekNumber === 10)!;
+  assert.equal(listSessionNotes(migrated.document, session10.key)[0]?.text, "ancienne note");
+  assert.equal(listPendingWeekNotes(migrated.document, week10).length, 0);
+});
+
+test("carnet — collectClassAnnualCourseIds fusionne cours enseignant, sujets et cours ouvert", () => {
+  assert.deepEqual(
+    collectClassAnnualCourseIds([COURSE.id], [CP2, null, COURSE.id], CP3),
+    [CP3, COURSE.id, CP2],
+  );
+  assert.equal(classNotesWeekCanAutoBind(collectClassAnnualCourseIds([COURSE.id], [], COURSE.id)), true);
+  assert.equal(
+    classNotesWeekCanAutoBind(collectClassAnnualCourseIds([COURSE.id], [CP2, CP3], COURSE.id)),
+    false,
+  );
 });

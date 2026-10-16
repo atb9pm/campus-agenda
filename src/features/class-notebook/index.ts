@@ -55,6 +55,8 @@ export {
   classNotesStorageKey,
   classNotesTouchCatalog,
   classNotesTouchClassroom,
+  classNotesWeekCanAutoBind,
+  collectClassAnnualCourseIds,
   clearNotesFromBrowser,
   cloneClassNotesDocument,
   composeWeekNotesDoc,
@@ -85,6 +87,7 @@ export {
   stripClassNotesForClassrooms,
   weekKeyedNotesMap,
   type ClassNotesCatalogScope,
+  type MigrateClassNotesToSessionsOptions,
 } from "./notes-storage.ts";
 export {
   CAMPUS_RICH_DETAIL_PREFIX,
