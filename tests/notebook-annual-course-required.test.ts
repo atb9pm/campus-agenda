@@ -222,6 +222,7 @@ test("déplacement Carnet — page conserve l’API PATCH structurée (semaine +
   const page = await readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8");
   const move = page.slice(page.indexOf("async function notebookMovePublication"));
   assert.match(move, /requireNotebookAnnualCourseId/);
-  assert.match(move, /updateAgendaItemApi\(itemId, \{\s*schoolWeekNumber,\s*\.\.\.\(day != null \? \{ day \} : \{\}\),\s*\}\)/);
+  assert.match(move, /updateAgendaItemApi\(itemId,/);
+  assert.match(move, /courseSessionKey: session\.key/);
   assert.doesNotMatch(move.slice(0, move.indexOf("async function notebookDeletePublication")), /createAgendaItemApi/);
 });

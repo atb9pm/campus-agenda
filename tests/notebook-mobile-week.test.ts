@@ -80,15 +80,15 @@ test("carnet mobile — UI : une semaine, 2/3/4 masqués, ◀ ▶ et titre conse
   assert.match(panel, /notebookWeekDisplayCountForViewport/);
   assert.match(panel, /matchMedia\(NOTEBOOK_NARROW_MEDIA\)/);
   assert.match(panel, /effectiveWeekDisplayCount/);
-  assert.match(panel, /visibleCourseWeeks\(eligibleWeeks, displayStartWeek, effectiveWeekDisplayCount\)/);
+  assert.match(panel, /visibleCourseSessions\(/);
   assert.match(panel, /visibleSchoolWeeks\(schoolWeeks, centerWeekNumber, effectiveWeekDisplayCount\)/);
   assert.match(panel, /shiftVisibleWeeks\(-1\)/);
   assert.match(panel, /shiftVisibleWeeks\(1\)/);
-  assert.match(panel, /aria-label="Semaines précédentes"/);
-  assert.match(panel, /aria-label="Semaines suivantes"/);
+  assert.match(panel, /aria-label="Séances précédentes"/);
+  assert.match(panel, /aria-label="Séances suivantes"/);
   assert.match(panel, /classSetup\.name\} · \{branchLabel/);
   assert.match(panel, /\[1, 2, 3, 4\] as WeekDisplayCount\[\]/);
-  assert.match(panel, /\{count\} semaine\{count > 1 \? "s" : ""\}/);
+  assert.match(panel, /\{count\} séance\{count > 1 \? "s" : ""\}/);
 
   const mobileCss = css.slice(css.indexOf("/* Carnet enseignant — smartphone"));
   assert.match(mobileCss, /@media \(max-width: 760px\) \{/);

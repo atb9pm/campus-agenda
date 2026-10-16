@@ -1,4 +1,3 @@
-import { isStructuredAgendaPublication } from "../agenda/publications.ts";
 import { isStudentVisible } from "../agenda/visibility.ts";
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
 import {
@@ -18,9 +17,15 @@ export function isPublicationLine(item: Pick<PrototypeAgendaItem, "type">): bool
   return item.type === "HOMEWORK" || item.type === "INFORMATION";
 }
 
-/** Publication saisie dans le Carnet : pas un contrôle, pas une publication structurée. */
+/**
+ * Publication saisie dans le Carnet (pas un contrôle, pas un item de parcours).
+ * Une publication Carnet peut désormais porter `courseSessionKey` ;
+ * `isStructuredAgendaPublication` reste vrai dès qu’une séance est rattachée.
+ */
 export function isCarnetOwnedPublication(item: PrototypeAgendaItem): boolean {
-  return isPublicationLine(item) && !isStructuredAgendaPublication(item);
+  if (!isPublicationLine(item)) return false;
+  if (item.referenceItemId?.trim() || item.referenceSessionId?.trim()) return false;
+  return true;
 }
 
 export function composeWeekPublicationDoc(items: readonly PrototypeAgendaItem[]): CampusRichDoc {

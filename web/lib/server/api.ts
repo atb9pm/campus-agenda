@@ -152,14 +152,15 @@ export async function getAnnualCourseServiceDeps(): Promise<AnnualCourseServiceD
 }
 
 export async function getNotebookPublicationDeps(): Promise<NotebookPublicationDeps> {
-  const [courses, catalog, years, adapters, agenda] = await Promise.all([
+  const [courses, catalog, years, adapters, agenda, schedules] = await Promise.all([
     getAnnualCourseStore(),
     getSchoolCatalogStore(),
     getSchoolYearStore(),
     getRuntimeAgendaAdapterStore(),
     getAgendaStore(),
+    getCourseScheduleStore(),
   ]);
-  return { courses, catalog, years, adapters, agenda };
+  return { courses, catalog, years, adapters, agenda, schedules };
 }
 
 export async function getStructuredPublishDeps(): Promise<StructuredPublishDeps> {

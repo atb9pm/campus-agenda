@@ -40,6 +40,9 @@ export {
   isNotebookPublicationType,
   notebookPublicationFromBody,
   resolveNotebookPublishContext,
+  resolveNotebookTargetSession,
+  NOTEBOOK_PUBLICATION_SESSION_AMBIGUOUS_REASON,
+  NOTEBOOK_PUBLICATION_SESSION_GONE_REASON,
   type NotebookPublicationDeps,
   type NotebookPublicationType,
   type NotebookPublishResult,
@@ -47,21 +50,34 @@ export {
 } from "./notebook-publication-service.ts";
 export {
   appendWeekNote,
+  assignPendingWeekNotes,
   classNotesStorageKey,
+  classNotesTouchClassroom,
   clearNotesFromBrowser,
+  cloneClassNotesDocument,
   composeWeekNotesDoc,
   createEmptyNotesDocument,
+  createEmptyNotesDocumentV2,
   isClassNotesPayload,
+  isNotesDocumentV1,
+  isNotesDocumentV2,
   loadNotesFromBrowser,
+  listPendingWeekNotes,
+  listSessionNotes,
   listWeekNotes,
+  migrateClassNotesToSessions,
   moveWeekNote,
   normalizeClassNotes,
+  notesDocumentsEquivalent,
   parseStoredNotes,
   peekNotesFromBrowser,
   removeWeekNote,
   saveNotesToBrowser,
   serializeClassNotes,
+  setSessionRichNote,
   setWeekRichNote,
+  stripClassNotesForClassrooms,
+  weekKeyedNotesMap,
 } from "./notes-storage.ts";
 export {
   CAMPUS_RICH_DETAIL_PREFIX,
@@ -221,4 +237,22 @@ export {
   weekdayLabelForCourseDayIndex,
   type CourseControlDayOption,
 } from "./course-week-window.ts";
-export type { ClassNotesDocument, NotebookClipboard, TeacherWeekNote } from "./types.ts";
+export {
+  formatCourseSessionCardSubtitle,
+  formatCourseSessionCardWeekLabel,
+  itemsForCourseSession,
+  moveTargetCourseSessions,
+  orderedCourseSessions,
+  schoolWeekForSession,
+  sessionNotesKey,
+  shiftCourseSession,
+  snapToCourseSession,
+  visibleCourseSessions,
+} from "./session-window.ts";
+export type {
+  ClassNotesDocument,
+  ClassNotesDocumentV1,
+  ClassNotesDocumentV2,
+  NotebookClipboard,
+  TeacherWeekNote,
+} from "./types.ts";

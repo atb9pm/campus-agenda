@@ -1216,17 +1216,24 @@ export default function Home() {
     showNotice("Contrôle planifié.");
   }
 
-  async function notebookCreatePublication(schoolWeekNumber: number, text: string, day?: number) {
+  async function notebookCreatePublication(
+    schoolWeekNumber: number,
+    text: string,
+    day?: number,
+    session?: { key: string; date: string; schoolWeekNumber: number; dayOfWeek: number },
+  ) {
     const annualCourseId = requireNotebookAnnualCourseId();
     if (!annualCourseId || !openNotebookClass) return;
-    const publicationDay = day ?? weekdayToCourseDayIndex(openNotebookClass.dayOfWeek);
+    const publicationDay = session ? session.dayOfWeek - 1 : (day ?? weekdayToCourseDayIndex(openNotebookClass.dayOfWeek));
     const created = await createNotebookPublicationApi({
       annualCourseId,
-      schoolWeekNumber,
+      schoolWeekNumber: session?.schoolWeekNumber ?? schoolWeekNumber,
       day: publicationDay,
       type: "HOMEWORK",
       title: text.trim(),
       detail: "",
+      courseSessionKey: session?.key,
+      courseSessionDate: session?.date,
     });
     setItems((previous) => upsertAgendaItem(previous, created));
     showNotice("Publication ajoutée.");
@@ -1235,13 +1242,34 @@ export default function Home() {
   async function notebookSaveWeekPublication(
     schoolWeekNumber: number,
     doc: CampusRichDoc,
-    options?: { studentVisible?: boolean; day?: number },
+    options?: {
+      studentVisible?: boolean;
+      day?: number;
+      courseSessionKey?: string;
+      courseSessionDate?: string;
+    },
   ) {
     const annualCourseId = requireNotebookAnnualCourseId();
     if (!annualCourseId || !openNotebookClass) return;
-    const weekItems = notebookItems.filter((item) => item.schoolWeekNumber === schoolWeekNumber);
+    const sessionKey = options?.courseSessionKey?.trim() || "";
+    const weekItems = notebookItems.filter((item) => {
+      if (sessionKey) {
+        return item.courseSessionKey === sessionKey || (
+          !item.courseSessionKey &&
+          item.schoolWeekNumber === schoolWeekNumber &&
+          (options?.day == null || item.day === options.day)
+        );
+      }
+      return item.schoolWeekNumber === schoolWeekNumber;
+    });
     const plan = planCarnetWeekPublicationSave(weekItems, doc);
     const publicationDay = options?.day ?? weekdayToCourseDayIndex(openNotebookClass.dayOfWeek);
+    const sessionPatch = {
+      ...(options?.day != null ? { day: options.day } : {}),
+      ...(sessionKey ? { courseSessionKey: sessionKey } : {}),
+      ...(options?.courseSessionDate ? { courseSessionDate: options.courseSessionDate } : {}),
+      schoolWeekNumber,
+    };
 
     if (plan.action === "clear") {
       for (const itemId of plan.deleteIds) {
@@ -1255,8 +1283,8 @@ export default function Home() {
     if (plan.action === "update") {
       const payload = {
         ...plan.payload,
+        ...sessionPatch,
         ...(options?.studentVisible === undefined ? {} : { studentVisible: options.studentVisible }),
-        ...(options?.day != null ? { day: options.day } : {}),
       };
       const updated = await updateAgendaItemApi(plan.updateId, payload);
       setItems((previous) => previous.map((item) => (item.id === plan.updateId ? updated : item)));
@@ -1273,6 +1301,8 @@ export default function Home() {
         title: plan.payload.title,
         detail: plan.payload.detail,
         studentVisible: options?.studentVisible ?? false,
+        courseSessionKey: sessionKey || undefined,
+        courseSessionDate: options?.courseSessionDate,
       });
       setItems((previous) => upsertAgendaItem(previous, created));
     }
@@ -1285,11 +1315,19 @@ export default function Home() {
     );
   }
 
-  async function notebookSetWeekPublicationVisibility(schoolWeekNumber: number, studentVisible: boolean) {
+  async function notebookSetWeekPublicationVisibility(
+    schoolWeekNumber: number,
+    studentVisible: boolean,
+    sessionKey?: string,
+  ) {
     if (!requireNotebookAnnualCourseId()) return;
-    const weekItems = notebookItems.filter(
-      (item) => item.schoolWeekNumber === schoolWeekNumber && isCarnetOwnedPublication(item),
-    );
+    const weekItems = notebookItems.filter((item) => {
+      if (!isCarnetOwnedPublication(item)) return false;
+      if (sessionKey) {
+        return item.courseSessionKey === sessionKey;
+      }
+      return item.schoolWeekNumber === schoolWeekNumber;
+    });
     for (const item of weekItems) {
       if ((item.studentVisible !== false) === studentVisible) continue;
       const updated = await updateAgendaItemApi(item.id, { studentVisible });
@@ -1298,11 +1336,24 @@ export default function Home() {
     showNotice(studentVisible ? "Visible aux élèves." : "Repassé en brouillon.");
   }
 
-  async function notebookMovePublication(itemId: number, schoolWeekNumber: number, day?: number) {
+  async function notebookMovePublication(
+    itemId: number,
+    schoolWeekNumber: number,
+    day?: number,
+    session?: { key: string; date: string; schoolWeekNumber: number; dayOfWeek: number },
+  ) {
     if (!requireNotebookAnnualCourseId()) return;
     const updated = await updateAgendaItemApi(itemId, {
-      schoolWeekNumber,
-      ...(day != null ? { day } : {}),
+      schoolWeekNumber: session?.schoolWeekNumber ?? schoolWeekNumber,
+      ...(session
+        ? {
+            day: session.dayOfWeek - 1,
+            courseSessionKey: session.key,
+            courseSessionDate: session.date,
+          }
+        : day != null
+          ? { day }
+          : {}),
     });
     setItems((previous) => previous.map((item) => (item.id === itemId ? updated : item)));
   }

@@ -1,5 +1,8 @@
 import type { PrototypeAgendaItem } from "../../features/agenda/demo-items.ts";
-import { isClassNotesPayload } from "../../features/class-notebook/notes-storage.ts";
+import {
+  cloneClassNotesDocument,
+  isClassNotesPayload,
+} from "../../features/class-notebook/notes-storage.ts";
 import { isTeacherSetupPayload } from "../../features/teacher-setup/storage.ts";
 import { isLegacyDemoHash, isUsablePasswordHash } from "../auth/password.ts";
 import { AGENDA_ITEM_TYPES } from "../../types/agenda.ts";
@@ -225,7 +228,7 @@ export async function restoreAgendaSnapshot(
   await deps.teacherNotes.replaceAllNotes(
     teacherNotes.map((entry) => ({
       teacherId: entry.teacherId,
-      document: { ...entry.document, weeks: { ...entry.document.weeks } },
+      document: cloneClassNotesDocument(entry.document),
     })),
   );
 

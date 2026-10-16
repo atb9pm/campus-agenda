@@ -413,8 +413,6 @@ test("Carnet notebookOwned — PATCH subjectId et provenance ignorés, date reca
     annualCourseId: "ac-transmission",
     courseSessionKey: null,
     courseSessionDate: THURSDAY_S6,
-    referenceSessionId: "ref-origin",
-    referenceItemId: "item-origin",
   });
   assert.equal(isCarnetOwnedPublication(item), true);
   assert.equal(isStructuredAgendaPublication(item), false);
@@ -435,23 +433,38 @@ test("Carnet notebookOwned — PATCH subjectId et provenance ignorés, date reca
   };
   const patch = notebookOwnedPublicationPatch(malicious);
   assert.equal(patch.subjectId, undefined);
-  assert.equal(patch.courseSessionKey, undefined);
-  assert.equal(patch.courseSessionDate, undefined);
+  assert.equal(patch.courseSessionKey, "stolen-key");
   assert.equal("annualCourseId" in patch, false);
   assert.equal("referenceSessionId" in patch, false);
   assert.equal("referenceItemId" in patch, false);
 
   const store = new MemoryAgendaStore([item]);
-  const moved = await persistPlacement(store, item, patch);
+  const stolen = await persistPlacement(store, item, patch, [SESSION_S6_THU, SESSION_S8_MON]);
+  assert.equal(stolen.ok, false);
+  if (!stolen.ok) {
+    assert.equal(stolen.reason, AGENDA_PLACEMENT_NO_SESSION_REASON);
+  }
+
+  const legit = notebookOwnedPublicationPatch({
+    title: "Titre modifié",
+    detail: "Détail modifié",
+    schoolWeekNumber: 8,
+    day: 0,
+    hour: 9,
+    studentVisible: true,
+    courseSessionKey: SESSION_S8_MON.key,
+    courseSessionDate: MONDAY_S8,
+  });
+  const moved = await persistPlacement(store, item, legit, [SESSION_S6_THU, SESSION_S8_MON]);
   assert.equal(moved.ok, true);
   if (!moved.ok) return;
   const persisted = await store.findAgendaItem(item.id);
   assert.equal(persisted?.title, "Titre modifié");
   assert.equal(persisted?.subjectId, "subj-transmission");
   assert.equal(persisted?.annualCourseId, "ac-transmission");
-  assert.equal(persisted?.courseSessionKey ?? null, null);
-  assert.equal(persisted?.referenceSessionId, "ref-origin");
-  assert.equal(persisted?.referenceItemId, "item-origin");
+  assert.equal(persisted?.courseSessionKey, SESSION_S8_MON.key);
+  assert.equal(persisted?.referenceSessionId ?? null, null);
+  assert.equal(persisted?.referenceItemId ?? null, null);
   assert.equal(persisted?.schoolWeekNumber, 8);
   assert.equal(persisted?.day, 0);
   assert.equal(persisted?.hour, 9);
@@ -485,7 +498,7 @@ test("architecture — normalisation centralisée, stores persistants, Carnet in
   assert.match(placement, /export function normalizeAgendaPlacement/);
   assert.match(placement, /export function buildAgendaItemUpdatePatch/);
   assert.match(placement, /isoDateForSchoolWeekDay/);
-  assert.match(placement, /isStructuredAgendaPublication/);
+  assert.match(placement, /requested\.courseSessionKey/);
   assert.doesNotMatch(publications, /normalizeAgendaPlacement/);
   assert.match(types, /courseSessionDate/);
   assert.match(types, /courseSessionKey/);
@@ -493,6 +506,6 @@ test("architecture — normalisation centralisée, stores persistants, Carnet in
   assert.match(memory, /courseSessionDate/);
   assert.match(patchRoute, /buildAgendaItemUpdatePatch/);
   assert.match(patchRoute, /listComputedCourseSessions/);
-  assert.match(page, /notebookMovePublication\(itemId: number, schoolWeekNumber: number, day\?: number\)/);
+  assert.match(page, /notebookMovePublication\(/);
   assert.match(panel, /onMovePublication/);
 });

@@ -8,6 +8,7 @@ import {
   NOTEBOOK_NARROW_VIEWPORT_MAX_PX,
   notebookWeekDisplayCountForViewport,
   isClassNotesPayload,
+  isNotesDocumentV1,
   moveWeekNote,
   normalizeClassNotes,
   visibleSchoolWeeks,
@@ -57,9 +58,13 @@ test("class notebook — notes prof déplaçables entre semaines", () => {
   const key10 = weekNotesKey("classe-chf-ma2", 10);
   const key11 = weekNotesKey("classe-chf-ma2", 11);
   let document = appendWeekNote({ version: 1, weeks: {} }, key10, "Prévoir démo");
+  assert.equal(document.version, 1);
+  if (document.version !== 1) throw new Error("expected v1");
   const noteId = document.weeks[key10]?.[0]?.id;
   assert.ok(noteId);
-  document = moveWeekNote(document, key10, key11, noteId!);
+  document = moveWeekNote(document, key10, key11, noteId);
+  assert.equal(document.version, 1);
+  if (document.version !== 1) throw new Error("expected v1");
   assert.equal(document.weeks[key10]?.length ?? 0, 0);
   assert.equal(document.weeks[key11]?.[0]?.text, "Prévoir démo");
 });
@@ -91,6 +96,8 @@ test("class notebook — validation et normalisation de payload HTTP", () => {
       ],
     },
   });
+  assert.equal(normalized.version, 1);
+  if (normalized.version !== 1) throw new Error("expected v1");
   assert.deepEqual(normalized.weeks["classe-a:1"], [{ id: "n1", text: "Garder" }]);
 });
 
@@ -101,6 +108,8 @@ test("class notebook — store mémoire get/save", async () => {
 
   const document = appendWeekNote({ version: 1, weeks: {} }, "classe-chf-ma2:12", "Révision");
   const saved = await store.saveNotes(TEACHER_CHF_ID, document);
+  assert.equal(saved.version, 1);
+  if (saved.version !== 1) throw new Error("expected v1");
   assert.equal(saved.weeks["classe-chf-ma2:12"]?.[0]?.text, "Révision");
   assert.deepEqual(await store.getNotes(TEACHER_CHF_ID), saved);
 });
@@ -125,8 +134,9 @@ test("class notebook — store SQLite migration et persistance", async () => {
     },
   });
   const again = await store.getNotes(TEACHER_CHF_ID);
-  assert.deepEqual(again?.weeks["classe-chf-ma2:3"], [{ id: "note-1", text: "Mis à jour" }]);
-  assert.equal(again?.weeks["classe-chf-ma2:4"], undefined);
+  assert.ok(again && isNotesDocumentV1(again));
+  assert.deepEqual(again.weeks["classe-chf-ma2:3"], [{ id: "note-1", text: "Mis à jour" }]);
+  assert.equal(again.weeks["classe-chf-ma2:4"], undefined);
 
   db.close();
 });

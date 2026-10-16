@@ -38,6 +38,8 @@ function contentPatchFromBody(body: {
   subjectId?: string;
   schoolWeekNumber?: number;
   studentVisible?: boolean;
+  courseSessionKey?: string;
+  courseSessionDate?: string;
 }): PublicationPatch {
   return {
     title: body.title,
@@ -47,6 +49,8 @@ function contentPatchFromBody(body: {
     subjectId: body.subjectId,
     schoolWeekNumber: body.schoolWeekNumber,
     studentVisible: body.studentVisible,
+    courseSessionKey: body.courseSessionKey,
+    courseSessionDate: body.courseSessionDate,
   };
 }
 
@@ -61,7 +65,7 @@ async function placementContextForItem(
     return { ok: false, reason: AGENDA_PLACEMENT_YEAR_REASON, status: 400 };
   }
   const context: AgendaPlacementContext = { weeks: year.weeks };
-  if (isStructuredAgendaPublication(item)) {
+  if (item.annualCourseId?.trim()) {
     const sessions = await listComputedCourseSessions(await getCourseScheduleServiceDeps(), {
       schoolYearId: year.id,
       annualCourseId: item.annualCourseId ?? "",

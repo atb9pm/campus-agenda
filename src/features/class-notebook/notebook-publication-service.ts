@@ -6,7 +6,10 @@ import {
 } from "../agenda-bridge/index.ts";
 import type { AnnualCourse } from "../annual-courses/types.ts";
 import type { AnnualCourseStore } from "../../lib/persistence/annual-course-types.ts";
+import type { CourseScheduleStore } from "../../lib/persistence/course-schedule-types.ts";
 import type { AgendaStore } from "../../lib/persistence/types.ts";
+import { listComputedCourseSessions } from "../course-sessions/index.ts";
+import type { CourseSession } from "../course-sessions/types.ts";
 import type {
   RuntimeAgendaAdapterStore,
   RuntimeClassroom,
@@ -33,6 +36,10 @@ export type NotebookPublicationType = (typeof NOTEBOOK_PUBLICATION_TYPES)[number
 export const NOTEBOOK_PUBLICATION_INVALID_REASON = "Données de publication invalides.";
 export const NOTEBOOK_PUBLICATION_TITLE_REQUIRED = "Le titre est obligatoire.";
 export const NOTEBOOK_CONTEXT_MISSING_REASON = "Contexte pédagogique du cours introuvable.";
+export const NOTEBOOK_PUBLICATION_SESSION_GONE_REASON =
+  "Cette séance n’existe plus dans l’horaire actuel. Impossible de publier.";
+export const NOTEBOOK_PUBLICATION_SESSION_AMBIGUOUS_REASON =
+  "Plusieurs séances correspondent à cette semaine. Choisissez une séance précise.";
 
 export interface NotebookPublicationDeps {
   courses: AnnualCourseStore;
@@ -40,6 +47,7 @@ export interface NotebookPublicationDeps {
   years: SchoolYearStore;
   adapters: RuntimeAgendaAdapterStore;
   agenda: AgendaStore;
+  schedules: CourseScheduleStore;
 }
 
 export interface ResolvedNotebookPublishContext {
@@ -67,9 +75,13 @@ export function notebookPublicationFromBody(body: unknown): {
   detail: string;
   ensureOnly: boolean;
   studentVisible?: boolean;
+  courseSessionKey?: string;
+  courseSessionDate?: string;
 } {
   const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   const typeRaw = String(record.type ?? "HOMEWORK").trim();
+  const courseSessionKey = String(record.courseSessionKey ?? "").trim();
+  const courseSessionDate = String(record.courseSessionDate ?? "").trim();
   return {
     annualCourseId: String(record.annualCourseId ?? "").trim(),
     schoolWeekNumber: Number(record.schoolWeekNumber ?? 0),
@@ -79,7 +91,68 @@ export function notebookPublicationFromBody(body: unknown): {
     detail: String(record.detail ?? ""),
     ensureOnly: record.ensureOnly === true,
     studentVisible: typeof record.studentVisible === "boolean" ? record.studentVisible : undefined,
+    ...(courseSessionKey ? { courseSessionKey } : {}),
+    ...(courseSessionDate ? { courseSessionDate } : {}),
   };
+}
+
+export async function resolveNotebookTargetSession(
+  deps: NotebookPublicationDeps,
+  options: {
+    course: AnnualCourse;
+    courseSessionKey?: string | null;
+    courseSessionDate?: string | null;
+    schoolWeekNumber: number;
+    day: number;
+  },
+): Promise<NotebookPublishResult<CourseSession | null>> {
+  const sessionsResult = await listComputedCourseSessions(deps, {
+    schoolYearId: options.course.schoolYearId,
+    classId: options.course.classId,
+    annualCourseId: options.course.id,
+  });
+  if (!sessionsResult.ok) {
+    return { ok: false, reason: sessionsResult.reason, status: sessionsResult.status ?? 409 };
+  }
+  const sessions = sessionsResult.value.filter(
+    (session) =>
+      session.annualCourseId === options.course.id && session.schoolYearId === options.course.schoolYearId,
+  );
+  const wantedKey = options.courseSessionKey?.trim() || "";
+  if (!sessions.length) {
+    if (wantedKey) {
+      return { ok: false, reason: NOTEBOOK_PUBLICATION_SESSION_GONE_REASON, status: 409 };
+    }
+    return { ok: true, value: null };
+  }
+  if (wantedKey) {
+    const found = sessions.find((session) => session.key === wantedKey) ?? null;
+    if (!found) {
+      return { ok: false, reason: NOTEBOOK_PUBLICATION_SESSION_GONE_REASON, status: 409 };
+    }
+    const wantedDate = options.courseSessionDate?.trim() || "";
+    if (wantedDate && wantedDate !== found.date) {
+      return { ok: false, reason: NOTEBOOK_PUBLICATION_SESSION_GONE_REASON, status: 409 };
+    }
+    return { ok: true, value: found };
+  }
+  const wantedDate = options.courseSessionDate?.trim() || "";
+  if (wantedDate) {
+    const byDate = sessions.filter((session) => session.date === wantedDate);
+    if (byDate.length === 1) return { ok: true, value: byDate[0]! };
+    if (byDate.length > 1) {
+      return { ok: false, reason: NOTEBOOK_PUBLICATION_SESSION_AMBIGUOUS_REASON, status: 409 };
+    }
+  }
+  const byWeekDay = sessions.filter(
+    (session) =>
+      session.schoolWeekNumber === options.schoolWeekNumber && session.dayOfWeek - 1 === options.day,
+  );
+  if (byWeekDay.length === 1) return { ok: true, value: byWeekDay[0]! };
+  if (byWeekDay.length > 1) {
+    return { ok: false, reason: NOTEBOOK_PUBLICATION_SESSION_AMBIGUOUS_REASON, status: 409 };
+  }
+  return { ok: false, reason: NOTEBOOK_PUBLICATION_SESSION_GONE_REASON, status: 409 };
 }
 
 function statusForPublishReason(reason: string): number {
@@ -182,6 +255,8 @@ export async function createNotebookPublication(
     title: string;
     detail: string;
     studentVisible?: boolean;
+    courseSessionKey?: string | null;
+    courseSessionDate?: string | null;
     at?: string;
   },
 ): Promise<NotebookPublishResult<PrototypeAgendaItem>> {
@@ -202,19 +277,31 @@ export async function createNotebookPublication(
   });
   if (!resolved.ok) return resolved;
 
+  const session = await resolveNotebookTargetSession(deps, {
+    course: resolved.value.course,
+    courseSessionKey: input.courseSessionKey,
+    courseSessionDate: input.courseSessionDate,
+    schoolWeekNumber: input.schoolWeekNumber,
+    day: input.day,
+  });
+  if (!session.ok) return session;
+  const target = session.value;
+
   const item = await deps.agenda.createAgendaItem({
     classroomId: resolved.value.classroom.id,
     subjectId: resolved.value.subject.id,
     authorTeacherId: input.teacherId,
-    day: input.day,
+    day: target ? target.dayOfWeek - 1 : input.day,
     hour: 8,
     weekOffset: 0,
-    schoolWeekNumber: input.schoolWeekNumber,
+    schoolWeekNumber: target ? target.schoolWeekNumber : input.schoolWeekNumber,
     type: input.type,
     title: input.title,
     detail: input.detail,
     schoolYearId: resolved.value.course.schoolYearId,
     annualCourseId: resolved.value.course.id,
+    courseSessionKey: target?.key ?? null,
+    courseSessionDate: target?.date ?? null,
     studentVisible: input.studentVisible ?? false,
   });
 

@@ -7,15 +7,30 @@ export interface TeacherWeekNote {
   body?: CampusRichDoc;
 }
 
-export interface ClassNotesDocument {
+export interface ClassNotesDocumentV1 {
   version: 1;
   /** Clé `${classSetupId}:${schoolWeekNumber}` */
   weeks: Record<string, TeacherWeekNote[]>;
 }
 
+export interface ClassNotesDocumentV2 {
+  version: 2;
+  /** Clé = `CourseSession.key` (`schoolYearId|annualCourseId|date`). */
+  sessions: Record<string, TeacherWeekNote[]>;
+  /**
+   * Notes V1 d’une semaine à plusieurs séances : à attribuer manuellement.
+   * Clé historique `${classSetupId}:${schoolWeekNumber}`.
+   */
+  pendingWeeks?: Record<string, TeacherWeekNote[]>;
+}
+
+export type ClassNotesDocument = ClassNotesDocumentV1 | ClassNotesDocumentV2;
+
 export interface NotebookClipboard {
   kind: "publication" | "note" | "line";
   sourceWeekNumber: number;
+  sourceSessionKey?: string;
+  sourceCardId?: string;
   publicationId?: number;
   noteId?: string;
   noteText?: string;
