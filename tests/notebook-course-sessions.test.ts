@@ -5,16 +5,21 @@ import test from "node:test";
 import type { SchoolWeek } from "../src/features/calendar/types.ts";
 import type { PrototypeAgendaItem } from "../src/features/agenda/demo-items.ts";
 import {
+  assignOrphanedSessionNotes,
   assignPendingWeekNotes,
+  classNotesTouchCatalog,
   formatCourseSessionCardSubtitle,
   isClassNotesPayload,
   itemsForCourseSession,
+  listOrphanedSessionNotes,
   listPendingWeekNotes,
   listSessionNotes,
   migrateClassNotesToSessions,
   orderedCourseSessions,
+  pendingWeekNotesWithoutSession,
   shiftCourseSession,
   snapToCourseSession,
+  stripClassNotesForCatalog,
   visibleCourseSessions,
   weekNotesKey,
 } from "../src/features/class-notebook/index.ts";
@@ -298,4 +303,112 @@ test("carnet — affichage séances et pas publicationDayIndexForCourseWeek dans
   assert.doesNotMatch(panel, /publicationDayIndexForCourseWeek/);
   assert.match(panel, /Séances précédentes/);
   assert.match(panel, /Séances suivantes/);
+  assert.match(panel, /moveMenuCardId/);
+  assert.doesNotMatch(panel, /moveMenuWeek/);
+  assert.match(panel, /dropSlot\.sessionKey === session\.key/);
+  assert.match(panel, /data-orphaned-session-notes/);
+});
+
+test("carnet — migration V1 incrémentale par classe", () => {
+  const sessions = electroSessions();
+  const weekA = weekNotesKey("class-a", 9);
+  const weekB = weekNotesKey("class-b", 10);
+  const v1 = {
+    version: 1 as const,
+    weeks: {
+      [weekA]: [{ id: "na", text: "Note classe A" }],
+      [weekB]: [{ id: "nb", text: "Note classe B" }],
+    },
+  };
+  const afterA = migrateClassNotesToSessions(v1, sessions, "class-a");
+  assert.equal(afterA.document.version, 2);
+  assert.equal(listPendingWeekNotes(afterA.document, weekA)[0]?.text, "Note classe A");
+  assert.equal(listPendingWeekNotes(afterA.document, weekB)[0]?.text, "Note classe B");
+  const session10 = sessions.find((session) => session.schoolWeekNumber === 10)!;
+  assert.equal(listSessionNotes(afterA.document, session10.key).length, 0);
+
+  const afterB = migrateClassNotesToSessions(afterA.document, sessions, "class-b");
+  assert.equal(listSessionNotes(afterB.document, session10.key)[0]?.text, "Note classe B");
+  assert.equal(listPendingWeekNotes(afterB.document, weekB).length, 0);
+  assert.equal(listPendingWeekNotes(afterB.document, weekA)[0]?.text, "Note classe A");
+});
+
+test("carnet — pending V2 d’une semaine à une séance migrée, jamais disparue", () => {
+  const sessions = electroSessions();
+  const week10 = weekNotesKey("class-mecauto3a", 10);
+  const week9 = weekNotesKey("class-mecauto3a", 9);
+  const v2 = {
+    version: 2 as const,
+    sessions: {},
+    pendingWeeks: {
+      [week10]: [{ id: "p10", text: "héritée 10" }],
+      [week9]: [{ id: "p9", text: "héritée 9" }],
+    },
+  };
+  const migrated = migrateClassNotesToSessions(v2, sessions, "class-mecauto3a");
+  const session10 = sessions.find((session) => session.schoolWeekNumber === 10)!;
+  assert.equal(listSessionNotes(migrated.document, session10.key)[0]?.text, "héritée 10");
+  assert.equal(listPendingWeekNotes(migrated.document, week10).length, 0);
+  assert.equal(listPendingWeekNotes(migrated.document, week9)[0]?.text, "héritée 9");
+});
+
+test("carnet — pending sans séance reste visible", () => {
+  const sessions = electroSessions().filter((session) => session.schoolWeekNumber !== 10);
+  const week10 = weekNotesKey("class-mecauto3a", 10);
+  const v2 = {
+    version: 2 as const,
+    sessions: {},
+    pendingWeeks: { [week10]: [{ id: "p10", text: "sans séance" }] },
+  };
+  const migrated = migrateClassNotesToSessions(v2, sessions, "class-mecauto3a");
+  assert.equal(listPendingWeekNotes(migrated.document, week10)[0]?.text, "sans séance");
+  assert.equal(pendingWeekNotesWithoutSession(migrated.document, "class-mecauto3a", sessions).length, 1);
+});
+
+test("carnet — note d’une CourseSession disparue reste orpheline et réattribuable", () => {
+  const sessions = electroSessions();
+  const monday = sessions.find((session) => session.schoolWeekNumber === 9 && session.dayOfWeek === 1)!;
+  const thursday = sessions.find((session) => session.schoolWeekNumber === 9 && session.dayOfWeek === 4)!;
+  const goneKey = `${YEAR}|${COURSE.id}|2020-01-01`;
+  const v2 = {
+    version: 2 as const,
+    sessions: {
+      [goneKey]: [{ id: "old", text: "Ancienne séance" }],
+      [monday.key]: [{ id: "ok", text: "actuelle" }],
+    },
+  };
+  const migrated = migrateClassNotesToSessions(v2, sessions, "class-mecauto3a");
+  assert.equal(listSessionNotes(migrated.document, goneKey).length, 0);
+  assert.equal(listOrphanedSessionNotes(migrated.document, goneKey)[0]?.text, "Ancienne séance");
+  assert.equal(listSessionNotes(migrated.document, monday.key)[0]?.text, "actuelle");
+  const assigned = assignOrphanedSessionNotes(migrated.document, goneKey, thursday.key);
+  assert.equal(listSessionNotes(assigned, thursday.key)[0]?.text, "Ancienne séance");
+  assert.equal(listOrphanedSessionNotes(assigned, goneKey).length, 0);
+});
+
+test("carnet — suppression catalogue retire les notes session du cours visé", () => {
+  const keepKey = `${YEAR}|ac-keep|2026-10-26`;
+  const dropKey = `${YEAR}|ac-drop|2026-10-26`;
+  const document = {
+    version: 2 as const,
+    sessions: {
+      [keepKey]: [{ id: "keep", text: "conserver" }],
+      [dropKey]: [{ id: "drop", text: "supprimer" }],
+    },
+    pendingWeeks: { "class-drop:9": [{ id: "pend", text: "pending drop" }] },
+    orphanedSessions: { [`${YEAR}|ac-drop|2019-01-01`]: [{ id: "orph", text: "orpheline drop" }] },
+  };
+  assert.equal(classNotesTouchCatalog(document, { annualCourseIds: ["ac-drop"] }), true);
+  assert.equal(classNotesTouchCatalog(document, { annualCourseIds: ["ac-other"] }), false);
+  const stripped = stripClassNotesForCatalog(document, {
+    classroomIds: ["class-drop"],
+    annualCourseIds: ["ac-drop"],
+  });
+  assert.equal(stripped.changed, true);
+  assert.ok(stripped.document.version === 2);
+  if (stripped.document.version !== 2) return;
+  assert.equal(stripped.document.sessions[keepKey]?.[0]?.text, "conserver");
+  assert.equal(stripped.document.sessions[dropKey], undefined);
+  assert.equal(stripped.document.pendingWeeks?.["class-drop:9"], undefined);
+  assert.equal(stripped.document.orphanedSessions?.[`${YEAR}|ac-drop|2019-01-01`], undefined);
 });

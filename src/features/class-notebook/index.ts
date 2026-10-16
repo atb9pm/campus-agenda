@@ -50,8 +50,10 @@ export {
 } from "./notebook-publication-service.ts";
 export {
   appendWeekNote,
+  assignOrphanedSessionNotes,
   assignPendingWeekNotes,
   classNotesStorageKey,
+  classNotesTouchCatalog,
   classNotesTouchClassroom,
   clearNotesFromBrowser,
   cloneClassNotesDocument,
@@ -62,6 +64,7 @@ export {
   isNotesDocumentV1,
   isNotesDocumentV2,
   loadNotesFromBrowser,
+  listOrphanedSessionNotes,
   listPendingWeekNotes,
   listSessionNotes,
   listWeekNotes,
@@ -69,15 +72,19 @@ export {
   moveWeekNote,
   normalizeClassNotes,
   notesDocumentsEquivalent,
+  orphanedSessionNotesForCourse,
   parseStoredNotes,
   peekNotesFromBrowser,
+  pendingWeekNotesWithoutSession,
   removeWeekNote,
   saveNotesToBrowser,
   serializeClassNotes,
   setSessionRichNote,
   setWeekRichNote,
+  stripClassNotesForCatalog,
   stripClassNotesForClassrooms,
   weekKeyedNotesMap,
+  type ClassNotesCatalogScope,
 } from "./notes-storage.ts";
 export {
   CAMPUS_RICH_DETAIL_PREFIX,

@@ -24,6 +24,21 @@ export function courseSessionKey(schoolYearId: string, annualCourseId: string, d
   return `${schoolYearId}|${annualCourseId}|${date}`;
 }
 
+/** Inverse de `courseSessionKey`. `null` si la clé n’a pas la forme attendue. */
+export function parseCourseSessionKey(
+  key: string,
+): { schoolYearId: string; annualCourseId: string; date: string } | null {
+  const trimmed = key.trim();
+  const first = trimmed.indexOf("|");
+  const last = trimmed.lastIndexOf("|");
+  if (first <= 0 || last <= first) return null;
+  const schoolYearId = trimmed.slice(0, first);
+  const annualCourseId = trimmed.slice(first + 1, last);
+  const date = trimmed.slice(last + 1);
+  if (!schoolYearId || !annualCourseId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  return { schoolYearId, annualCourseId, date };
+}
+
 function slotActiveOnDate(slot: CourseScheduleSlot, date: string): boolean {
   if (slot.validFrom && date < slot.validFrom) return false;
   if (slot.validTo && date > slot.validTo) return false;

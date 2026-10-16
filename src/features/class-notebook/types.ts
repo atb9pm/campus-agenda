@@ -22,6 +22,11 @@ export interface ClassNotesDocumentV2 {
    * Clé historique `${classSetupId}:${schoolWeekNumber}`.
    */
   pendingWeeks?: Record<string, TeacherWeekNote[]>;
+  /**
+   * Notes d’une CourseSession.key qui n’existe plus dans l’horaire actuel.
+   * Jamais supprimées silencieusement ; à réattribuer.
+   */
+  orphanedSessions?: Record<string, TeacherWeekNote[]>;
 }
 
 export type ClassNotesDocument = ClassNotesDocumentV1 | ClassNotesDocumentV2;

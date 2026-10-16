@@ -8,7 +8,7 @@ import {
   exportMemoryTimetableTables,
   replaceMemoryTimetableTables,
 } from "../../lib/persistence/memory-timetable-store.ts";
-import { stripClassNotesForClassrooms } from "../class-notebook/notes-storage.ts";
+import { stripClassNotesForCatalog } from "../class-notebook/notes-storage.ts";
 import type { AnnualCourseNote } from "../pedagogical-path/index.ts";
 import type { CatalogDeleteSnapshotDeps } from "./snapshot.ts";
 import type { CatalogDeletePlan } from "./types.ts";
@@ -131,7 +131,10 @@ export async function applyCatalogDeleteInMemory(
   await deps.teacherNotes.replaceAllNotes(
     teacherNotes.map((entry) => ({
       ...entry,
-      document: stripClassNotesForClassrooms(entry.document, plan.classroomIds).document,
+      document: stripClassNotesForCatalog(entry.document, {
+        classroomIds: plan.classroomIds,
+        annualCourseIds: plan.annualCourseIds,
+      }).document,
     })),
   );
 

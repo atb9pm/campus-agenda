@@ -1,4 +1,4 @@
-import { classNotesTouchClassroom } from "../class-notebook/notes-storage.ts";
+import { classNotesTouchCatalog } from "../class-notebook/notes-storage.ts";
 import {
   agendaItemBlocksClassDeletion,
   normalizeClassCode,
@@ -95,7 +95,10 @@ function finalizeCounts(plan: CatalogDeletePlan, snapshot: CatalogDeleteSnapshot
     entry.config.classes.some((item) => plan.classroomIds.includes(item.id)),
   ).length;
   const noteCount = snapshot.teacherNotes.filter((entry) =>
-    classNotesTouchClassroom(entry.document, plan.classroomIds),
+    classNotesTouchCatalog(entry.document, {
+      classroomIds: plan.classroomIds,
+      annualCourseIds: plan.annualCourseIds,
+    }),
   ).length;
   plan.counts = {
     classes: plan.classIds.length,

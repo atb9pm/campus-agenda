@@ -1,3 +1,4 @@
+import { parseCourseSessionKey } from "../course-sessions/compute.ts";
 import type { CourseSession } from "../course-sessions/types.ts";
 import {
   excerptRichDoc,
@@ -132,16 +133,26 @@ function cleanNotesMap(source: Record<string, TeacherWeekNote[]> | undefined): R
   return result;
 }
 
+function finishV2(
+  sessions: Record<string, TeacherWeekNote[]>,
+  pendingWeeks?: Record<string, TeacherWeekNote[]>,
+  orphanedSessions?: Record<string, TeacherWeekNote[]>,
+): ClassNotesDocumentV2 {
+  const nextSessions = cleanNotesMap(sessions);
+  const nextPending = cleanNotesMap(pendingWeeks);
+  const nextOrphaned = cleanNotesMap(orphanedSessions);
+  return {
+    version: 2,
+    sessions: nextSessions,
+    ...(Object.keys(nextPending).length ? { pendingWeeks: nextPending } : {}),
+    ...(Object.keys(nextOrphaned).length ? { orphanedSessions: nextOrphaned } : {}),
+  };
+}
+
 /** Nettoie textes vides et garantit la forme version 1 ou 2. */
 export function normalizeClassNotes(document: ClassNotesDocument): ClassNotesDocument {
   if (document.version === 2) {
-    const sessions = cleanNotesMap(document.sessions);
-    const pendingWeeks = cleanNotesMap(document.pendingWeeks);
-    return {
-      version: 2,
-      sessions,
-      ...(Object.keys(pendingWeeks).length ? { pendingWeeks } : {}),
-    };
+    return finishV2(document.sessions, document.pendingWeeks, document.orphanedSessions);
   }
   return { version: 1, weeks: cleanNotesMap(document.weeks) };
 }
@@ -157,9 +168,12 @@ export function isClassNotesPayload(value: unknown): value is ClassNotesDocument
   if (candidate.version === 2) {
     if (!candidate.sessions || typeof candidate.sessions !== "object") return false;
     if (candidate.pendingWeeks && typeof candidate.pendingWeeks !== "object") return false;
+    if (candidate.orphanedSessions && typeof candidate.orphanedSessions !== "object") return false;
     const sessionOk = Object.values(candidate.sessions).every(notesArrayValid);
     const pendingOk = !candidate.pendingWeeks || Object.values(candidate.pendingWeeks).every(notesArrayValid);
-    return sessionOk && pendingOk;
+    const orphanedOk =
+      !candidate.orphanedSessions || Object.values(candidate.orphanedSessions).every(notesArrayValid);
+    return sessionOk && pendingOk && orphanedOk;
   }
   if (candidate.version !== 1 || !candidate.weeks || typeof candidate.weeks !== "object") {
     return false;
@@ -200,7 +214,7 @@ export function listSessionNotes(document: ClassNotesDocument, sessionKey: strin
 }
 
 export function listPendingWeekNotes(document: ClassNotesDocument, weekKey: string): TeacherWeekNote[] {
-  if (document.version !== 2) return listWeekNotes(document, weekKey);
+  if (document.version !== 2) return [];
   return document.pendingWeeks?.[weekKey] ?? [];
 }
 
@@ -223,7 +237,7 @@ function writeV2Sessions(
   const sessions = { ...document.sessions };
   if (!notes.length) delete sessions[sessionKey];
   else sessions[sessionKey] = notes;
-  return { ...document, version: 2, sessions };
+  return finishV2(sessions, document.pendingWeeks, document.orphanedSessions);
 }
 
 export function setWeekRichNote(
@@ -342,11 +356,68 @@ export function assignPendingWeekNotes(
     ...asV2.sessions,
     [target]: [...(asV2.sessions[target] ?? []), ...pending],
   };
-  return {
-    version: 2,
-    sessions,
-    ...(Object.keys(pendingWeeks).length ? { pendingWeeks } : {}),
+  return finishV2(sessions, pendingWeeks, asV2.orphanedSessions);
+}
+
+export function listOrphanedSessionNotes(
+  document: ClassNotesDocument,
+  sessionKey?: string,
+): TeacherWeekNote[] {
+  if (document.version !== 2) return [];
+  if (sessionKey) return document.orphanedSessions?.[sessionKey] ?? [];
+  return Object.values(document.orphanedSessions ?? {}).flat();
+}
+
+export function orphanedSessionNotesForCourse(
+  document: ClassNotesDocument,
+  annualCourseId: string,
+): Array<{ sessionKey: string; notes: TeacherWeekNote[] }> {
+  if (document.version !== 2 || !annualCourseId.trim()) return [];
+  const wanted = annualCourseId.trim();
+  const rows: Array<{ sessionKey: string; notes: TeacherWeekNote[] }> = [];
+  for (const [sessionKey, notes] of Object.entries(document.orphanedSessions ?? {})) {
+    const parsed = parseCourseSessionKey(sessionKey);
+    if (parsed?.annualCourseId !== wanted && !sessionKey.includes(`|${wanted}|`)) continue;
+    if (notes.length) rows.push({ sessionKey, notes });
+  }
+  return rows;
+}
+
+export function assignOrphanedSessionNotes(
+  document: ClassNotesDocument,
+  orphanedKey: string,
+  sessionKey: string,
+): ClassNotesDocument {
+  if (document.version !== 2) return document;
+  const target = sessionKey.trim();
+  const source = orphanedKey.trim();
+  if (!target || !source) return document;
+  const orphaned = document.orphanedSessions?.[source] ?? [];
+  if (!orphaned.length) return document;
+  const orphanedSessions = { ...(document.orphanedSessions ?? {}) };
+  delete orphanedSessions[source];
+  const sessions = {
+    ...document.sessions,
+    [target]: [...(document.sessions[target] ?? []), ...orphaned],
   };
+  return finishV2(sessions, document.pendingWeeks, orphanedSessions);
+}
+
+export function pendingWeekNotesWithoutSession(
+  document: ClassNotesDocument,
+  classSetupId: string,
+  sessions: readonly CourseSession[],
+): Array<{ weekKey: string; weekNumber: number; notes: TeacherWeekNote[] }> {
+  const prefix = `${classSetupId}:`;
+  const weekNumbers = new Set(sessions.map((session) => session.schoolWeekNumber));
+  const rows: Array<{ weekKey: string; weekNumber: number; notes: TeacherWeekNote[] }> = [];
+  for (const [weekKey, notes] of Object.entries(weekKeyedNotesMap(document))) {
+    if (!weekKey.startsWith(prefix) || !notes.length) continue;
+    const weekNumber = Number(weekKey.slice(prefix.length));
+    if (weekNumbers.has(weekNumber)) continue;
+    rows.push({ weekKey, weekNumber, notes });
+  }
+  return rows;
 }
 
 export function notesDocumentsEquivalent(left: ClassNotesDocument, right: ClassNotesDocument): boolean {
@@ -356,11 +427,11 @@ export function notesDocumentsEquivalent(left: ClassNotesDocument, right: ClassN
 export function cloneClassNotesDocument(document: ClassNotesDocument): ClassNotesDocument {
   const normalized = normalizeClassNotes(document);
   if (normalized.version === 2) {
-    return {
-      version: 2,
-      sessions: { ...normalized.sessions },
-      ...(normalized.pendingWeeks ? { pendingWeeks: { ...normalized.pendingWeeks } } : {}),
-    };
+    return finishV2(
+      { ...normalized.sessions },
+      normalized.pendingWeeks ? { ...normalized.pendingWeeks } : undefined,
+      normalized.orphanedSessions ? { ...normalized.orphanedSessions } : undefined,
+    );
   }
   return { version: 1, weeks: { ...normalized.weeks } };
 }
@@ -376,76 +447,178 @@ export function replaceWeekKeyedNotes(
   weeks: Record<string, TeacherWeekNote[]>,
 ): ClassNotesDocument {
   if (document.version === 2) {
-    return {
-      version: 2,
-      sessions: document.sessions,
-      ...(Object.keys(weeks).length ? { pendingWeeks: weeks } : {}),
-    };
+    return finishV2(document.sessions, weeks, document.orphanedSessions);
   }
   return { version: 1, weeks };
+}
+
+export interface ClassNotesCatalogScope {
+  classroomIds?: readonly string[];
+  annualCourseIds?: readonly string[];
+}
+
+function sessionKeyMatchesAnnualCourse(sessionKey: string, annualCourseIds: readonly string[]): boolean {
+  const parsed = parseCourseSessionKey(sessionKey);
+  if (parsed) return annualCourseIds.includes(parsed.annualCourseId);
+  return annualCourseIds.some((annualCourseId) => sessionKey.includes(`|${annualCourseId}|`));
+}
+
+export function classNotesTouchCatalog(
+  document: ClassNotesDocument,
+  scope: ClassNotesCatalogScope,
+): boolean {
+  const classroomIds = scope.classroomIds ?? [];
+  const annualCourseIds = scope.annualCourseIds ?? [];
+  if (
+    classroomIds.length &&
+    Object.keys(weekKeyedNotesMap(document)).some((key) =>
+      classroomIds.some((classroomId) => key.startsWith(`${classroomId}:`)),
+    )
+  ) {
+    return true;
+  }
+  if (!annualCourseIds.length || document.version !== 2) return false;
+  return (
+    Object.keys(document.sessions).some((key) => sessionKeyMatchesAnnualCourse(key, annualCourseIds)) ||
+    Object.keys(document.orphanedSessions ?? {}).some((key) => sessionKeyMatchesAnnualCourse(key, annualCourseIds))
+  );
 }
 
 export function classNotesTouchClassroom(
   document: ClassNotesDocument,
   classroomIds: readonly string[],
 ): boolean {
-  return Object.keys(weekKeyedNotesMap(document)).some((key) =>
-    classroomIds.some((classroomId) => key.startsWith(`${classroomId}:`)),
-  );
+  return classNotesTouchCatalog(document, { classroomIds });
 }
 
-export function stripClassNotesForClassrooms(
+export function stripClassNotesForCatalog(
   document: ClassNotesDocument,
-  classroomIds: readonly string[],
+  scope: ClassNotesCatalogScope,
 ): { document: ClassNotesDocument; changed: boolean } {
-  const weeks = weekKeyedNotesMap(document);
+  const classroomIds = scope.classroomIds ?? [];
+  const annualCourseIds = scope.annualCourseIds ?? [];
   let changed = false;
+  const weeks = weekKeyedNotesMap(document);
   for (const key of Object.keys(weeks)) {
     if (classroomIds.some((classroomId) => key.startsWith(`${classroomId}:`))) {
       delete weeks[key];
       changed = true;
     }
   }
+  if (document.version !== 2) {
+    if (!changed) return { document, changed: false };
+    return { document: { version: 1, weeks }, changed: true };
+  }
+  const sessions = { ...document.sessions };
+  const orphanedSessions = { ...(document.orphanedSessions ?? {}) };
+  for (const key of Object.keys(sessions)) {
+    if (sessionKeyMatchesAnnualCourse(key, annualCourseIds)) {
+      delete sessions[key];
+      changed = true;
+    }
+  }
+  for (const key of Object.keys(orphanedSessions)) {
+    if (sessionKeyMatchesAnnualCourse(key, annualCourseIds)) {
+      delete orphanedSessions[key];
+      changed = true;
+    }
+  }
   if (!changed) return { document, changed: false };
-  return { document: replaceWeekKeyedNotes(document, weeks), changed: true };
+  return { document: finishV2(sessions, weeks, orphanedSessions), changed: true };
+}
+
+export function stripClassNotesForClassrooms(
+  document: ClassNotesDocument,
+  classroomIds: readonly string[],
+): { document: ClassNotesDocument; changed: boolean } {
+  return stripClassNotesForCatalog(document, { classroomIds });
+}
+
+function placeWeekNotes(
+  sessionsBag: Record<string, TeacherWeekNote[]>,
+  pendingWeeks: Record<string, TeacherWeekNote[]>,
+  weekKey: string,
+  notes: TeacherWeekNote[],
+  sessions: readonly CourseSession[],
+  classPrefix: string,
+): boolean {
+  if (!weekKey.startsWith(classPrefix)) {
+    pendingWeeks[weekKey] = [...(pendingWeeks[weekKey] ?? []), ...notes];
+    return false;
+  }
+  const weekNumber = Number(weekKey.slice(classPrefix.length));
+  const weekSessions = sessions.filter((session) => session.schoolWeekNumber === weekNumber);
+  if (weekSessions.length === 1) {
+    const key = weekSessions[0]!.key;
+    sessionsBag[key] = [...(sessionsBag[key] ?? []), ...notes];
+    return true;
+  }
+  pendingWeeks[weekKey] = [...(pendingWeeks[weekKey] ?? []), ...notes];
+  return false;
 }
 
 /**
- * Passe un document V1 vers V2 à partir des CourseSession d’un AnnualCourse.
- * Semaine à une séance → migration automatique.
- * Semaine à plusieurs séances → pendingWeeks (pas d’attribution silencieuse).
+ * Migration incrémentale vers V2, scoped au classSetupId ouvert.
+ * V2 : retravaille uniquement les pendingWeeks de cette classe.
+ * Clés de séance du cours ouvert devenues introuvables → orphanedSessions
+ * (jamais de suppression silencieuse ; pas de remappage si plusieurs séances restent).
  */
 export function migrateClassNotesToSessions(
   document: ClassNotesDocument,
   sessions: readonly CourseSession[],
   classSetupId: string,
 ): { document: ClassNotesDocumentV2; changed: boolean } {
-  if (document.version === 2) {
-    return { document: normalizeClassNotes(document) as ClassNotesDocumentV2, changed: false };
-  }
+  const prefix = `${classSetupId}:`;
+  const currentKeys = new Set(sessions.map((session) => session.key));
+  const courseIds = new Set(sessions.map((session) => session.annualCourseId));
+  let changed = false;
   const sessionsBag: Record<string, TeacherWeekNote[]> = {};
   const pendingWeeks: Record<string, TeacherWeekNote[]> = {};
-  const prefix = `${classSetupId}:`;
-  for (const [weekKey, notes] of Object.entries(document.weeks ?? {})) {
-    const cleaned = cleanNotesList(notes);
-    if (!cleaned.length) continue;
-    if (!weekKey.startsWith(prefix)) {
-      pendingWeeks[weekKey] = cleaned;
-      continue;
+  const orphanedSessions: Record<string, TeacherWeekNote[]> = {};
+
+  if (document.version === 1) {
+    changed = true;
+    for (const [weekKey, notes] of Object.entries(document.weeks ?? {})) {
+      const cleaned = cleanNotesList(notes);
+      if (!cleaned.length) continue;
+      placeWeekNotes(sessionsBag, pendingWeeks, weekKey, cleaned, sessions, prefix);
     }
-    const weekNumber = Number(weekKey.slice(prefix.length));
-    const weekSessions = sessions.filter((session) => session.schoolWeekNumber === weekNumber);
-    if (weekSessions.length === 1) {
+  } else {
+    Object.assign(sessionsBag, document.sessions);
+    Object.assign(pendingWeeks, document.pendingWeeks ?? {});
+    Object.assign(orphanedSessions, document.orphanedSessions ?? {});
+    for (const weekKey of Object.keys(pendingWeeks)) {
+      if (!weekKey.startsWith(prefix)) continue;
+      const notes = cleanNotesList(pendingWeeks[weekKey]);
+      if (!notes.length) {
+        delete pendingWeeks[weekKey];
+        changed = true;
+        continue;
+      }
+      const weekNumber = Number(weekKey.slice(prefix.length));
+      const weekSessions = sessions.filter((session) => session.schoolWeekNumber === weekNumber);
+      if (weekSessions.length !== 1) continue;
+      delete pendingWeeks[weekKey];
       const key = weekSessions[0]!.key;
-      sessionsBag[key] = [...(sessionsBag[key] ?? []), ...cleaned];
-    } else {
-      pendingWeeks[weekKey] = cleaned;
+      sessionsBag[key] = [...(sessionsBag[key] ?? []), ...notes];
+      changed = true;
     }
   }
-  const next: ClassNotesDocumentV2 = {
-    version: 2,
-    sessions: sessionsBag,
-    ...(Object.keys(pendingWeeks).length ? { pendingWeeks } : {}),
-  };
+
+  for (const sessionKey of Object.keys(sessionsBag)) {
+    const notes = sessionsBag[sessionKey] ?? [];
+    const parsed = parseCourseSessionKey(sessionKey);
+    const courseId = parsed?.annualCourseId;
+    if (!courseId || !courseIds.has(courseId)) continue;
+    if (currentKeys.has(sessionKey)) continue;
+    delete sessionsBag[sessionKey];
+    orphanedSessions[sessionKey] = [...(orphanedSessions[sessionKey] ?? []), ...notes];
+    changed = true;
+  }
+
+  const next = finishV2(sessionsBag, pendingWeeks, orphanedSessions);
+  if (!changed) {
+    return { document: next, changed: false };
+  }
   return { document: next, changed: true };
 }

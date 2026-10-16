@@ -12,6 +12,7 @@ import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items";
 import type { SchoolWeek } from "@campus/features/calendar";
 import {
   appendWeekNote,
+  assignOrphanedSessionNotes,
   assignPendingWeekNotes,
   clampWeekDisplayCount,
   NOTEBOOK_NARROW_VIEWPORT_MAX_PX,
@@ -49,7 +50,9 @@ import {
   moveTargetSchoolWeeks,
   moveWeekNote,
   notesDocumentsEquivalent,
+  orphanedSessionNotesForCourse,
   orderedCourseSessions,
+  pendingWeekNotesWithoutSession,
   rememberRichClip,
   schoolWeekForSession,
   sessionNotesKey,
@@ -263,12 +266,16 @@ export function ClassNotebookPanel({
   const [editorDoc, setEditorDoc] = useState<CampusRichDoc>(emptyRichDoc());
   const [studentPreviewOpen, setStudentPreviewOpen] = useState(false);
   const [unpublishCardId, setUnpublishCardId] = useState<string | null>(null);
-  const [moveMenuWeek, setMoveMenuWeek] = useState<number | null>(null);
+  const [moveMenuCardId, setMoveMenuCardId] = useState<string | null>(null);
   const [selectedLine, setSelectedLine] = useState<SelectedLine | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
-  const [dropSlot, setDropSlot] = useState<{ source: LineSource; weekNumber: number; atLineIndex: number } | null>(
-    null,
-  );
+  const [dropSlot, setDropSlot] = useState<{
+    source: LineSource;
+    weekNumber: number;
+    atLineIndex: number;
+    sessionKey?: string;
+    cardId?: string;
+  } | null>(null);
   const [courseSessions, setCourseSessions] = useState<CourseSession[] | null>(null);
   const [loadedCourseId, setLoadedCourseId] = useState<string | null>(null);
   const [sessionsError, setSessionsError] = useState("");
@@ -886,14 +893,14 @@ export function ClassNotebookPanel({
   ]);
 
   useEffect(() => {
-    if (moveMenuWeek == null) return;
+    if (moveMenuCardId == null) return;
     function close(event: Event) {
       if (event instanceof KeyboardEvent && event.key !== "Escape") return;
       if (event.type === "pointerdown") {
         const target = event.target as HTMLElement | null;
         if (target?.closest(".class-notebook-move")) return;
       }
-      setMoveMenuWeek(null);
+      setMoveMenuCardId(null);
     }
     document.addEventListener("pointerdown", close);
     document.addEventListener("keydown", close);
@@ -901,7 +908,7 @@ export function ClassNotebookPanel({
       document.removeEventListener("pointerdown", close);
       document.removeEventListener("keydown", close);
     };
-  }, [moveMenuWeek]);
+  }, [moveMenuCardId]);
 
   function openEditor(kind: EditorKind, weekNumber: number, session?: CourseSession | null) {
     const weekItems =
@@ -1240,7 +1247,12 @@ export function ClassNotebookPanel({
       insertSlotsDragging: dragging != null,
       hiddenInsertSlots,
       activeInsertSlot:
-        dropSlot?.source === source && dropSlot.weekNumber === weekNumber ? dropSlot.atLineIndex : null,
+        dropSlot?.source === source &&
+        (session
+          ? dropSlot.sessionKey === session.key
+          : dropSlot.weekNumber === weekNumber && !dropSlot.sessionKey)
+          ? dropSlot.atLineIndex
+          : null,
     };
   }
 
@@ -1492,6 +1504,21 @@ export function ClassNotebookPanel({
       {structuredCourse && !sessionsLoading && !sessionsError && courseSessions?.length === 0 ? (
         <p className="class-notebook-empty">Aucune séance planifiée pour ce cours dans l’horaire.</p>
       ) : null}
+      {structuredCourse && courseSessions
+        ? pendingWeekNotesWithoutSession(notesDocument, classSetup.id, courseSessions).map((entry) => (
+            <div
+              key={entry.weekKey}
+              className="class-notebook-pending-notes"
+              data-pending-week-notes=""
+              data-pending-week-unscheduled={entry.weekNumber}
+            >
+              <p>
+                Note ancienne de la semaine {String(entry.weekNumber).padStart(2, "0")} — séance à attribuer
+              </p>
+              <RichDocView doc={composeWeekNotesDoc(entry.notes)} compact emptyLabel="" />
+            </div>
+          ))
+        : null}
 
       <div
         className={`class-notebook-grid class-notebook-grid-${effectiveWeekDisplayCount}`}
@@ -1509,12 +1536,7 @@ export function ClassNotebookPanel({
           const weekNotes = session
             ? listSessionNotes(notesDocument, sessionNotesKey(session.key))
             : listWeekNotes(notesDocument, weekKey);
-          const pendingNotes =
-            session && courseSessions
-              ? courseSessions.filter((entry) => entry.schoolWeekNumber === weekNumber).length > 1
-                ? listPendingWeekNotes(notesDocument, weekKey)
-                : []
-              : [];
+          const pendingNotes = listPendingWeekNotes(notesDocument, weekKey);
           const weekControls = scopedItems.filter((item) => item.type === "TEST");
           const weekCarnetPublications = scopedItems.filter(isCarnetOwnedPublication);
           const weekStructuredPublications = scopedItems.filter(
@@ -1640,7 +1662,7 @@ export function ClassNotebookPanel({
                         className="class-notebook-drag-handle"
                         draggable
                         aria-label={`Déplacer la publication de ${session ? formatCourseSessionCardWeekLabel(session, week) : week ? formatWeekColumnLabel(week) : "cette séance"}`}
-                        aria-expanded={moveMenuWeek === weekNumber}
+                        aria-expanded={moveMenuCardId === card.id}
                         title="Glisser, ou cliquer pour choisir la séance"
                         onDragStart={(event) => {
                           const itemId = weekCarnetPublications[0]!.id;
@@ -1659,12 +1681,12 @@ export function ClassNotebookPanel({
                           setDropSlot(null);
                         }}
                         onClick={() =>
-                          setMoveMenuWeek((current) => (current === weekNumber ? null : weekNumber))
+                          setMoveMenuCardId((current) => (current === card.id ? null : card.id))
                         }
                       >
                         ⠿
                       </button>
-                      {moveMenuWeek === weekNumber ? (
+                      {moveMenuCardId === card.id ? (
                         <menu className="class-notebook-move-menu">
                           <li className="class-notebook-move-menu-title">Déplacer vers</li>
                           {(session
@@ -1688,7 +1710,7 @@ export function ClassNotebookPanel({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setMoveMenuWeek(null);
+                                    setMoveMenuCardId(null);
                                     entry.onPick();
                                   }}
                                 >
@@ -1747,7 +1769,14 @@ export function ClassNotebookPanel({
                     }
                     onInsertSlotDragOver={
                       canPublish
-                        ? (at) => setDropSlot({ source: "publication", weekNumber: weekNumber, atLineIndex: at })
+                        ? (at) =>
+                            setDropSlot({
+                              source: "publication",
+                              weekNumber: weekNumber,
+                              atLineIndex: at,
+                              sessionKey: session?.key,
+                              cardId: card.id,
+                            })
                         : undefined
                     }
                     onInsertSlotDrop={
@@ -1823,6 +1852,27 @@ export function ClassNotebookPanel({
                     </button>
                   </div>
                 ) : null}
+                {session
+                  ? orphanedSessionNotesForCourse(notesDocument, session.annualCourseId).map((entry) => (
+                      <div
+                        key={entry.sessionKey}
+                        className="class-notebook-pending-notes"
+                        data-orphaned-session-notes={entry.sessionKey}
+                      >
+                        <p>Note d’une séance disparue — à réattribuer</p>
+                        <RichDocView doc={composeWeekNotesDoc(entry.notes)} compact emptyLabel="" />
+                        <button
+                          type="button"
+                          className="workspace-action secondary"
+                          onClick={() =>
+                            onNotesChange(assignOrphanedSessionNotes(notesDocument, entry.sessionKey, session.key))
+                          }
+                        >
+                          Attribuer à cette séance
+                        </button>
+                      </div>
+                    ))
+                  : null}
                 <div className="class-notebook-lines">
                   <RichDocView
                     doc={composeWeekNotesDoc(weekNotes)}
@@ -1849,7 +1899,13 @@ export function ClassNotebookPanel({
                     }}
                     onInsertSlot={(at) => placeCopiedLine(weekNumber, "notes", at, session)}
                     onInsertSlotDragOver={(at) =>
-                      setDropSlot({ source: "notes", weekNumber: weekNumber, atLineIndex: at })
+                      setDropSlot({
+                        source: "notes",
+                        weekNumber: weekNumber,
+                        atLineIndex: at,
+                        sessionKey: session?.key,
+                        cardId: card.id,
+                      })
                     }
                     onInsertSlotDrop={(at, event) => handleDropOnSlot(event, "notes", weekNumber, at, session)}
                     onMoveLine={(line, direction) => nudgeSelectedLine("notes", weekNumber, line, direction, session)}
