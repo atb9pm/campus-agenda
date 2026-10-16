@@ -716,6 +716,8 @@ export async function createNotebookPublicationApi(input: {
   title: string;
   detail: string;
   studentVisible?: boolean;
+  courseSessionKey?: string;
+  courseSessionDate?: string;
 }): Promise<PrototypeAgendaItem> {
   const response = await fetch("/api/teacher/notebook-publications", {
     method: "POST",
@@ -729,6 +731,8 @@ export async function createNotebookPublicationApi(input: {
       title: input.title,
       detail: input.detail,
       studentVisible: input.studentVisible,
+      courseSessionKey: input.courseSessionKey,
+      courseSessionDate: input.courseSessionDate,
     }),
   });
   const payload = await parseJson<{ ok: boolean; item?: PrototypeAgendaItem; reason?: string }>(response);
@@ -803,6 +807,8 @@ export async function updateAgendaItemApi(
     subjectId: string;
     schoolWeekNumber: number;
     studentVisible: boolean;
+    courseSessionKey: string;
+    courseSessionDate: string;
   }>,
 ): Promise<PrototypeAgendaItem> {
   const response = await fetch(`/api/agenda/${itemId}`, {

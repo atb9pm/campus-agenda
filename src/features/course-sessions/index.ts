@@ -2,6 +2,7 @@ export type { CourseSession, CourseSessionSegment } from "./types.ts";
 export {
   computeCourseSessions,
   courseSessionKey,
+  parseCourseSessionKey,
   type ComputeCourseSessionsCourse,
   type ComputeCourseSessionsInput,
 } from "./compute.ts";

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { weekNotesKey } from "../src/features/class-notebook/index.ts";
+import { isNotesDocumentV1, weekNotesKey } from "../src/features/class-notebook/index.ts";
 import {
   NOTES_ARE_NOT_AGENDA_TYPE,
   REFERENCE_ITEM_TYPES,
@@ -388,7 +388,8 @@ test("compat — anciennes notes carnet inchangées", async () => {
     },
   });
   const loaded = await store.getNotes("teacher-legacy");
-  assert.equal(loaded?.weeks[key]?.[0]?.text, "Préparer trois multimètres");
+  assert.ok(loaded && isNotesDocumentV1(loaded));
+  assert.equal(loaded.weeks[key]?.[0]?.text, "Préparer trois multimètres");
 });
 
 test("compat — types Agenda publications inchangés (pas de NOTE)", () => {

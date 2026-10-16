@@ -63,6 +63,8 @@ test("formulaire unique — Carnet et Planning partagent ControlEditorModal", as
   assert.match(notebook, /class-notebook-control-day/);
   assert.match(notebook, /Planifier →/);
   assert.match(notebook, /data-control-plan-week/);
+  assert.doesNotMatch(notebook, /data-control-session-picker/);
+  assert.doesNotMatch(notebook, /Choisir le cours/);
   assert.doesNotMatch(notebook, /📅 \{item\.title\}/);
   assert.doesNotMatch(notebook, /onSave=\{async \(input\) =>/);
   assert.match(notebook, /onSelect=\{openEditControl\}/);

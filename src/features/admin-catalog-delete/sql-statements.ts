@@ -1,4 +1,4 @@
-import { serializeClassNotes } from "../class-notebook/notes-storage.ts";
+import { serializeClassNotes, stripClassNotesForCatalog } from "../class-notebook/notes-storage.ts";
 import { serializeTeacherSetup } from "../teacher-setup/storage.ts";
 import type { SqlBatchStatement } from "../../lib/persistence/sql/types.ts";
 import type { CatalogDeleteSnapshot } from "./snapshot.ts";
@@ -45,18 +45,14 @@ export function buildTeacherJsonUpdates(
     });
   }
   for (const entry of snapshot.teacherNotes) {
-    const weeks = { ...entry.document.weeks };
-    let changed = false;
-    for (const key of Object.keys(weeks)) {
-      if (plan.classroomIds.some((classroomId) => key.startsWith(`${classroomId}:`))) {
-        delete weeks[key];
-        changed = true;
-      }
-    }
-    if (!changed) continue;
+    const stripped = stripClassNotesForCatalog(entry.document, {
+      classroomIds: plan.classroomIds,
+      annualCourseIds: plan.annualCourseIds,
+    });
+    if (!stripped.changed) continue;
     statements.push({
       sql: `UPDATE teacher_notes SET notes_json = ?, updated_at = datetime('now') WHERE teacher_id = ?`,
-      values: [serializeClassNotes({ ...entry.document, weeks }), entry.teacherId],
+      values: [serializeClassNotes(stripped.document), entry.teacherId],
     });
   }
   return statements;

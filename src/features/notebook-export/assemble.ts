@@ -1,6 +1,14 @@
 import { isStudentVisible } from "../agenda/visibility.ts";
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
-import { isPublicationLine, weekNotesKey, composeWeekNotesDoc, listWeekNotes } from "../class-notebook/index.ts";
+import {
+  composeWeekNotesDoc,
+  isNotesDocumentV2,
+  isPublicationLine,
+  listPendingWeekNotes,
+  listSessionNotes,
+  listWeekNotes,
+  weekNotesKey,
+} from "../class-notebook/index.ts";
 import type { ClassNotesDocument } from "../class-notebook/types.ts";
 import { COURSE_WEEKDAY_LABELS } from "../course-schedule/types.ts";
 import { formatSwissDate } from "../course-sessions/format.ts";
@@ -107,7 +115,7 @@ export function assembleNotebookExport(input: {
 }): NotebookExportDocument | null {
   const allSessions = [...input.sessions];
   const sessions = filterSessionsForExportPeriod(allSessions, input.weeks, input.options.period);
-  const notesSeen = new Set<number>();
+  const pendingWeeksSeen = new Set<string>();
   const blocks: NotebookExportSessionBlock[] = [];
   const scopedItems = input.annualCourseId
     ? input.items.filter((entry) => !entry.annualCourseId || entry.annualCourseId === input.annualCourseId)
@@ -127,10 +135,25 @@ export function assembleNotebookExport(input: {
     publicationCount += publicationItems.length;
     matchedControlCount += controlItems.length;
     let notes: NotebookExportSessionBlock["notes"] = [];
-    if (input.options.includeTeacherNotes && input.notes && !notesSeen.has(session.schoolWeekNumber)) {
-      notesSeen.add(session.schoolWeekNumber);
-      const weekNotes = listWeekNotes(input.notes, weekNotesKey(input.classId, session.schoolWeekNumber));
-      notes = richDocToExportLines(composeWeekNotesDoc(weekNotes));
+    if (input.options.includeTeacherNotes && input.notes) {
+      if (isNotesDocumentV2(input.notes)) {
+        notes = richDocToExportLines(composeWeekNotesDoc(listSessionNotes(input.notes, session.key)));
+        const weekKey = weekNotesKey(input.classId, session.schoolWeekNumber);
+        const weekSessions = allSessions.filter((entry) => entry.schoolWeekNumber === session.schoolWeekNumber);
+        if (weekSessions.length === 1 && !pendingWeeksSeen.has(weekKey)) {
+          pendingWeeksSeen.add(weekKey);
+          const pending = listPendingWeekNotes(input.notes, weekKey);
+          if (pending.length) {
+            notes = [...notes, ...richDocToExportLines(composeWeekNotesDoc(pending))];
+          }
+        }
+      } else {
+        const weekKey = weekNotesKey(input.classId, session.schoolWeekNumber);
+        const weekSessions = allSessions.filter((entry) => entry.schoolWeekNumber === session.schoolWeekNumber);
+        if (weekSessions.length === 1) {
+          notes = richDocToExportLines(composeWeekNotesDoc(listWeekNotes(input.notes, weekKey)));
+        }
+      }
     }
     if (!publications.length && !controls.length && !notes.length) continue;
     blocks.push({

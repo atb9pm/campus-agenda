@@ -1,7 +1,6 @@
 import { isoDateForSchoolWeekDay } from "../school-days/index.ts";
 import type { CourseSession } from "../course-sessions/types.ts";
 import type { PrototypeAgendaItem } from "./demo-items.ts";
-import { isStructuredAgendaPublication } from "./publications.ts";
 import type { PublicationPatch } from "./publications.ts";
 
 export const AGENDA_PLACEMENT_NO_SESSION_REASON =
@@ -28,11 +27,14 @@ function sessionDayIndex(session: Pick<CourseSession, "dayOfWeek">): number {
 }
 
 export function isAgendaPlacementChange(
-  item: Pick<PrototypeAgendaItem, "day" | "schoolWeekNumber">,
-  patch: Pick<PublicationPatch, "day" | "schoolWeekNumber">,
+  item: Pick<PrototypeAgendaItem, "day" | "schoolWeekNumber" | "courseSessionKey">,
+  patch: Pick<PublicationPatch, "day" | "schoolWeekNumber" | "courseSessionKey">,
 ): boolean {
   if (patch.day !== undefined && patch.day !== item.day) return true;
   if (patch.schoolWeekNumber !== undefined && patch.schoolWeekNumber !== item.schoolWeekNumber) {
+    return true;
+  }
+  if (patch.courseSessionKey !== undefined && patch.courseSessionKey !== (item.courseSessionKey ?? null)) {
     return true;
   }
   return false;
@@ -40,17 +42,21 @@ export function isAgendaPlacementChange(
 
 export function normalizeAgendaPlacement(
   item: PrototypeAgendaItem,
-  requested: { schoolWeekNumber: number; day: number },
+  requested: { schoolWeekNumber: number; day: number; courseSessionKey?: string | null },
   context: AgendaPlacementContext,
 ): { ok: true; placement: NormalizedAgendaPlacement } | { ok: false; reason: string } {
-  if (isStructuredAgendaPublication(item)) {
-    const annualCourseId = item.annualCourseId!.trim();
-    const session = (context.sessions ?? []).find(
-      (entry) =>
-        entry.annualCourseId === annualCourseId
-        && entry.schoolWeekNumber === requested.schoolWeekNumber
-        && sessionDayIndex(entry) === requested.day,
-    );
+  const annualCourseId = item.annualCourseId?.trim() || "";
+  const wantedKey = requested.courseSessionKey?.trim() || "";
+  const sessions = context.sessions ?? [];
+  if (wantedKey || (annualCourseId && sessions.length)) {
+    const session = wantedKey
+      ? sessions.find((entry) => entry.key === wantedKey)
+      : sessions.find(
+          (entry) =>
+            (!annualCourseId || entry.annualCourseId === annualCourseId) &&
+            entry.schoolWeekNumber === requested.schoolWeekNumber &&
+            sessionDayIndex(entry) === requested.day,
+        );
     if (!session) {
       return { ok: false, reason: AGENDA_PLACEMENT_NO_SESSION_REASON };
     }
@@ -89,9 +95,18 @@ export function buildAgendaItemUpdatePatch(
   if (!isAgendaPlacementChange(item, patch)) {
     return { ok: true, patch };
   }
+  const weekOrDayChanged =
+    (patch.day !== undefined && patch.day !== item.day) ||
+    (patch.schoolWeekNumber !== undefined && patch.schoolWeekNumber !== item.schoolWeekNumber);
   const requested = {
     schoolWeekNumber: patch.schoolWeekNumber ?? item.schoolWeekNumber,
     day: patch.day ?? item.day,
+    courseSessionKey:
+      patch.courseSessionKey !== undefined
+        ? patch.courseSessionKey
+        : weekOrDayChanged
+          ? null
+          : item.courseSessionKey,
   };
   const normalized = normalizeAgendaPlacement(item, requested, context);
   if (!normalized.ok) return normalized;

@@ -46,6 +46,8 @@ export function notebookOwnedPublicationPatch(body: {
   hour?: number;
   schoolWeekNumber?: number;
   studentVisible?: boolean;
+  courseSessionKey?: string;
+  courseSessionDate?: string;
 }): PublicationPatch {
   return {
     title: body.title,
@@ -54,6 +56,8 @@ export function notebookOwnedPublicationPatch(body: {
     hour: body.hour,
     schoolWeekNumber: body.schoolWeekNumber,
     studentVisible: body.studentVisible,
+    courseSessionKey: body.courseSessionKey,
+    courseSessionDate: body.courseSessionDate,
   };
 }
 

@@ -32,6 +32,7 @@ import {
   sanitizeRichDoc,
   savePlanTouchesItem,
   setWeekRichNote,
+  isNotesDocumentV1,
   CAMPUS_RICH_DETAIL_PREFIX,
   type CampusRichDoc,
 } from "../src/features/class-notebook/index.ts";
@@ -284,6 +285,7 @@ test("foldable — seuls les items Carnet, pas les publications structurées", (
       title: "Structuré",
       annualCourseId: "ac-1",
       courseSessionKey: "year|ac-1|2026-08-17",
+      referenceItemId: "ref-item-1",
     }),
     item({ id: 3, type: "TEST", title: "Contrôle" }),
   ];
@@ -307,6 +309,7 @@ test("semaine mixte — l’éditeur n’ouvre que la publication Carnet et la s
     detail: "Ne pas absorber",
     annualCourseId: "ac-moteur",
     courseSessionKey: "year|ac-moteur|2026-09-14",
+    referenceItemId: "ref-item-moteur",
   });
   const week = [carnet, structured];
 
@@ -462,6 +465,7 @@ test("notes prof — document riche + ancien texte, normalisation", () => {
     blocks: [{ type: "checklist", items: [{ checked: true, inlines: [{ text: "Vérifier les absents", marks: { bold: true } }] }] }],
   });
   const saved = setWeekRichNote({ version: 1, weeks: {} }, "classe-a:2", body);
+  assert.ok(isNotesDocumentV1(saved));
   const composed = composeWeekNotesDoc(saved.weeks["classe-a:2"] ?? []);
   assert.equal(composed.blocks[0]?.type, "checklist");
 
@@ -476,6 +480,7 @@ test("notes prof — document riche + ancien texte, normalisation", () => {
       "classe-a:3": [{ id: "drop", text: "   " }],
     },
   });
+  assert.ok(isNotesDocumentV1(normalized));
   assert.ok(normalized.weeks["classe-a:2"]?.[0]?.body);
   assert.equal(normalized.weeks["classe-a:3"], undefined);
 });
@@ -494,10 +499,12 @@ test("backup notes — ancien JSON et nouveau body restaurables", async () => {
   const rich = setWeekRichNote({ version: 1, weeks: {} }, "classe-a:5", sampleDoc());
   await store.saveNotes(TEACHER_CHF_ID, rich);
   const roundtrip = await store.getNotes(TEACHER_CHF_ID);
-  assert.equal(roundtrip?.weeks["classe-a:5"]?.[0]?.body?.format, "campus-rich-v1");
+  assert.ok(roundtrip && isNotesDocumentV1(roundtrip));
+  assert.equal(roundtrip.weeks["classe-a:5"]?.[0]?.body?.format, "campus-rich-v1");
   const dumped = await store.exportAllNotes();
   await store.replaceAllNotes(dumped);
   const restored = await store.getNotes(TEACHER_CHF_ID);
-  assert.deepEqual(restored?.weeks["classe-a:5"]?.[0]?.body, rich.weeks["classe-a:5"]?.[0]?.body);
+  assert.ok(restored && isNotesDocumentV1(restored) && isNotesDocumentV1(rich));
+  assert.deepEqual(restored.weeks["classe-a:5"]?.[0]?.body, rich.weeks["classe-a:5"]?.[0]?.body);
   db.close();
 });

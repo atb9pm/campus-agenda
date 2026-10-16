@@ -12,6 +12,8 @@ import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items";
 import type { SchoolWeek } from "@campus/features/calendar";
 import {
   appendWeekNote,
+  assignOrphanedSessionNotes,
+  assignPendingWeekNotes,
   clampWeekDisplayCount,
   NOTEBOOK_NARROW_VIEWPORT_MAX_PX,
   notebookWeekDisplayCountForViewport,
@@ -26,27 +28,40 @@ import {
   insertWeekUnitAt,
   adjacentWeekUnitInsertIndex,
   findCarnetPublicationItemForSave,
+  formatCourseSessionCardSubtitle,
+  formatCourseSessionCardWeekLabel,
   formatWeekColumnLabel,
   formatWeekColumnSubtitle,
-  formatWeekColumnSubtitleFromSessions,
   isCarnetOwnedPublication,
   isListBlock,
   listBlockLineSpan,
   courseSessionForControlSlot,
-  courseSessionsForWeek,
   isEmptyRichDoc,
   isPublicationLine,
+  itemsForCourseSession,
   lineIndexAfterMove,
+  listPendingWeekNotes,
+  listSessionNotes,
   listWeekNotes,
+  migrateClassNotesToSessions,
+  moveTargetCourseSessions,
   moveWeekUnitToDoc,
   moveWeekUnitWithinDoc,
   moveTargetSchoolWeeks,
   moveWeekNote,
-  publicationDayIndexForCourseWeek,
+  notesDocumentsEquivalent,
+  orphanedSessionNotesForCourse,
+  orderedCourseSessions,
+  pendingWeekNotesWithoutSession,
   rememberRichClip,
+  schoolWeekForSession,
+  sessionNotesKey,
+  setSessionRichNote,
   setWeekRichNote,
-  shiftEligibleCourseWeek,
+  shiftCourseSession,
+  snapToCourseSession,
   snapToEligibleCourseWeek,
+  visibleCourseSessions,
   visibleCourseWeeks,
   visibleRichDocLines,
   weekCarnetVisibility,
@@ -102,15 +117,31 @@ interface ClassNotebookPanelProps {
   onShiftWeeks: (direction: -1 | 1) => void;
   onCenterWeekChange: (weekNumber: number) => void;
   onNotesChange: (document: ClassNotesDocument) => void;
-  onCreatePublication: (schoolWeekNumber: number, text: string, day?: number) => Promise<void>;
+  onCreatePublication: (
+    schoolWeekNumber: number,
+    text: string,
+    day?: number,
+    session?: { key: string; date: string; schoolWeekNumber: number; dayOfWeek: number },
+  ) => Promise<void>;
   onSaveWeekPublication: (
     schoolWeekNumber: number,
     doc: CampusRichDoc,
-    options?: { studentVisible?: boolean; day?: number },
+    options?: { studentVisible?: boolean; day?: number; courseSessionKey?: string; courseSessionDate?: string },
   ) => Promise<void>;
-  onSetWeekPublicationVisibility: (schoolWeekNumber: number, studentVisible: boolean) => Promise<void>;
-  onMovePublication: (itemId: number, schoolWeekNumber: number, day?: number) => Promise<void>;
+  onSetWeekPublicationVisibility: (
+    schoolWeekNumber: number,
+    studentVisible: boolean,
+    sessionKey?: string,
+  ) => Promise<void>;
+  onMovePublication: (
+    itemId: number,
+    schoolWeekNumber: number,
+    day?: number,
+    session?: { key: string; date: string; schoolWeekNumber: number; dayOfWeek: number },
+  ) => Promise<void>;
   classroomId?: string | null;
+  /** AnnualCourse de la classe (attribution V1 uniquement si la liste a un seul cours). */
+  classAnnualCourseIds?: readonly string[];
   onSaveControl: (input: {
     schoolWeekNumber: number;
     day: number;
@@ -126,24 +157,41 @@ interface ClassNotebookPanelProps {
 }
 
 type LineSelection =
-  | { kind: "publication"; itemId: number; weekNumber: number }
-  | { kind: "note"; noteId: string; weekNumber: number };
+  | { kind: "publication"; itemId: number; weekNumber: number; sessionKey?: string }
+  | { kind: "note"; noteId: string; weekNumber: number; sessionKey?: string };
 
 type EditorKind = "publication" | "notes";
 type LineSource = "publication" | "notes";
 
 type DragPayload =
-  | { kind: "week"; itemId: number; weekNumber: number }
-  | { kind: "line"; source: LineSource; weekNumber: number; blockIndex: number; itemIndex: number | null };
+  | { kind: "week"; itemId: number; weekNumber: number; sessionKey?: string }
+  | { kind: "line"; source: LineSource; weekNumber: number; blockIndex: number; itemIndex: number | null; sessionKey?: string };
 
 type SelectedLine = {
   source: LineSource;
   weekNumber: number;
   blockIndex: number;
   itemIndex: number | null;
+  sessionKey?: string;
 };
 
-type DeleteTarget = { kind: LineSource; weekNumber: number };
+type DeleteTarget = { kind: LineSource; weekNumber: number; cardId: string };
+
+type NotebookCard = {
+  id: string;
+  weekNumber: number;
+  week: SchoolWeek | null;
+  session: CourseSession | null;
+};
+
+function sessionPlacement(session: CourseSession) {
+  return {
+    key: session.key,
+    date: session.date,
+    schoolWeekNumber: session.schoolWeekNumber,
+    dayOfWeek: session.dayOfWeek,
+  };
+}
 
 const CARNET_MOVE_PREFIX = "campus-carnet-move:";
 const NOTEBOOK_NARROW_MEDIA = `(max-width: ${NOTEBOOK_NARROW_VIEWPORT_MAX_PX}px)`;
@@ -200,6 +248,7 @@ export function ClassNotebookPanel({
   onSetWeekPublicationVisibility,
   onMovePublication: persistMovePublication,
   classroomId = null,
+  classAnnualCourseIds = [],
   onSaveControl,
   onUpdateControl,
   onDeleteControl,
@@ -216,20 +265,24 @@ export function ClassNotebookPanel({
   const [clipboard, setClipboard] = useState<NotebookClipboard | null>(null);
   const [selection] = useState<LineSelection | null>(null);
   const [dragPayload, setDragPayload] = useState<DragPayload | null>(null);
-  const [editor, setEditor] = useState<{ kind: EditorKind; weekNumber: number } | null>(null);
+  const [editor, setEditor] = useState<{ kind: EditorKind; weekNumber: number; sessionKey?: string | null } | null>(null);
   const [editorDoc, setEditorDoc] = useState<CampusRichDoc>(emptyRichDoc());
   const [studentPreviewOpen, setStudentPreviewOpen] = useState(false);
-  const [unpublishWeek, setUnpublishWeek] = useState<number | null>(null);
-  const [moveMenuWeek, setMoveMenuWeek] = useState<number | null>(null);
+  const [unpublishCardId, setUnpublishCardId] = useState<string | null>(null);
+  const [moveMenuCardId, setMoveMenuCardId] = useState<string | null>(null);
   const [selectedLine, setSelectedLine] = useState<SelectedLine | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
-  const [dropSlot, setDropSlot] = useState<{ source: LineSource; weekNumber: number; atLineIndex: number } | null>(
-    null,
-  );
+  const [dropSlot, setDropSlot] = useState<{
+    source: LineSource;
+    weekNumber: number;
+    atLineIndex: number;
+    sessionKey?: string;
+    cardId?: string;
+  } | null>(null);
   const [courseSessions, setCourseSessions] = useState<CourseSession[] | null>(null);
   const [loadedCourseId, setLoadedCourseId] = useState<string | null>(null);
   const [sessionsError, setSessionsError] = useState("");
-  const [controlPickerSessions, setControlPickerSessions] = useState<CourseSession[] | null>(null);
+  const [centerSessionKey, setCenterSessionKey] = useState<string | null>(null);
   const [controlEditor, setControlEditor] = useState<
     | { mode: "create"; session: CourseSession }
     | { mode: "edit"; item: PrototypeAgendaItem; session: CourseSession | null }
@@ -287,12 +340,45 @@ export function ClassNotebookPanel({
     [courseSessions, schoolWeeks, sessionsLoading, structuredCourse],
   );
 
+  const orderedSessions = useMemo(
+    () => (courseSessions ? orderedCourseSessions(courseSessions) : []),
+    [courseSessions],
+  );
+
+  const displayStartSession = useMemo(() => {
+    if (!structuredCourse || sessionsLoading || !orderedSessions.length) return null;
+    return snapToCourseSession(orderedSessions, centerSessionKey, centerWeekNumber);
+  }, [centerSessionKey, centerWeekNumber, orderedSessions, sessionsLoading, structuredCourse]);
+
   const displayStartWeek =
-    structuredCourse && !sessionsLoading && eligibleWeekNumbers.length
-      ? eligibleWeekNumbers.includes(centerWeekNumber)
-        ? centerWeekNumber
-        : (snapToEligibleCourseWeek(eligibleWeekNumbers, centerWeekNumber) ?? centerWeekNumber)
-      : centerWeekNumber;
+    structuredCourse && displayStartSession
+      ? displayStartSession.schoolWeekNumber
+      : structuredCourse && !sessionsLoading && eligibleWeekNumbers.length
+        ? eligibleWeekNumbers.includes(centerWeekNumber)
+          ? centerWeekNumber
+          : (snapToEligibleCourseWeek(eligibleWeekNumbers, centerWeekNumber) ?? centerWeekNumber)
+        : centerWeekNumber;
+
+  useEffect(() => {
+    if (!structuredCourse || sessionsLoading || courseSessions == null || sessionsError) return;
+    const migrated = migrateClassNotesToSessions(notesDocument, courseSessions, classSetup.id, {
+      annualCourseId: structuredCourseId,
+      classAnnualCourseIds,
+    });
+    if (migrated.changed && !notesDocumentsEquivalent(notesDocument, migrated.document)) {
+      onNotesChange(migrated.document);
+    }
+  }, [
+    classAnnualCourseIds,
+    classSetup.id,
+    courseSessions,
+    notesDocument,
+    onNotesChange,
+    sessionsError,
+    sessionsLoading,
+    structuredCourse,
+    structuredCourseId,
+  ]);
 
   const visibleWeeks = useMemo(() => {
     if (structuredCourse) {
@@ -311,48 +397,107 @@ export function ClassNotebookPanel({
     structuredCourse,
   ]);
 
+  const visibleCards: NotebookCard[] = useMemo(() => {
+    if (structuredCourse) {
+      if (sessionsLoading || !orderedSessions.length) return [];
+      return visibleCourseSessions(
+        orderedSessions,
+        displayStartSession?.key ?? null,
+        effectiveWeekDisplayCount,
+      ).map((session) => ({
+        id: session.key,
+        weekNumber: session.schoolWeekNumber,
+        week: schoolWeekForSession(schoolWeeks, session),
+        session,
+      }));
+    }
+    return visibleWeeks.map((week) => ({
+      id: `week:${week.number}`,
+      weekNumber: week.number,
+      week,
+      session: null,
+    }));
+  }, [
+    displayStartSession?.key,
+    effectiveWeekDisplayCount,
+    orderedSessions,
+    schoolWeeks,
+    sessionsLoading,
+    structuredCourse,
+    visibleWeeks,
+  ]);
+
+  const allCards: NotebookCard[] = useMemo(() => {
+    if (structuredCourse) {
+      return orderedSessions.map((session) => ({
+        id: session.key,
+        weekNumber: session.schoolWeekNumber,
+        week: schoolWeekForSession(schoolWeeks, session),
+        session,
+      }));
+    }
+    return schoolWeeks.map((week) => ({
+      id: `week:${week.number}`,
+      weekNumber: week.number,
+      week,
+      session: null,
+    }));
+  }, [orderedSessions, schoolWeeks, structuredCourse]);
+
+  function cardById(cardId: string): NotebookCard | undefined {
+    return allCards.find((card) => card.id === cardId) ?? visibleCards.find((card) => card.id === cardId);
+  }
+
   function shiftVisibleWeeks(direction: -1 | 1) {
     if (structuredCourse) {
-      const next = shiftEligibleCourseWeek(eligibleWeekNumbers, displayStartWeek, direction);
-      if (next != null) onCenterWeekChange(next);
+      const next = shiftCourseSession(orderedSessions, displayStartSession?.key ?? null, direction);
+      if (!next) return;
+      setCenterSessionKey(next.key);
+      onCenterWeekChange(next.schoolWeekNumber);
       return;
     }
     onShiftWeeks(direction);
   }
 
-  const publicationDayForWeek = useCallback(
-    (weekNumber: number, existingDay?: number | null): number | undefined => {
-      if (!structuredCourse || courseSessions == null || sessionsLoading) return undefined;
-      return publicationDayIndexForCourseWeek(courseSessions, weekNumber, existingDay) ?? undefined;
-    },
-    [courseSessions, sessionsLoading, structuredCourse],
-  );
-
   const onCreatePublication = useCallback(
-    (schoolWeekNumber: number, text: string) => {
-      return persistCreatePublication(schoolWeekNumber, text, publicationDayForWeek(schoolWeekNumber));
+    (schoolWeekNumber: number, text: string, session?: CourseSession | null) => {
+      return persistCreatePublication(
+        schoolWeekNumber,
+        text,
+        session ? session.dayOfWeek - 1 : undefined,
+        session ? sessionPlacement(session) : undefined,
+      );
     },
-    [persistCreatePublication, publicationDayForWeek],
+    [persistCreatePublication],
   );
 
   const onSaveWeekPublication = useCallback(
-    (schoolWeekNumber: number, doc: CampusRichDoc, options?: { studentVisible?: boolean }) => {
-      const weekItems = items.filter((item) => item.schoolWeekNumber === schoolWeekNumber);
+    (schoolWeekNumber: number, doc: CampusRichDoc, options?: { studentVisible?: boolean; session?: CourseSession | null }) => {
+      const session = options?.session ?? null;
+      const weekItems = session && courseSessions
+        ? itemsForCourseSession(items, session, courseSessions).filter(isCarnetOwnedPublication)
+        : items.filter((item) => item.schoolWeekNumber === schoolWeekNumber);
       const existing = findCarnetPublicationItemForSave(weekItems);
       return persistSaveWeekPublication(schoolWeekNumber, doc, {
-        ...options,
-        day: publicationDayForWeek(schoolWeekNumber, existing?.day),
+        studentVisible: options?.studentVisible,
+        day: session ? session.dayOfWeek - 1 : existing?.day,
+        courseSessionKey: session?.key,
+        courseSessionDate: session?.date,
       });
     },
-    [items, persistSaveWeekPublication, publicationDayForWeek],
+    [courseSessions, items, persistSaveWeekPublication],
   );
 
   const onMovePublication = useCallback(
-    (itemId: number, schoolWeekNumber: number) => {
-      const existing = items.find((item) => item.id === itemId);
-      return persistMovePublication(itemId, schoolWeekNumber, publicationDayForWeek(schoolWeekNumber, existing?.day));
+    (itemId: number, schoolWeekNumber: number, session?: CourseSession | null) => {
+      return persistMovePublication(
+        itemId,
+        session?.schoolWeekNumber ?? schoolWeekNumber,
+        session ? session.dayOfWeek - 1 : undefined,
+        session ? sessionPlacement(session) : undefined,
+      );
     },
-    [items, persistMovePublication, publicationDayForWeek],
+    [persistMovePublication],
   );
 
   const classControls = useMemo(
@@ -366,20 +511,31 @@ export function ClassNotebookPanel({
   const branchLabel = selectedBranchLabel?.trim() || classSetup.branchNames[0] || "Branche";
 
   const weekSourceDoc = useCallback(
-    (source: LineSource, weekNumber: number): CampusRichDoc => {
+    (source: LineSource, weekNumber: number, session?: CourseSession | null): CampusRichDoc => {
       if (source === "publication") {
-        return composeWeekPublicationDoc(items.filter((item) => item.schoolWeekNumber === weekNumber));
+        const pubs =
+          session && courseSessions
+            ? itemsForCourseSession(items, session, courseSessions)
+            : items.filter((item) => item.schoolWeekNumber === weekNumber);
+        return composeWeekPublicationDoc(pubs);
+      }
+      if (session) {
+        return composeWeekNotesDoc(listSessionNotes(notesDocument, sessionNotesKey(session.key)));
       }
       return composeWeekNotesDoc(listWeekNotes(notesDocument, weekNotesKey(classSetup.id, weekNumber)));
     },
-    [classSetup.id, items, notesDocument],
+    [classSetup.id, courseSessions, items, notesDocument],
   );
 
   const saveSourceDoc = useCallback(
-    async (source: LineSource, weekNumber: number, doc: CampusRichDoc) => {
+    async (source: LineSource, weekNumber: number, doc: CampusRichDoc, session?: CourseSession | null) => {
       if (source === "publication") {
         if (!canPublish) return false;
-        await onSaveWeekPublication(weekNumber, doc);
+        await onSaveWeekPublication(weekNumber, doc, { session });
+        return true;
+      }
+      if (session) {
+        onNotesChange(setSessionRichNote(notesDocument, sessionNotesKey(session.key), doc));
         return true;
       }
       onNotesChange(setWeekRichNote(notesDocument, weekNotesKey(classSetup.id, weekNumber), doc));
@@ -388,7 +544,13 @@ export function ClassNotebookPanel({
     [canPublish, classSetup.id, notesDocument, onNotesChange, onSaveWeekPublication],
   );
 
-  const rememberLine = useCallback((source: LineSource, weekNumber: number, doc: CampusRichDoc, lineIndex: number) => {
+  const rememberLine = useCallback((
+    source: LineSource,
+    weekNumber: number,
+    doc: CampusRichDoc,
+    lineIndex: number,
+    session?: CourseSession | null,
+  ) => {
     const line = visibleRichDocLines(doc)[lineIndex];
     if (!line) {
       setSelectedLine(null);
@@ -399,6 +561,7 @@ export function ClassNotebookPanel({
       weekNumber,
       blockIndex: line.blockIndex,
       itemIndex: line.itemIndex,
+      sessionKey: session?.key,
     });
     const extracted = extractWeekUnit(doc, line.blockIndex, line.itemIndex);
     if (extracted) rememberRichClip({ kind: "block", block: extracted.extracted });
@@ -406,6 +569,7 @@ export function ClassNotebookPanel({
       kind: "line",
       mode: "copy",
       sourceWeekNumber: weekNumber,
+      sourceSessionKey: session?.key,
       lineSource: source,
       blockIndex: line.blockIndex,
       itemIndex: line.itemIndex,
@@ -421,43 +585,55 @@ export function ClassNotebookPanel({
       blockIndex: number,
       itemIndex: number | null,
       atLineIndex?: number,
+      fromSession?: CourseSession | null,
+      toSession?: CourseSession | null,
     ) => {
-      if (fromWeek === toWeek) return;
       if (source === "publication") {
         if (!canPublish) return;
         const copied = copyWeekUnitToDoc(
-          weekSourceDoc(source, fromWeek),
-          weekSourceDoc(source, toWeek),
+          weekSourceDoc(source, fromWeek, fromSession),
+          weekSourceDoc(source, toWeek, toSession),
           blockIndex,
           itemIndex,
           atLineIndex,
         );
         if (!copied) return;
-        await onSaveWeekPublication(toWeek, copied);
+        await onSaveWeekPublication(toWeek, copied, { session: toSession });
         return;
       }
       const copied = copyWeekUnitToDoc(
-        weekSourceDoc(source, fromWeek),
-        weekSourceDoc(source, toWeek),
+        weekSourceDoc(source, fromWeek, fromSession),
+        weekSourceDoc(source, toWeek, toSession),
         blockIndex,
         itemIndex,
         atLineIndex,
       );
       if (!copied) return;
+      if (toSession) {
+        onNotesChange(setSessionRichNote(notesDocument, sessionNotesKey(toSession.key), copied));
+        return;
+      }
       onNotesChange(setWeekRichNote(notesDocument, weekNotesKey(classSetup.id, toWeek), copied));
     },
     [canPublish, classSetup.id, notesDocument, onNotesChange, onSaveWeekPublication, weekSourceDoc],
   );
 
   const deleteCarnetLine = useCallback(
-    async (source: LineSource, weekNumber: number, blockIndex: number, itemIndex: number | null) => {
+    async (
+      source: LineSource,
+      weekNumber: number,
+      blockIndex: number,
+      itemIndex: number | null,
+      session?: CourseSession | null,
+    ) => {
       if (source === "publication" && !canPublish) return;
-      const result = deleteWeekUnit(weekSourceDoc(source, weekNumber), blockIndex, itemIndex);
+      const result = deleteWeekUnit(weekSourceDoc(source, weekNumber, session), blockIndex, itemIndex);
       if (!result) return;
-      await saveSourceDoc(source, weekNumber, result.doc);
+      await saveSourceDoc(source, weekNumber, result.doc, session);
       setSelectedLine((current) =>
         current?.source === source &&
         current.weekNumber === weekNumber &&
+        current.sessionKey === session?.key &&
         current.blockIndex === blockIndex &&
         current.itemIndex === itemIndex
           ? null
@@ -468,46 +644,56 @@ export function ClassNotebookPanel({
   );
 
   const cutCarnetLine = useCallback(
-    async (source: LineSource, weekNumber: number, blockIndex: number, itemIndex: number | null) => {
+    async (
+      source: LineSource,
+      weekNumber: number,
+      blockIndex: number,
+      itemIndex: number | null,
+      session?: CourseSession | null,
+    ) => {
       if (source === "publication" && !canPublish) return;
-      const extracted = extractWeekUnit(weekSourceDoc(source, weekNumber), blockIndex, itemIndex);
+      const extracted = extractWeekUnit(weekSourceDoc(source, weekNumber, session), blockIndex, itemIndex);
       if (!extracted) return;
       rememberRichClip({ kind: "block", block: extracted.extracted });
       setClipboard({
         kind: "line",
         mode: "cut",
         sourceWeekNumber: weekNumber,
+        sourceSessionKey: session?.key,
         lineSource: source,
         blockIndex,
         itemIndex,
         block: extracted.extracted,
       });
-      await saveSourceDoc(source, weekNumber, extracted.remaining);
+      await saveSourceDoc(source, weekNumber, extracted.remaining, session);
       setSelectedLine(null);
     },
     [canPublish, saveSourceDoc, weekSourceDoc],
   );
 
   const handlePaste = useCallback(
-    async (targetWeekNumber: number) => {
+    async (targetWeekNumber: number, session?: CourseSession | null) => {
       if (!clipboard) return;
+      const fromSession = clipboard.sourceSessionKey
+        ? orderedSessions.find((entry) => entry.key === clipboard.sourceSessionKey) ?? null
+        : null;
 
       if (clipboard.kind === "publication" && clipboard.publicationId) {
         if (clipboard.mode === "cut") {
-          await onMovePublication(clipboard.publicationId, targetWeekNumber);
+          await onMovePublication(clipboard.publicationId, targetWeekNumber, session);
           setClipboard(null);
           return;
         }
         const source = items.find((item) => item.id === clipboard.publicationId);
         if (source) {
-          await onCreatePublication(targetWeekNumber, source.title);
+          await onCreatePublication(targetWeekNumber, source.title, session);
         }
         return;
       }
 
       if (clipboard.kind === "note" && clipboard.noteId && clipboard.noteText) {
-        const fromKey = weekNotesKey(classSetup.id, clipboard.sourceWeekNumber);
-        const toKey = weekNotesKey(classSetup.id, targetWeekNumber);
+        const fromKey = clipboard.sourceSessionKey || weekNotesKey(classSetup.id, clipboard.sourceWeekNumber);
+        const toKey = session ? sessionNotesKey(session.key) : weekNotesKey(classSetup.id, targetWeekNumber);
         if (clipboard.mode === "cut") {
           onNotesChange(moveWeekNote(notesDocument, fromKey, toKey, clipboard.noteId));
           setClipboard(null);
@@ -523,10 +709,13 @@ export function ClassNotebookPanel({
         (clipboard.block || clipboard.blockIndex != null)
       ) {
         const source = clipboard.lineSource;
+        const sameCard = session
+          ? clipboard.sourceSessionKey === session.key
+          : clipboard.sourceWeekNumber === targetWeekNumber && !clipboard.sourceSessionKey;
         if (clipboard.block) {
-          const target = weekSourceDoc(source, targetWeekNumber);
+          const target = weekSourceDoc(source, targetWeekNumber, session);
           let at = visibleRichDocLines(target).length;
-          if (clipboard.mode === "copy" && clipboard.sourceWeekNumber === targetWeekNumber) {
+          if (clipboard.mode === "copy" && sameCard) {
             const from = visibleRichDocLines(target).findIndex(
               (line) =>
                 line.blockIndex === clipboard.blockIndex &&
@@ -534,14 +723,14 @@ export function ClassNotebookPanel({
             );
             if (from >= 0) at = from + 1;
           }
-          await saveSourceDoc(source, targetWeekNumber, insertWeekUnitAt(target, clipboard.block, at));
+          await saveSourceDoc(source, targetWeekNumber, insertWeekUnitAt(target, clipboard.block, at), session);
           if (clipboard.mode === "cut") {
             setClipboard({ ...clipboard, mode: "copy" });
           }
           return;
         }
-        if (clipboard.sourceWeekNumber === targetWeekNumber) {
-          const doc = weekSourceDoc(source, targetWeekNumber);
+        if (sameCard) {
+          const doc = weekSourceDoc(source, targetWeekNumber, session);
           const from = visibleRichDocLines(doc).findIndex(
             (line) =>
               line.blockIndex === clipboard.blockIndex &&
@@ -555,7 +744,7 @@ export function ClassNotebookPanel({
             from < 0 ? undefined : from + 1,
           );
           if (!copied) return;
-          await saveSourceDoc(source, targetWeekNumber, copied);
+          await saveSourceDoc(source, targetWeekNumber, copied, session);
           return;
         }
         await copyCarnetLine(
@@ -564,6 +753,9 @@ export function ClassNotebookPanel({
           targetWeekNumber,
           clipboard.blockIndex!,
           clipboard.itemIndex ?? null,
+          undefined,
+          fromSession,
+          session,
         );
       }
     },
@@ -576,6 +768,7 @@ export function ClassNotebookPanel({
       onCreatePublication,
       onMovePublication,
       onNotesChange,
+      orderedSessions,
       saveSourceDoc,
       weekSourceDoc,
     ],
@@ -601,6 +794,7 @@ export function ClassNotebookPanel({
           selectedLine.weekNumber,
           selectedLine.blockIndex,
           selectedLine.itemIndex,
+          orderedSessions.find((entry) => entry.key === selectedLine.sessionKey) ?? null,
         );
         return;
       }
@@ -615,6 +809,7 @@ export function ClassNotebookPanel({
             selectedLine.weekNumber,
             selectedLine.blockIndex,
             selectedLine.itemIndex,
+            orderedSessions.find((entry) => entry.key === selectedLine.sessionKey) ?? null,
           );
           return;
         }
@@ -625,16 +820,22 @@ export function ClassNotebookPanel({
             kind: "publication",
             mode: "cut",
             sourceWeekNumber: selection.weekNumber,
+            sourceSessionKey: selection.sessionKey,
             publicationId: selection.itemId,
           });
         } else {
-          const noteKey = weekNotesKey(classSetup.id, selection.weekNumber);
-          const note = listWeekNotes(notesDocument, noteKey).find((entry) => entry.id === selection.noteId);
+          const noteKey = selection.sessionKey || weekNotesKey(classSetup.id, selection.weekNumber);
+          const note = (
+            selection.sessionKey
+              ? listSessionNotes(notesDocument, selection.sessionKey)
+              : listWeekNotes(notesDocument, noteKey)
+          ).find((entry) => entry.id === selection.noteId);
           if (note) {
             setClipboard({
               kind: "note",
               mode: "cut",
               sourceWeekNumber: selection.weekNumber,
+              sourceSessionKey: selection.sessionKey,
               noteId: note.id,
               noteText: note.text,
             });
@@ -647,7 +848,11 @@ export function ClassNotebookPanel({
         if (selectedLine) {
           event.preventDefault();
           const extracted = extractWeekUnit(
-            weekSourceDoc(selectedLine.source, selectedLine.weekNumber),
+            weekSourceDoc(
+              selectedLine.source,
+              selectedLine.weekNumber,
+              orderedSessions.find((entry) => entry.key === selectedLine.sessionKey) ?? null,
+            ),
             selectedLine.blockIndex,
             selectedLine.itemIndex,
           );
@@ -656,6 +861,7 @@ export function ClassNotebookPanel({
             kind: "line",
             mode: "copy",
             sourceWeekNumber: selectedLine.weekNumber,
+            sourceSessionKey: selectedLine.sessionKey,
             lineSource: selectedLine.source,
             blockIndex: selectedLine.blockIndex,
             itemIndex: selectedLine.itemIndex,
@@ -669,6 +875,7 @@ export function ClassNotebookPanel({
             kind: "publication",
             mode: "copy",
             sourceWeekNumber: selection.weekNumber,
+            sourceSessionKey: selection.sessionKey,
             publicationId: selection.itemId,
           });
         }
@@ -678,7 +885,11 @@ export function ClassNotebookPanel({
         const weekNumber = selectedLine?.weekNumber ?? selection?.weekNumber;
         if (weekNumber == null) return;
         event.preventDefault();
-        void handlePaste(weekNumber);
+        const sessionKey = selectedLine?.sessionKey ?? selection?.sessionKey;
+        void handlePaste(
+          weekNumber,
+          sessionKey ? orderedSessions.find((entry) => entry.key === sessionKey) ?? null : null,
+        );
       }
     }
 
@@ -691,20 +902,21 @@ export function ClassNotebookPanel({
     editor,
     handlePaste,
     notesDocument,
+    orderedSessions,
     selectedLine,
     selection,
     weekSourceDoc,
   ]);
 
   useEffect(() => {
-    if (moveMenuWeek == null) return;
+    if (moveMenuCardId == null) return;
     function close(event: Event) {
       if (event instanceof KeyboardEvent && event.key !== "Escape") return;
       if (event.type === "pointerdown") {
         const target = event.target as HTMLElement | null;
         if (target?.closest(".class-notebook-move")) return;
       }
-      setMoveMenuWeek(null);
+      setMoveMenuCardId(null);
     }
     document.addEventListener("pointerdown", close);
     document.addEventListener("keydown", close);
@@ -712,29 +924,40 @@ export function ClassNotebookPanel({
       document.removeEventListener("pointerdown", close);
       document.removeEventListener("keydown", close);
     };
-  }, [moveMenuWeek]);
+  }, [moveMenuCardId]);
 
-  function openEditor(kind: EditorKind, weekNumber: number) {
-    const weekItems = items.filter((item) => item.schoolWeekNumber === weekNumber);
+  function openEditor(kind: EditorKind, weekNumber: number, session?: CourseSession | null) {
+    const weekItems =
+      session && courseSessions
+        ? itemsForCourseSession(items, session, courseSessions)
+        : items.filter((item) => item.schoolWeekNumber === weekNumber);
     const weekKey = weekNotesKey(classSetup.id, weekNumber);
     const doc =
       kind === "publication"
         ? composeWeekPublicationDoc(weekItems)
-        : composeWeekNotesDoc(listWeekNotes(notesDocument, weekKey));
+        : composeWeekNotesDoc(
+            session
+              ? listSessionNotes(notesDocument, sessionNotesKey(session.key))
+              : listWeekNotes(notesDocument, weekKey),
+          );
     setEditorDoc(doc);
     setStudentPreviewOpen(false);
-    setEditor({ kind, weekNumber });
+    setEditor({ kind, weekNumber, sessionKey: session?.key ?? null });
   }
 
   async function saveEditor(studentVisible?: boolean) {
     if (!editor) return;
+    const editorSession = editor.sessionKey
+      ? orderedSessions.find((entry) => entry.key === editor.sessionKey) ?? null
+      : null;
     if (editor.kind === "publication") {
       if (!canPublish) return;
-      await onSaveWeekPublication(
-        editor.weekNumber,
-        editorDoc,
-        studentVisible === undefined ? undefined : { studentVisible },
-      );
+      await onSaveWeekPublication(editor.weekNumber, editorDoc, {
+        ...(studentVisible === undefined ? {} : { studentVisible }),
+        session: editorSession,
+      });
+    } else if (editorSession) {
+      onNotesChange(setSessionRichNote(notesDocument, sessionNotesKey(editorSession.key), editorDoc));
     } else {
       const key = weekNotesKey(classSetup.id, editor.weekNumber);
       onNotesChange(setWeekRichNote(notesDocument, key, editorDoc));
@@ -743,8 +966,13 @@ export function ClassNotebookPanel({
     setStudentPreviewOpen(false);
   }
 
-  function handlePublicationDragStart(event: DragEvent<HTMLLIElement>, itemId: number, weekNumber: number) {
-    const payload: DragPayload = { kind: "week", itemId, weekNumber };
+  function handlePublicationDragStart(
+    event: DragEvent<HTMLLIElement>,
+    itemId: number,
+    weekNumber: number,
+    session?: CourseSession | null,
+  ) {
+    const payload: DragPayload = { kind: "week", itemId, weekNumber, sessionKey: session?.key };
     setDragPayload(payload);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", encodeCarnetMove(payload));
@@ -757,39 +985,53 @@ export function ClassNotebookPanel({
     blockIndex: number,
     itemIndex: number | null,
     atLineIndex?: number,
+    toSession?: CourseSession | null,
+    fromSession?: CourseSession | null,
   ) {
     if (source === "publication" && !canPublish) return;
-    const fromDoc = weekSourceDoc(source, fromWeek);
+    const fromDoc = weekSourceDoc(source, fromWeek, fromSession);
+    const sameCard = toSession && fromSession
+      ? toSession.key === fromSession.key
+      : !toSession && !fromSession && fromWeek === toWeek;
 
-    if (fromWeek === toWeek) {
+    if (sameCard) {
       if (atLineIndex == null) return;
       const fromIndex = visibleRichDocLines(fromDoc).findIndex(
         (line) => line.blockIndex === blockIndex && line.itemIndex === itemIndex,
       );
       const next = moveWeekUnitWithinDoc(fromDoc, blockIndex, itemIndex, atLineIndex);
       if (!next || next === fromDoc) return;
-      if (source === "publication") {
-        await onSaveWeekPublication(toWeek, next);
-      } else {
-        onNotesChange(setWeekRichNote(notesDocument, weekNotesKey(classSetup.id, toWeek), next));
-      }
+      await saveSourceDoc(source, toWeek, next, toSession ?? fromSession);
       if (fromIndex >= 0) {
-        rememberLine(source, toWeek, next, lineIndexAfterMove(fromIndex, atLineIndex));
+        rememberLine(source, toWeek, next, lineIndexAfterMove(fromIndex, atLineIndex), toSession ?? fromSession);
       }
       return;
     }
 
     const moved = moveWeekUnitToDoc(
       fromDoc,
-      weekSourceDoc(source, toWeek),
+      weekSourceDoc(source, toWeek, toSession),
       blockIndex,
       itemIndex,
       atLineIndex,
     );
     if (!moved) return;
     if (source === "publication") {
-      await onSaveWeekPublication(toWeek, moved.target);
-      await onSaveWeekPublication(fromWeek, moved.source);
+      await onSaveWeekPublication(toWeek, moved.target, { session: toSession });
+      await onSaveWeekPublication(fromWeek, moved.source, { session: fromSession });
+    } else if (toSession || fromSession) {
+      let next = notesDocument;
+      if (fromSession) {
+        next = setSessionRichNote(next, sessionNotesKey(fromSession.key), moved.source);
+      } else {
+        next = setWeekRichNote(next, weekNotesKey(classSetup.id, fromWeek), moved.source);
+      }
+      if (toSession) {
+        next = setSessionRichNote(next, sessionNotesKey(toSession.key), moved.target);
+      } else {
+        next = setWeekRichNote(next, weekNotesKey(classSetup.id, toWeek), moved.target);
+      }
+      onNotesChange(next);
     } else {
       const fromKey = weekNotesKey(classSetup.id, fromWeek);
       const toKey = weekNotesKey(classSetup.id, toWeek);
@@ -797,20 +1039,32 @@ export function ClassNotebookPanel({
     }
   }
 
-  async function handleDropOnWeek(event: DragEvent<HTMLElement>, weekNumber: number) {
+  async function handleDropOnWeek(
+    event: DragEvent<HTMLElement>,
+    weekNumber: number,
+    session?: CourseSession | null,
+  ) {
     event.preventDefault();
     const payload = decodeCarnetMove(event.dataTransfer.getData("text/plain"), dragPayload);
     setDragPayload(null);
     setDropSlot(null);
     if (!payload) return;
     if (payload.kind === "week") {
-      if (payload.weekNumber === weekNumber) return;
       const source = items.find((item) => item.id === payload.itemId);
-      if (!source || source.schoolWeekNumber === weekNumber) return;
+      if (!source) return;
+      if (session) {
+        if (source.courseSessionKey === session.key) return;
+        await onMovePublication(payload.itemId, session.schoolWeekNumber, session);
+        return;
+      }
+      if (payload.weekNumber === weekNumber || source.schoolWeekNumber === weekNumber) return;
       await onMovePublication(payload.itemId, weekNumber);
       return;
     }
-    const atLineIndex = visibleRichDocLines(weekSourceDoc(payload.source, weekNumber)).length;
+    const atLineIndex = visibleRichDocLines(weekSourceDoc(payload.source, weekNumber, session)).length;
+    const fromSession = payload.sessionKey
+      ? orderedSessions.find((entry) => entry.key === payload.sessionKey) ?? null
+      : null;
     await moveCarnetLine(
       payload.source,
       payload.weekNumber,
@@ -818,6 +1072,8 @@ export function ClassNotebookPanel({
       payload.blockIndex,
       payload.itemIndex,
       atLineIndex,
+      session,
+      fromSession,
     );
   }
 
@@ -826,11 +1082,15 @@ export function ClassNotebookPanel({
     source: LineSource,
     weekNumber: number,
     atLineIndex: number,
+    session?: CourseSession | null,
   ) {
     const payload = decodeCarnetMove(event.dataTransfer.getData("text/plain"), dragPayload);
     setDragPayload(null);
     setDropSlot(null);
     if (!payload || payload.kind !== "line" || payload.source !== source) return;
+    const fromSession = payload.sessionKey
+      ? orderedSessions.find((entry) => entry.key === payload.sessionKey) ?? null
+      : null;
     void moveCarnetLine(
       payload.source,
       payload.weekNumber,
@@ -838,6 +1098,8 @@ export function ClassNotebookPanel({
       payload.blockIndex,
       payload.itemIndex,
       atLineIndex,
+      session,
+      fromSession,
     );
   }
 
@@ -846,6 +1108,7 @@ export function ClassNotebookPanel({
     source: LineSource,
     weekNumber: number,
     line: RichDocLine,
+    session?: CourseSession | null,
   ) {
     const payload: DragPayload = {
       kind: "line",
@@ -853,25 +1116,33 @@ export function ClassNotebookPanel({
       weekNumber,
       blockIndex: line.blockIndex,
       itemIndex: line.itemIndex,
+      sessionKey: session?.key,
     };
     setDragPayload(payload);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", encodeCarnetMove(payload));
   }
 
-  function selectAndCopyLine(source: LineSource, weekNumber: number, line: RichDocLine) {
+  function selectAndCopyLine(
+    source: LineSource,
+    weekNumber: number,
+    line: RichDocLine,
+    session?: CourseSession | null,
+  ) {
     setSelectedLine({
       source,
       weekNumber,
       blockIndex: line.blockIndex,
       itemIndex: line.itemIndex,
+      sessionKey: session?.key,
     });
-    const extracted = extractWeekUnit(weekSourceDoc(source, weekNumber), line.blockIndex, line.itemIndex);
+    const extracted = extractWeekUnit(weekSourceDoc(source, weekNumber, session), line.blockIndex, line.itemIndex);
     if (extracted) rememberRichClip({ kind: "block", block: extracted.extracted });
     setClipboard({
       kind: "line",
       mode: "copy",
       sourceWeekNumber: weekNumber,
+      sourceSessionKey: session?.key,
       lineSource: source,
       blockIndex: line.blockIndex,
       itemIndex: line.itemIndex,
@@ -879,18 +1150,30 @@ export function ClassNotebookPanel({
     });
   }
 
-  function placeCopiedLine(weekNumber: number, source: LineSource, atLineIndex: number) {
+  function placeCopiedLine(
+    weekNumber: number,
+    source: LineSource,
+    atLineIndex: number,
+    session?: CourseSession | null,
+  ) {
     if (!clipboard || clipboard.kind !== "line" || clipboard.lineSource !== source) return;
+    const fromSession = clipboard.sourceSessionKey
+      ? orderedSessions.find((entry) => entry.key === clipboard.sourceSessionKey) ?? null
+      : null;
     if (clipboard.mode === "cut" && clipboard.block) {
       void saveSourceDoc(
         source,
         weekNumber,
-        insertWeekUnitAt(weekSourceDoc(source, weekNumber), clipboard.block, atLineIndex),
+        insertWeekUnitAt(weekSourceDoc(source, weekNumber, session), clipboard.block, atLineIndex),
+        session,
       ).then(() => setClipboard({ ...clipboard, mode: "copy" }));
       return;
     }
     if (clipboard.blockIndex == null) return;
-    if (clipboard.sourceWeekNumber === weekNumber) {
+    const sameCard = session
+      ? clipboard.sourceSessionKey === session.key
+      : clipboard.sourceWeekNumber === weekNumber && !clipboard.sourceSessionKey;
+    if (sameCard) {
       void moveCarnetLine(
         clipboard.lineSource,
         clipboard.sourceWeekNumber,
@@ -898,6 +1181,8 @@ export function ClassNotebookPanel({
         clipboard.blockIndex,
         clipboard.itemIndex ?? null,
         atLineIndex,
+        session,
+        fromSession,
       );
       return;
     }
@@ -908,17 +1193,34 @@ export function ClassNotebookPanel({
       clipboard.blockIndex,
       clipboard.itemIndex ?? null,
       atLineIndex,
+      fromSession,
+      session,
     );
   }
 
-  function nudgeSelectedLine(source: LineSource, weekNumber: number, line: RichDocLine, direction: -1 | 1) {
-    const doc = weekSourceDoc(source, weekNumber);
+  function nudgeSelectedLine(
+    source: LineSource,
+    weekNumber: number,
+    line: RichDocLine,
+    direction: -1 | 1,
+    session?: CourseSession | null,
+  ) {
+    const doc = weekSourceDoc(source, weekNumber, session);
     const atLineIndex = adjacentWeekUnitInsertIndex(doc, line.blockIndex, line.itemIndex, direction);
     if (atLineIndex == null) return;
-    void moveCarnetLine(source, weekNumber, weekNumber, line.blockIndex, line.itemIndex, atLineIndex);
+    void moveCarnetLine(
+      source,
+      weekNumber,
+      weekNumber,
+      line.blockIndex,
+      line.itemIndex,
+      atLineIndex,
+      session,
+      session,
+    );
   }
 
-  function lineSlotState(source: LineSource, weekNumber: number, canEdit: boolean) {
+  function lineSlotState(source: LineSource, weekNumber: number, canEdit: boolean, session?: CourseSession | null) {
     const dragging =
       dragPayload?.kind === "line" && dragPayload.source === source ? dragPayload : null;
     const copied =
@@ -927,8 +1229,12 @@ export function ClassNotebookPanel({
         : null;
     const showInsertSlots = canEdit && (dragging != null || copied != null);
     const fromThisWeek = dragging
-      ? dragging.weekNumber === weekNumber
-      : copied?.sourceWeekNumber === weekNumber;
+      ? session
+        ? dragging.sessionKey === session.key
+        : dragging.weekNumber === weekNumber
+      : session
+        ? copied?.sourceSessionKey === session.key
+        : copied?.sourceWeekNumber === weekNumber;
     const origin = dragging
       ? { blockIndex: dragging.blockIndex, itemIndex: dragging.itemIndex }
       : copied && copied.blockIndex != null
@@ -936,7 +1242,7 @@ export function ClassNotebookPanel({
         : null;
     const hiddenInsertSlots = new Set<number>();
     if (showInsertSlots && fromThisWeek && origin) {
-      const doc = weekSourceDoc(source, weekNumber);
+      const doc = weekSourceDoc(source, weekNumber, session);
       const lines = visibleRichDocLines(doc);
       const fromIndex = lines.findIndex(
         (line) => line.blockIndex === origin.blockIndex && line.itemIndex === origin.itemIndex,
@@ -957,30 +1263,46 @@ export function ClassNotebookPanel({
       insertSlotsDragging: dragging != null,
       hiddenInsertSlots,
       activeInsertSlot:
-        dropSlot?.source === source && dropSlot.weekNumber === weekNumber ? dropSlot.atLineIndex : null,
+        dropSlot?.source === source &&
+        (session
+          ? dropSlot.sessionKey === session.key
+          : dropSlot.weekNumber === weekNumber && !dropSlot.sessionKey)
+          ? dropSlot.atLineIndex
+          : null,
     };
   }
 
   async function confirmDelete() {
     if (!deleteTarget) return;
-    const { kind, weekNumber } = deleteTarget;
+    const { kind, weekNumber, cardId } = deleteTarget;
     setDeleteTarget(null);
+    const session = cardById(cardId)?.session ?? null;
     if (kind === "publication") {
       if (!canPublish) return;
-      await onSaveWeekPublication(weekNumber, emptyRichDoc());
+      await onSaveWeekPublication(weekNumber, emptyRichDoc(), { session });
+      return;
+    }
+    if (session) {
+      onNotesChange(setSessionRichNote(notesDocument, sessionNotesKey(session.key), emptyRichDoc()));
       return;
     }
     onNotesChange(setWeekRichNote(notesDocument, weekNotesKey(classSetup.id, weekNumber), emptyRichDoc()));
   }
 
   const editorVisibility = editor
-    ? weekCarnetVisibility(items.filter((item) => item.schoolWeekNumber === editor.weekNumber))
+    ? weekCarnetVisibility(
+        editor.sessionKey && courseSessions
+          ? items.filter((item) => {
+              const resolved = sessionForItem(item);
+              return resolved?.key === editor.sessionKey;
+            })
+          : items.filter((item) => item.schoolWeekNumber === editor.weekNumber),
+      )
     : "empty";
-  const unpublishTargetWeek = unpublishWeek != null ? schoolWeeks.find((week) => week.number === unpublishWeek) : undefined;
+  const unpublishCard = unpublishCardId ? cardById(unpublishCardId) : undefined;
 
   function closeControlEditor() {
     setControlEditor(null);
-    setControlPickerSessions(null);
     setControlTitle("");
     setControlDetail("");
     setControlError("");
@@ -1036,7 +1358,6 @@ export function ClassNotebookPanel({
   }
 
   function openCreateForSession(session: CourseSession) {
-    setControlPickerSessions(null);
     setControlsOpen(false);
     setControlEditor({ mode: "create", session });
     setControlTitle("");
@@ -1051,7 +1372,6 @@ export function ClassNotebookPanel({
 
   function openEditControl(item: PrototypeAgendaItem) {
     setControlsOpen(false);
-    setControlPickerSessions(null);
     setControlEditor({ mode: "edit", item, session: sessionForItem(item) });
     setControlTitle(item.title);
     setControlDetail(controlEditorDetailValue(item.detail));
@@ -1059,15 +1379,8 @@ export function ClassNotebookPanel({
     setControlServerCoordination(null);
   }
 
-  function startPlanForWeek(weekNumber: number) {
-    if (!structuredCourse || !courseSessions) return;
-    const weekSessions = courseSessionsForWeek(courseSessions, weekNumber);
-    if (weekSessions.length === 0) return;
-    if (weekSessions.length === 1) {
-      openCreateForSession(weekSessions[0]!);
-      return;
-    }
-    setControlPickerSessions(weekSessions);
+  function startPlanForSession(session: CourseSession) {
+    openCreateForSession(session);
   }
 
   async function submitControlEditor(confirm: boolean) {
@@ -1175,10 +1488,10 @@ export function ClassNotebookPanel({
 
       <div className="class-notebook-week-controls">
         <div className="class-notebook-shift">
-          <button type="button" onClick={() => shiftVisibleWeeks(-1)} aria-label="Semaines précédentes">
+          <button type="button" onClick={() => shiftVisibleWeeks(-1)} aria-label="Séances précédentes">
             ◀
           </button>
-          <button type="button" onClick={() => shiftVisibleWeeks(1)} aria-label="Semaines suivantes">
+          <button type="button" onClick={() => shiftVisibleWeeks(1)} aria-label="Séances suivantes">
             ▶
           </button>
         </div>
@@ -1192,7 +1505,7 @@ export function ClassNotebookPanel({
                 checked={weekDisplayCount === count}
                 onChange={() => setWeekDisplayCount(clampWeekDisplayCount(count))}
               />
-              {count} semaine{count > 1 ? "s" : ""}
+              {count} séance{count > 1 ? "s" : ""}
             </label>
           ))}
         </fieldset>
@@ -1207,56 +1520,109 @@ export function ClassNotebookPanel({
       {structuredCourse && !sessionsLoading && !sessionsError && courseSessions?.length === 0 ? (
         <p className="class-notebook-empty">Aucune séance planifiée pour ce cours dans l’horaire.</p>
       ) : null}
+      {structuredCourse && !sessionsLoading && structuredCourseId && courseSessions?.length === 0
+        ? orphanedSessionNotesForCourse(notesDocument, structuredCourseId).map((entry) => (
+            <div
+              key={entry.sessionKey}
+              className="class-notebook-pending-notes"
+              data-orphaned-session-notes={entry.sessionKey}
+            >
+              <p>Note d’une séance disparue — à réattribuer</p>
+              <RichDocView doc={composeWeekNotesDoc(entry.notes)} compact emptyLabel="" />
+            </div>
+          ))
+        : null}
+      {structuredCourse && courseSessions
+        ? pendingWeekNotesWithoutSession(notesDocument, classSetup.id, courseSessions).map((entry) => (
+            <div
+              key={entry.weekKey}
+              className="class-notebook-pending-notes"
+              data-pending-week-notes=""
+              data-pending-week-unscheduled={entry.weekNumber}
+            >
+              <p>
+                Note ancienne de la semaine {String(entry.weekNumber).padStart(2, "0")} — séance à attribuer
+              </p>
+              <RichDocView doc={composeWeekNotesDoc(entry.notes)} compact emptyLabel="" />
+            </div>
+          ))
+        : null}
 
       <div
         className={`class-notebook-grid class-notebook-grid-${effectiveWeekDisplayCount}`}
-        style={{ gridTemplateColumns: `repeat(${Math.max(visibleWeeks.length, 1)}, minmax(0, 1fr))` }}
+        style={{ gridTemplateColumns: `repeat(${Math.max(visibleCards.length, 1)}, minmax(0, 1fr))` }}
       >
-        {visibleWeeks.map((week) => {
-          const weekKey = weekNotesKey(classSetup.id, week.number);
-          const weekNotes = listWeekNotes(notesDocument, weekKey);
-          const weekControls = classControls.filter((item) => item.schoolWeekNumber === week.number);
-          const weekCarnetPublications = items.filter(
-            (item) => item.schoolWeekNumber === week.number && isCarnetOwnedPublication(item),
-          );
-          const weekStructuredPublications = items.filter(
+        {visibleCards.map((card) => {
+          const weekNumber = card.weekNumber;
+          const week = card.week;
+          const session = card.session;
+          const weekKey = weekNotesKey(classSetup.id, weekNumber);
+          const scopedItems =
+            session && courseSessions
+              ? itemsForCourseSession(items, session, courseSessions)
+              : items.filter((item) => item.schoolWeekNumber === weekNumber);
+          const weekNotes = session
+            ? listSessionNotes(notesDocument, sessionNotesKey(session.key))
+            : listWeekNotes(notesDocument, weekKey);
+          const pendingNotes = listPendingWeekNotes(notesDocument, weekKey);
+          const weekControls = scopedItems.filter((item) => item.type === "TEST");
+          const weekCarnetPublications = scopedItems.filter(isCarnetOwnedPublication);
+          const weekStructuredPublications = scopedItems.filter(
             (item) =>
-              item.schoolWeekNumber === week.number &&
               isPublicationLine(item) &&
+              !isCarnetOwnedPublication(item) &&
               isStructuredPublication(item),
           );
-          const isActive = week.number === displayStartWeek;
+          const isActive = card.id === (displayStartSession?.key ?? `week:${displayStartWeek}`);
           const visibility = weekCarnetVisibility(weekCarnetPublications);
-          const publicationSlots = lineSlotState("publication", week.number, canPublish);
-          const notesSlots = lineSlotState("notes", week.number, true);
-          const lineDropActive =
-            (dragPayload?.kind === "line" && dragPayload.weekNumber !== week.number) ||
-            (clipboard?.kind === "line" && clipboard.sourceWeekNumber !== week.number);
+          const publicationSlots = lineSlotState("publication", weekNumber, canPublish, session);
+          const notesSlots = lineSlotState("notes", weekNumber, true, session);
+          const lineDropActive = session
+            ? (dragPayload?.kind === "line" && dragPayload.sessionKey !== session.key) ||
+              (clipboard?.kind === "line" && clipboard.sourceSessionKey !== session.key)
+            : (dragPayload?.kind === "line" && dragPayload.weekNumber !== weekNumber) ||
+              (clipboard?.kind === "line" && clipboard.sourceWeekNumber !== weekNumber);
+          const weekDropActive =
+            dragPayload?.kind === "week" &&
+            (session ? dragPayload.sessionKey !== session.key : dragPayload.weekNumber !== weekNumber);
 
           return (
             <article
-              key={week.number}
+              key={card.id}
               className={`class-notebook-column${isActive ? " active" : ""}${
-                (dragPayload !== null && dragPayload.kind === "week" && dragPayload.weekNumber !== week.number) ||
-                lineDropActive
-                  ? " is-drop-target"
-                  : ""
+                weekDropActive || lineDropActive ? " is-drop-target" : ""
               }`}
               onDragOver={(event) => {
                 event.preventDefault();
                 event.dataTransfer.dropEffect = "move";
               }}
-              onDrop={(event) => void handleDropOnWeek(event, week.number)}
+              onDrop={(event) => void handleDropOnWeek(event, weekNumber, session)}
             >
               <header className="class-notebook-column-header">
-                <button type="button" onClick={() => onCenterWeekChange(week.number)}>
-                  <strong>{formatWeekColumnLabel(week)}</strong>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (session) {
+                      setCenterSessionKey(session.key);
+                      onCenterWeekChange(session.schoolWeekNumber);
+                      return;
+                    }
+                    onCenterWeekChange(weekNumber);
+                  }}
+                >
+                  <strong>
+                    {session
+                      ? formatCourseSessionCardWeekLabel(session, week)
+                      : week
+                        ? formatWeekColumnLabel(week)
+                        : `Sem ${String(weekNumber).padStart(2, "0")}`}
+                  </strong>
                   <span>
-                    {structuredCourse && courseSessions
-                      ? formatWeekColumnSubtitleFromSessions(
-                          courseSessions.filter((session) => session.schoolWeekNumber === week.number),
-                        )
-                      : formatWeekColumnSubtitle(week)}
+                    {session
+                      ? formatCourseSessionCardSubtitle(session)
+                      : week
+                        ? formatWeekColumnSubtitle(week)
+                        : ""}
                   </span>
                 </button>
               </header>
@@ -1271,7 +1637,7 @@ export function ClassNotebookPanel({
                         className="class-notebook-control-line"
                         data-control-line=""
                         draggable
-                        onDragStart={(event) => handlePublicationDragStart(event, item.id, week.number)}
+                        onDragStart={(event) => handlePublicationDragStart(event, item.id, weekNumber, session)}
                       >
                         <button
                           type="button"
@@ -1298,14 +1664,13 @@ export function ClassNotebookPanel({
                     ))}
                   </ul>
                 ) : null}
-                {structuredCourse &&
-                courseSessions &&
-                courseSessionsForWeek(courseSessions, week.number).length > 0 ? (
+                {session ? (
                   <button
                     type="button"
                     className="class-notebook-plan-link"
                     data-control-plan-week=""
-                    onClick={() => startPlanForWeek(week.number)}
+                    data-course-session-key={session.key}
+                    onClick={() => startPlanForSession(session)}
                   >
                     Planifier →
                   </button>
@@ -1324,15 +1689,19 @@ export function ClassNotebookPanel({
                         type="button"
                         className="class-notebook-drag-handle"
                         draggable
-                        aria-label={`Déplacer la publication de ${formatWeekColumnLabel(week)}`}
-                        aria-expanded={moveMenuWeek === week.number}
-                        title="Glisser, ou cliquer pour choisir la semaine"
+                        aria-label={`Déplacer la publication de ${session ? formatCourseSessionCardWeekLabel(session, week) : week ? formatWeekColumnLabel(week) : "cette séance"}`}
+                        aria-expanded={moveMenuCardId === card.id}
+                        title="Glisser, ou cliquer pour choisir la séance"
                         onDragStart={(event) => {
                           const itemId = weekCarnetPublications[0]!.id;
-                          const payload: DragPayload = { kind: "week", itemId, weekNumber: week.number };
+                          const payload: DragPayload = {
+                            kind: "week",
+                            itemId,
+                            weekNumber: weekNumber,
+                            sessionKey: session?.key,
+                          };
                           setDragPayload(payload);
                           event.dataTransfer.effectAllowed = "move";
-                          // Chrome annule un drag sans données : l'identifiant sert aussi de repli au drop.
                           event.dataTransfer.setData("text/plain", encodeCarnetMove(payload));
                         }}
                         onDragEnd={() => {
@@ -1340,25 +1709,40 @@ export function ClassNotebookPanel({
                           setDropSlot(null);
                         }}
                         onClick={() =>
-                          setMoveMenuWeek((current) => (current === week.number ? null : week.number))
+                          setMoveMenuCardId((current) => (current === card.id ? null : card.id))
                         }
                       >
                         ⠿
                       </button>
-                      {moveMenuWeek === week.number ? (
+                      {moveMenuCardId === card.id ? (
                         <menu className="class-notebook-move-menu">
                           <li className="class-notebook-move-menu-title">Déplacer vers</li>
-                          {moveTargetSchoolWeeks(structuredCourse ? eligibleWeeks : schoolWeeks, week.number)
-                            .map((entry) => (
-                              <li key={entry.number}>
+                          {(session
+                            ? moveTargetCourseSessions(orderedSessions, session.key).map((target) => ({
+                                id: target.key,
+                                label: `${formatCourseSessionCardWeekLabel(target, schoolWeekForSession(schoolWeeks, target))} · ${formatCourseSessionCardSubtitle(target)}`,
+                                onPick: () =>
+                                  void onMovePublication(
+                                    weekCarnetPublications[0]!.id,
+                                    target.schoolWeekNumber,
+                                    target,
+                                  ),
+                              }))
+                            : moveTargetSchoolWeeks(schoolWeeks, weekNumber).map((entry) => ({
+                                id: String(entry.number),
+                                label: formatWeekColumnLabel(entry),
+                                onPick: () => void onMovePublication(weekCarnetPublications[0]!.id, entry.number),
+                              }))
+                          ).map((entry) => (
+                              <li key={entry.id}>
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setMoveMenuWeek(null);
-                                    void onMovePublication(weekCarnetPublications[0]!.id, entry.number);
+                                    setMoveMenuCardId(null);
+                                    entry.onPick();
                                   }}
                                 >
-                                  {formatWeekColumnLabel(entry)}
+                                  {entry.label}
                                 </button>
                               </li>
                             ))}
@@ -1383,7 +1767,9 @@ export function ClassNotebookPanel({
                     interactive={canPublish}
                     lineDraggable={canPublish}
                     selectedLineKey={
-                      selectedLine?.source === "publication" && selectedLine.weekNumber === week.number
+                      selectedLine?.source === "publication" &&
+                      selectedLine.weekNumber === weekNumber &&
+                      (session ? selectedLine.sessionKey === session.key : !selectedLine.sessionKey)
                         ? lineViewKey(selectedLine)
                         : undefined
                     }
@@ -1391,15 +1777,15 @@ export function ClassNotebookPanel({
                     insertSlotsDragging={publicationSlots.insertSlotsDragging}
                     activeInsertSlot={publicationSlots.activeInsertSlot}
                     hiddenInsertSlots={publicationSlots.hiddenInsertSlots}
-                    emptyLabel="Aucune publication pour cette semaine."
+                    emptyLabel="Aucune publication pour cette séance."
                     onLineClick={
                       canPublish
-                        ? (line) => selectAndCopyLine("publication", week.number, line)
+                        ? (line) => selectAndCopyLine("publication", weekNumber, line, session)
                         : undefined
                     }
                     onLineDragStart={
                       canPublish
-                        ? (line, event) => startLineDrag(event, "publication", week.number, line)
+                        ? (line, event) => startLineDrag(event, "publication", weekNumber, line, session)
                         : undefined
                     }
                     onLineDragEnd={() => {
@@ -1407,21 +1793,28 @@ export function ClassNotebookPanel({
                       setDropSlot(null);
                     }}
                     onInsertSlot={
-                      canPublish ? (at) => placeCopiedLine(week.number, "publication", at) : undefined
+                      canPublish ? (at) => placeCopiedLine(weekNumber, "publication", at, session) : undefined
                     }
                     onInsertSlotDragOver={
                       canPublish
-                        ? (at) => setDropSlot({ source: "publication", weekNumber: week.number, atLineIndex: at })
+                        ? (at) =>
+                            setDropSlot({
+                              source: "publication",
+                              weekNumber: weekNumber,
+                              atLineIndex: at,
+                              sessionKey: session?.key,
+                              cardId: card.id,
+                            })
                         : undefined
                     }
                     onInsertSlotDrop={
                       canPublish
-                        ? (at, event) => handleDropOnSlot(event, "publication", week.number, at)
+                        ? (at, event) => handleDropOnSlot(event, "publication", weekNumber, at, session)
                         : undefined
                     }
                     onMoveLine={
                       canPublish
-                        ? (line, direction) => nudgeSelectedLine("publication", week.number, line, direction)
+                        ? (line, direction) => nudgeSelectedLine("publication", weekNumber, line, direction, session)
                         : undefined
                     }
                   />
@@ -1436,7 +1829,7 @@ export function ClassNotebookPanel({
                     type="button"
                     className="workspace-action secondary"
                     disabled={!canPublish}
-                    onClick={() => openEditor("publication", week.number)}
+                    onClick={() => openEditor("publication", weekNumber, session)}
                   >
                     {visibility === "empty" ? "Rédiger" : "Modifier"}
                   </button>
@@ -1444,7 +1837,7 @@ export function ClassNotebookPanel({
                     <button
                       type="button"
                       className="workspace-action"
-                      onClick={() => void onSetWeekPublicationVisibility(week.number, true)}
+                      onClick={() => void onSetWeekPublicationVisibility(weekNumber, true, session?.key)}
                     >
                       Publier aux élèves
                     </button>
@@ -1453,7 +1846,7 @@ export function ClassNotebookPanel({
                     <button
                       type="button"
                       className="workspace-action secondary"
-                      onClick={() => setUnpublishWeek(week.number)}
+                      onClick={() => setUnpublishCardId(card.id)}
                     >
                       Repasser en brouillon
                     </button>
@@ -1462,7 +1855,7 @@ export function ClassNotebookPanel({
                     <button
                       type="button"
                       className="workspace-action secondary"
-                      onClick={() => setDeleteTarget({ kind: "publication", weekNumber: week.number })}
+                      onClick={() => setDeleteTarget({ kind: "publication", weekNumber: weekNumber, cardId: card.id })}
                     >
                       Supprimer
                     </button>
@@ -1472,6 +1865,42 @@ export function ClassNotebookPanel({
 
               <section className="class-notebook-zone class-notebook-zone-notes" aria-label="Notes prof">
                 <h3>Notes prof</h3>
+                {pendingNotes.length && session ? (
+                  <div className="class-notebook-pending-notes" data-pending-week-notes="">
+                    <p>Note ancienne de la semaine — séance à attribuer</p>
+                    <RichDocView doc={composeWeekNotesDoc(pendingNotes)} compact emptyLabel="" />
+                    <button
+                      type="button"
+                      className="workspace-action secondary"
+                      onClick={() =>
+                        onNotesChange(assignPendingWeekNotes(notesDocument, weekKey, session.key))
+                      }
+                    >
+                      Attribuer à cette séance
+                    </button>
+                  </div>
+                ) : null}
+                {session
+                  ? orphanedSessionNotesForCourse(notesDocument, session.annualCourseId).map((entry) => (
+                      <div
+                        key={entry.sessionKey}
+                        className="class-notebook-pending-notes"
+                        data-orphaned-session-notes={entry.sessionKey}
+                      >
+                        <p>Note d’une séance disparue — à réattribuer</p>
+                        <RichDocView doc={composeWeekNotesDoc(entry.notes)} compact emptyLabel="" />
+                        <button
+                          type="button"
+                          className="workspace-action secondary"
+                          onClick={() =>
+                            onNotesChange(assignOrphanedSessionNotes(notesDocument, entry.sessionKey, session.key))
+                          }
+                        >
+                          Attribuer à cette séance
+                        </button>
+                      </div>
+                    ))
+                  : null}
                 <div className="class-notebook-lines">
                   <RichDocView
                     doc={composeWeekNotesDoc(weekNotes)}
@@ -1479,7 +1908,9 @@ export function ClassNotebookPanel({
                     interactive
                     lineDraggable
                     selectedLineKey={
-                      selectedLine?.source === "notes" && selectedLine.weekNumber === week.number
+                      selectedLine?.source === "notes" &&
+                      selectedLine.weekNumber === weekNumber &&
+                      (session ? selectedLine.sessionKey === session.key : !selectedLine.sessionKey)
                         ? lineViewKey(selectedLine)
                         : undefined
                     }
@@ -1488,25 +1919,31 @@ export function ClassNotebookPanel({
                     activeInsertSlot={notesSlots.activeInsertSlot}
                     hiddenInsertSlots={notesSlots.hiddenInsertSlots}
                     emptyLabel="Aucune note privée."
-                    onLineClick={(line) => selectAndCopyLine("notes", week.number, line)}
-                    onLineDragStart={(line, event) => startLineDrag(event, "notes", week.number, line)}
+                    onLineClick={(line) => selectAndCopyLine("notes", weekNumber, line, session)}
+                    onLineDragStart={(line, event) => startLineDrag(event, "notes", weekNumber, line, session)}
                     onLineDragEnd={() => {
                       setDragPayload(null);
                       setDropSlot(null);
                     }}
-                    onInsertSlot={(at) => placeCopiedLine(week.number, "notes", at)}
+                    onInsertSlot={(at) => placeCopiedLine(weekNumber, "notes", at, session)}
                     onInsertSlotDragOver={(at) =>
-                      setDropSlot({ source: "notes", weekNumber: week.number, atLineIndex: at })
+                      setDropSlot({
+                        source: "notes",
+                        weekNumber: weekNumber,
+                        atLineIndex: at,
+                        sessionKey: session?.key,
+                        cardId: card.id,
+                      })
                     }
-                    onInsertSlotDrop={(at, event) => handleDropOnSlot(event, "notes", week.number, at)}
-                    onMoveLine={(line, direction) => nudgeSelectedLine("notes", week.number, line, direction)}
+                    onInsertSlotDrop={(at, event) => handleDropOnSlot(event, "notes", weekNumber, at, session)}
+                    onMoveLine={(line, direction) => nudgeSelectedLine("notes", weekNumber, line, direction, session)}
                   />
                 </div>
                 <div className="class-notebook-zone-actions">
                   <button
                     type="button"
                     className="workspace-action secondary"
-                    onClick={() => openEditor("notes", week.number)}
+                    onClick={() => openEditor("notes", weekNumber, session)}
                   >
                     Modifier
                   </button>
@@ -1514,7 +1951,7 @@ export function ClassNotebookPanel({
                     <button
                       type="button"
                       className="workspace-action secondary"
-                      onClick={() => setDeleteTarget({ kind: "notes", weekNumber: week.number })}
+                      onClick={() => setDeleteTarget({ kind: "notes", weekNumber: weekNumber, cardId: card.id })}
                     >
                       Supprimer
                     </button>
@@ -1541,8 +1978,8 @@ export function ClassNotebookPanel({
               <p className="eyebrow">{editor.kind === "publication" ? "Publication élèves" : "Notes prof"}</p>
               <h2>
                 {editor.kind === "publication"
-                  ? "Rédiger la publication de la semaine"
-                  : "Notes privées de la semaine"}
+                  ? "Rédiger la publication de la séance"
+                  : "Notes privées de la séance"}
               </h2>
               {editor.kind === "publication" ? (
                 <p className="rich-doc-visibility-status">
@@ -1608,21 +2045,22 @@ export function ClassNotebookPanel({
       ) : null}
 
       <ConfirmDialog
-        open={unpublishWeek != null}
+        open={unpublishCardId != null}
         title="Repasser en brouillon"
         body={
-          unpublishTargetWeek
-            ? `${formatWeekColumnLabel(unpublishTargetWeek)} disparaît de l’agenda élève. Le texte reste dans le Carnet.`
-            : "Cette semaine disparaît de l’agenda élève. Le texte reste dans le Carnet."
+          unpublishCard?.session
+            ? `${formatCourseSessionCardWeekLabel(unpublishCard.session, unpublishCard.week)} disparaît de l’agenda élève. Le texte reste dans le Carnet.`
+            : "Cette séance disparaît de l’agenda élève. Le texte reste dans le Carnet."
         }
         confirmLabel="Masquer aux élèves"
         cancelLabel="Annuler"
-        onCancel={() => setUnpublishWeek(null)}
+        onCancel={() => setUnpublishCardId(null)}
         onConfirm={() => {
-          if (unpublishWeek == null) return;
-          const weekNumber = unpublishWeek;
-          setUnpublishWeek(null);
-          void onSetWeekPublicationVisibility(weekNumber, false);
+          if (!unpublishCard) return;
+          const weekNumber = unpublishCard.weekNumber;
+          const sessionKey = unpublishCard.session?.key;
+          setUnpublishCardId(null);
+          void onSetWeekPublicationVisibility(weekNumber, false, sessionKey);
         }}
       />
       <ConfirmDialog
@@ -1630,8 +2068,8 @@ export function ClassNotebookPanel({
         title={deleteTarget?.kind === "notes" ? "Supprimer les notes" : "Supprimer la publication"}
         body={
           deleteTarget?.kind === "notes"
-            ? "Toutes les notes privées de cette semaine seront effacées. Cette action ne peut pas être annulée."
-            : "Tout le texte de cette semaine sera effacé. Cette action ne peut pas être annulée."
+            ? "Toutes les notes privées de cette séance seront effacées. Cette action ne peut pas être annulée."
+            : "Tout le texte de cette séance sera effacé. Cette action ne peut pas être annulée."
         }
         confirmLabel="Supprimer"
         cancelLabel="Annuler"
@@ -1650,34 +2088,6 @@ export function ClassNotebookPanel({
         onSelect={openEditControl}
         onDelete={onDeleteControl}
       />
-      {controlPickerSessions ? (
-        <div className="technical-modal-backdrop" role="presentation">
-          <section className="technical-modal control-plan-modal" role="dialog" aria-modal="true">
-            <header>
-              <div>
-                <span className="eyebrow">SÉANCE</span>
-                <h2>Choisir le cours</h2>
-              </div>
-              <button type="button" onClick={() => setControlPickerSessions(null)} aria-label="Fermer">
-                ×
-              </button>
-            </header>
-            <ul className="control-plan-options" data-control-session-picker="">
-              {controlPickerSessions.map((session) => (
-                <li key={session.key}>
-                  <button type="button" data-course-session-key={session.key} onClick={() => openCreateForSession(session)}>
-                    {formatControlEditorCourseCaption(
-                      branchLabel,
-                      formatCourseSessionPeriods(session.segments),
-                    )}{" "}
-                    · {formatControlSessionDayLabel(session)}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        </div>
-      ) : null}
       {controlEditor ? (
         <ControlEditorModal
           mode={controlEditor.mode}

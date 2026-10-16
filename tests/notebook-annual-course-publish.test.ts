@@ -99,6 +99,7 @@ function yearsStub(): SchoolYearStore {
       if (id === DRAFT_ID) return { ...draft, weeks: [] };
       return null;
     },
+    listDayExceptions: async () => [],
   } as SchoolYearStore;
 }
 
@@ -147,6 +148,7 @@ async function sqliteWorld(): Promise<World> {
     years,
     adapters,
     agenda,
+    schedules,
   };
   return {
     adapters,
