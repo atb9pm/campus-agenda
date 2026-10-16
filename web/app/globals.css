@@ -2139,6 +2139,36 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .class-notebook-zone li button { padding: 0 4px; border: 0; background: transparent; color: #8b3a3a; cursor: pointer; }
 .class-notebook-zone input { width: 100%; padding: 9px 10px; border: 1px dashed var(--line-strong); border-radius: 8px; background: #fff; font-size: 11px; }
 .class-notebook-plan-link { justify-self: start; padding: 0; border: 0; background: transparent; color: var(--blue); font-size: 10px; font-weight: 700; cursor: pointer; }
+.class-notebook-control-line { gap: 8px; }
+.class-notebook-control-open {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: var(--carnet-font);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: #8b2e2e;
+  text-align: left;
+  cursor: pointer;
+}
+.class-notebook-zone-control .class-notebook-control-open,
+.class-notebook-zone-control .class-notebook-control-title,
+.class-notebook-zone-control .class-notebook-control-day {
+  font-family: var(--carnet-font);
+  font-size: 16px;
+  font-weight: 700;
+  color: #8b2e2e;
+}
+.class-notebook-control-title { min-width: 0; }
+.class-notebook-control-day { flex: none; }
+.class-notebook-zone-control .class-notebook-control-delete { color: #8b2e2e; }
 .class-notebook-zone-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .class-notebook-zone-notes { color: #5b6b82; }
 .class-notebook-structured-line { margin: 0; color: #516582; font-size: 10px; }
@@ -2549,8 +2579,9 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .controls-modal-footer { display: flex; justify-content: flex-end; }
 .controls-modal-list h3 { margin: 0 0 10px; color: var(--navy); font-size: 12px; }
 .controls-modal-list ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.controls-modal-list li { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #f8fbff; font-size: 11px; }
-.controls-modal-list li button { border: 0; background: transparent; color: #8b3a3a; cursor: pointer; }
+.controls-modal-list li { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #f8fbff; font-size: 11px; }
+.controls-modal-list li > button:first-child { display: grid; justify-items: start; gap: 2px; border: 0; background: transparent; color: var(--navy); text-align: left; cursor: pointer; }
+.controls-modal-list li button[aria-label] { border: 0; background: transparent; color: #8b3a3a; cursor: pointer; }
 .controls-modal-empty { margin: 0; color: #8793a9; font-size: 11px; }
 .notebook-export-modal { width: min(420px, 100%); max-width: 420px; }
 .notebook-export-modal .controls-modal-header { margin-bottom: 0; }

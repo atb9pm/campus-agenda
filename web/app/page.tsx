@@ -40,6 +40,7 @@ import {
   createNotebookPublicationApi,
   createTeacherControlApi,
   ControlCoordinationRequiredError,
+  updateTeacherControlApi,
   deleteAgendaItemApi,
   fetchAgendaItems,
   fetchApiSession,
@@ -279,6 +280,7 @@ export default function Home() {
     schoolWeekNumber: number;
     day: number;
     title: string;
+    detail: string;
   } | null>(null);
   const [classNotesReady, setClassNotesReady] = useState(false);
   /** Évite d'écrire sur le serveur juste après un chargement / une migration. */
@@ -1199,6 +1201,7 @@ export default function Home() {
       schoolWeekNumber: number;
       day: number;
       title: string;
+      detail?: string;
     },
     confirmCoordination = false,
   ) {
@@ -1206,7 +1209,7 @@ export default function Home() {
       annualCourseId: input.annualCourseId,
       courseSessionKey: input.courseSessionKey,
       title: input.title.trim(),
-      detail: "",
+      detail: input.detail ?? "",
       confirmCoordination,
     });
     setItems((previous) => upsertAgendaItem(previous, created.item));
@@ -1314,46 +1317,46 @@ export default function Home() {
     schoolWeekNumber: number;
     day: number;
     title: string;
+    detail?: string;
     courseSessionKey?: string;
+    annualCourseId?: string;
+    confirmCoordination?: boolean;
   }) {
-    const annualCourseId = requireNotebookAnnualCourseId();
+    const annualCourseId = input.annualCourseId?.trim() || requireNotebookAnnualCourseId();
     if (!annualCourseId) return;
     const courseSessionKey = input.courseSessionKey?.trim() ?? "";
     if (!courseSessionKey) {
       showNotice("Ce cours n’a pas de séance à cette date.");
-      return;
+      throw new Error("Ce cours n’a pas de séance à cette date.");
     }
     try {
-      await performNotebookControl({
-        annualCourseId,
-        courseSessionKey,
-        schoolWeekNumber: input.schoolWeekNumber,
-        day: input.day,
-        title: input.title,
-      });
-    } catch (error) {
-      if (error instanceof ControlCoordinationRequiredError) {
-        setControlAlert({
-          triggered: true,
-          courseDay: { schoolWeekNumber: input.schoolWeekNumber, dayIndex: input.day },
-          existingTests: error.coordination.classDayControls.map((entry) => ({
-            id: entry.agendaItemId,
-            title: entry.title,
-            subjectName: entry.branchLabel,
-            teacherName: entry.teacherName,
-          })),
-        });
-        setPendingNotebookControl({
+      await performNotebookControl(
+        {
           annualCourseId,
           courseSessionKey,
           schoolWeekNumber: input.schoolWeekNumber,
           day: input.day,
           title: input.title,
-        });
-        return;
+          detail: input.detail ?? "",
+        },
+        input.confirmCoordination === true,
+      );
+    } catch (error) {
+      if (error instanceof ControlCoordinationRequiredError) {
+        throw error;
       }
       showNotice(error instanceof Error ? error.message : "Publication impossible.");
+      throw error;
     }
+  }
+
+  async function notebookUpdateControl(itemId: number, input: { title: string; detail: string }) {
+    const updated = await updateTeacherControlApi(itemId, {
+      title: input.title.trim(),
+      detail: input.detail,
+    });
+    setItems((previous) => previous.map((item) => (item.id === itemId ? updated.item : item)));
+    showNotice("Contrôle enregistré.");
   }
 
   if (passwordChange) {
@@ -1550,7 +1553,9 @@ export default function Home() {
             onSaveWeekPublication={notebookSaveWeekPublication}
             onSetWeekPublicationVisibility={notebookSetWeekPublicationVisibility}
             onMovePublication={notebookMovePublication}
+            classroomId={notebookClassroomId}
             onSaveControl={notebookSaveControl}
+            onUpdateControl={notebookUpdateControl}
             onDeleteControl={notebookDeletePublication}
             onPreviewStudent={enterTeacherPreview}
           />

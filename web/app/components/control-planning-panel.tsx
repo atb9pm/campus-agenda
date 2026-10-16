@@ -33,6 +33,14 @@ import {
   moveTeacherControlApi,
   updateTeacherControlApi,
 } from "../../lib/api-client.ts";
+import {
+  ControlCoordinationBlock,
+  ControlEditorModal,
+  controlEditorDetailValue,
+  formatControlEditorCourseCaption,
+  formatControlEditorDateLabel,
+  type ControlCoordinationLine,
+} from "./control-editor-modal.tsx";
 
 const CONTROL_DRAG_MIME = "application/x-campus-control";
 const EMPTY_FILTER_SUBJECTS: ControlPlanningView["filterSubjects"] = [];
@@ -88,8 +96,7 @@ function formatIsoDay(iso: string | null): string {
 }
 
 function formatWeekdayDate(weekdayLabel: string, iso: string | null): string {
-  const day = formatIsoDay(iso);
-  return day ? `${weekdayLabel} ${day}` : weekdayLabel;
+  return formatControlEditorDateLabel(weekdayLabel, iso);
 }
 
 function formatCompactDay(iso: string | null): string {
@@ -129,29 +136,6 @@ function toPlanningDay(day: ControlPlanningSemesterDay): ControlPlanningDay {
     classDayControls: day.classDayControls,
     confirmationRequired: day.confirmationRequired,
   };
-}
-
-function coordinationCardsFromSummary(
-  entries: ControlCoordinationSummary["classDayControls"],
-): ControlPlanningCard[] {
-  return entries.map((entry) => ({
-    agendaItemId: entry.agendaItemId,
-    classroomId: entry.classroomId,
-    classroomName: entry.classroomName,
-    subjectId: "",
-    branchLabel: entry.branchLabel,
-    title: entry.title,
-    detail: "",
-    teacherId: "",
-    teacherName: entry.teacherName,
-    isOwn: false,
-    schoolWeekNumber: entry.schoolWeekNumber,
-    dayIndex: entry.dayIndex,
-    date: entry.date,
-    annualCourseId: null,
-    courseSessionKey: null,
-    courseSessionDate: entry.date,
-  }));
 }
 
 function ControlCard({
@@ -327,167 +311,6 @@ function ControlCard({
   );
 }
 
-function CoordinationBlock({
-  classroomName,
-  dayLabel,
-  classDayControls,
-  teacherWeekControls,
-  confirmationRequired,
-}: {
-  classroomName: string;
-  dayLabel: string;
-  classDayControls: ControlPlanningCard[];
-  teacherWeekControls: ControlPlanningCard[];
-  confirmationRequired: boolean;
-}) {
-  return (
-    <section className="control-plan-coordination" data-control-coordination="">
-      <h3>Coordination</h3>
-      {confirmationRequired ? (
-        <p className="control-plan-warning" data-control-confirm-warning="">
-          ⚠ {classDayControls.length} contrôles sont déjà prévus dans {classroomName} {dayLabel}.
-        </p>
-      ) : null}
-      <p>
-        Contrôles déjà prévus dans {classroomName}
-        {classDayControls.length === 0 ? " : aucun." : " :"}
-      </p>
-      {classDayControls.length ? (
-        <ul>
-          {classDayControls.map((card) => (
-            <li key={card.agendaItemId}>
-              <strong>{card.branchLabel}</strong> — {card.title}
-              <span>{card.teacherName}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <p>
-        Votre semaine :{" "}
-        {teacherWeekControls.length === 1
-          ? "1 contrôle déjà planifié"
-          : `${teacherWeekControls.length} contrôles déjà planifiés`}
-      </p>
-      {teacherWeekControls.length ? (
-        <ul data-teacher-week-load="">
-          {teacherWeekControls.map((card) => (
-            <li key={card.agendaItemId}>
-              {card.classroomName} — {(SCHOOL_WEEKDAY_LABELS[card.dayIndex] ?? "").toLocaleLowerCase("fr-CH")} —{" "}
-              {card.branchLabel}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {confirmationRequired ? (
-        <p>Vous pouvez choisir une autre séance ou publier malgré tout.</p>
-      ) : null}
-    </section>
-  );
-}
-
-function PlanModal({
-  classroomName,
-  day,
-  option,
-  classDayControls,
-  teacherWeekControls,
-  submitting,
-  error,
-  confirmationRequired,
-  title,
-  detail,
-  onTitle,
-  onDetail,
-  onClose,
-  onSubmit,
-}: {
-  classroomName: string;
-  day: ControlPlanningDay;
-  option: ControlPlacementOption;
-  classDayControls: ControlPlanningCard[];
-  teacherWeekControls: ControlPlanningCard[];
-  submitting: boolean;
-  error: string;
-  confirmationRequired: boolean;
-  title: string;
-  detail: string;
-  onTitle: (value: string) => void;
-  onDetail: (value: string) => void;
-  onClose: () => void;
-  onSubmit: (confirm: boolean) => void;
-}) {
-  const dayLabel = formatWeekdayDate(day.weekdayLabel, option.date);
-  return (
-    <div className="technical-modal-backdrop" role="presentation">
-      <section
-        className="technical-modal control-plan-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="control-plan-title"
-        data-control-modal=""
-      >
-        <header>
-          <div>
-            <span className="eyebrow">PLANIFIER UN CONTRÔLE</span>
-            <h2 id="control-plan-title">Planifier un contrôle</h2>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Fermer" disabled={submitting}>
-            ×
-          </button>
-        </header>
-        <p className="control-plan-fixed" data-control-fixed="">
-          <strong>{classroomName}</strong>
-          <span>{dayLabel}</span>
-          <span>{placementCaption(option)}</span>
-        </p>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            onSubmit(confirmationRequired);
-          }}
-        >
-          <label>
-            Titre *
-            <input
-              data-control-title=""
-              value={title}
-              onChange={(event) => onTitle(event.target.value)}
-              required
-              disabled={submitting}
-            />
-          </label>
-          <label>
-            Détail
-            <textarea
-              data-control-detail=""
-              value={detail}
-              onChange={(event) => onDetail(event.target.value)}
-              rows={3}
-              disabled={submitting}
-            />
-          </label>
-          <CoordinationBlock
-            classroomName={classroomName}
-            dayLabel={`ce ${day.weekdayLabel.toLocaleLowerCase("fr-CH")}`}
-            classDayControls={classDayControls}
-            teacherWeekControls={teacherWeekControls}
-            confirmationRequired={confirmationRequired}
-          />
-          {error ? <p className="control-plan-error">{error}</p> : null}
-          <footer>
-            <button type="button" onClick={onClose} disabled={submitting}>
-              Annuler
-            </button>
-            <button type="submit" data-control-publish="" disabled={submitting || !title.trim()}>
-              {submitting ? "Publication…" : confirmationRequired ? "Publier quand même" : "Publier"}
-            </button>
-          </footer>
-        </form>
-      </section>
-    </div>
-  );
-}
-
 function MoveModal({
   classroomName,
   day,
@@ -505,8 +328,8 @@ function MoveModal({
   day: ControlPlanningDay;
   option: ControlPlacementOption;
   card: ControlPlanningCard;
-  classDayControls: ControlPlanningCard[];
-  teacherWeekControls: ControlPlanningCard[];
+  classDayControls: ControlCoordinationLine[];
+  teacherWeekControls: ControlCoordinationLine[];
   submitting: boolean;
   error: string;
   confirmationRequired: boolean;
@@ -538,7 +361,7 @@ function MoveModal({
           <span>{dayLabel}</span>
           <span>{placementCaption(option)}</span>
         </p>
-        <CoordinationBlock
+        <ControlCoordinationBlock
           classroomName={classroomName}
           dayLabel={`ce ${day.weekdayLabel.toLocaleLowerCase("fr-CH")}`}
           classDayControls={classDayControls}
@@ -559,93 +382,6 @@ function MoveModal({
             {submitting ? "Déplacement…" : confirmationRequired ? "Déplacer quand même" : "Déplacer"}
           </button>
         </footer>
-      </section>
-    </div>
-  );
-}
-
-function EditModal({
-  card,
-  title,
-  detail,
-  submitting,
-  error,
-  onTitle,
-  onDetail,
-  onClose,
-  onSubmit,
-}: {
-  card: ControlPlanningCard;
-  title: string;
-  detail: string;
-  submitting: boolean;
-  error: string;
-  onTitle: (value: string) => void;
-  onDetail: (value: string) => void;
-  onClose: () => void;
-  onSubmit: () => void;
-}) {
-  const placement = [card.classroomName, card.branchLabel, formatIsoDay(card.courseSessionDate ?? card.date)]
-    .filter(Boolean)
-    .join(" · ");
-  return (
-    <div className="technical-modal-backdrop" role="presentation">
-      <section
-        className="technical-modal control-plan-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="control-edit-title"
-        data-control-edit-modal=""
-      >
-        <header>
-          <div>
-            <span className="eyebrow">MODIFIER UN CONTRÔLE</span>
-            <h2 id="control-edit-title">Modifier un contrôle</h2>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Fermer" disabled={submitting}>
-            ×
-          </button>
-        </header>
-        <p className="control-plan-fixed" data-control-edit-fixed="">
-          <strong>{placement}</strong>
-          <span>Classe, branche et séance inchangées.</span>
-        </p>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            onSubmit();
-          }}
-        >
-          <label>
-            Titre *
-            <input
-              data-control-edit-title=""
-              value={title}
-              onChange={(event) => onTitle(event.target.value)}
-              required
-              disabled={submitting}
-            />
-          </label>
-          <label>
-            Détail
-            <textarea
-              data-control-edit-detail=""
-              value={detail}
-              onChange={(event) => onDetail(event.target.value)}
-              rows={3}
-              disabled={submitting}
-            />
-          </label>
-          {error ? <p className="control-plan-error">{error}</p> : null}
-          <footer>
-            <button type="button" onClick={onClose} disabled={submitting}>
-              Annuler
-            </button>
-            <button type="submit" data-control-edit-save="" disabled={submitting || !title.trim()}>
-              {submitting ? "Enregistrement…" : "Enregistrer"}
-            </button>
-          </footer>
-        </form>
       </section>
     </div>
   );
@@ -922,7 +658,7 @@ export function ControlPlanningPanel({
     setDeleteError("");
     setEditCard(card);
     setEditTitle(card.title);
-    setEditDetail(card.detail ?? "");
+    setEditDetail(controlEditorDetailValue(card.detail));
     setEditError("");
   }
 
@@ -1881,19 +1617,17 @@ export function ControlPlanningPanel({
       ) : null}
 
       {modalDay && modalOption && view ? (
-        <PlanModal
+        <ControlEditorModal
+          mode="create"
           classroomName={modalClassroomName}
-          day={modalDay}
-          option={modalOption}
+          dateLabel={formatWeekdayDate(modalDay.weekdayLabel, modalOption.date)}
+          weekdayLabel={modalDay.weekdayLabel}
+          courseCaption={formatControlEditorCourseCaption(modalOption.branchLabel, modalOption.sessionLabel)}
           classDayControls={
-            serverCoordination
-              ? coordinationCardsFromSummary(serverCoordination.classDayControls)
-              : targetClassDayControls
+            serverCoordination ? serverCoordination.classDayControls : targetClassDayControls
           }
           teacherWeekControls={
-            serverCoordination
-              ? coordinationCardsFromSummary(serverCoordination.teacherWeekControls)
-              : view.teacherWeekControls
+            serverCoordination ? serverCoordination.teacherWeekControls : view.teacherWeekControls
           }
           submitting={submitting}
           error={publishError}
@@ -1919,14 +1653,14 @@ export function ControlPlanningPanel({
           card={moveCard}
           classDayControls={
             serverCoordination
-              ? coordinationCardsFromSummary(serverCoordination.classDayControls)
+              ? serverCoordination.classDayControls
               : classDayControlsForPlacementOption(moveDay.classDayControls, moveOption).filter(
                   (entry) => entry.agendaItemId !== moveCard.agendaItemId,
                 )
           }
           teacherWeekControls={
             serverCoordination
-              ? coordinationCardsFromSummary(serverCoordination.teacherWeekControls)
+              ? serverCoordination.teacherWeekControls
               : view.teacherWeekControls.filter((entry) => entry.agendaItemId !== moveCard.agendaItemId)
           }
           submitting={moving}
@@ -1946,12 +1680,19 @@ export function ControlPlanningPanel({
       ) : null}
 
       {editCard ? (
-        <EditModal
-          card={editCard}
-          title={editTitle}
-          detail={editDetail}
+        <ControlEditorModal
+          mode="edit"
+          classroomName={editCard.classroomName}
+          dateLabel={formatWeekdayDate(
+            SCHOOL_WEEKDAY_LABELS[editCard.dayIndex] ?? "",
+            editCard.courseSessionDate ?? editCard.date,
+          )}
+          weekdayLabel={SCHOOL_WEEKDAY_LABELS[editCard.dayIndex]}
+          courseCaption={formatControlEditorCourseCaption(editCard.branchLabel)}
           submitting={editing}
           error={editError}
+          title={editTitle}
+          detail={editDetail}
           onTitle={setEditTitle}
           onDetail={setEditDetail}
           onClose={closeModal}

@@ -304,6 +304,7 @@ test("service — planning prêt pour la vue, erreurs de filtre", async () => {
 test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de table controls", async () => {
   const [
     panel,
+    editor,
     css,
     page,
     nav,
@@ -319,6 +320,7 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
     mesCoursRoute,
   ] = await Promise.all([
     readFile(new URL("../web/app/components/control-planning-panel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/components/control-editor-modal.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../src/features/teacher/navigation.ts", import.meta.url), "utf8"),
@@ -363,10 +365,11 @@ test("sources — vue journalière sans axe horaire, Agenda inchangé, pas de ta
   assert.doesNotMatch(panel, /À rééquilibrer/);
   assert.match(panel, /\+ Planifier un contrôle/);
   assert.match(panel, /data-control-plan/);
-  assert.match(panel, /data-control-modal/);
-  assert.match(panel, /data-control-title/);
-  assert.match(panel, /data-control-detail/);
-  assert.match(panel, /Publier quand même/);
+  assert.match(panel, /<ControlEditorModal/);
+  assert.match(editor, /data-control-modal/);
+  assert.match(editor, /data-control-title/);
+  assert.match(editor, /data-control-detail/);
+  assert.match(editor, /Publier quand même/);
   assert.match(panel, /createTeacherControlApi/);
   assert.match(panel, /confirmCoordination/);
   assert.match(panel, /classDayControlsForPlacementOption/);
