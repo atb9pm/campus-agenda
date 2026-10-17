@@ -126,15 +126,19 @@ export function exportLinesContainRawRichPayload(lines: readonly NotebookExportR
   return joined.includes(CAMPUS_RICH_DETAIL_PREFIX) || joined.includes(`"${CAMPUS_RICH_FORMAT}"`);
 }
 
-export function compactLineText(line: NotebookExportRichLine): string {
-  if (line.kind === "bullet") return `- ${line.text.trim()}`;
-  if (line.kind === "ordered") return `${line.order ?? 1}. ${line.text.trim()}`;
-  if (line.kind === "check") return `${line.checked ? "[x]" : "[ ]"} ${line.text.trim()}`;
-  return line.text.replace(/\s+/g, " ").trim();
+export function normalizeExportControlChars(text: string): string {
+  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\t/g, "    ");
 }
 
-export function truncateExportText(value: string, maxLength = 110): string {
-  const compact = value.replace(/\s+/g, " ").trim();
-  if (compact.length <= maxLength) return compact;
-  return `${compact.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+export function splitRunsOnNewlines(runs: readonly NotebookExportRun[]): NotebookExportRun[][] {
+  const rows: NotebookExportRun[][] = [[]];
+  for (const run of runs) {
+    const parts = normalizeExportControlChars(run.text).split("\n");
+    parts.forEach((part, index) => {
+      if (index > 0) rows.push([]);
+      if (!part.length) return;
+      rows[rows.length - 1]!.push(run.marks ? { text: part, marks: run.marks } : { text: part });
+    });
+  }
+  return rows;
 }

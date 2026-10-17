@@ -9,6 +9,8 @@ import {
   type PDFPage,
 } from "pdf-lib";
 
+import { RICH_TEXT_COLOR_HEX } from "../class-notebook/rich-doc.ts";
+import { normalizeExportControlChars, splitRunsOnNewlines } from "./rich-lines.ts";
 import {
   formatNotebookExportCoverage,
   NOTEBOOK_EXPORT_UNMATCHED_CONTROLS_TITLE,
@@ -27,7 +29,6 @@ import {
   underlineForMarks,
   type NotebookExportFontKind,
 } from "./rich-style.ts";
-import { summaryLinesForSession } from "./summary.ts";
 
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
@@ -36,16 +37,26 @@ const NAVY = rgb(29 / 255, 53 / 255, 87 / 255);
 const MUTED = rgb(81 / 255, 101 / 255, 130 / 255);
 const RULE = rgb(210 / 255, 218 / 255, 230 / 255);
 const BLACK = rgb(0.12, 0.14, 0.18);
+const CHIP_BG = rgb(238 / 255, 243 / 255, 251 / 255);
+const NOTE_RAIL = rgb(210 / 255, 218 / 255, 230 / 255);
+const CONTROL_RED = rgb(
+  Number.parseInt(RICH_TEXT_COLOR_HEX.red.slice(1, 3), 16) / 255,
+  Number.parseInt(RICH_TEXT_COLOR_HEX.red.slice(3, 5), 16) / 255,
+  Number.parseInt(RICH_TEXT_COLOR_HEX.red.slice(5, 7), 16) / 255,
+);
+const CONTROL_RED_MUTED = rgb(155 / 255, 55 / 255, 50 / 255);
+const SESSION_MIN_HEIGHT = 86;
 
-function winAnsi(text: string): string {
-  return text
+export function winAnsi(text: string): string {
+  return normalizeExportControlChars(text)
+    .replace(/\n/g, "")
     .replace(/[•●]/g, "-")
     .replace(/[—–]/g, "-")
     .replace(/[’‘]/g, "'")
     .replace(/[“”«»]/g, '"')
     .replace(/[☑✓]/g, "[x]")
     .replace(/[☐□]/g, "[ ]")
-    .replace(/[^\u0009\u000A\u000D\u0020-\u007E\u00A0-\u00FF]/g, "?");
+    .replace(/[^\u0020-\u007E\u00A0-\u00FF]/g, "?");
 }
 
 async function loadLogo(): Promise<Uint8Array | null> {
@@ -76,6 +87,10 @@ function wrap(font: PDFFont, text: string, size: number, maxWidth: number): stri
 function colorFromHex(hex: string) {
   const { r, g, b } = hexToRgbParts(hex);
   return rgb(r, g, b);
+}
+
+function sessionHeading(block: NotebookExportSessionBlock): string {
+  return `${block.weekLabel.replace(/^Sem\b/i, "SEM").toUpperCase()} · ${block.dateLabel.toUpperCase()}`;
 }
 
 class PdfWriter {
@@ -111,8 +126,8 @@ class PdfWriter {
     this.skipFirstFooter = skipFirstFooter;
   }
 
-  contentWidth(): number {
-    return PAGE_WIDTH - MARGIN * 2;
+  contentWidth(indent = 0): number {
+    return PAGE_WIDTH - MARGIN * 2 - indent;
   }
 
   font(kind: NotebookExportFontKind): PDFFont {
@@ -171,36 +186,42 @@ class PdfWriter {
     this.page.node.addAnnot(annot);
   }
 
-  drawText(text: string, options: { size: number; font?: PDFFont; color?: ReturnType<typeof rgb>; gap?: number; href?: string }): void {
+  drawText(
+    text: string,
+    options: { size: number; font?: PDFFont; color?: ReturnType<typeof rgb>; gap?: number; href?: string; indent?: number },
+  ): void {
     if (!this.page) return;
     const font = options.font ?? this.regular;
     const size = options.size;
-    for (const line of wrap(font, text, size, this.contentWidth())) {
+    const indent = options.indent ?? 0;
+    for (const line of wrap(font, text, size, this.contentWidth(indent))) {
       if (this.remaining() < size + 2) {
         this.addPage("content");
       }
       const y = this.y - size;
       this.page!.drawText(line, {
-        x: MARGIN,
+        x: MARGIN + indent,
         y,
         size,
         font,
         color: options.color ?? BLACK,
       });
-      if (options.href) this.link(options.href, MARGIN, y, font.widthOfTextAtSize(line, size), size + 2);
+      if (options.href) this.link(options.href, MARGIN + indent, y, font.widthOfTextAtSize(line, size), size + 2);
       this.y -= size + 3;
     }
     this.y -= options.gap ?? 4;
   }
 
   measure(text: string, marks: NotebookExportRun["marks"] | undefined, size: number, forceBold: boolean): number {
-    return this.font(fontKindForMarks(marks, forceBold)).widthOfTextAtSize(winAnsi(text), size);
+    const safe = winAnsi(text);
+    if (!safe) return 0;
+    return this.font(fontKindForMarks(marks, forceBold)).widthOfTextAtSize(safe, size);
   }
 
-  wrapRuns(prefix: NotebookExportRun[], runs: readonly NotebookExportRun[], size: number, forceBold: boolean): NotebookExportRun[][] {
-    const maxWidth = this.contentWidth();
+  wrapSoft(runs: readonly NotebookExportRun[], size: number, forceBold: boolean, indent: number): NotebookExportRun[][] {
+    const maxWidth = this.contentWidth(indent);
     const tokens: NotebookExportRun[] = [];
-    for (const run of [...prefix, ...runs]) {
+    for (const run of runs) {
       const text = winAnsi(run.text);
       const parts = text.split(/(\s+)/);
       for (const part of parts) {
@@ -229,9 +250,29 @@ class PdfWriter {
     return rows.length ? rows : [[{ text: "" }]];
   }
 
+  wrapRuns(
+    prefix: NotebookExportRun[],
+    runs: readonly NotebookExportRun[],
+    size: number,
+    forceBold: boolean,
+    indent = 0,
+  ): NotebookExportRun[][] {
+    const hardRows = splitRunsOnNewlines([...prefix, ...runs]);
+    const wrapped: NotebookExportRun[][] = [];
+    for (const hard of hardRows) {
+      if (!hard.length) {
+        wrapped.push([{ text: "" }]);
+        continue;
+      }
+      wrapped.push(...this.wrapSoft(hard, size, forceBold, indent));
+    }
+    return wrapped.length ? wrapped : [[{ text: "" }]];
+  }
+
   paintRun(run: NotebookExportRun, x: number, baseline: number, size: number, forceBold: boolean): number {
     if (!this.page) return 0;
     const text = winAnsi(run.text);
+    if (!text) return 0;
     const font = this.font(fontKindForMarks(run.marks, forceBold));
     const width = font.widthOfTextAtSize(text, size);
     const highlight = highlightHexForMarks(run.marks);
@@ -268,15 +309,32 @@ class PdfWriter {
 
   drawRuns(
     runs: readonly NotebookExportRun[],
-    options: { size: number; gap?: number; prefix?: NotebookExportRun[]; forceBold?: boolean },
+    options: {
+      size: number;
+      gap?: number;
+      prefix?: NotebookExportRun[];
+      forceBold?: boolean;
+      indent?: number;
+      rail?: boolean;
+    },
   ): void {
     if (!this.page) return;
     const size = options.size;
     const forceBold = Boolean(options.forceBold);
-    for (const row of this.wrapRuns(options.prefix ?? [], runs, size, forceBold)) {
+    const indent = options.indent ?? 0;
+    for (const row of this.wrapRuns(options.prefix ?? [], runs, size, forceBold, indent)) {
       if (this.remaining() < size + 4) this.addPage("content");
       const baseline = this.y - size;
-      let x = MARGIN;
+      if (options.rail) {
+        this.page!.drawRectangle({
+          x: MARGIN,
+          y: baseline - 2,
+          width: 2,
+          height: size + 4,
+          color: NOTE_RAIL,
+        });
+      }
+      let x = MARGIN + indent;
       for (const run of row) {
         x += this.paintRun(run, x, baseline, size, forceBold);
       }
@@ -293,7 +351,7 @@ class PdfWriter {
       thickness: 0.4,
       color: RULE,
     });
-    this.y -= 10;
+    this.y -= 12;
   }
 
   cover(document: NotebookExportDocument): void {
@@ -330,80 +388,150 @@ class PdfWriter {
     this.drawText(value, { size: 12, font: this.bold, color: NAVY, gap: 10 });
   }
 
-  section(title: string): void {
-    this.drawText(title, { size: 9, font: this.bold, color: NAVY, gap: 6 });
+  section(title: string, indent = 0): void {
+    this.drawText(title, { size: 8, font: this.bold, color: NAVY, gap: 6, indent });
   }
 
-  rich(lines: readonly NotebookExportRichLine[]): void {
+  chip(label: string): void {
+    if (!this.page || !label.trim()) return;
+    const size = 8;
+    const paddingX = 6;
+    const paddingY = 3;
+    const text = winAnsi(label.toUpperCase());
+    const lines = wrap(this.bold, text, size, this.contentWidth() - paddingX * 2);
+    const widths = lines.map((line) => this.bold.widthOfTextAtSize(line, size));
+    const boxWidth = Math.min(Math.max(...widths) + paddingX * 2, this.contentWidth());
+    const boxHeight = lines.length * (size + 2) + paddingY * 2;
+    this.ensure(boxHeight + 10);
+    this.page.drawRectangle({
+      x: MARGIN,
+      y: this.y - boxHeight,
+      width: boxWidth,
+      height: boxHeight,
+      color: CHIP_BG,
+    });
+    lines.forEach((line, index) => {
+      this.page!.drawText(line, {
+        x: MARGIN + paddingX,
+        y: this.y - paddingY - size - index * (size + 2),
+        size,
+        font: this.bold,
+        color: NAVY,
+      });
+    });
+    this.y -= boxHeight + 10;
+  }
+
+  drawRightText(text: string, size: number, color: ReturnType<typeof rgb>, y: number): number {
+    const line = winAnsi(text);
+    const width = this.bold.widthOfTextAtSize(line, size);
+    this.page!.drawText(line, {
+      x: PAGE_WIDTH - MARGIN - width,
+      y,
+      size,
+      font: this.bold,
+      color,
+    });
+    return width;
+  }
+
+  sessionHeader(block: NotebookExportSessionBlock): void {
+    const left = winAnsi(sessionHeading(block));
+    const size = 10;
+    const titles = block.controls.map((entry) => entry.title.trim() || "Contrôle");
+    const joined = titles.join(" · ").toUpperCase();
+    const leftWidth = this.bold.widthOfTextAtSize(left, size);
+    const joinedWidth = titles.length ? this.bold.widthOfTextAtSize(winAnsi(joined), size) : 0;
+    const y = this.y - size;
+    this.page!.drawText(left, { x: MARGIN, y, size, font: this.bold, color: NAVY });
+    if (titles.length && leftWidth + 16 + joinedWidth <= this.contentWidth()) {
+      this.drawRightText(joined, size, CONTROL_RED, y);
+      this.y -= size + 4;
+    } else if (titles.length) {
+      this.y -= size + 3;
+      for (const title of titles) {
+        if (this.remaining() < size + 4) this.addPage("content");
+        this.drawRightText(title.toUpperCase(), size, CONTROL_RED, this.y - size);
+        this.y -= size + 3;
+      }
+    } else {
+      this.y -= size + 4;
+    }
+    for (const control of block.controls) {
+      if (!control.detail) continue;
+      if (this.remaining() < 12) this.addPage("content");
+      const detail = winAnsi(control.detail);
+      const width = this.regular.widthOfTextAtSize(detail, 8);
+      this.page!.drawText(detail, {
+        x: PAGE_WIDTH - MARGIN - width,
+        y: this.y - 8,
+        size: 8,
+        font: this.regular,
+        color: CONTROL_RED_MUTED,
+      });
+      this.y -= 12;
+    }
+  }
+
+  rich(
+    lines: readonly NotebookExportRichLine[],
+    options: { indent?: number; rail?: boolean } = {},
+  ): void {
+    const indent = options.indent ?? 0;
     for (const line of lines) {
       if (line.kind === "heading") {
-        this.drawRuns(line.runs, { size: 11, gap: 4, forceBold: true });
+        this.drawRuns(line.runs, { size: 11, gap: 4, forceBold: true, indent, rail: options.rail });
       } else if (line.kind === "bullet") {
-        this.drawRuns(line.runs, { size: 10, gap: 3, prefix: [{ text: "- " }] });
+        this.drawRuns(line.runs, { size: 10, gap: 3, prefix: [{ text: "- " }], indent, rail: options.rail });
       } else if (line.kind === "ordered") {
-        this.drawRuns(line.runs, { size: 10, gap: 3, prefix: [{ text: `${line.order ?? 1}. ` }] });
+        this.drawRuns(line.runs, {
+          size: 10,
+          gap: 3,
+          prefix: [{ text: `${line.order ?? 1}. ` }],
+          indent,
+          rail: options.rail,
+        });
       } else if (line.kind === "check") {
-        this.drawRuns(line.runs, { size: 10, gap: 3, prefix: [{ text: `${line.checked ? "[x]" : "[ ]"} ` }] });
-      } else if (line.kind === "callout") {
-        this.drawRuns(line.runs, { size: 10, gap: 3 });
+        this.drawRuns(line.runs, {
+          size: 10,
+          gap: 3,
+          prefix: [{ text: `${line.checked ? "[x]" : "[ ]"} ` }],
+          indent,
+          rail: options.rail,
+        });
       } else {
-        this.drawRuns(line.runs, { size: 10, gap: 3 });
+        this.drawRuns(line.runs, { size: 10, gap: 3, indent, rail: options.rail });
       }
     }
   }
 
-  sessionSummary(block: NotebookExportSessionBlock): void {
-    const lines = summaryLinesForSession(block);
-    this.ensure(16 * lines.length + 10);
-    const header = lines[0] ?? "";
-    this.drawText(header, { size: 10, font: this.bold, color: NAVY, gap: 2 });
-    for (const line of lines.slice(1)) {
-      this.drawText(line, { size: 9, color: BLACK, gap: 1 });
-    }
-    this.y -= 8;
-  }
-
-  sessionDetailed(block: NotebookExportSessionBlock): void {
-    this.ensure(72);
-    this.drawText(block.weekLabel.toUpperCase(), { size: 13, font: this.bold, color: NAVY, gap: 2 });
-    this.drawText(block.longDateLabel, { size: 10, color: MUTED, gap: 8 });
-    this.rule();
+  renderSession(block: NotebookExportSessionBlock, branchLabel: string): void {
+    this.ensure(SESSION_MIN_HEIGHT);
+    this.sessionHeader(block);
+    this.chip(branchLabel);
     if (block.publications.length) {
       this.section("PUBLICATION ÉLÈVES");
       this.rich(block.publications);
-      this.y -= 4;
-    }
-    if (block.controls.length) {
-      this.section("CONTRÔLE");
-      for (const title of block.controls) this.drawText(title, { size: 10, gap: 3 });
-      this.y -= 4;
+      this.y -= 6;
     }
     if (block.notes.length) {
-      this.section("NOTES PROF");
-      this.rich(block.notes);
+      this.section("NOTES PROFESSEUR", 10);
+      this.rich(block.notes, { indent: 10, rail: true });
       this.y -= 4;
     }
-    this.y -= 8;
+    this.rule();
   }
 
-  unmatchedControls(controls: readonly NotebookExportUnmatchedControl[], layout: NotebookExportDocument["layout"]): void {
+  unmatchedControls(controls: readonly NotebookExportUnmatchedControl[]): void {
     if (!controls.length) return;
     this.ensure(48);
-    if (layout === "detailed") {
-      this.section(NOTEBOOK_EXPORT_UNMATCHED_CONTROLS_TITLE.toUpperCase());
-      for (const control of controls) {
-        const line = control.dateLabel ? `${control.title}  ·  ${control.dateLabel}` : control.title;
-        this.drawText(line, { size: 10, gap: 3 });
-      }
-      this.y -= 8;
-      return;
-    }
-    this.drawText(NOTEBOOK_EXPORT_UNMATCHED_CONTROLS_TITLE, { size: 10, font: this.bold, color: NAVY, gap: 2 });
+    this.section(NOTEBOOK_EXPORT_UNMATCHED_CONTROLS_TITLE);
     for (const control of controls) {
-      const line = control.dateLabel
-        ? `Contrôle — ${control.title}  ·  ${control.dateLabel}`
-        : `Contrôle — ${control.title}`;
-      this.drawText(line, { size: 9, color: BLACK, gap: 1 });
+      const title = control.title.trim() || "Contrôle";
+      this.drawText(title.toUpperCase(), { size: 10, font: this.bold, color: CONTROL_RED, gap: 1 });
+      if (control.detail) this.drawText(control.detail, { size: 8, color: CONTROL_RED_MUTED, gap: 1 });
+      if (control.dateLabel) this.drawText(control.dateLabel, { size: 8, color: MUTED, gap: 6 });
+      else this.y -= 4;
     }
     this.y -= 8;
   }
@@ -451,10 +579,9 @@ export async function renderNotebookExportPdf(document: NotebookExportDocument):
   if (document.coverPage) writer.cover(document);
   if (!writer.page || document.coverPage) writer.addPage("content");
   for (const session of document.sessions) {
-    if (document.layout === "detailed") writer.sessionDetailed(session);
-    else writer.sessionSummary(session);
+    writer.renderSession(session, document.branchLabel);
   }
-  writer.unmatchedControls(document.unmatchedControls, document.layout);
+  writer.unmatchedControls(document.unmatchedControls);
   writer.footers();
   return pdf.save();
 }

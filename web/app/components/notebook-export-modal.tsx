@@ -6,7 +6,6 @@ import { DEFAULT_NOTEBOOK_EXPORT_OPTIONS } from "@campus/features/notebook-expor
 import {
   NOTEBOOK_EXPORT_EMPTY_REASON,
   NOTEBOOK_EXPORT_FAILED_REASON,
-  type NotebookExportLayout,
   type NotebookExportPeriod,
 } from "@campus/features/notebook-export/types.ts";
 import { fetchTeacherNotebookExportApi } from "../../lib/api-client.ts";
@@ -33,7 +32,6 @@ export function NotebookExportModal({
   const [includeTeacherNotes, setIncludeTeacherNotes] = useState(DEFAULT_NOTEBOOK_EXPORT_OPTIONS.includeTeacherNotes);
   const [includeDrafts, setIncludeDrafts] = useState(DEFAULT_NOTEBOOK_EXPORT_OPTIONS.includeDrafts);
   const [period, setPeriod] = useState<NotebookExportPeriod>(DEFAULT_NOTEBOOK_EXPORT_OPTIONS.period);
-  const [layout, setLayout] = useState<NotebookExportLayout>(DEFAULT_NOTEBOOK_EXPORT_OPTIONS.layout);
   const [coverPage, setCoverPage] = useState(DEFAULT_NOTEBOOK_EXPORT_OPTIONS.coverPage);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
@@ -52,7 +50,6 @@ export function NotebookExportModal({
         includeTeacherNotes,
         includeDrafts,
         period,
-        layout,
         coverPage,
       });
       const url = URL.createObjectURL(blob);
@@ -127,18 +124,6 @@ export function NotebookExportModal({
             <label className="notebook-export-option">
               <input type="radio" name="export-period" checked={period === "semester-2"} onChange={() => setPeriod("semester-2")} />
               <span>Semestre 2</span>
-            </label>
-          </fieldset>
-
-          <fieldset className="notebook-export-fieldset">
-            <legend>Présentation</legend>
-            <label className="notebook-export-option">
-              <input type="radio" name="export-layout" checked={layout === "summary"} onChange={() => setLayout("summary")} />
-              <span>Synthèse annuelle</span>
-            </label>
-            <label className="notebook-export-option">
-              <input type="radio" name="export-layout" checked={layout === "detailed"} onChange={() => setLayout("detailed")} />
-              <span>Carnet détaillé</span>
             </label>
           </fieldset>
 

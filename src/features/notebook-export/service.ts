@@ -16,6 +16,7 @@ import { parseNotebookExportOptions } from "./options.ts";
 import { renderNotebookExportPdf } from "./pdf.ts";
 import { formatCourseScheduleSummary } from "./schedule-summary.ts";
 import { selectLegacyTestsForAnnualCourseExport } from "./session-match.ts";
+import { logOperationalError } from "../../lib/observability/index.ts";
 import {
   NOTEBOOK_EXPORT_EMPTY_REASON,
   NOTEBOOK_EXPORT_FAILED_REASON,
@@ -123,6 +124,11 @@ export async function exportTeacherNotebookPdf(
       }),
     };
   } catch {
+    logOperationalError("notebook_export_pdf_failed", {
+      annualCourseId: input.annualCourseId,
+      period: options.period,
+      sessionCount: assembled.sessionCount,
+    });
     return { ok: false, reason: NOTEBOOK_EXPORT_FAILED_REASON, status: 500 };
   }
 }

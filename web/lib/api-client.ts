@@ -420,7 +420,6 @@ export async function fetchTeacherNotebookExportApi(input: {
   includeTeacherNotes: boolean;
   includeDrafts: boolean;
   period: "year" | "semester-1" | "semester-2";
-  layout: "summary" | "detailed";
   coverPage: boolean;
 }): Promise<{ blob: Blob; filename: string }> {
   const response = await fetch("/api/teacher/notebook-export", {

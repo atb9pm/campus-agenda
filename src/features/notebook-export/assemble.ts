@@ -15,13 +15,14 @@ import { formatSwissDate } from "../course-sessions/format.ts";
 import type { CourseSession } from "../course-sessions/types.ts";
 import { splitControlPlanningPeriods } from "../control-planning/periods.ts";
 import type { SchoolWeekEntry } from "../school-year/types.ts";
+import { decodeRichDetail, isPlaceholderDetail } from "../class-notebook/rich-doc.ts";
 import { publicationToExportLines, richDocToExportLines } from "./rich-lines.ts";
 import {
   agendaItemBelongsToExportPeriod,
   resolveAgendaItemSession,
 } from "./session-match.ts";
-import { formatSummaryDateLabel } from "./summary.ts";
 import type {
+  NotebookExportControl,
   NotebookExportDocument,
   NotebookExportOptions,
   NotebookExportSessionBlock,
@@ -79,11 +80,34 @@ function itemsForSession(
   });
 }
 
+function controlDetailText(item: PrototypeAgendaItem): string | null {
+  const raw = item.detail?.trim() ?? "";
+  if (!raw || isPlaceholderDetail(raw)) return null;
+  const rich = decodeRichDetail(raw);
+  if (rich) {
+    const plain = richDocToExportLines(rich)
+      .map((line) => line.text)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return plain || null;
+  }
+  return raw;
+}
+
+function exportControlFromItem(item: PrototypeAgendaItem): NotebookExportControl {
+  return {
+    title: item.title.trim() || "Contrôle",
+    detail: controlDetailText(item),
+  };
+}
+
 function unmatchedControlEntry(item: PrototypeAgendaItem): NotebookExportUnmatchedControl {
   const date = item.courseSessionDate?.trim();
   return {
     id: item.id,
     title: item.title.trim() || "Contrôle",
+    detail: controlDetailText(item),
     dateLabel: date ? formatSwissDate(date) : null,
   };
 }
@@ -131,7 +155,7 @@ export function assembleNotebookExport(input: {
     const controlItems = input.options.includeControls
       ? itemsForSession(scopedItems, session, allSessions, "control", true)
       : [];
-    const controls = controlItems.map((entry) => entry.title.trim()).filter(Boolean);
+    const controls = controlItems.map(exportControlFromItem);
     publicationCount += publicationItems.length;
     matchedControlCount += controlItems.length;
     let notes: NotebookExportSessionBlock["notes"] = [];
@@ -161,7 +185,6 @@ export function assembleNotebookExport(input: {
       weekLabel: formatExportWeekLabel(session),
       dateLabel: formatExportDateLabel(session),
       longDateLabel: formatExportLongDateLabel(session),
-      summaryDateLabel: formatSummaryDateLabel(session),
       publications,
       controls,
       notes,
@@ -188,7 +211,6 @@ export function assembleNotebookExport(input: {
     teacherName: input.teacherName,
     scheduleSummary: input.scheduleSummary,
     generatedOn: input.generatedOn,
-    layout: input.options.layout,
     coverPage: input.options.coverPage,
     sessionCount: sessions.length,
     publicationCount,
