@@ -16,6 +16,7 @@ import { computeCourseSessions } from "../src/features/course-sessions/index.ts"
 import { canMutateAgenda } from "../src/lib/auth/permissions.ts";
 import {
   assembleNotebookExport,
+  controlLineX,
   COURSE_TIMELINE_FORBIDDEN_REASON,
   DEFAULT_NOTEBOOK_EXPORT_OPTIONS,
   diagnoseAnnualCourseTests,
@@ -31,14 +32,17 @@ import {
   matchAgendaItemToSession,
   notebookExportFilename,
   NOTEBOOK_EXPORT_UNMATCHED_CONTROLS_TITLE,
+  PDF_EXPORT_MARGIN,
   parseNotebookExportOptions,
   publicationToExportLines,
   renderNotebookExportPdf,
   resolveAgendaItemSession,
   richDocToExportLines,
+  splitPlainTextLines,
   splitRunsOnNewlines,
   underlineForMarks,
   winAnsi,
+  wrapControlPlainText,
 } from "../src/features/notebook-export/index.ts";
 import { openPdfDocument } from "../src/lib/pdf/open-pdf-document.ts";
 import { MemoryAgendaStore } from "../src/lib/persistence/memory-store.ts";
@@ -1278,5 +1282,135 @@ test("export — page de garde on/off, legacy sans RichDoc, logger d’échec", 
   assert.match(source, /sessionCount/);
   assert.doesNotMatch(source, /assembled\.sessions\[0\]\.publications/);
 });
+
+test("export — titre et détail de contrôle : newlines, wrap, x >= MARGIN", async () => {
+  const fontPdf = await PDFDocument.create();
+  const font = await fontPdf.embedFont(StandardFonts.Helvetica);
+  const maxWidth = 220;
+  assert.deepEqual(splitPlainTextLines("Injection\nDépollution"), ["Injection", "Dépollution"]);
+  assert.deepEqual(splitPlainTextLines("Injection\r\nDépollution"), ["Injection", "Dépollution"]);
+  assert.deepEqual(splitPlainTextLines("Injection\rDépollution"), ["Injection", "Dépollution"]);
+  assert.deepEqual(splitPlainTextLines("Injection\n\nDépollution"), ["Injection", "", "Dépollution"]);
+  assert.deepEqual(wrapControlPlainText(font, "Injection\nDépollution", 10, maxWidth), ["Injection", "Dépollution"]);
+  assert.deepEqual(wrapControlPlainText(font, "Injection\r\nDépollution", 10, maxWidth), ["Injection", "Dépollution"]);
+  assert.deepEqual(wrapControlPlainText(font, "Injection\rDépollution", 10, maxWidth), ["Injection", "Dépollution"]);
+  assert.deepEqual(wrapControlPlainText(font, "Injection\n\nDépollution", 10, maxWidth), ["Injection", "", "Dépollution"]);
+  const tabRows = wrapControlPlainText(font, "Injection\tDépollution", 10, 400);
+  assert.match(tabRows.join(" "), /Injection/);
+  assert.match(tabRows.join(" "), /Dépollution/);
+  assert.ok(tabRows.every((row) => !/[\n\r\t]/.test(row)));
+
+  const long =
+    "Injection directe haute pression, formation du mélange, dépollution et contrôle du système";
+  const longRows = wrapControlPlainText(font, long, 10, 180);
+  assert.ok(longRows.length > 1);
+  for (const row of [...longRows, ...tabRows, "Injection", "Dépollution"]) {
+    assert.doesNotMatch(row, /[\n\r\t]/);
+    assert.doesNotMatch(winAnsi(row), /[\n\r\t]/);
+    const width = row ? font.widthOfTextAtSize(winAnsi(row), 10) : 0;
+    assert.ok(controlLineX(width, 180) >= PDF_EXPORT_MARGIN);
+    if (row) assert.ok(width <= 180 + 0.01);
+  }
+  assert.ok(controlLineX(10_000, 180) >= PDF_EXPORT_MARGIN);
+
+  const s6 = sessionByWeek(6);
+  function testItem(
+    id: number,
+    title: string,
+    detail: string,
+  ): PrototypeAgendaItem {
+    return item({
+      id,
+      type: "TEST",
+      title,
+      detail,
+      annualCourseId: COURSE.id,
+      courseSessionKey: s6.key,
+      courseSessionDate: s6.date,
+      schoolWeekNumber: 6,
+      day: 3,
+    });
+  }
+
+  async function linesFor(detail: string, title = "Contrôle 1"): Promise<string[]> {
+    const doc = assemble({ items: [testItem(1, title, detail)], exportOptions: { coverPage: false } });
+    assert.ok(doc);
+    assert.equal(doc!.sessions[0]?.controls[0]?.detail, detail);
+    return pdfLines(await renderNotebookExportPdf(doc!));
+  }
+
+  for (const detail of ["Injection\nDépollution", "Injection\r\nDépollution", "Injection\rDépollution"]) {
+    const lines = await linesFor(detail);
+    const injectionAt = lines.findIndex((line) => line.includes("Injection"));
+    const depollutionAt = lines.findIndex((line) => line.includes("Dépollution"));
+    assert.ok(injectionAt >= 0 && depollutionAt >= 0);
+    assert.notEqual(injectionAt, depollutionAt);
+    assert.equal(lines.some((line) => /InjectionDépollution/.test(line)), false);
+  }
+
+  const blank = await linesFor("Injection\n\nDépollution");
+  const first = blank.findIndex((line) => line.includes("Injection"));
+  const second = blank.findIndex((line) => line.includes("Dépollution"));
+  assert.ok(second - first >= 1);
+
+  const tabPdf = assemble({
+    items: [testItem(1, "Contrôle 1", "Injection\tDépollution")],
+    exportOptions: { coverPage: false },
+  });
+  const tabText = await pdfText(await renderNotebookExportPdf(tabPdf!));
+  assert.match(tabText, /Injection/);
+  assert.match(tabText, /Dépollution/);
+
+  const longTitle =
+    "Contrôle formation du mélange et système d'injection directe essence";
+  const longTitleDoc = assemble({
+    items: [testItem(1, longTitle, "Injection\nDépollution\nCatalyseur")],
+    exportOptions: { coverPage: false },
+  });
+  const longTitlePdf = await renderNotebookExportPdf(longTitleDoc!);
+  const longTitleLines = await pdfLines(longTitlePdf);
+  assert.ok(longTitleLines.some((line) => /FORMATION|MÉLANGE|MELANGE|INJECTION/i.test(line)));
+  assert.ok(longTitleLines.filter((line) => /Injection|Dépollution|Catalyseur/.test(line)).length >= 3);
+
+  const longDetailDoc = assemble({
+    items: [testItem(1, "Contrôle 1", long)],
+    exportOptions: { coverPage: false },
+  });
+  const longDetailLines = await pdfLines(await renderNotebookExportPdf(longDetailDoc!));
+  assert.ok(longDetailLines.some((line) => /Injection/.test(line)));
+  assert.ok(longDetailLines.length > 3);
+
+  const many = assemble({
+    items: [
+      testItem(1, "Contrôle 1", "Injection\nDépollution"),
+      testItem(2, "Contrôle 2", "Catalyseur"),
+    ],
+    exportOptions: { coverPage: false },
+  });
+  assert.deepEqual(
+    many!.sessions[0]?.controls.map((entry) => entry.title),
+    ["Contrôle 1", "Contrôle 2"],
+  );
+  const manyLines = await pdfLines(await renderNotebookExportPdf(many!));
+  assert.ok(manyLines.some((line) => /CONTRÔLE 1/i.test(line)));
+  assert.ok(manyLines.some((line) => /CONTRÔLE 2/i.test(line)));
+  assert.ok(manyLines.some((line) => line.includes("Injection")));
+  assert.ok(manyLines.some((line) => line.includes("Dépollution")));
+  assert.ok(manyLines.some((line) => line.includes("Catalyseur")));
+
+  const comma = assemble({
+    items: [testItem(1, "Contrôle 1", "Injection, dépollution")],
+    exportOptions: { coverPage: false },
+  });
+  const commaText = await pdfText(await renderNotebookExportPdf(comma!));
+  assert.match(commaText, /Injection, dépollution/);
+
+  const pdfSource = await readFile(new URL("../src/features/notebook-export/pdf.ts", import.meta.url), "utf8");
+  assert.match(pdfSource, /drawControlText/);
+  assert.match(pdfSource, /splitPlainTextLines/);
+  assert.doesNotMatch(pdfSource, /const detail = winAnsi\(control\.detail\)/);
+  assert.match(pdfSource, /normalizeExportControlChars\(text\)\.split\("\\n"\)/);
+});
+
 
 

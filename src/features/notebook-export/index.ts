@@ -40,7 +40,15 @@ export {
   highlightHexForMarks,
   underlineForMarks,
 } from "./rich-style.ts";
-export { renderNotebookExportPdf, winAnsi } from "./pdf.ts";
+export {
+  controlLineX,
+  PDF_EXPORT_MARGIN,
+  PDF_EXPORT_PAGE_WIDTH,
+  renderNotebookExportPdf,
+  splitPlainTextLines,
+  winAnsi,
+  wrapControlPlainText,
+} from "./pdf.ts";
 export {
   COURSE_TIMELINE_FORBIDDEN_REASON,
   exportTeacherNotebookPdf,

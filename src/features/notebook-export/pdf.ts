@@ -30,9 +30,11 @@ import {
   type NotebookExportFontKind,
 } from "./rich-style.ts";
 
-const PAGE_WIDTH = 595.28;
+export const PDF_EXPORT_PAGE_WIDTH = 595.28;
+export const PDF_EXPORT_MARGIN = 50;
+const PAGE_WIDTH = PDF_EXPORT_PAGE_WIDTH;
 const PAGE_HEIGHT = 841.89;
-const MARGIN = 50;
+const MARGIN = PDF_EXPORT_MARGIN;
 const NAVY = rgb(29 / 255, 53 / 255, 87 / 255);
 const MUTED = rgb(81 / 255, 101 / 255, 130 / 255);
 const RULE = rgb(210 / 255, 218 / 255, 230 / 255);
@@ -46,6 +48,7 @@ const CONTROL_RED = rgb(
 );
 const CONTROL_RED_MUTED = rgb(155 / 255, 55 / 255, 50 / 255);
 const SESSION_MIN_HEIGHT = 86;
+const CONTROL_COLUMN_MAX = 280;
 
 export function winAnsi(text: string): string {
   return normalizeExportControlChars(text)
@@ -67,21 +70,69 @@ async function loadLogo(): Promise<Uint8Array | null> {
   }
 }
 
+export function splitPlainTextLines(text: string): string[] {
+  return normalizeExportControlChars(text).split("\n");
+}
+
+export function controlLineX(lineWidth: number, maxWidth: number): number {
+  const capped = Math.min(Math.max(0, lineWidth), Math.max(0, maxWidth));
+  return Math.max(MARGIN, PAGE_WIDTH - MARGIN - capped);
+}
+
+function wrapFittedWord(font: PDFFont, word: string, size: number, maxWidth: number): string[] {
+  const safe = winAnsi(word);
+  if (!safe) return [];
+  if (font.widthOfTextAtSize(safe, size) <= maxWidth) return [safe];
+  const chunks: string[] = [];
+  let current = "";
+  for (const char of safe) {
+    const next = current + char;
+    if (current && font.widthOfTextAtSize(next, size) > maxWidth) {
+      chunks.push(current);
+      current = char;
+    } else {
+      current = next;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
 function wrap(font: PDFFont, text: string, size: number, maxWidth: number): string[] {
   const words = winAnsi(text).split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let current = "";
+  const flush = () => {
+    if (current) lines.push(current);
+    current = "";
+  };
   for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (font.widthOfTextAtSize(next, size) <= maxWidth) {
-      current = next;
+    const pieces = wrapFittedWord(font, word, size, maxWidth);
+    for (const piece of pieces) {
+      const next = current ? `${current} ${piece}` : piece;
+      if (current && font.widthOfTextAtSize(next, size) > maxWidth) {
+        flush();
+        current = piece;
+      } else {
+        current = next;
+      }
+    }
+  }
+  flush();
+  return lines.length ? lines : [""];
+}
+
+export function wrapControlPlainText(font: PDFFont, text: string, size: number, maxWidth: number): string[] {
+  const width = Math.max(1, maxWidth);
+  const rows: string[] = [];
+  for (const hard of splitPlainTextLines(text)) {
+    if (!hard) {
+      rows.push("");
       continue;
     }
-    if (current) lines.push(current);
-    current = word;
+    rows.push(...wrap(font, hard, size, width));
   }
-  if (current) lines.push(current);
-  return lines.length ? lines : [""];
+  return rows.length ? rows : [""];
 }
 
 function colorFromHex(hex: string) {
@@ -422,55 +473,98 @@ class PdfWriter {
     this.y -= boxHeight + 10;
   }
 
-  drawRightText(text: string, size: number, color: ReturnType<typeof rgb>, y: number): number {
-    const line = winAnsi(text);
-    const width = this.bold.widthOfTextAtSize(line, size);
-    this.page!.drawText(line, {
-      x: PAGE_WIDTH - MARGIN - width,
-      y,
-      size,
-      font: this.bold,
-      color,
+  drawControlText(
+    text: string,
+    options: {
+      size: number;
+      font: PDFFont;
+      color: ReturnType<typeof rgb>;
+      maxWidth: number;
+      gap?: number;
+      firstBaseline?: number;
+    },
+  ): void {
+    if (!this.page) return;
+    const size = options.size;
+    const maxWidth = Math.max(1, options.maxWidth);
+    const rows = wrapControlPlainText(options.font, text, size, maxWidth);
+    rows.forEach((row, index) => {
+      if (this.remaining() < size + 4) this.addPage("content");
+      const baseline = index === 0 && options.firstBaseline != null ? options.firstBaseline : this.y - size;
+      const safe = winAnsi(row);
+      if (safe) {
+        const width = options.font.widthOfTextAtSize(safe, size);
+        const x = controlLineX(width, maxWidth);
+        this.page!.drawText(safe, {
+          x,
+          y: baseline,
+          size,
+          font: options.font,
+          color: options.color,
+        });
+      }
+      this.y = baseline - 3;
     });
-    return width;
+    this.y -= options.gap ?? 2;
   }
 
   sessionHeader(block: NotebookExportSessionBlock): void {
-    const left = winAnsi(sessionHeading(block));
+    const header = winAnsi(sessionHeading(block));
     const size = 10;
-    const titles = block.controls.map((entry) => entry.title.trim() || "Contrôle");
-    const joined = titles.join(" · ").toUpperCase();
-    const leftWidth = this.bold.widthOfTextAtSize(left, size);
-    const joinedWidth = titles.length ? this.bold.widthOfTextAtSize(winAnsi(joined), size) : 0;
-    const y = this.y - size;
-    this.page!.drawText(left, { x: MARGIN, y, size, font: this.bold, color: NAVY });
-    if (titles.length && leftWidth + 16 + joinedWidth <= this.contentWidth()) {
-      this.drawRightText(joined, size, CONTROL_RED, y);
-      this.y -= size + 4;
+    const headerWidth = this.bold.widthOfTextAtSize(header, size);
+    const headerBaseline = this.y - size;
+    this.page!.drawText(header, {
+      x: MARGIN,
+      y: headerBaseline,
+      size,
+      font: this.bold,
+      color: NAVY,
+    });
+    this.y = headerBaseline - 3;
+
+    const titles = block.controls.map((entry) => (entry.title.trim() || "Contrôle").toUpperCase());
+    const gap = 16;
+    const remaining = this.contentWidth() - headerWidth - gap;
+    const columnWidth = Math.min(CONTROL_COLUMN_MAX, this.contentWidth());
+    const joined = titles.join(" · ");
+    const sameLineWidth = Math.min(remaining, columnWidth);
+    const sameLineRows =
+      titles.length && remaining >= 64 ? wrapControlPlainText(this.bold, joined, size, sameLineWidth) : [];
+    const titleFitsBesideHeader = sameLineRows.length === 1 && Boolean(sameLineRows[0]);
+
+    if (titleFitsBesideHeader) {
+      this.y = headerBaseline + size;
+      this.drawControlText(joined, {
+        size,
+        font: this.bold,
+        color: CONTROL_RED,
+        maxWidth: sameLineWidth,
+        firstBaseline: headerBaseline,
+        gap: 2,
+      });
     } else if (titles.length) {
-      this.y -= size + 3;
       for (const title of titles) {
-        if (this.remaining() < size + 4) this.addPage("content");
-        this.drawRightText(title.toUpperCase(), size, CONTROL_RED, this.y - size);
-        this.y -= size + 3;
+        this.drawControlText(title, {
+          size,
+          font: this.bold,
+          color: CONTROL_RED,
+          maxWidth: columnWidth,
+          gap: 1,
+        });
       }
-    } else {
-      this.y -= size + 4;
     }
+
     for (const control of block.controls) {
       if (!control.detail) continue;
-      if (this.remaining() < 12) this.addPage("content");
-      const detail = winAnsi(control.detail);
-      const width = this.regular.widthOfTextAtSize(detail, 8);
-      this.page!.drawText(detail, {
-        x: PAGE_WIDTH - MARGIN - width,
-        y: this.y - 8,
+      this.drawControlText(control.detail, {
         size: 8,
         font: this.regular,
         color: CONTROL_RED_MUTED,
+        maxWidth: columnWidth,
+        gap: 2,
       });
-      this.y -= 12;
     }
+    this.y -= 2;
   }
 
   rich(
