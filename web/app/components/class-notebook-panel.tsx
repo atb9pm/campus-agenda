@@ -1488,10 +1488,10 @@ export function ClassNotebookPanel({
 
       <div className="class-notebook-week-controls">
         <div className="class-notebook-shift">
-          <button type="button" onClick={() => shiftVisibleWeeks(-1)} aria-label="Séances précédentes">
+          <button type="button" onClick={() => shiftVisibleWeeks(-1)} aria-label="Séquences précédentes">
             ◀
           </button>
-          <button type="button" onClick={() => shiftVisibleWeeks(1)} aria-label="Séances suivantes">
+          <button type="button" onClick={() => shiftVisibleWeeks(1)} aria-label="Séquences suivantes">
             ▶
           </button>
         </div>
@@ -1505,7 +1505,7 @@ export function ClassNotebookPanel({
                 checked={weekDisplayCount === count}
                 onChange={() => setWeekDisplayCount(clampWeekDisplayCount(count))}
               />
-              {count} séance{count > 1 ? "s" : ""}
+              {count} séquence{count > 1 ? "s" : ""}
             </label>
           ))}
         </fieldset>
