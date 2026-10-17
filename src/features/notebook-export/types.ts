@@ -4,16 +4,12 @@ import type { QuickBlockKind, RichMarks } from "../class-notebook/rich-doc.ts";
 export const NOTEBOOK_EXPORT_PERIODS = ["year", "semester-1", "semester-2"] as const;
 export type NotebookExportPeriod = (typeof NOTEBOOK_EXPORT_PERIODS)[number];
 
-export const NOTEBOOK_EXPORT_LAYOUTS = ["summary", "detailed"] as const;
-export type NotebookExportLayout = (typeof NOTEBOOK_EXPORT_LAYOUTS)[number];
-
 export interface NotebookExportOptions {
   includePublications: boolean;
   includeControls: boolean;
   includeTeacherNotes: boolean;
   includeDrafts: boolean;
   period: NotebookExportPeriod;
-  layout: NotebookExportLayout;
   coverPage: boolean;
 }
 
@@ -31,20 +27,25 @@ export interface NotebookExportRichLine {
   calloutKind?: QuickBlockKind;
 }
 
+export interface NotebookExportControl {
+  title: string;
+  detail: string | null;
+}
+
 export interface NotebookExportSessionBlock {
   session: CourseSession;
   weekLabel: string;
   dateLabel: string;
   longDateLabel: string;
-  summaryDateLabel: string;
   publications: NotebookExportRichLine[];
-  controls: string[];
+  controls: NotebookExportControl[];
   notes: NotebookExportRichLine[];
 }
 
 export interface NotebookExportUnmatchedControl {
   id: number;
   title: string;
+  detail: string | null;
   dateLabel: string | null;
 }
 
@@ -56,7 +57,6 @@ export interface NotebookExportDocument {
   teacherName: string;
   scheduleSummary: string;
   generatedOn: string;
-  layout: NotebookExportLayout;
   coverPage: boolean;
   sessionCount: number;
   publicationCount: number;

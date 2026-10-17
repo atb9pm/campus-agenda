@@ -290,7 +290,7 @@ test("chemin Carnet — 1 contrôle via publishManualControlToAgenda puis export
     assert.equal(exported.ok, true);
     if (!exported.ok) return;
     const text = await pdfText(exported.pdf);
-    assert.match(text, /ControleCarnetUn/);
+    assert.match(text, /ControleCarnetUn/i);
     assert.match(text, /1 contrôle/);
   });
 });
@@ -323,8 +323,8 @@ test("chemin Carnet — 2 contrôles, couverture 2 contrôles, titres dans le PD
     assert.equal(exported.ok, true);
     if (!exported.ok) return;
     const text = await pdfText(exported.pdf);
-    assert.match(text, /ControleCarnetA/);
-    assert.match(text, /ControleCarnetB/);
+    assert.match(text, /ControleCarnetA/i);
+    assert.match(text, /ControleCarnetB/i);
     assert.match(text, /2 contrôles/);
     assert.doesNotMatch(text, /0 contrôle/);
     assert.match(formatNotebookExportCoverage({ sessionCount: 2, publicationCount: 0, controlCount: 2 }), /2 contrôles/);
@@ -359,8 +359,8 @@ test("chemin Carnet — TEST d'un autre AnnualCourse absent de l'export", async 
     assert.equal(exported.ok, true);
     if (!exported.ok) return;
     const text = await pdfText(exported.pdf);
-    assert.match(text, /ControleCoursA/);
-    assert.doesNotMatch(text, /ControleCoursB/);
+    assert.match(text, /ControleCoursA/i);
+    assert.doesNotMatch(text, /ControleCoursB/i);
   });
 });
 
@@ -418,7 +418,7 @@ test("chemin Carnet — TEST legacy annualCourseId NULL récupéré sans ambigu�
     assert.equal(exported.ok, true);
     if (!exported.ok) return;
     const text = await pdfText(exported.pdf);
-    assert.match(text, /ControleLegacyNull/);
+    assert.match(text, /ControleLegacyNull/i);
     assert.match(text, /1 contrôle/);
   });
 });

@@ -1,5 +1,6 @@
 export {
   DEFAULT_NOTEBOOK_EXPORT_OPTIONS,
+  isLegacyNotebookExportLayout,
   parseNotebookExportOptions,
 } from "./options.ts";
 export { notebookExportFilename } from "./filename.ts";
@@ -25,12 +26,13 @@ export {
   type SessionMatchKind,
 } from "./session-match.ts";
 export {
-  compactLineText,
   exportLineHasMark,
   exportLinesContainRawRichPayload,
   inlinesToRuns,
+  normalizeExportControlChars,
   publicationToExportLines,
   richDocToExportLines,
+  splitRunsOnNewlines,
 } from "./rich-lines.ts";
 export {
   colorHexForMarks,
@@ -38,8 +40,15 @@ export {
   highlightHexForMarks,
   underlineForMarks,
 } from "./rich-style.ts";
-export { formatSummaryDateLabel, summaryLinesForSession } from "./summary.ts";
-export { renderNotebookExportPdf } from "./pdf.ts";
+export {
+  controlLineX,
+  PDF_EXPORT_MARGIN,
+  PDF_EXPORT_PAGE_WIDTH,
+  renderNotebookExportPdf,
+  splitPlainTextLines,
+  winAnsi,
+  wrapControlPlainText,
+} from "./pdf.ts";
 export {
   COURSE_TIMELINE_FORBIDDEN_REASON,
   exportTeacherNotebookPdf,
@@ -49,11 +58,10 @@ export {
 export {
   NOTEBOOK_EXPORT_EMPTY_REASON,
   NOTEBOOK_EXPORT_FAILED_REASON,
-  NOTEBOOK_EXPORT_LAYOUTS,
   NOTEBOOK_EXPORT_PERIODS,
   NOTEBOOK_EXPORT_UNMATCHED_CONTROLS_TITLE,
   formatNotebookExportCoverage,
-  type NotebookExportLayout,
+  type NotebookExportControl,
   type NotebookExportOptions,
   type NotebookExportPeriod,
   type NotebookExportDocument,
