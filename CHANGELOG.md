@@ -2,30 +2,37 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
-## [2.62.0] — Tableau de bord élève devoirs et contrôles
+## [2.62.0] — Baseline stable avant transition N → N+1
+
+**Baseline stable avant développement du passage annuel N → N+1.**
+
+Cette version fige l’état validé de `staging` pour la production. Elle **ne développe pas** la copie interannuelle, l’activation automatique d’une année future, ni la reprise automatique des contenus.
 
 ### Ajouté
 
-- Navigation élève **Tout / Devoirs / Contrôles**.
-- Tableau de bord desktop en deux colonnes : à faire à gauche, prochains contrôles à droite.
-- Aperçu compact des prochains contrôles, avec accès au planning complet.
+- Carnet professeur indexé par **CourseSession** calculée (une carte = une séance réelle).
+- Export **PDF unique** du Carnet (plus de choix Synthèse / Détaillé).
+- Navigation élève **Tout / Devoirs / Contrôles**, Cours du jour, Contrôles à venir.
 
 ### Changé
 
-- Séparation visuelle claire entre devoirs, informations et contrôles.
-- Planning des contrôles plus compact (dates, semaines A/B, lecture chronologique).
-- Interface élève mobile-first, sans modifier la vue professeur.
+- Éditeur **RichDoc** simplifié (barre d’outils, listes, Entrée).
+- Contrôles : formulaire **unifié** Carnet / Planning.
+- Vue élève épurée (cartouches compactes, hiérarchie Contrôles à venir).
+- Zone Affichage du Carnet : libellé **séquence / séquences**.
 
 ### Corrigé
 
-- Secret TOTP admin illisible (clé MFA différente après restauration TEST) : nouvel enrôlement au lieu d’un blocage 503.
-- Saisie du code à 6 chiffres : plus de `pattern` HTML qui bloquait la validation sur iPhone.
+- PDF : retours à la ligne (`\n`, CRLF, CR), tabulations, wrapping du titre et du détail des contrôles ; couleurs, gras, italique, souligné, surlignage, liens cliquables.
+- Secret TOTP illisible après restauration TEST : nouvel enrôlement (`reset_required`) au lieu d’un 503 bloquant.
+- Notes professeur orphelines et migration V1 incrémentale du Carnet.
 
 ### Conservé
 
-- Logique métier existante des contrôles (J-7, aujourd’hui, demain, cours précédents).
-- Aucun changement de stockage, d’API métier ou de schéma SQLite.
-- Baseline officielle **v2.61.9** inchangée.
+- Aucune nouvelle migration SQL depuis **2.61.9**.
+- Sauvegarde / restauration **v4** (mêmes tables, dont `teacher_mfa`, `teacher_notes`, `annual_courses`, `agenda_items`).
+- CourseSession reste **calculée** (pas de table SQL).
+- Transition annuelle N → N+1 **hors périmètre**.
 
 ## [2.61.9] — Sélection automatique de Ma semaine
 
