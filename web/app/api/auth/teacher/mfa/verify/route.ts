@@ -31,7 +31,14 @@ export async function POST(request: Request) {
     String(body.code ?? ""),
   );
   if (!result.ok) {
-    return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
+    return jsonResponse(
+      {
+        ok: false,
+        reason: result.reason,
+        ...(result.mfaSetupRequired ? { mfaSetupRequired: true } : {}),
+      },
+      { status: result.status },
+    );
   }
 
   const now = Date.now();

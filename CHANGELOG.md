@@ -2,6 +2,38 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.0] — Baseline stable avant transition N → N+1
+
+**Baseline stable avant développement du passage annuel N → N+1.**
+
+Cette version fige l’état validé de `staging` pour la production. Elle **ne développe pas** la copie interannuelle, l’activation automatique d’une année future, ni la reprise automatique des contenus.
+
+### Ajouté
+
+- Carnet professeur indexé par **CourseSession** calculée (une carte = une séance réelle).
+- Export **PDF unique** du Carnet (plus de choix Synthèse / Détaillé).
+- Navigation élève **Tout / Devoirs / Contrôles**, Cours du jour, Contrôles à venir.
+
+### Changé
+
+- Éditeur **RichDoc** simplifié (barre d’outils, listes, Entrée).
+- Contrôles : formulaire **unifié** Carnet / Planning.
+- Vue élève épurée (cartouches compactes, hiérarchie Contrôles à venir).
+- Zone Affichage du Carnet : libellé **séquence / séquences**.
+
+### Corrigé
+
+- PDF : retours à la ligne (`\n`, CRLF, CR), tabulations, wrapping du titre et du détail des contrôles ; couleurs, gras, italique, souligné, surlignage, liens cliquables.
+- Secret TOTP illisible après restauration TEST : nouvel enrôlement (`reset_required`) au lieu d’un 503 bloquant.
+- Notes professeur orphelines et migration V1 incrémentale du Carnet.
+
+### Conservé
+
+- Aucune nouvelle migration SQL depuis **2.61.9**.
+- Sauvegarde / restauration **v4** (mêmes tables, dont `teacher_mfa`, `teacher_notes`, `annual_courses`, `agenda_items`).
+- CourseSession reste **calculée** (pas de table SQL).
+- Transition annuelle N → N+1 **hors périmètre**.
+
 ## [2.61.9] — Sélection automatique de Ma semaine
 
 ### Corrigé

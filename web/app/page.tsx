@@ -16,7 +16,6 @@ import {
   getStudentAgendaItems,
   groupControlPlanning,
   msUntilNextLocalMidnight,
-  nextControlHeadlineForEntries,
   studentAccessFromApiSession,
   studentCalendarDateNeedsRefresh,
 } from "@campus/features/student";
@@ -25,9 +24,6 @@ import {
   buildSchoolWeeksFromEntries,
   courseDayKey,
   findSchoolWeekForDate,
-  formatCourseDayHeading,
-  formatCourseDayMenuLabel,
-  formatSchoolWeekLabel,
   listPreviousAttendanceCourseDays,
   listPreviousCourseDays,
   resolveDisplayCourseDay,
@@ -39,12 +35,12 @@ import {
   listFutureTestsForClass,
   type ThirdTestAlert,
 } from "@campus/features/evaluations";
-import type { AgendaItemType } from "@campus/types/agenda";
 import {
   changeTeacherPasswordApi,
   createNotebookPublicationApi,
   createTeacherControlApi,
   ControlCoordinationRequiredError,
+  updateTeacherControlApi,
   deleteAgendaItemApi,
   fetchAgendaItems,
   fetchApiSession,
@@ -88,7 +84,7 @@ import {
 } from "@campus/features/teacher-setup";
 import {
   displaySetupsFromAssignedCourses,
-  maSemaineSignalsByCourse,
+  teacherCoursesForClass,
   type TeacherCourseWorkspaceEntry,
 } from "@campus/features/teacher-workspace";
 import {
@@ -105,16 +101,14 @@ import {
   resolveNotebookSubjectId,
   workspaceAllowsNotebookPublish,
   weekdayToCourseDayIndex,
-  decodeRichDetail,
+  collectClassAnnualCourseIds,
   isCarnetOwnedPublication,
-  isPlaceholderDetail,
   planCarnetWeekPublicationSave,
   type CampusRichDoc,
   type ClassNotesDocument,
   type NotebookCourseContext,
   type NotebookRuntimeClassroom,
 } from "@campus/features/class-notebook";
-import { RichDocView } from "./components/rich-doc-view.tsx";
 import { ConfigurationPanel } from "./components/configuration-panel.tsx";
 import { AdministrationPanel } from "./components/administration-panel.tsx";
 import { BrandLogo } from "./components/brand-logo.tsx";
@@ -126,21 +120,10 @@ import { ClassNotebookPanel } from "./components/class-notebook-panel.tsx";
 import { MaSemainePanel } from "./components/ma-semaine-panel.tsx";
 import { MesCoursPanel } from "./components/mes-cours-panel.tsx";
 import { ControlPlanningPanel } from "./components/control-planning-panel.tsx";
+import { StudentDashboard, type StudentDashboardTab } from "./components/student-dashboard.tsx";
 
 type AppMode = "teacher" | "student";
 type StudentEntry = "code" | "teacher-preview";
-
-const TYPE_LABELS: Record<AgendaItemType, string> = {
-  HOMEWORK: "Devoir",
-  TEST: "Contrôle",
-  INFORMATION: "Information",
-};
-
-function studentUpcomingPlainDetail(item: PrototypeAgendaItem): string | null {
-  if (decodeRichDetail(item.detail) || isPlaceholderDetail(item.detail)) return null;
-  const detail = item.detail.trim();
-  return detail || null;
-}
 
 const EMPTY_CLASSROOM_CATALOG: ClassroomCatalog = {
   classrooms: [],
@@ -274,8 +257,8 @@ export default function Home() {
   const [mfaRecoveryCodes, setMfaRecoveryCodes] = useState<string[] | null>(null);
   const [studentCourseDayKey, setStudentCourseDayKey] = useState<string | null>(null);
   const [studentHistoryOpen, setStudentHistoryOpen] = useState(false);
-  /** Onglet mobile élève : cours du jour, contrôles, historique. */
-  const [studentMobileTab, setStudentMobileTab] = useState<"cours" | "controles" | "historique">("cours");
+  /** Onglet élève : Tout / Devoirs / Contrôles, plus historique mobile. */
+  const [studentMobileTab, setStudentMobileTab] = useState<StudentDashboardTab>("tout");
   const [schoolWeeks, setSchoolWeeks] = useState<SchoolWeek[]>([]);
   const [controlAlert, setControlAlert] = useState<ThirdTestAlert | null>(null);
   const [teacherSetup, setTeacherSetup] = useState<TeacherSetupConfig>(() => emptyTeacherSetup());
@@ -299,6 +282,7 @@ export default function Home() {
     schoolWeekNumber: number;
     day: number;
     title: string;
+    detail: string;
   } | null>(null);
   const [classNotesReady, setClassNotesReady] = useState(false);
   /** Évite d'écrire sur le serveur juste après un chargement / une migration. */
@@ -691,10 +675,6 @@ export default function Home() {
     ],
   );
   const notebookPublishAnnualCourseId = openNotebookCourse?.annualCourseId?.trim() || null;
-  const maSemaineWeekSignals = useMemo(
-    () => maSemaineSignalsByCourse(items, teacherCourses, selectedSchoolWeekNumber),
-    [items, teacherCourses, selectedSchoolWeekNumber],
-  );
   const notebookItems = useMemo(() => {
     if (!notebookClassroomId) return [];
     return filterNotebookItemsForSubject(items, {
@@ -706,6 +686,18 @@ export default function Home() {
     });
   }, [currentTeacherId, items, notebookClassroomId, notebookSubjectId, openNotebookCourse]);
   const notebookCanPublish = workspaceAllowsNotebookPublish(teacherCourses, notebookPublishAnnualCourseId);
+  const notebookClassAnnualCourseIds = useMemo(
+    () =>
+      collectClassAnnualCourseIds(
+        teacherCoursesForClass(
+          teacherCourses,
+          openNotebookCourse?.classId ?? openNotebookClass?.id,
+        ).map((course) => course.annualCourseId),
+        (notebookRuntimeSubjects ?? []).map((subject) => subject.annualCourseId),
+        openNotebookCourse?.annualCourseId,
+      ),
+    [notebookRuntimeSubjects, openNotebookClass?.id, openNotebookCourse, teacherCourses],
+  );
   const notebookBlockedReason = notebookPublishBlockedReason({
     hasOpenClass: Boolean(openNotebookClass),
     annualCourseId: notebookPublishAnnualCourseId,
@@ -1090,6 +1082,12 @@ export default function Home() {
         await applyTeacherSession(session);
       } catch (error) {
         setMfaError(error instanceof Error ? error.message : "Code incorrect.");
+        if (error instanceof Error && (error as Error & { mfaSetupRequired?: boolean }).mfaSetupRequired) {
+          const nextSession = await fetchApiSession().catch(() => null);
+          if (nextSession?.kind === "teacher") {
+            await applyTeacherSession(nextSession);
+          }
+        }
       } finally {
         setLoginPending(false);
       }
@@ -1217,6 +1215,7 @@ export default function Home() {
       schoolWeekNumber: number;
       day: number;
       title: string;
+      detail?: string;
     },
     confirmCoordination = false,
   ) {
@@ -1224,24 +1223,31 @@ export default function Home() {
       annualCourseId: input.annualCourseId,
       courseSessionKey: input.courseSessionKey,
       title: input.title.trim(),
-      detail: "",
+      detail: input.detail ?? "",
       confirmCoordination,
     });
     setItems((previous) => upsertAgendaItem(previous, created.item));
     showNotice("Contrôle planifié.");
   }
 
-  async function notebookCreatePublication(schoolWeekNumber: number, text: string, day?: number) {
+  async function notebookCreatePublication(
+    schoolWeekNumber: number,
+    text: string,
+    day?: number,
+    session?: { key: string; date: string; schoolWeekNumber: number; dayOfWeek: number },
+  ) {
     const annualCourseId = requireNotebookAnnualCourseId();
     if (!annualCourseId || !openNotebookClass) return;
-    const publicationDay = day ?? weekdayToCourseDayIndex(openNotebookClass.dayOfWeek);
+    const publicationDay = session ? session.dayOfWeek - 1 : (day ?? weekdayToCourseDayIndex(openNotebookClass.dayOfWeek));
     const created = await createNotebookPublicationApi({
       annualCourseId,
-      schoolWeekNumber,
+      schoolWeekNumber: session?.schoolWeekNumber ?? schoolWeekNumber,
       day: publicationDay,
       type: "HOMEWORK",
       title: text.trim(),
       detail: "",
+      courseSessionKey: session?.key,
+      courseSessionDate: session?.date,
     });
     setItems((previous) => upsertAgendaItem(previous, created));
     showNotice("Publication ajoutée.");
@@ -1250,13 +1256,34 @@ export default function Home() {
   async function notebookSaveWeekPublication(
     schoolWeekNumber: number,
     doc: CampusRichDoc,
-    options?: { studentVisible?: boolean; day?: number },
+    options?: {
+      studentVisible?: boolean;
+      day?: number;
+      courseSessionKey?: string;
+      courseSessionDate?: string;
+    },
   ) {
     const annualCourseId = requireNotebookAnnualCourseId();
     if (!annualCourseId || !openNotebookClass) return;
-    const weekItems = notebookItems.filter((item) => item.schoolWeekNumber === schoolWeekNumber);
+    const sessionKey = options?.courseSessionKey?.trim() || "";
+    const weekItems = notebookItems.filter((item) => {
+      if (sessionKey) {
+        return item.courseSessionKey === sessionKey || (
+          !item.courseSessionKey &&
+          item.schoolWeekNumber === schoolWeekNumber &&
+          (options?.day == null || item.day === options.day)
+        );
+      }
+      return item.schoolWeekNumber === schoolWeekNumber;
+    });
     const plan = planCarnetWeekPublicationSave(weekItems, doc);
     const publicationDay = options?.day ?? weekdayToCourseDayIndex(openNotebookClass.dayOfWeek);
+    const sessionPatch = {
+      ...(options?.day != null ? { day: options.day } : {}),
+      ...(sessionKey ? { courseSessionKey: sessionKey } : {}),
+      ...(options?.courseSessionDate ? { courseSessionDate: options.courseSessionDate } : {}),
+      schoolWeekNumber,
+    };
 
     if (plan.action === "clear") {
       for (const itemId of plan.deleteIds) {
@@ -1270,8 +1297,8 @@ export default function Home() {
     if (plan.action === "update") {
       const payload = {
         ...plan.payload,
+        ...sessionPatch,
         ...(options?.studentVisible === undefined ? {} : { studentVisible: options.studentVisible }),
-        ...(options?.day != null ? { day: options.day } : {}),
       };
       const updated = await updateAgendaItemApi(plan.updateId, payload);
       setItems((previous) => previous.map((item) => (item.id === plan.updateId ? updated : item)));
@@ -1288,6 +1315,8 @@ export default function Home() {
         title: plan.payload.title,
         detail: plan.payload.detail,
         studentVisible: options?.studentVisible ?? false,
+        courseSessionKey: sessionKey || undefined,
+        courseSessionDate: options?.courseSessionDate,
       });
       setItems((previous) => upsertAgendaItem(previous, created));
     }
@@ -1300,11 +1329,19 @@ export default function Home() {
     );
   }
 
-  async function notebookSetWeekPublicationVisibility(schoolWeekNumber: number, studentVisible: boolean) {
+  async function notebookSetWeekPublicationVisibility(
+    schoolWeekNumber: number,
+    studentVisible: boolean,
+    sessionKey?: string,
+  ) {
     if (!requireNotebookAnnualCourseId()) return;
-    const weekItems = notebookItems.filter(
-      (item) => item.schoolWeekNumber === schoolWeekNumber && isCarnetOwnedPublication(item),
-    );
+    const weekItems = notebookItems.filter((item) => {
+      if (!isCarnetOwnedPublication(item)) return false;
+      if (sessionKey) {
+        return item.courseSessionKey === sessionKey;
+      }
+      return item.schoolWeekNumber === schoolWeekNumber;
+    });
     for (const item of weekItems) {
       if ((item.studentVisible !== false) === studentVisible) continue;
       const updated = await updateAgendaItemApi(item.id, { studentVisible });
@@ -1313,11 +1350,24 @@ export default function Home() {
     showNotice(studentVisible ? "Visible aux élèves." : "Repassé en brouillon.");
   }
 
-  async function notebookMovePublication(itemId: number, schoolWeekNumber: number, day?: number) {
+  async function notebookMovePublication(
+    itemId: number,
+    schoolWeekNumber: number,
+    day?: number,
+    session?: { key: string; date: string; schoolWeekNumber: number; dayOfWeek: number },
+  ) {
     if (!requireNotebookAnnualCourseId()) return;
     const updated = await updateAgendaItemApi(itemId, {
-      schoolWeekNumber,
-      ...(day != null ? { day } : {}),
+      schoolWeekNumber: session?.schoolWeekNumber ?? schoolWeekNumber,
+      ...(session
+        ? {
+            day: session.dayOfWeek - 1,
+            courseSessionKey: session.key,
+            courseSessionDate: session.date,
+          }
+        : day != null
+          ? { day }
+          : {}),
     });
     setItems((previous) => previous.map((item) => (item.id === itemId ? updated : item)));
   }
@@ -1332,46 +1382,46 @@ export default function Home() {
     schoolWeekNumber: number;
     day: number;
     title: string;
+    detail?: string;
     courseSessionKey?: string;
+    annualCourseId?: string;
+    confirmCoordination?: boolean;
   }) {
-    const annualCourseId = requireNotebookAnnualCourseId();
+    const annualCourseId = input.annualCourseId?.trim() || requireNotebookAnnualCourseId();
     if (!annualCourseId) return;
     const courseSessionKey = input.courseSessionKey?.trim() ?? "";
     if (!courseSessionKey) {
       showNotice("Ce cours n’a pas de séance à cette date.");
-      return;
+      throw new Error("Ce cours n’a pas de séance à cette date.");
     }
     try {
-      await performNotebookControl({
-        annualCourseId,
-        courseSessionKey,
-        schoolWeekNumber: input.schoolWeekNumber,
-        day: input.day,
-        title: input.title,
-      });
-    } catch (error) {
-      if (error instanceof ControlCoordinationRequiredError) {
-        setControlAlert({
-          triggered: true,
-          courseDay: { schoolWeekNumber: input.schoolWeekNumber, dayIndex: input.day },
-          existingTests: error.coordination.classDayControls.map((entry) => ({
-            id: entry.agendaItemId,
-            title: entry.title,
-            subjectName: entry.branchLabel,
-            teacherName: entry.teacherName,
-          })),
-        });
-        setPendingNotebookControl({
+      await performNotebookControl(
+        {
           annualCourseId,
           courseSessionKey,
           schoolWeekNumber: input.schoolWeekNumber,
           day: input.day,
           title: input.title,
-        });
-        return;
+          detail: input.detail ?? "",
+        },
+        input.confirmCoordination === true,
+      );
+    } catch (error) {
+      if (error instanceof ControlCoordinationRequiredError) {
+        throw error;
       }
       showNotice(error instanceof Error ? error.message : "Publication impossible.");
+      throw error;
     }
+  }
+
+  async function notebookUpdateControl(itemId: number, input: { title: string; detail: string }) {
+    const updated = await updateTeacherControlApi(itemId, {
+      title: input.title.trim(),
+      detail: input.detail,
+    });
+    setItems((previous) => previous.map((item) => (item.id === itemId ? updated.item : item)));
+    showNotice("Contrôle enregistré.");
   }
 
   if (passwordChange) {
@@ -1451,270 +1501,37 @@ export default function Home() {
 
   if (isStudentView && studentSession) {
     return (
-      <div className="mechanical-app student-app student-course-day-app has-mobile-tabs" data-student-tab={studentMobileTab}>
-        <main className="student-course-day-main" id="main-content">
-          <header className="student-course-day-header">
-            <div className="student-course-day-brand">
-              <BrandLogo />
-            </div>
-            <div className="student-course-day-actions desktop-only">
-              <div className="student-history-anchor">
-                <button
-                  type="button"
-                  className="student-history-toggle"
-                  aria-expanded={studentHistoryOpen}
-                  aria-haspopup="menu"
-                  onClick={() => setStudentHistoryOpen((open) => !open)}
-                >
-                  Cours précédents
-                </button>
-                {studentHistoryOpen && (
-                  <menu className="student-history-menu" aria-label="Cours précédents">
-                    {!studentFollowingCourseDay && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setStudentCourseDayKey(null);
-                          setStudentHistoryOpen(false);
-                        }}
-                      >
-                        Revenir au prochain cours
-                      </button>
-                    )}
-                    {studentPreviousCourseDays.map((slot) => (
-                      <button
-                        key={courseDayKey(slot)}
-                        type="button"
-                        onClick={() => {
-                          setStudentCourseDayKey(courseDayKey(slot));
-                          setStudentHistoryOpen(false);
-                        }}
-                      >
-                        {formatCourseDayMenuLabel(slot)}
-                      </button>
-                    ))}
-                  </menu>
-                )}
-              </div>
-              <button className="student-signout" type="button" onClick={exitStudentMode}>
-                {studentEntry === "teacher-preview" ? "Quitter l’aperçu" : "Se déconnecter"}
-              </button>
-            </div>
-          </header>
-
-          <section
-            className="student-course-day-card student-mobile-panel"
-            data-panel="cours"
-            aria-labelledby="student-course-day-title"
-          >
-            <p className="eyebrow">{selectedClassroom?.name ?? studentClassroomName} · {studentSession.label}</p>
-            {studentDisplayCourseDay ? (
-              <>
-                <p className="student-week-label">{formatSchoolWeekLabel(studentDisplayCourseDay)}</p>
-                <h1 id="student-course-day-title">{formatCourseDayHeading(studentDisplayCourseDay)}</h1>
-                {!studentFollowingCourseDay && (
-                  <p className="student-course-day-note">Consultation d’un cours passé.</p>
-                )}
-
-                {studentCourseDaySections.length ? (
-                  <div className="student-branch-list">
-                    {studentCourseDaySections.map((section) => {
-                      const dateLabel = section.nextControls[0]
-                        ? formatCourseDayHeading(section.nextControls[0].slot)
-                        : "";
-                      const headline = nextControlHeadlineForEntries(
-                        section.nextControls,
-                        studentToday,
-                        dateLabel,
-                      );
-                      return (
-                      <section
-                        className="student-branch-block"
-                        key={section.subject.id}
-                        aria-label={section.subject.name || undefined}
-                      >
-                        {section.subject.name ? <h2>{section.subject.name}</h2> : null}
-                        {headline ? (
-                          <div
-                            className={`student-next-control urgency-${headline.urgency}`}
-                            data-next-control=""
-                          >
-                            <p className="student-next-control-kicker">
-                              {headline.warn ? (
-                                <span className="student-next-control-warn" aria-hidden="true">⚠</span>
-                              ) : null}
-                              {headline.kicker.replace(/^⚠\s/, "")}
-                            </p>
-                            {headline.dateLabel ? (
-                              <p className="student-next-control-date">{headline.dateLabel}</p>
-                            ) : null}
-                            <ul className="student-next-control-titles">
-                              {section.nextControls.map((entry) => (
-                                <li key={entry.item.id}>
-                                  <strong>{entry.item.title}</strong>
-                                  {studentUpcomingPlainDetail(entry.item) ? (
-                                    <span className="student-next-control-detail">
-                                      {studentUpcomingPlainDetail(entry.item)}
-                                    </span>
-                                  ) : null}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null}
-                        {section.publications.length ? (
-                          <ul>
-                            {section.publications.map((item) => (
-                              <li key={item.id} className={`student-branch-item ${item.type.toLowerCase()}`}>
-                                <span className="student-item-type">{TYPE_LABELS[item.type]}</span>
-                                {decodeRichDetail(item.detail) ? (
-                                  <RichDocView doc={decodeRichDetail(item.detail)!} />
-                                ) : (
-                                  <>
-                                    <strong>{item.title}</strong>
-                                    {!isPlaceholderDetail(item.detail) ? <p>{item.detail}</p> : null}
-                                  </>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </section>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="student-course-day-empty">
-                    <strong>Aucun élément publié</strong>
-                    <small>Pas de devoir, contrôle ou information pour ce jour de cours.</small>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="student-course-day-empty">
-                <strong>Aucune année scolaire configurée.</strong>
-                <small>L’agenda élève sera disponible dès qu’une année scolaire sera active.</small>
-              </div>
-            )}
-          </section>
-
-          <section
-            className="student-upcoming-tests student-mobile-panel"
-            data-panel="controles"
-            aria-labelledby="student-upcoming-tests-title"
-          >
-            <h2 id="student-upcoming-tests-title">Planning des contrôles</h2>
-            {studentControlPlanning.length ? (
-              <div className="student-control-planning">
-                {studentControlPlanning.map((week) => (
-                  <section
-                    className="student-control-planning-week"
-                    key={`${week.schoolWeekNumber}-${week.weekKind ?? ""}`}
-                  >
-                    <h3 className="student-week-label">{week.weekLabel}</h3>
-                    {week.days.map((day) => (
-                      <div className="student-control-planning-day" key={day.dateKey}>
-                        <h4>{formatCourseDayHeading(day.slot)}</h4>
-                        <ol className="student-upcoming-tests-list">
-                          {day.entries.map((entry) => (
-                            <li key={entry.item.id}>
-                              {entry.subjectName ? (
-                                <span className="student-upcoming-tests-branch">{entry.subjectName}</span>
-                              ) : null}
-                              <strong>{entry.item.title}</strong>
-                              {studentUpcomingPlainDetail(entry.item) ? (
-                                <span className="student-upcoming-tests-detail">
-                                  {studentUpcomingPlainDetail(entry.item)}
-                                </span>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ol>
-                      </div>
-                    ))}
-                  </section>
-                ))}
-              </div>
-            ) : (
-              <p className="student-upcoming-tests-empty">Aucun contrôle planifié à venir pour votre classe.</p>
-            )}
-          </section>
-
-          <section
-            className="student-history-panel student-mobile-panel mobile-only"
-            data-panel="historique"
-            aria-labelledby="student-history-title"
-          >
-            <h2 id="student-history-title">Cours précédents</h2>
-            {!studentFollowingCourseDay && (
-              <button
-                type="button"
-                className="student-history-current"
-                onClick={() => {
-                  setStudentCourseDayKey(null);
-                  setStudentMobileTab("cours");
-                }}
-              >
-                Revenir au prochain cours
-              </button>
-            )}
-            {studentPreviousCourseDays.length ? (
-              <ul className="student-history-list">
-                {studentPreviousCourseDays.map((slot) => (
-                  <li key={courseDayKey(slot)}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStudentCourseDayKey(courseDayKey(slot));
-                        setStudentMobileTab("cours");
-                      }}
-                    >
-                      {formatCourseDayMenuLabel(slot)}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="student-history-empty">Aucun cours précédent disponible.</p>
-            )}
-          </section>
-
-          <p className="prototype-label">CONSULTATION ÉLÈVE · CAMPUS AGENDA {APP_VERSION}</p>
-        </main>
-
-        <nav className="mobile-tab-bar" aria-label="Navigation élève">
-          <button
-            type="button"
-            className={studentMobileTab === "cours" ? "active" : ""}
-            onClick={() => setStudentMobileTab("cours")}
-          >
-            <span aria-hidden="true">▣</span>
-            Cours
-          </button>
-          <button
-            type="button"
-            className={studentMobileTab === "controles" ? "active" : ""}
-            onClick={() => setStudentMobileTab("controles")}
-          >
-            <span aria-hidden="true">✓</span>
-            Contrôles
-          </button>
-          <button
-            type="button"
-            className={studentMobileTab === "historique" ? "active" : ""}
-            onClick={() => setStudentMobileTab("historique")}
-          >
-            <span aria-hidden="true">↺</span>
-            Passés
-          </button>
-          <button type="button" onClick={exitStudentMode}>
-            <span aria-hidden="true">↪</span>
-            {studentEntry === "teacher-preview" ? "Quitter" : "Sortir"}
-          </button>
-        </nav>
-
+      <>
+        <StudentDashboard
+          appVersion={APP_VERSION}
+          classroomName={selectedClassroom?.name ?? studentClassroomName}
+          sessionLabel={studentSession.label}
+          displayCourseDay={studentDisplayCourseDay}
+          followingCourseDay={studentFollowingCourseDay}
+          historyOpen={studentHistoryOpen}
+          previousCourseDays={studentPreviousCourseDays}
+          tab={studentMobileTab}
+          sections={studentCourseDaySections}
+          futureTests={studentFutureTests}
+          planning={studentControlPlanning}
+          today={studentToday}
+          signOutLabel={studentEntry === "teacher-preview" ? "Quitter l’aperçu" : "Se déconnecter"}
+          onToggleHistory={() => setStudentHistoryOpen((open) => !open)}
+          onSelectCourseDay={(key) => {
+            setStudentCourseDayKey(key);
+            setStudentHistoryOpen(false);
+            setStudentMobileTab("tout");
+          }}
+          onBackToCurrent={() => {
+            setStudentCourseDayKey(null);
+            setStudentHistoryOpen(false);
+            setStudentMobileTab("tout");
+          }}
+          onSignOut={exitStudentMode}
+          onTabChange={setStudentMobileTab}
+        />
         {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
-      </div>
+      </>
     );
   }
 
@@ -1801,7 +1618,10 @@ export default function Home() {
             onSaveWeekPublication={notebookSaveWeekPublication}
             onSetWeekPublicationVisibility={notebookSetWeekPublicationVisibility}
             onMovePublication={notebookMovePublication}
+            classroomId={notebookClassroomId}
+            classAnnualCourseIds={notebookClassAnnualCourseIds}
             onSaveControl={notebookSaveControl}
+            onUpdateControl={notebookUpdateControl}
             onDeleteControl={notebookDeletePublication}
             onPreviewStudent={enterTeacherPreview}
           />
@@ -1811,7 +1631,6 @@ export default function Home() {
           <MaSemainePanel
             classes={assignedDisplaySetups}
             courses={teacherCourses}
-            weekSignals={maSemaineWeekSignals}
             schoolWeeks={schoolWeeksMemo}
             selectedSchoolWeekNumber={selectedSchoolWeekNumber}
             onSelectSchoolWeek={setSelectedSchoolWeekNumber}

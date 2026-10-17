@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { PDFDocument, StandardFonts } from "pdf-lib";
 
 import type { PrototypeAgendaItem } from "../src/features/agenda/demo-items.ts";
 import {
@@ -15,6 +16,7 @@ import { computeCourseSessions } from "../src/features/course-sessions/index.ts"
 import { canMutateAgenda } from "../src/lib/auth/permissions.ts";
 import {
   assembleNotebookExport,
+  controlLineX,
   COURSE_TIMELINE_FORBIDDEN_REASON,
   DEFAULT_NOTEBOOK_EXPORT_OPTIONS,
   diagnoseAnnualCourseTests,
@@ -25,17 +27,22 @@ import {
   formatCourseScheduleSummary,
   formatNotebookExportCoverage,
   highlightHexForMarks,
+  isLegacyNotebookExportLayout,
   isUnambiguousLegacyTestForCourse,
   matchAgendaItemToSession,
   notebookExportFilename,
   NOTEBOOK_EXPORT_UNMATCHED_CONTROLS_TITLE,
+  PDF_EXPORT_MARGIN,
   parseNotebookExportOptions,
   publicationToExportLines,
   renderNotebookExportPdf,
   resolveAgendaItemSession,
   richDocToExportLines,
-  summaryLinesForSession,
+  splitPlainTextLines,
+  splitRunsOnNewlines,
   underlineForMarks,
+  winAnsi,
+  wrapControlPlainText,
 } from "../src/features/notebook-export/index.ts";
 import { openPdfDocument } from "../src/lib/pdf/open-pdf-document.ts";
 import { MemoryAgendaStore } from "../src/lib/persistence/memory-store.ts";
@@ -98,6 +105,14 @@ function item(patch: Partial<PrototypeAgendaItem> & Pick<PrototypeAgendaItem, "i
   };
 }
 
+function controlTitles(block: { controls: { title: string }[] } | undefined): string[] {
+  return block?.controls.map((entry) => entry.title) ?? [];
+}
+
+function hasControlTitle(doc: { sessions: { controls: { title: string }[] }[] } | null | undefined, title: string): boolean {
+  return Boolean(doc?.sessions.some((block) => block.controls.some((entry) => entry.title === title)));
+}
+
 function assemble(options: {
   slots?: CourseScheduleSlot[];
   items?: PrototypeAgendaItem[];
@@ -136,7 +151,6 @@ test("export — options par défaut : publications et contrôles, pas notes ni 
     includeTeacherNotes: false,
     includeDrafts: false,
     period: "year",
-    layout: "summary",
     coverPage: true,
   });
   const parsed = parseNotebookExportOptions({});
@@ -159,6 +173,10 @@ test("export — bouton et fenêtre uniquement pour un cours ouvert, sans catég
   assert.match(modal, /notebook-export-option/);
   assert.doesNotMatch(modal, /<legend>Information/);
   assert.doesNotMatch(modal, />Informations</);
+  assert.doesNotMatch(modal, /Présentation/);
+  assert.doesNotMatch(modal, /Synthèse annuelle/);
+  assert.doesNotMatch(modal, /Carnet détaillé/);
+  assert.doesNotMatch(modal, /layout/);
   assert.match(css, /\.notebook-export-modal \.notebook-export-option \{/);
   assert.match(css, /text-transform: none;/);
   assert.match(css, /flex: 0 0 16px;/);
@@ -239,7 +257,7 @@ test("export — publication et contrôle rattachés au bon day, plusieurs séan
   assert.equal(week6.length, 2);
   assert.equal(week6[0]?.session.dayOfWeek, 1);
   assert.equal(week6[0]?.publications.some((line) => line.text.includes("Lundi")), true);
-  assert.equal(week6[1]?.controls.includes("Contrôle jeudi"), true);
+  assert.equal(controlTitles(week6[1]).includes("Contrôle jeudi"), true);
 
   const sameDay = sessionsFor({
     slots: [
@@ -374,6 +392,7 @@ test("export — sécurité enseignant, élève interdit, professeur non assign�
   assert.match(service, /getTeacherCourseTimeline/);
   assert.match(service, /includeTeacherNotes \? await deps\.notes\.getNotes/);
   assert.match(modal, /DEFAULT_NOTEBOOK_EXPORT_OPTIONS/);
+  assert.match(service, /logOperationalError/);
   assert.doesNotMatch(route, /kind === "student"/);
   assert.equal(canMutateAgenda({ kind: "student", classroomId: "class-demo", code: "ABC" } as never), false);
   assert.equal(canMutateAgenda({ kind: "teacher", teacherId: "teacher-demo" } as never), true);
@@ -447,7 +466,7 @@ test("export — publication riche via buildPublicationPayload sans titre dupliq
   assert.equal(legacy[1]?.text, "Lire le dossier");
 });
 
-test("export — synthèse compacte distincte du carnet détaillé", async () => {
+test("export — format unique, layout historique ignoré", async () => {
   const rich = encodeRichDetail({
     format: "campus-rich-v1",
     blocks: [
@@ -461,23 +480,25 @@ test("export — synthèse compacte distincte du carnet détaillé", async () =>
     item({ id: 1, type: "HOMEWORK", title: "ignored-title", detail: rich, studentVisible: true }),
     item({ id: 2, type: "TEST", title: "Injection", schoolWeekNumber: 6, day: 3 }),
   ];
-  const summary = assemble({ items, exportOptions: { layout: "summary" } });
-  const detailed = assemble({ items, exportOptions: { layout: "detailed" } });
-  assert.ok(summary && detailed);
-  const compact = summaryLinesForSession(summary!.sessions[0]!);
-  assert.match(compact[0] ?? "", /SEM 06-B · Jeu\. 24\.09\.2026/);
-  assert.equal(compact.some((line) => line.startsWith("Publication élèves —")), true);
-  assert.equal(compact.some((line) => line.startsWith("Contrôle — Injection")), true);
-  assert.equal(compact.some((line) => line.includes("Information")), true);
-  assert.equal(compact.some((line) => line.includes("PUBLICATION ÉLÈVES")), false);
-  assert.equal(detailed!.sessions[0]?.publications.some((line) => line.kind === "heading" && line.text === "Moteur"), true);
-  assert.equal(detailed!.sessions[0]?.publications.some((line) => exportLineHasMark(line, "bold")), true);
-  assert.ok(compact.join("\n").length < detailed!.sessions[0]!.publications.map((line) => line.text).join("\n").length + 80);
-  const summaryPdf = await renderNotebookExportPdf(summary!);
-  const detailedPdf = await renderNotebookExportPdf(detailed!);
-  assert.equal(Buffer.from(summaryPdf.slice(0, 5)).toString("latin1"), "%PDF-");
-  assert.equal(Buffer.from(detailedPdf.slice(0, 5)).toString("latin1"), "%PDF-");
-  assert.notEqual(summaryPdf.byteLength, detailedPdf.byteLength);
+  const parsedLegacy = parseNotebookExportOptions({ layout: "detailed" });
+  assert.equal(isLegacyNotebookExportLayout("detailed"), true);
+  assert.equal("layout" in parsedLegacy, false);
+  assert.deepEqual(parsedLegacy, parseNotebookExportOptions({ layout: "summary" }));
+  const unique = assemble({ items, exportOptions: { layout: "summary" } as never });
+  const same = assemble({ items, exportOptions: { layout: "detailed" } as never });
+  assert.ok(unique && same);
+  assert.equal(unique!.sessions[0]?.publications.some((line) => line.kind === "heading" && line.text === "Moteur"), true);
+  assert.equal(unique!.sessions[0]?.publications.some((line) => exportLineHasMark(line, "bold")), true);
+  assert.equal(unique!.sessions[0]?.publications.some((line) => line.text.includes("Information")), true);
+  const uniquePdf = await renderNotebookExportPdf(unique!);
+  const samePdf = await renderNotebookExportPdf(same!);
+  assert.equal(Buffer.from(uniquePdf.slice(0, 5)).toString("latin1"), "%PDF-");
+  assert.equal(await pdfText(uniquePdf), await pdfText(samePdf));
+  const text = await pdfText(uniquePdf);
+  assert.match(text, /PUBLICATION ÉLÈVES/);
+  assert.doesNotMatch(text, /Publication élèves —/);
+  assert.doesNotMatch(text, /Synthèse/);
+  assert.doesNotMatch(text, /Détaillé/);
 });
 
 function sessionByWeek(weekNumber: number) {
@@ -515,7 +536,7 @@ test("export — association key prioritaire même si semaine/jour incohérents"
   assert.equal(resolveAgendaItemSession(itemWithKey, sessionsFor({ slots: [slot({})] })).kind, "MATCH_KEY");
   const doc = assemble({ items: [itemWithKey] });
   assert.equal(doc?.controlCount, 1);
-  assert.equal(doc?.sessions.some((block) => block.controls.includes("C-key")), true);
+  assert.equal(hasControlTitle(doc, "C-key"), true);
 });
 
 test("export — association par courseSessionDate sans key", () => {
@@ -533,7 +554,7 @@ test("export — association par courseSessionDate sans key", () => {
   assert.equal(matchAgendaItemToSession(dated, s6), "MATCH_DATE");
   const doc = assemble({ items: [dated] });
   assert.equal(doc?.controlCount, 1);
-  assert.equal(doc?.sessions[0]?.controls.includes("C-date"), true);
+  assert.equal(controlTitles(doc?.sessions[0]).includes("C-date"), true);
 });
 
 test("export — fallback historique semaine/jour pour ancien TEST sans key/date", () => {
@@ -551,7 +572,7 @@ test("export — fallback historique semaine/jour pour ancien TEST sans key/date
   assert.equal(matchAgendaItemToSession(legacy, s6), "MATCH_WEEK_DAY");
   const doc = assemble({ items: [legacy] });
   assert.equal(doc?.controlCount, 1);
-  assert.equal(doc?.sessions[0]?.controls.includes("C-legacy"), true);
+  assert.equal(controlTitles(doc?.sessions[0]).includes("C-legacy"), true);
 });
 
 test("export — TEST d'un autre AnnualCourse de la même classe jamais exporté", () => {
@@ -580,7 +601,7 @@ test("export — TEST d'un autre AnnualCourse de la même classe jamais exporté
     ],
   });
   assert.equal(doc?.controlCount, 1);
-  assert.equal(doc?.sessions.some((block) => block.controls.includes("C-autre")), false);
+  assert.equal(hasControlTitle(doc, "C-autre"), false);
   assert.equal(doc?.unmatchedControls.some((entry) => entry.title === "C-autre"), false);
 });
 
@@ -600,7 +621,7 @@ test("export — TEST non rattaché à une séance actuelle reste compté et lis
   const doc = assemble({ items: [orphan] });
   assert.ok(doc);
   assert.equal(doc!.controlCount, 1);
-  assert.equal(doc!.sessions.some((block) => block.controls.includes("C-orphelin")), false);
+  assert.equal(hasControlTitle(doc, "C-orphelin"), false);
   assert.equal(doc!.unmatchedControls.length, 1);
   assert.equal(doc!.unmatchedControls[0]?.title, "C-orphelin");
   assert.equal(doc!.unmatchedControls[0]?.dateLabel, "01.01.2099");
@@ -617,11 +638,11 @@ test("export — PDF des contrôles non rattachés", async () => {
     schoolWeekNumber: 99,
     day: 0,
   });
-  const doc = assemble({ items: [orphan], exportOptions: { layout: "summary" } });
+  const doc = assemble({ items: [orphan] });
   assert.ok(doc);
   const pdf = await renderNotebookExportPdf(doc!);
   const text = await pdfText(pdf);
-  assert.match(text, /C-orphelin/);
+  assert.match(text, /C-orphelin/i);
   assert.match(text, /1 contrôle/);
   assert.equal(text.includes(NOTEBOOK_EXPORT_UNMATCHED_CONTROLS_TITLE), true);
 });
@@ -656,14 +677,14 @@ test("export — 2 TEST structurés : controlCount=2, jamais 0, PDF contient les
   assert.equal(doc!.controlCount, 2);
   assert.equal(formatNotebookExportCoverage(doc!), "3 séances  ·  0 publication élèves  ·  2 contrôles");
   assert.doesNotMatch(formatNotebookExportCoverage(doc!), /0 contrôle(?:s)?(?!\S)/);
-  const titles = doc!.sessions.flatMap((block) => block.controls);
+  const titles = doc!.sessions.flatMap((block) => controlTitles(block));
   assert.equal(titles.includes("ControleAlpha"), true);
   assert.equal(titles.includes("ControleBeta"), true);
 
   const pdf = await renderNotebookExportPdf(doc!);
   const text = await pdfText(pdf);
-  assert.match(text, /ControleAlpha/);
-  assert.match(text, /ControleBeta/);
+  assert.match(text, /ControleAlpha/i);
+  assert.match(text, /ControleBeta/i);
   assert.match(text, /2 contrôles/);
   assert.doesNotMatch(text, /0 contrôle/);
 });
@@ -719,9 +740,9 @@ test("export — année complète et semestres : période par date puis semaine"
   const semester2 = assemble({ items, exportOptions: { period: "semester-2" } });
   assert.equal(year?.controlCount, 3);
   assert.equal(semester1?.controlCount, 1);
-  assert.equal(semester1?.sessions.some((block) => block.controls.includes("C-S1")), true);
+  assert.equal(hasControlTitle(semester1, "C-S1"), true);
   assert.equal(semester2?.controlCount, 2);
-  assert.equal(semester2?.sessions.some((block) => block.controls.includes("C-S2")), true);
+  assert.equal(hasControlTitle(semester2, "C-S2"), true);
   assert.equal(semester2?.unmatchedControls.some((entry) => entry.title === "C-orphelin-S2"), true);
   assert.equal(semester1?.unmatchedControls.length, 0);
 });
@@ -881,10 +902,10 @@ test("export — intégration listAgendaItemsByAnnualCourse puis PDF", async () 
   assert.equal(formatNotebookExportCoverage(doc!), "3 séances  ·  0 publication élèves  ·  2 contrôles");
   const pdf = await renderNotebookExportPdf(doc!);
   const text = await pdfText(pdf);
-  assert.match(text, /ControleStoreA/);
-  assert.match(text, /ControleStoreB/);
+  assert.match(text, /ControleStoreA/i);
+  assert.match(text, /ControleStoreB/i);
   assert.match(text, /2 contrôles/);
-  assert.doesNotMatch(text, /ControleAutreCours/);
+  assert.doesNotMatch(text, /ControleAutreCours/i);
   assert.doesNotMatch(text, /non rattachés/);
 });
 
@@ -903,7 +924,7 @@ test("export — key invalide : date encore valide, sinon fallback semaine/jour"
   assert.equal(resolveAgendaItemSession(staleKeyDate, sessionsFor({ slots: [slot({})] })).kind, "MATCH_DATE");
   const byDate = assemble({ items: [staleKeyDate] });
   assert.equal(byDate?.controlCount, 1);
-  assert.equal(byDate?.sessions.some((block) => block.controls.includes("C-stale-key-date")), true);
+  assert.equal(hasControlTitle(byDate, "C-stale-key-date"), true);
 
   const staleKeyWeek = item({
     id: 2,
@@ -917,7 +938,7 @@ test("export — key invalide : date encore valide, sinon fallback semaine/jour"
   });
   assert.equal(resolveAgendaItemSession(staleKeyWeek, sessionsFor({ slots: [slot({})] })).kind, "MATCH_WEEK_DAY");
   const byWeek = assemble({ items: [staleKeyWeek] });
-  assert.equal(byWeek?.sessions.some((block) => block.controls.includes("C-stale-key-week")), true);
+  assert.equal(hasControlTitle(byWeek, "C-stale-key-week"), true);
 });
 
 test("export — publication structurée à key invalide ne disparaît pas", () => {
@@ -998,4 +1019,398 @@ test("export — Carnet structuré crée le contrôle via POST /api/teacher/cont
   assert.doesNotMatch(perform, /createAgendaItemApi/);
   assert.doesNotMatch(save, /createAgendaItemApi/);
 });
+
+async function pdfLines(pdf: Uint8Array): Promise<string[]> {
+  const document = await openPdfDocument(pdf);
+  const lines: string[] = [];
+  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+    const page = await document.getPage(pageNumber);
+    const content = await page.getTextContent();
+    let currentY: number | null = null;
+    let buffer = "";
+    const flush = () => {
+      if (buffer) lines.push(buffer);
+      buffer = "";
+    };
+    for (const entry of content.items) {
+      if (!("str" in entry) || typeof entry.str !== "string" || !entry.str) continue;
+      const y = Array.isArray(entry.transform) ? Math.round(Number(entry.transform[5])) : 0;
+      if (currentY !== null && Math.abs(y - currentY) > 2) flush();
+      currentY = y;
+      buffer += entry.str;
+    }
+    flush();
+  }
+  return lines;
+}
+
+test("export — WinAnsi refuse newline/tab/CR (cause réelle du crash détaillé)", async () => {
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const page = pdf.addPage([595, 842]);
+  for (const sample of ["Ligne 1\nLigne 2", "Ligne 1\r\nLigne 2", "Ligne 1\rLigne 2", "Colonne 1\tColonne 2"]) {
+    await assert.rejects(async () => {
+      font.widthOfTextAtSize(sample, 10);
+      page.drawText(sample, { x: 50, y: 800, size: 10, font });
+    }, /WinAnsi cannot encode/);
+  }
+  assert.equal(winAnsi("Ligne 1\nLigne 2").includes("\n"), false);
+  assert.equal(winAnsi("a\tb").includes("\t"), false);
+});
+
+test("export — newline / CRLF / CR / tab / lignes vides / styles traversant un retour", async () => {
+  const cases = [
+    { id: 1, text: "Ligne 1\nLigne 2", expect: ["Ligne 1", "Ligne 2"] },
+    { id: 2, text: "Ligne 1\r\nLigne 2", expect: ["Ligne 1", "Ligne 2"] },
+    { id: 3, text: "Ligne 1\rLigne 2", expect: ["Ligne 1", "Ligne 2"] },
+    { id: 4, text: "Colonne 1\tColonne 2", expect: ["Colonne 1", "Colonne 2"] },
+    { id: 5, text: "Ligne 1\n\nLigne 3", expect: ["Ligne 1", "Ligne 3"] },
+  ];
+  assert.deepEqual(
+    splitRunsOnNewlines([{ text: "Ligne 1\n\nLigne 3" }]).map((row) => row.map((run) => run.text).join("")),
+    ["Ligne 1", "", "Ligne 3"],
+  );
+  for (const sample of cases) {
+    const doc = assemble({
+      items: [
+        item({
+          id: sample.id,
+          type: "HOMEWORK",
+          title: "ignored",
+          studentVisible: true,
+          detail: encodeRichDetail({
+            format: "campus-rich-v1",
+            blocks: [{ type: "paragraph", inlines: [{ text: sample.text, marks: { bold: true, color: "red" } }] }],
+          }),
+        }),
+      ],
+    });
+    assert.ok(doc);
+    const pdf = await renderNotebookExportPdf(doc!);
+    const text = await pdfText(pdf);
+    for (const part of sample.expect) {
+      assert.ok(text.includes(part), `attendu « ${part} »`);
+    }
+    const rows = splitRunsOnNewlines(doc!.sessions[0]!.publications[0]!.runs);
+    assert.ok(
+      rows.every((row) =>
+        row.every((run) => !run.text || (run.marks?.bold === true && run.marks?.color === "red")),
+      ),
+    );
+  }
+
+  const crossing = assemble({
+    items: [
+      item({
+        id: 20,
+        type: "HOMEWORK",
+        title: "x",
+        studentVisible: true,
+        detail: encodeRichDetail({
+          format: "campus-rich-v1",
+          blocks: [
+            {
+              type: "paragraph",
+              inlines: [
+                { text: "Avant\nAprès", marks: { bold: true, color: "red", highlight: true, href: "https://campus.example/fiche" } },
+              ],
+            },
+          ],
+        }),
+      }),
+    ],
+  });
+  const pdf = await renderNotebookExportPdf(crossing!);
+  const lines = await pdfLines(pdf);
+  assert.ok(lines.some((line) => line.includes("Avant")));
+  assert.ok(lines.some((line) => line.includes("Après")));
+  assert.ok(lines.findIndex((line) => line.includes("Avant")) !== lines.findIndex((line) => line.includes("Après")));
+  const crossingRows = splitRunsOnNewlines(crossing!.sessions[0]!.publications[0]!.runs);
+  assert.equal(crossingRows[0]?.[0]?.marks?.href, "https://campus.example/fiche");
+  assert.equal(crossingRows[1]?.[0]?.marks?.href, "https://campus.example/fiche");
+  assert.equal(crossingRows[0]?.[0]?.marks?.highlight, true);
+});
+
+test("export — cas MECAUTO3A : contrôle rouge, détail, branche, notes, couleurs", async () => {
+  const mondaySlots = [slot({ id: "mon", weekKind: "A", dayOfWeek: 1, periodStart: 1, periodEnd: 2 })];
+  const sessions = sessionsFor({ slots: mondaySlots });
+  const monday = sessions.find((session) => session.schoolWeekNumber === 9 && session.date === "2026-10-26");
+  assert.ok(monday);
+  const publication = encodeRichDetail({
+    format: "campus-rich-v1",
+    blocks: [
+      {
+        type: "paragraph",
+        inlines: [
+          { text: "Devoir", marks: { bold: true } },
+          { text: ":\nLe moteur N°1, " },
+          { text: "feuille à terminer", marks: { color: "red" } },
+        ],
+      },
+      {
+        type: "paragraph",
+        inlines: [
+          { text: "Relire la " },
+          { text: "page 15", marks: { highlight: true } },
+          { text: "." },
+        ],
+      },
+      {
+        type: "paragraph",
+        inlines: [{ text: "Fiche de révision", marks: { href: "https://campus.example/fiche" } }],
+      },
+    ],
+  });
+  const notes = {
+    version: 2 as const,
+    sessions: {
+      [monday!.key]: [
+        {
+          id: "n1",
+          text: "notes",
+          body: {
+            format: "campus-rich-v1" as const,
+            blocks: [
+              { type: "paragraph" as const, inlines: [{ text: "Préparer la correction." }] },
+              {
+                type: "paragraph" as const,
+                inlines: [
+                  { text: "Attention", marks: { bold: true as const, color: "red" as const } },
+                  { text: ":\nreprendre la dépollution." },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    },
+  };
+  const doc = assemble({
+    slots: mondaySlots,
+    items: [
+      item({
+        id: 1,
+        type: "HOMEWORK",
+        title: "ignored",
+        studentVisible: true,
+        annualCourseId: COURSE.id,
+        courseSessionKey: monday!.key,
+        courseSessionDate: monday!.date,
+        schoolWeekNumber: 9,
+        day: 0,
+        detail: publication,
+      }),
+      item({
+        id: 2,
+        type: "TEST",
+        title: "Contrôle 1",
+        detail: "Injection, dépollution",
+        annualCourseId: COURSE.id,
+        courseSessionKey: monday!.key,
+        courseSessionDate: monday!.date,
+        schoolWeekNumber: 9,
+        day: 0,
+      }),
+    ],
+    notes,
+    exportOptions: { includeTeacherNotes: true, coverPage: true, period: "year" },
+  });
+  assert.ok(doc);
+  assert.equal(doc!.sessions[0]?.controls[0]?.title, "Contrôle 1");
+  assert.equal(doc!.sessions[0]?.controls[0]?.detail, "Injection, dépollution");
+  const pdf = await renderNotebookExportPdf({ ...doc!, branchLabel: "CP Léger Injection, dépollution" });
+  const text = await pdfText(pdf);
+  assert.match(text, /SEM 09-A · LUNDI 26\.10\.2026/);
+  assert.match(text, /CONTRÔLE 1/);
+  assert.match(text, /Injection, dépollution/);
+  assert.match(text, /CP LÉGER INJECTION, DÉPOLLUTION/);
+  assert.match(text, /PUBLICATION ÉLÈVES/);
+  assert.match(text, /Devoir/);
+  assert.match(text, /feuille à terminer/);
+  assert.match(text, /page 15/);
+  assert.match(text, /Fiche de révision/);
+  assert.match(text, /NOTES PROFESSEUR/);
+  assert.match(text, /Préparer la correction/);
+  assert.match(text, /Attention/);
+  assert.match(text, /CARNET ANNUEL/);
+  assert.doesNotMatch(text, /Synthèse/);
+  const pdfSource = await readFile(new URL("../src/features/notebook-export/pdf.ts", import.meta.url), "utf8");
+  assert.match(pdfSource, /RICH_TEXT_COLOR_HEX\.red/);
+  assert.match(pdfSource, /CONTROL_RED/);
+  assert.match(pdfSource, /sessionHeader/);
+});
+
+test("export — deux CourseSession la même semaine restent deux blocs", async () => {
+  const twoDays = assemble({
+    slots: [
+      slot({ id: "mon", weekKind: "A", dayOfWeek: 1, periodStart: 1, periodEnd: 2 }),
+      slot({ id: "thu", weekKind: "A", dayOfWeek: 4, periodStart: 3, periodEnd: 4 }),
+    ],
+    items: [
+      item({ id: 1, type: "HOMEWORK", title: "Lundi 26", schoolWeekNumber: 9, day: 0, studentVisible: true }),
+      item({ id: 2, type: "HOMEWORK", title: "Jeudi 29", schoolWeekNumber: 9, day: 3, studentVisible: true }),
+    ],
+  });
+  const week9 = twoDays?.sessions.filter((block) => block.session.schoolWeekNumber === 9) ?? [];
+  assert.equal(week9.length, 2);
+  assert.equal(week9[0]?.session.date, "2026-10-26");
+  assert.equal(week9[1]?.session.date, "2026-10-29");
+  const pdf = await renderNotebookExportPdf(twoDays!);
+  const text = await pdfText(pdf);
+  assert.match(text, /SEM 09-A · LUNDI 26\.10\.2026/);
+  assert.match(text, /SEM 09-A · JEUDI 29\.10\.2026/);
+});
+
+test("export — page de garde on/off, legacy sans RichDoc, logger d’échec", async () => {
+  const withCover = assemble({
+    items: [item({ id: 1, type: "HOMEWORK", title: "Devoir papier", detail: "Lire le dossier", studentVisible: true })],
+    exportOptions: { coverPage: true },
+  });
+  const withoutCover = assemble({
+    items: [item({ id: 1, type: "HOMEWORK", title: "Devoir papier", detail: "Lire le dossier", studentVisible: true })],
+    exportOptions: { coverPage: false },
+  });
+  const covered = await pdfText(await renderNotebookExportPdf(withCover!));
+  const bare = await pdfText(await renderNotebookExportPdf(withoutCover!));
+  assert.match(covered, /CARNET ANNUEL/);
+  assert.doesNotMatch(bare, /CARNET ANNUEL/);
+  assert.match(covered, /Devoir papier/);
+  assert.match(covered, /Lire le dossier/);
+  const source = await readFile(new URL("../src/features/notebook-export/service.ts", import.meta.url), "utf8");
+  assert.match(source, /logOperationalError/);
+  assert.match(source, /annualCourseId/);
+  assert.match(source, /sessionCount/);
+  assert.doesNotMatch(source, /assembled\.sessions\[0\]\.publications/);
+});
+
+test("export — titre et détail de contrôle : newlines, wrap, x >= MARGIN", async () => {
+  const fontPdf = await PDFDocument.create();
+  const font = await fontPdf.embedFont(StandardFonts.Helvetica);
+  const maxWidth = 220;
+  assert.deepEqual(splitPlainTextLines("Injection\nDépollution"), ["Injection", "Dépollution"]);
+  assert.deepEqual(splitPlainTextLines("Injection\r\nDépollution"), ["Injection", "Dépollution"]);
+  assert.deepEqual(splitPlainTextLines("Injection\rDépollution"), ["Injection", "Dépollution"]);
+  assert.deepEqual(splitPlainTextLines("Injection\n\nDépollution"), ["Injection", "", "Dépollution"]);
+  assert.deepEqual(wrapControlPlainText(font, "Injection\nDépollution", 10, maxWidth), ["Injection", "Dépollution"]);
+  assert.deepEqual(wrapControlPlainText(font, "Injection\r\nDépollution", 10, maxWidth), ["Injection", "Dépollution"]);
+  assert.deepEqual(wrapControlPlainText(font, "Injection\rDépollution", 10, maxWidth), ["Injection", "Dépollution"]);
+  assert.deepEqual(wrapControlPlainText(font, "Injection\n\nDépollution", 10, maxWidth), ["Injection", "", "Dépollution"]);
+  const tabRows = wrapControlPlainText(font, "Injection\tDépollution", 10, 400);
+  assert.match(tabRows.join(" "), /Injection/);
+  assert.match(tabRows.join(" "), /Dépollution/);
+  assert.ok(tabRows.every((row) => !/[\n\r\t]/.test(row)));
+
+  const long =
+    "Injection directe haute pression, formation du mélange, dépollution et contrôle du système";
+  const longRows = wrapControlPlainText(font, long, 10, 180);
+  assert.ok(longRows.length > 1);
+  for (const row of [...longRows, ...tabRows, "Injection", "Dépollution"]) {
+    assert.doesNotMatch(row, /[\n\r\t]/);
+    assert.doesNotMatch(winAnsi(row), /[\n\r\t]/);
+    const width = row ? font.widthOfTextAtSize(winAnsi(row), 10) : 0;
+    assert.ok(controlLineX(width, 180) >= PDF_EXPORT_MARGIN);
+    if (row) assert.ok(width <= 180 + 0.01);
+  }
+  assert.ok(controlLineX(10_000, 180) >= PDF_EXPORT_MARGIN);
+
+  const s6 = sessionByWeek(6);
+  function testItem(
+    id: number,
+    title: string,
+    detail: string,
+  ): PrototypeAgendaItem {
+    return item({
+      id,
+      type: "TEST",
+      title,
+      detail,
+      annualCourseId: COURSE.id,
+      courseSessionKey: s6.key,
+      courseSessionDate: s6.date,
+      schoolWeekNumber: 6,
+      day: 3,
+    });
+  }
+
+  async function linesFor(detail: string, title = "Contrôle 1"): Promise<string[]> {
+    const doc = assemble({ items: [testItem(1, title, detail)], exportOptions: { coverPage: false } });
+    assert.ok(doc);
+    assert.equal(doc!.sessions[0]?.controls[0]?.detail, detail);
+    return pdfLines(await renderNotebookExportPdf(doc!));
+  }
+
+  for (const detail of ["Injection\nDépollution", "Injection\r\nDépollution", "Injection\rDépollution"]) {
+    const lines = await linesFor(detail);
+    const injectionAt = lines.findIndex((line) => line.includes("Injection"));
+    const depollutionAt = lines.findIndex((line) => line.includes("Dépollution"));
+    assert.ok(injectionAt >= 0 && depollutionAt >= 0);
+    assert.notEqual(injectionAt, depollutionAt);
+    assert.equal(lines.some((line) => /InjectionDépollution/.test(line)), false);
+  }
+
+  const blank = await linesFor("Injection\n\nDépollution");
+  const first = blank.findIndex((line) => line.includes("Injection"));
+  const second = blank.findIndex((line) => line.includes("Dépollution"));
+  assert.ok(second - first >= 1);
+
+  const tabPdf = assemble({
+    items: [testItem(1, "Contrôle 1", "Injection\tDépollution")],
+    exportOptions: { coverPage: false },
+  });
+  const tabText = await pdfText(await renderNotebookExportPdf(tabPdf!));
+  assert.match(tabText, /Injection/);
+  assert.match(tabText, /Dépollution/);
+
+  const longTitle =
+    "Contrôle formation du mélange et système d'injection directe essence";
+  const longTitleDoc = assemble({
+    items: [testItem(1, longTitle, "Injection\nDépollution\nCatalyseur")],
+    exportOptions: { coverPage: false },
+  });
+  const longTitlePdf = await renderNotebookExportPdf(longTitleDoc!);
+  const longTitleLines = await pdfLines(longTitlePdf);
+  assert.ok(longTitleLines.some((line) => /FORMATION|MÉLANGE|MELANGE|INJECTION/i.test(line)));
+  assert.ok(longTitleLines.filter((line) => /Injection|Dépollution|Catalyseur/.test(line)).length >= 3);
+
+  const longDetailDoc = assemble({
+    items: [testItem(1, "Contrôle 1", long)],
+    exportOptions: { coverPage: false },
+  });
+  const longDetailLines = await pdfLines(await renderNotebookExportPdf(longDetailDoc!));
+  assert.ok(longDetailLines.some((line) => /Injection/.test(line)));
+  assert.ok(longDetailLines.length > 3);
+
+  const many = assemble({
+    items: [
+      testItem(1, "Contrôle 1", "Injection\nDépollution"),
+      testItem(2, "Contrôle 2", "Catalyseur"),
+    ],
+    exportOptions: { coverPage: false },
+  });
+  assert.deepEqual(
+    many!.sessions[0]?.controls.map((entry) => entry.title),
+    ["Contrôle 1", "Contrôle 2"],
+  );
+  const manyLines = await pdfLines(await renderNotebookExportPdf(many!));
+  assert.ok(manyLines.some((line) => /CONTRÔLE 1/i.test(line)));
+  assert.ok(manyLines.some((line) => /CONTRÔLE 2/i.test(line)));
+  assert.ok(manyLines.some((line) => line.includes("Injection")));
+  assert.ok(manyLines.some((line) => line.includes("Dépollution")));
+  assert.ok(manyLines.some((line) => line.includes("Catalyseur")));
+
+  const comma = assemble({
+    items: [testItem(1, "Contrôle 1", "Injection, dépollution")],
+    exportOptions: { coverPage: false },
+  });
+  const commaText = await pdfText(await renderNotebookExportPdf(comma!));
+  assert.match(commaText, /Injection, dépollution/);
+
+  const pdfSource = await readFile(new URL("../src/features/notebook-export/pdf.ts", import.meta.url), "utf8");
+  assert.match(pdfSource, /drawControlText/);
+  assert.match(pdfSource, /splitPlainTextLines/);
+  assert.doesNotMatch(pdfSource, /const detail = winAnsi\(control\.detail\)/);
+  assert.match(pdfSource, /normalizeExportControlChars\(text\)\.split\("\\n"\)/);
+});
+
+
 

@@ -40,6 +40,14 @@ import { SqlTeacherSetupStore } from "../src/lib/persistence/sql/sql-teacher-set
 import { SqlTimetableStore } from "../src/lib/persistence/sql/sql-timetable-store.ts";
 import { prepareSqlDatabase } from "../src/lib/persistence/store-factory.ts";
 import type { SqlDatabase } from "../src/lib/persistence/sql/types.ts";
+import { isNotesDocumentV2, stripClassNotesForCatalog } from "../src/features/class-notebook/index.ts";
+import { TEACHER_CHF_ID } from "../src/features/classes/index.ts";
+import { applyMigrations } from "../src/lib/persistence/sql/migrate.ts";
+import { seedDemoDatabase } from "../src/lib/persistence/sql/seed.ts";
+import {
+  getMemoryTeacherNotesStore,
+  resetMemoryTeacherNotesStore,
+} from "../src/lib/persistence/memory-teacher-notes-store.ts";
 
 async function countRows(db: SqlDatabase, table: string): Promise<number> {
   const row = await db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).bind().first<{ count: number }>();
@@ -236,7 +244,7 @@ async function seedTeacher(db: SqlDatabase, id = "teacher-admin") {
 }
 
 test("version 2.48.0 — aucune migration destructive catalogue", () => {
-  assert.equal(APP_VERSION, "2.61.9");
+  assert.equal(APP_VERSION, "2.62.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
   assert.equal(confirmationMatches("MA2", "MA2"), true);
   assert.equal(confirmationMatches("MA2", "ma2"), false);
@@ -1359,4 +1367,91 @@ test("API — admin only 401/403", async () => {
     "utf8",
   );
   assert.match(plans, /JSON\.stringify\(\{ confirmationText \}\)/);
+});
+
+test("notes V2 — suppression catalogue SQL + memory retire les séances du cours visé", async () => {
+  const keepKey = "year-2026|ac-keep|2026-10-26";
+  const dropKey = "year-2026|ac-drop|2026-10-26";
+  const document = {
+    version: 2 as const,
+    sessions: {
+      [keepKey]: [{ id: "keep", text: "conserver" }],
+      [dropKey]: [{ id: "drop", text: "supprimer" }],
+    },
+  };
+  const plan = {
+    kind: "class" as const,
+    target: { id: "x", kind: "class" as const, code: "X", label: "X" },
+    confirmationText: "X",
+    counts: emptyCatalogDeleteCounts(),
+    classIds: [],
+    professionIds: [],
+    branchIds: [],
+    contextIds: [],
+    annualCourseIds: ["ac-drop"],
+    assignmentIds: [],
+    assignmentEventIds: [],
+    annualCourseNoteIds: [],
+    courseScheduleSlotIds: [],
+    attendanceDayIds: [],
+    agendaItemIds: [],
+    classroomIds: ["class-drop"],
+    subjectIds: [],
+    membershipIds: [],
+    studentAccessIds: [],
+    publicationTemplateIds: [],
+    timetableSlotIds: [],
+    timetableMappingKeys: [],
+  };
+  const emptySnapshot = {
+    classes: [],
+    professions: [],
+    branches: [],
+    contexts: [],
+    courses: [],
+    assignments: [],
+    events: [],
+    notes: [],
+    paths: [],
+    scheduleSlots: [],
+    attendanceDays: [],
+    agendaItems: [],
+    classrooms: [],
+    subjects: [],
+    memberships: [],
+    studentAccesses: [],
+    templates: [],
+    teacherSetups: [],
+    teacherNotes: [{ teacherId: TEACHER_CHF_ID, document }],
+    timetableSlots: [],
+    timetableMappings: [],
+  };
+
+  resetMemoryTeacherNotesStore();
+  const memory = getMemoryTeacherNotesStore();
+  await memory.saveNotes(TEACHER_CHF_ID, document);
+  const memoryStripped = stripClassNotesForCatalog(document, {
+    classroomIds: plan.classroomIds,
+    annualCourseIds: plan.annualCourseIds,
+  });
+  await memory.replaceAllNotes([{ teacherId: TEACHER_CHF_ID, document: memoryStripped.document }]);
+  const memoryNotes = await memory.getNotes(TEACHER_CHF_ID);
+  assert.ok(memoryNotes && isNotesDocumentV2(memoryNotes));
+  assert.equal(memoryNotes.sessions[keepKey]?.[0]?.text, "conserver");
+  assert.equal(memoryNotes.sessions[dropKey], undefined);
+
+  const db = createNodeSqliteDatabase(":memory:");
+  await applyMigrations(db);
+  await seedDemoDatabase(db);
+  const sqlStore = new SqlTeacherNotesStore(db);
+  await sqlStore.saveNotes(TEACHER_CHF_ID, document);
+  const statements = buildCatalogDeleteStatements(plan, emptySnapshot);
+  const update = statements.find((entry) => String(entry.sql).includes("teacher_notes"));
+  assert.ok(update);
+  await db.prepare(String(update.sql)).bind(...(update.values as unknown[])).run();
+  const sqlNotes = await sqlStore.getNotes(TEACHER_CHF_ID);
+  assert.ok(sqlNotes && isNotesDocumentV2(sqlNotes));
+  assert.equal(sqlNotes.sessions[keepKey]?.[0]?.text, "conserver");
+  assert.equal(sqlNotes.sessions[dropKey], undefined);
+  db.close();
 });

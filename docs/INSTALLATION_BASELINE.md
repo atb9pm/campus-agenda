@@ -1,8 +1,10 @@
-# Baseline d’installation — Campus Agenda 2.61.9
+# Baseline d’installation — Campus Agenda 2.62.0
 
 Campus Agenda est un **produit unique**. Les données d’un établissement **ne font pas partie du produit**.
 
-Cette baseline formalise ce qu’est une installation propre de la version **2.61.9**, afin de pouvoir plus tard installer le même logiciel pour d’autres établissements, chacun avec sa propre instance.
+Cette baseline formalise ce qu’est une installation propre de la version **2.62.0**, afin de pouvoir plus tard installer le même logiciel pour d’autres établissements, chacun avec sa propre instance.
+
+**Baseline stable avant développement du passage annuel N → N+1.** Cette version ne contient pas la copie interannuelle, l’activation automatique d’une année future, ni la reprise automatique des contenus.
 
 ## Produit et données
 
@@ -32,7 +34,7 @@ Une nouvelle école = une nouvelle installation (domaine, SQLite, secrets, confi
 
 ## Démarrage sur base vierge
 
-Une installation propre de 2.61.9, sur un fichier SQLite nouveau ou vide, doit donner :
+Une installation propre de 2.62.0, sur un fichier SQLite nouveau ou vide, doit donner :
 
 1. les **migrations** appliquées (schéma à jour) ;
 2. un **administrateur initial** créé au bootstrap (`CAMPUS_ADMIN_PASSWORD` obligatoire si la base est totalement vide) ;
@@ -104,7 +106,9 @@ Ne jamais versionner le fichier de sauvegarde dans Git.
 
 Le backup **v4** peut contenir la table `teacher_mfa` (secret TOTP chiffré, empreintes de codes de récupération).
 
-Une restauration sur TEST qui utilise une **autre** `CAMPUS_MFA_ENCRYPTION_KEY` que celle de production rend ces secrets illisibles (fermeture sécurisée). Dans ce cas, réinitialiser la 2FA **sur le TEST**, puis faire un nouvel enrôlement.
+Une restauration sur TEST qui utilise une **autre** `CAMPUS_MFA_ENCRYPTION_KEY` que celle de production rend ces secrets illisibles. À la connexion admin, l’application passe alors en **nouvel enrôlement** (état `reset_required`) au lieu de bloquer sur un code TOTP indéchiffrable. L’ancien téléphone / les anciens recovery de production ne s’appliquent pas au TEST.
+
+Si la clé `CAMPUS_MFA_ENCRYPTION_KEY` est **absente** du lancement Infomaniak, l’enrôlement reste fermé (503). La commande serveur ci-dessous reste disponible.
 
 Sur Infomaniak, utiliser **npm** uniquement (pas `pnpm`). Depuis `web/`, sur le serveur TEST :
 
@@ -118,9 +122,9 @@ NODE_ENV=production CAMPUS_DEMO_SEED=false CAMPUS_STORE=sqlite CAMPUS_SQLITE_PAT
 
 La procédure détaillée (même environnement, même clé, ou reset si la clé est perdue) reste dans [Exploitation](OPERATIONS.md).
 
-## Baseline 2.61.9
+## Baseline 2.62.0
 
-La version **2.61.9** constitue la première baseline d’installation formalisée, avec :
+La version **2.62.0** constitue la baseline produit à figer avant le chantier N → N+1, avec :
 
 - runtime **Node.js** sur Infomaniak ;
 - persistance **SQLite** ;
@@ -129,6 +133,11 @@ La version **2.61.9** constitue la première baseline d’installation formalis�
 - **aucune donnée scolaire de démonstration** en production ;
 - **AnnualCourse** comme contexte enseignant (jamais la classe seule) ;
 - **CourseSession** calculée (pas de table SQL) ;
+- Carnet par CourseSession, contrôles unifiés, vue élève et export PDF unique ;
 - sauvegarde / restauration **v4**.
 
-Le tag Git `v2.61.9` n’est créé qu’après validation et merge sur `main`. Cette documentation ne pose pas le tag.
+Le tag Git `v2.62.0` n’est créé qu’après validation humaine et merge sur `main`. Cette documentation ne pose pas le tag.
+
+## Baseline 2.61.9
+
+La version **2.61.9** reste la première baseline d’installation formalisée (tag `v2.61.9`).

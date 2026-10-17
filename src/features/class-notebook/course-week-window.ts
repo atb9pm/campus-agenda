@@ -152,14 +152,11 @@ export function weekdayLabelForCourseDayIndex(dayIndex: number): string {
 }
 
 /**
- * `AgendaItem.day` (0 = lundi … 4 = vendredi) pour une semaine du Carnet structuré.
+ * Historique : jour d’une publication lorsque la carte Carnet était encore une semaine.
+ * Le Carnet structuré n’utilise plus ce helper pour créer une publication
+ * (la carte connaît déjà sa CourseSession).
  *
- * Une carte Carnet reste une semaine, même s’il y a plusieurs CourseSession.
- *
- * - un seul jour réel cette semaine → ce jour (jamais le jour générique de la classe) ;
- * - plusieurs jours, `existingDay` encore parmi les séances → le conserver ;
- * - plusieurs jours sans jour encore valide → première CourseSession par date ;
- * - aucune séance cette semaine → `null` (le caller garde le fallback legacy).
+ * Conservé pour les lectures legacy et les tests de compatibilité.
  */
 export function publicationDayIndexForCourseWeek(
   sessions: readonly CourseSession[],

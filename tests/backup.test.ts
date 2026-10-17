@@ -19,6 +19,7 @@ import {
   resetMemoryTeacherNotesStore,
 } from "../src/lib/persistence/memory-teacher-notes-store.ts";
 import { DEMO_PROTOTYPE_ITEMS } from "../src/features/agenda/demo-items.ts";
+import { isNotesDocumentV1 } from "../src/features/class-notebook/index.ts";
 import { DEMO_CURRENT_TEACHER_ID } from "../src/features/classes/index.ts";
 
 function backupDeps() {
@@ -82,7 +83,9 @@ test("backup v3 — export puis restauration agenda + setup + notes + comptes", 
   assert.equal(snapshot.teacherNotesCount, 1);
   assert.ok(snapshot.teacherAccountCount >= 1);
   assert.equal(snapshot.teacherSetups[0]?.teacherId, DEMO_CURRENT_TEACHER_ID);
-  assert.equal(snapshot.teacherNotes[0]?.document.weeks["classe-setup-1:12"]?.[0]?.text, "Rappeler les EPI");
+  const exportedNotes = snapshot.teacherNotes[0]?.document;
+  assert.ok(exportedNotes && isNotesDocumentV1(exportedNotes));
+  assert.equal(exportedNotes.weeks["classe-setup-1:12"]?.[0]?.text, "Rappeler les EPI");
   const exportedAccount = snapshot.teacherAccounts.find((entry) => entry.id === DEMO_CURRENT_TEACHER_ID);
   assert.equal(exportedAccount?.passwordHash, passwordHash);
   assert.equal(exportedAccount?.initials, "ED");
@@ -120,7 +123,8 @@ test("backup v3 — export puis restauration agenda + setup + notes + comptes", 
   const setup = await deps.teacherSetups.getSetup(DEMO_CURRENT_TEACHER_ID);
   assert.equal(setup?.classes[0]?.name, "2A");
   const notes = await deps.teacherNotes.getNotes(DEMO_CURRENT_TEACHER_ID);
-  assert.equal(notes?.weeks["classe-setup-1:12"]?.[0]?.text, "Rappeler les EPI");
+  assert.ok(notes && isNotesDocumentV1(notes));
+  assert.equal(notes.weeks["classe-setup-1:12"]?.[0]?.text, "Rappeler les EPI");
 
   const auth = await deps.teacherAccounts.authenticate("ED", "Sauvegarde-Test-2026!");
   assert.equal(auth.ok, true);
@@ -186,7 +190,8 @@ test("backup — restauration v1 (legacy) ne touche pas setup/notes/comptes", as
   const setup = await deps.teacherSetups.getSetup(DEMO_CURRENT_TEACHER_ID);
   assert.equal(setup?.classes[0]?.name, "Conservée");
   const notes = await deps.teacherNotes.getNotes(DEMO_CURRENT_TEACHER_ID);
-  assert.equal(notes?.weeks["keep-me:1"]?.[0]?.text, "Reste");
+  assert.ok(notes && isNotesDocumentV1(notes));
+  assert.equal(notes.weeks["keep-me:1"]?.[0]?.text, "Reste");
   assert.deepEqual(await deps.teacherAccounts.exportAllAccounts(), beforeAccounts);
 });
 
@@ -231,7 +236,7 @@ test("backup — restauration v2 ne touche pas les comptes", async () => {
 });
 
 test("backup — GET admin envoie un fichier JSON à télécharger", async () => {
-  assert.equal(APP_VERSION, "2.61.9");
+  assert.equal(APP_VERSION, "2.62.0");
   const route = await readFile(new URL("../web/app/api/admin/backup/route.ts", import.meta.url), "utf8");
   const panel = await readFile(new URL("../web/app/components/admin-backup-panel.tsx", import.meta.url), "utf8");
 

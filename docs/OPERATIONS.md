@@ -1,6 +1,6 @@
 # Exploitation — Campus Agenda
 
-Guide opérationnel, **septembre 2026**. Version applicative : voir `APP_VERSION` (`2.54.1` et suivantes).
+Guide opérationnel. Version applicative : voir `APP_VERSION` (**2.62.0**, baseline stable avant transition N → N+1).
 
 ## Production actuelle
 
@@ -43,7 +43,7 @@ Réponse attendue :
 {
   "ok": true,
   "service": "campus-agenda",
-  "version": "2.46.0",
+  "version": "2.62.0",
   "store": "sqlite",
   "uptimeSeconds": 42
 }
@@ -312,7 +312,7 @@ La commande affiche le compte ciblé et n’agit que si l’opérateur tape exac
 
 ### 11. Restauration d’un backup et clé MFA
 
-Le backup v4 conserve `teacher_mfa` (secret chiffré + empreintes de recovery). Restaurer ce backup sur un serveur dont `CAMPUS_MFA_ENCRYPTION_KEY` est différente rend les secrets illisibles (fail closed). Procédure :
+Le backup v4 conserve `teacher_mfa` (secret chiffré + empreintes de recovery). Restaurer ce backup sur un serveur dont `CAMPUS_MFA_ENCRYPTION_KEY` est différente rend les secrets illisibles. Si une clé valide est présente, la connexion admin ouvre un **nouvel enrôlement** (`reset_required`) au lieu de rester bloquée sur le TOTP de production. Si la clé est absente, l’accès reste fermé (503). Procédure manuelle :
 
 1. Installer **la même** clé que celle utilisée lors de la sauvegarde.
 2. Restaurer le fichier v4.

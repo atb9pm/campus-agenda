@@ -154,9 +154,18 @@ export async function verifyAdminMfaApi(code: string): Promise<ApiTeacherSession
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code }),
   });
-  const payload = await parseJson<{ ok: boolean; reason?: string; session?: ApiTeacherSession }>(response);
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    session?: ApiTeacherSession;
+    mfaSetupRequired?: boolean;
+  }>(response);
   if (!response.ok || !payload.ok || !payload.session) {
-    throw new Error(payload.reason ?? "Code incorrect.");
+    const error = new Error(payload.reason ?? "Code incorrect.");
+    if (payload.mfaSetupRequired) {
+      (error as Error & { mfaSetupRequired?: boolean }).mfaSetupRequired = true;
+    }
+    throw error;
   }
   return payload.session;
 }
@@ -411,7 +420,6 @@ export async function fetchTeacherNotebookExportApi(input: {
   includeTeacherNotes: boolean;
   includeDrafts: boolean;
   period: "year" | "semester-1" | "semester-2";
-  layout: "summary" | "detailed";
   coverPage: boolean;
 }): Promise<{ blob: Blob; filename: string }> {
   const response = await fetch("/api/teacher/notebook-export", {
@@ -707,6 +715,8 @@ export async function createNotebookPublicationApi(input: {
   title: string;
   detail: string;
   studentVisible?: boolean;
+  courseSessionKey?: string;
+  courseSessionDate?: string;
 }): Promise<PrototypeAgendaItem> {
   const response = await fetch("/api/teacher/notebook-publications", {
     method: "POST",
@@ -720,6 +730,8 @@ export async function createNotebookPublicationApi(input: {
       title: input.title,
       detail: input.detail,
       studentVisible: input.studentVisible,
+      courseSessionKey: input.courseSessionKey,
+      courseSessionDate: input.courseSessionDate,
     }),
   });
   const payload = await parseJson<{ ok: boolean; item?: PrototypeAgendaItem; reason?: string }>(response);
@@ -794,6 +806,8 @@ export async function updateAgendaItemApi(
     subjectId: string;
     schoolWeekNumber: number;
     studentVisible: boolean;
+    courseSessionKey: string;
+    courseSessionDate: string;
   }>,
 ): Promise<PrototypeAgendaItem> {
   const response = await fetch(`/api/agenda/${itemId}`, {

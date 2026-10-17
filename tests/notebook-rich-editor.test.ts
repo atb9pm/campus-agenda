@@ -32,6 +32,7 @@ import {
   sanitizeRichDoc,
   savePlanTouchesItem,
   setWeekRichNote,
+  isNotesDocumentV1,
   CAMPUS_RICH_DETAIL_PREFIX,
   type CampusRichDoc,
 } from "../src/features/class-notebook/index.ts";
@@ -84,12 +85,13 @@ function sampleDoc(): CampusRichDoc {
 }
 
 test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async () => {
-  assert.equal(APP_VERSION, "2.61.9");
+  assert.equal(APP_VERSION, "2.62.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
-  const [panel, notesApi, studentPage] = await Promise.all([
+  const [panel, notesApi, studentPage, homeworkPanel] = await Promise.all([
     readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/api/teacher/notes/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/components/student-homework-panel.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(panel, /Publication élèves/);
   assert.match(panel, /Notes prof/);
@@ -101,8 +103,8 @@ test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async (
   assert.doesNotMatch(panel, /À faire[\s\S]*Contrôle/);
   assert.doesNotMatch(panel, /insertQuickBlock\([^\)]*control/);
   assert.match(notesApi, /requireTeacherSession/);
-  assert.match(studentPage, /RichDocView/);
-  assert.match(studentPage, /isPlaceholderDetail/);
+  assert.match(homeworkPanel, /RichDocView/);
+  assert.match(homeworkPanel, /isPlaceholderDetail/);
   assert.match(studentPage, /isCarnetOwnedPublication/);
   assert.match(studentPage, /planCarnetWeekPublicationSave/);
   assert.doesNotMatch(panel, /onCopyPreviousPublication/);
@@ -110,17 +112,25 @@ test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async (
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.match(editor, /parseInlinesFromHtml/);
   assert.match(editor, /applyMarkToRange/);
-  assert.match(editor, /applyStructureToLine/);
+  assert.doesNotMatch(editor, /applyStructure\(/);
   assert.match(editor, /marksInRange/);
   assert.match(editor, /setCharacterSelection/);
   assert.match(editor, /characterOffset/);
   assert.match(editor, /splitLine/);
+  assert.match(editor, /continueListAtCaret/);
+  assert.match(editor, /exitListAtCaret/);
   assert.match(editor, /removeLine/);
   assert.match(editor, /data-color-swatch/);
-  assert.match(editor, /Liste numérotée/);
-  assert.match(editor, /Texte normal/);
+  assert.doesNotMatch(editor, /Liste numérotée/);
+  assert.doesNotMatch(editor, /Texte normal/);
+  assert.doesNotMatch(editor, /text="Titre"/);
+  assert.doesNotMatch(editor, /text="Annuler"/);
+  assert.doesNotMatch(editor, /text="Copier"/);
   assert.match(editor, /rich-doc-link-bar/);
   assert.doesNotMatch(editor, /showExtended/);
+  assert.doesNotMatch(editor, /Blocs de la semaine/);
+  assert.doesNotMatch(editor, /insertQuickBlock/);
+  assert.doesNotMatch(editor, /rich-doc-quick/);
   assert.match(panel, /selectAndCopyLine/);
   assert.match(panel, /Supprimer/);
   assert.doesNotMatch(panel, /class-notebook-line-handle/);
@@ -275,6 +285,7 @@ test("foldable — seuls les items Carnet, pas les publications structurées", (
       title: "Structuré",
       annualCourseId: "ac-1",
       courseSessionKey: "year|ac-1|2026-08-17",
+      referenceItemId: "ref-item-1",
     }),
     item({ id: 3, type: "TEST", title: "Contrôle" }),
   ];
@@ -298,6 +309,7 @@ test("semaine mixte — l’éditeur n’ouvre que la publication Carnet et la s
     detail: "Ne pas absorber",
     annualCourseId: "ac-moteur",
     courseSessionKey: "year|ac-moteur|2026-09-14",
+    referenceItemId: "ref-item-moteur",
   });
   const week = [carnet, structured];
 
@@ -453,6 +465,7 @@ test("notes prof — document riche + ancien texte, normalisation", () => {
     blocks: [{ type: "checklist", items: [{ checked: true, inlines: [{ text: "Vérifier les absents", marks: { bold: true } }] }] }],
   });
   const saved = setWeekRichNote({ version: 1, weeks: {} }, "classe-a:2", body);
+  assert.ok(isNotesDocumentV1(saved));
   const composed = composeWeekNotesDoc(saved.weeks["classe-a:2"] ?? []);
   assert.equal(composed.blocks[0]?.type, "checklist");
 
@@ -467,6 +480,7 @@ test("notes prof — document riche + ancien texte, normalisation", () => {
       "classe-a:3": [{ id: "drop", text: "   " }],
     },
   });
+  assert.ok(isNotesDocumentV1(normalized));
   assert.ok(normalized.weeks["classe-a:2"]?.[0]?.body);
   assert.equal(normalized.weeks["classe-a:3"], undefined);
 });
@@ -485,10 +499,12 @@ test("backup notes — ancien JSON et nouveau body restaurables", async () => {
   const rich = setWeekRichNote({ version: 1, weeks: {} }, "classe-a:5", sampleDoc());
   await store.saveNotes(TEACHER_CHF_ID, rich);
   const roundtrip = await store.getNotes(TEACHER_CHF_ID);
-  assert.equal(roundtrip?.weeks["classe-a:5"]?.[0]?.body?.format, "campus-rich-v1");
+  assert.ok(roundtrip && isNotesDocumentV1(roundtrip));
+  assert.equal(roundtrip.weeks["classe-a:5"]?.[0]?.body?.format, "campus-rich-v1");
   const dumped = await store.exportAllNotes();
   await store.replaceAllNotes(dumped);
   const restored = await store.getNotes(TEACHER_CHF_ID);
-  assert.deepEqual(restored?.weeks["classe-a:5"]?.[0]?.body, rich.weeks["classe-a:5"]?.[0]?.body);
+  assert.ok(restored && isNotesDocumentV1(restored) && isNotesDocumentV1(rich));
+  assert.deepEqual(restored.weeks["classe-a:5"]?.[0]?.body, rich.weeks["classe-a:5"]?.[0]?.body);
   db.close();
 });

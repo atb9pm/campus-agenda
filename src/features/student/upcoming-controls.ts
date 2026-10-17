@@ -173,6 +173,84 @@ export function buildStudentCourseDaySections(
     .filter((section) => section.publications.length > 0 || section.nextControls.length > 0);
 }
 
+export const STUDENT_CONTROL_PREVIEW_LIMIT = 3;
+
+export function previewUpcomingControls(
+  futureTests: UpcomingTestEntry[],
+  limit = STUDENT_CONTROL_PREVIEW_LIMIT,
+): UpcomingTestEntry[] {
+  return futureTests.slice(0, limit);
+}
+
+export function studentTodoSections(sections: StudentCourseDaySection[]): StudentCourseDaySection[] {
+  return sections
+    .map((section) => ({
+      ...section,
+      nextControls: [] as UpcomingTestEntry[],
+      publications: section.publications.filter((item) => item.type !== "TEST"),
+    }))
+    .filter((section) => section.publications.length > 0);
+}
+
+export function studentHomeworkOnlySections(
+  sections: StudentCourseDaySection[],
+): StudentCourseDaySection[] {
+  return sections
+    .map((section) => ({
+      ...section,
+      nextControls: [] as UpcomingTestEntry[],
+      publications: section.publications.filter((item) => item.type === "HOMEWORK"),
+    }))
+    .filter((section) => section.publications.length > 0);
+}
+
+export function formatCompactControlDate(date: Date): string {
+  const day = new Intl.DateTimeFormat("fr-CH", { day: "numeric" }).format(date);
+  const month = new Intl.DateTimeFormat("fr-CH", { month: "short" })
+    .format(date)
+    .replace(".", "")
+    .trim()
+    .toUpperCase();
+  return `${day} ${month}`;
+}
+
+export function controlAgendaDateParts(date: Date): { day: string; month: string } {
+  const day = new Intl.DateTimeFormat("fr-CH", { day: "numeric" }).format(date);
+  const month = new Intl.DateTimeFormat("fr-CH", { month: "short" })
+    .format(date)
+    .replace(".", "")
+    .trim()
+    .toLowerCase();
+  return { day, month };
+}
+
+export function planningDayParts(date: Date): { dayNumber: string; weekday: string } {
+  const dayNumber = new Intl.DateTimeFormat("fr-CH", { day: "numeric" }).format(date);
+  const weekday = new Intl.DateTimeFormat("fr-CH", { weekday: "short" })
+    .format(date)
+    .replace(".", "")
+    .trim()
+    .toUpperCase();
+  return { dayNumber, weekday };
+}
+
+/** Présentation compacte du compteur — mêmes seuils que formatNextControlHeadline. */
+export function compactControlPresentation(
+  daysUntil: number,
+  date: Date,
+): { urgency: ControlUrgency; badge: string; warn: boolean } {
+  if (daysUntil <= 0) {
+    return { urgency: "today", badge: "AUJOURD’HUI", warn: false };
+  }
+  if (daysUntil === 1) {
+    return { urgency: "tomorrow", badge: "DEMAIN", warn: true };
+  }
+  if (daysUntil <= 7) {
+    return { urgency: "week", badge: `J-${daysUntil}`, warn: true };
+  }
+  return { urgency: "later", badge: formatCompactControlDate(date), warn: false };
+}
+
 export function groupControlPlanning(futureTests: UpcomingTestEntry[]): ControlPlanningWeek[] {
   const weeks: ControlPlanningWeek[] = [];
 

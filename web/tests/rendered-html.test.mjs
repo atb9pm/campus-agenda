@@ -65,25 +65,30 @@ test("the rendered version matches the shared APP_VERSION", async () => {
 });
 
 test("keeps the validated teacher essentials and social preview", async () => {
-  const [page, layout, packageJson] = await Promise.all([
+  const [page, layout, packageJson, studentDashboard, homeworkPanel, controlsPanel] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/student-dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/student-homework-panel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/student-controls-panel.tsx", import.meta.url), "utf8"),
   ]);
 
-  assert.match(page, /HOMEWORK: "Devoir"/);
-  assert.match(page, /TEST: "Contrôle"/);
-  assert.match(page, /INFORMATION: "Information"/);
+  assert.match(homeworkPanel, /Cours du jour/);
+  assert.match(homeworkPanel, /RichDocView/);
+  assert.match(controlsPanel, /Contrôles à venir/);
+  assert.doesNotMatch(homeworkPanel, /HOMEWORK: "DEVOIR"/);
+  assert.doesNotMatch(homeworkPanel, /INFORMATION: "INFORMATION"/);
   assert.match(page, /MesCoursPanel/);
   assert.match(page, /ControlPlanningPanel/);
   assert.match(page, /MaSemainePanel/);
   assert.match(page, /ClassNotebookPanel/);
   assert.match(page, /ConfigurationPanel/);
   assert.match(page, /AdministrationPanel/);
-  assert.match(page, /mobile-tab-bar/);
-  assert.match(page, /data-student-tab/);
+  assert.match(studentDashboard, /mobile-tab-bar/);
+  assert.match(studentDashboard, /data-student-tab/);
   assert.match(page, /Navigation enseignant/);
-  assert.match(page, /Navigation élève/);
+  assert.match(studentDashboard, /Navigation élève/);
   assert.match(page, /enterStudentWithCode/);
   assert.match(page, /fetchApiSession/);
   assert.match(page, /loginStudentApi/);

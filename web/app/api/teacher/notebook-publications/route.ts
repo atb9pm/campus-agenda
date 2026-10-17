@@ -50,6 +50,8 @@ async function handlePost(request: Request) {
     title: parsed.title,
     detail: parsed.detail,
     studentVisible: parsed.studentVisible,
+    courseSessionKey: parsed.courseSessionKey,
+    courseSessionDate: parsed.courseSessionDate,
   });
 
   if (!result.ok) {

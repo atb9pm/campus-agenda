@@ -6,7 +6,7 @@ import { APP_VERSION } from "../src/lib/app-version.ts";
 import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 
 test("version 2.61.8 — carnet IBM Plex Sans 18 px, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.61.9");
+  assert.equal(APP_VERSION, "2.62.0");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
   const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
   assert.match(css, /family=IBM\+Plex\+Sans/);
@@ -26,5 +26,5 @@ test("version 2.61.8 — carnet IBM Plex Sans 18 px, pas de migration", async ()
   assert.match(css, /\.student-course-day-app[\s\S]{0,80}font-family: var\(--carnet-font\)/);
   assert.match(css, /\.student-course-day-app \.eyebrow[\s\S]{0,80}font-weight: 700/);
   assert.match(css, /\.student-item-type[\s\S]{0,120}font-weight: 700/);
-  assert.match(css, /\.student-upcoming-tests h2[\s\S]{0,120}font-weight: 700/);
+  assert.match(css, /\.student-upcoming-tests h2[\s\S]{0,280}font-weight: 700/);
 });

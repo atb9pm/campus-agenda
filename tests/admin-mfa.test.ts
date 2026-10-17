@@ -14,11 +14,13 @@ import {
   MFA_PENDING_REASON,
   MFA_SETUP_REQUIRED_REASON,
   MFA_UNAVAILABLE_REASON,
+  MFA_UNREADABLE_REASON,
   RESET_2FA_CONFIRM_TOKEN,
   adminMfaStatusView,
   confirmAdminMfaEnrollment,
   confirmAdminMfaReconfigure,
   describeAdminMfaFlags,
+  healUnreadableAdminMfa,
   evaluateAdminMfaAccess,
   isReset2faConfirmToken,
   regenerateAdminRecoveryCodes,
@@ -99,7 +101,7 @@ async function enrollAdmin(store = getMemoryAdminMfaStore(), teacherId = TEACHER
 }
 
 test("version 2.54.1 — 2FA administrateur TOTP", () => {
-  assert.equal(APP_VERSION, "2.61.9");
+  assert.equal(APP_VERSION, "2.62.0");
   assert.ok(CAMPUS_BACKUP_INSERT_ORDER.includes("teacher_mfa"));
   assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 30);
   assert.equal(isReset2faConfirmToken("yes"), false);
@@ -338,6 +340,58 @@ test("21b — backup/restore SQL teacher_mfa", async () => {
   assert.equal(after.ok, true);
 });
 
+test("21c — secret chiffré avec une autre clé : reset_required puis nouvel enrôlement", async () => {
+  resetWorld();
+  process.env.CAMPUS_MFA_ENCRYPTION_KEY = MFA_KEY;
+  const store = getMemoryAdminMfaStore();
+  await enrollAdmin(store);
+  const otherKey = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+  process.env.CAMPUS_MFA_ENCRYPTION_KEY = otherKey;
+  try {
+    const healed = await healUnreadableAdminMfa(store, TEACHER_CHF_ID);
+    assert.equal(healed?.status, "reset_required");
+    assert.equal(healed?.secretEncrypted, null);
+    const flags = describeAdminMfaFlags(true, healed, true);
+    assert.equal(flags.mfaSetupRequired, true);
+    assert.equal(flags.mfaChallengeRequired, false);
+
+    const challenge = await verifyAdminMfaChallenge(store, TEACHER_CHF_ID, "123456");
+    assert.equal(challenge.ok, false);
+    if (!challenge.ok) {
+      assert.equal(challenge.reason, MFA_INVALID_CODE_REASON);
+    }
+
+    const start = await startAdminMfaEnrollment(store, TEACHER_CHF_ID, "ChF");
+    assert.equal(start.ok, true);
+    if (!start.ok) return;
+    const confirm = await confirmAdminMfaEnrollment(store, TEACHER_CHF_ID, generateTotpCode(start.manualKey));
+    assert.equal(confirm.ok, true);
+  } finally {
+    process.env.CAMPUS_MFA_ENCRYPTION_KEY = MFA_KEY;
+  }
+});
+
+test("21d — défi TOTP avec clé différente : 409 et enrôlement", async () => {
+  resetWorld();
+  process.env.CAMPUS_MFA_ENCRYPTION_KEY = MFA_KEY;
+  const store = getMemoryAdminMfaStore();
+  await enrollAdmin(store);
+  process.env.CAMPUS_MFA_ENCRYPTION_KEY = "ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100";
+  try {
+    const result = await verifyAdminMfaChallenge(store, TEACHER_CHF_ID, "000000");
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.reason, MFA_UNREADABLE_REASON);
+      assert.equal(result.status, 409);
+      assert.equal(result.mfaSetupRequired, true);
+    }
+    const after = await store.get(TEACHER_CHF_ID);
+    assert.equal(after?.status, "reset_required");
+  } finally {
+    process.env.CAMPUS_MFA_ENCRYPTION_KEY = MFA_KEY;
+  }
+});
+
 test("22 — absence de clé : fail closed", async () => {
   const previousKey = process.env.CAMPUS_MFA_ENCRYPTION_KEY;
   const previousRequire = process.env.CAMPUS_MFA_REQUIRE_KEY;
@@ -462,6 +516,8 @@ test("UI sécurité et login exposent les écrans MFA", async () => {
   const challenge = await readFile(new URL("../web/app/components/mfa-challenge-panel.tsx", import.meta.url), "utf8");
   assert.match(challenge, /Utiliser un code de récupération/);
   assert.match(challenge, /one-time-code/);
+  assert.match(challenge, /slice\(0, 6\)/);
+  assert.doesNotMatch(challenge, /pattern=\{useRecovery/);
   const status = adminMfaStatusView(null);
   assert.equal(status.enabled, false);
 });

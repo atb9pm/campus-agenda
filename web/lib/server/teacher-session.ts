@@ -1,6 +1,6 @@
 import {
   describeAdminMfaFlags,
-  loadAdminMfa,
+  healUnreadableAdminMfa,
 } from "@campus/features/admin-mfa/index.ts";
 import type { TeacherSession } from "@campus/lib/persistence/types.ts";
 import { getAdminMfaStore } from "@campus/lib/persistence/store-factory.ts";
@@ -18,7 +18,7 @@ export async function buildTeacherClientSession(
   ]);
   const account = await accounts.findAccount(teacherId);
   const isAdmin = await store.teacherIsAdmin(teacherId);
-  const record = await loadAdminMfa(mfaStore, teacherId);
+  const record = await healUnreadableAdminMfa(mfaStore, teacherId);
   const flags = describeAdminMfaFlags(isAdmin, record, Boolean(session.mfaPending));
   return {
     kind: "teacher" as const,

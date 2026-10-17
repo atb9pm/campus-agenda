@@ -14,7 +14,6 @@ import {
   openCourseInWeekTarget,
 } from "../src/features/class-notebook/index.ts";
 import {
-  maSemaineSignalsByCourse,
   type TeacherCourseWorkspaceEntry,
 } from "../src/features/teacher-workspace/index.ts";
 
@@ -199,7 +198,7 @@ test("legacy — publications sans annualCourseId restent lisibles, ambiguïté 
   );
 });
 
-test("Export visible, retour Ma semaine conserve la semaine, signaux et mobile inchangés", async () => {
+test("Export visible, retour Ma semaine conserve la semaine, mobile inchangé", async () => {
   const [panel, page, semaine, css] = await Promise.all([
     readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
@@ -211,17 +210,8 @@ test("Export visible, retour Ma semaine conserve la semaine, signaux et mobile i
   assert.match(page, /annualCourseId=\{openNotebookCourse\.annualCourseId\}/);
   assert.match(page, /function closeClassNotebook\(\) \{\s*setOpenNotebookClassId\(null\);\s*setOpenNotebookCourse\(null\);/);
   assert.doesNotMatch(page, /function closeClassNotebook\([\s\S]{0,220}setSelectedSchoolWeekNumber/);
-  assert.match(semaine, /weekSignals\[course\.annualCourseId\]/);
-  const signals = maSemaineSignalsByCourse(
-    [
-      { ...item(1, "subj-transmission", "Devoir CP2"), annualCourseId: "ac-transmission", studentVisible: true },
-      { ...item(2, "subj-transmission", "Info CP2", "INFORMATION"), annualCourseId: "ac-transmission", studentVisible: true },
-      { ...item(3, "subj-transmission", "Contrôle CP2", "TEST"), annualCourseId: "ac-transmission", studentVisible: true },
-    ],
-    MECAUTO_COURSES,
-    8,
-  );
-  assert.equal(signals["ac-transmission"], "Devoir · Information · Contrôle");
+  assert.doesNotMatch(semaine, /weekSignals/);
+  assert.match(semaine, /\{course\.branchLabel\}/);
   assert.equal(notebookWeekDisplayCountForViewport(390, 3), 1);
   assert.equal(NOTEBOOK_NARROW_VIEWPORT_MAX_PX, 760);
   assert.match(css, /class-notebook-display-count \{ display: none; \}/);
@@ -232,6 +222,7 @@ test("déplacement Carnet — page conserve l’API PATCH structurée (semaine +
   const page = await readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8");
   const move = page.slice(page.indexOf("async function notebookMovePublication"));
   assert.match(move, /requireNotebookAnnualCourseId/);
-  assert.match(move, /updateAgendaItemApi\(itemId, \{\s*schoolWeekNumber,\s*\.\.\.\(day != null \? \{ day \} : \{\}\),\s*\}\)/);
+  assert.match(move, /updateAgendaItemApi\(itemId,/);
+  assert.match(move, /courseSessionKey: session\.key/);
   assert.doesNotMatch(move.slice(0, move.indexOf("async function notebookDeletePublication")), /createAgendaItemApi/);
 });

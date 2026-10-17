@@ -39,6 +39,8 @@ export interface AdminMfaClientFlags {
 export const MFA_PENDING_REASON = "Double authentification requise.";
 export const MFA_SETUP_REQUIRED_REASON = "Configuration de la double authentification requise.";
 export const MFA_UNAVAILABLE_REASON = "Double authentification indisponible. Contactez l'hébergeur.";
+export const MFA_UNREADABLE_REASON =
+  "Double authentification illisible sur ce serveur. Configurez-la à nouveau.";
 export const MFA_INVALID_CODE_REASON = "Code incorrect.";
 export const MFA_INVALID_PASSWORD_REASON = "Mot de passe incorrect.";
 export const RESET_2FA_CONFIRM_TOKEN = "RESET-2FA";

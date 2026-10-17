@@ -23,6 +23,8 @@ import {
   shiftEligibleCourseWeek,
   snapToEligibleCourseWeek,
   visibleCourseWeeks,
+  visibleCourseSessions,
+  orderedCourseSessions,
   visibleSchoolWeeks,
   weekNotesKey,
 } from "../src/features/class-notebook/index.ts";
@@ -266,7 +268,7 @@ test("carnet — ouverture sur une semaine non éligible → prochain cours rée
   assert.equal(snapToEligibleCourseWeek([6, 8, 10], 11), 10);
 });
 
-test("carnet — plusieurs séances dans la même semaine → une seule carte", () => {
+test("carnet — plusieurs séances dans la même semaine → deux cartes CourseSession", () => {
   const weeks = chassisCalendarWeeks();
   const schoolWeeks = schoolWeeksFromEntries(weeks);
   const sessions = sessionsFor({
@@ -278,12 +280,15 @@ test("carnet — plusieurs séances dans la même semaine → une seule carte", 
   });
   const eligible = eligibleSchoolWeeksForSessions(schoolWeeks, sessions);
   assert.equal(eligible.filter((week) => week.number === 6).length, 1);
-  const week6 = sessions.filter((session) => session.schoolWeekNumber === 6);
+  const week6 = orderedCourseSessions(sessions.filter((session) => session.schoolWeekNumber === 6));
   assert.equal(week6.length, 2);
   assert.deepEqual(
-    week6.map((session) => session.dayOfWeek).sort(),
+    week6.map((session) => session.dayOfWeek),
     [1, 4],
   );
+  const visible = visibleCourseSessions(week6, week6[0]!.key, 4);
+  assert.equal(visible.length, 2);
+  assert.notEqual(visible[0]!.key, visible[1]!.key);
 });
 
 test("carnet — sous-titre affiche les vrais jours et dates", () => {
@@ -643,14 +648,14 @@ test("carnet — pas de règle hardcodée classe / branche / jour", async () => 
   assert.doesNotMatch(helper, /Châssis/);
   assert.doesNotMatch(helper, /weekKind === "B"/);
   assert.match(panel, /fetchTeacherCourseTimelineApi/);
-  assert.match(panel, /visibleCourseWeeks/);
-  assert.match(panel, /publicationDayIndexForCourseWeek/);
+  assert.match(panel, /visibleCourseSessions/);
+  assert.match(panel, /orderedCourseSessions/);
   assert.match(panel, /courseSessionForControlSlot/);
   assert.match(panel, /findCarnetPublicationItemForSave/);
   assert.match(panel, /Aucune séance planifiée pour ce cours dans l’horaire/);
-  assert.match(modal, /controlDayOptionsForCourseWeek/);
+  assert.match(helper, /controlDayOptionsForCourseWeek/);
   assert.match(modal, /courseSessions/);
-  assert.match(page, /publicationDay = day \?\? weekdayToCourseDayIndex/);
-  assert.match(page, /notebookMovePublication\(itemId: number, schoolWeekNumber: number, day\?: number\)/);
-  assert.match(page, /\.\.\.\(day != null \? \{ day \} : \{\}\)/);
+  assert.match(page, /publicationDay = session \? session\.dayOfWeek - 1 : \(day \?\? weekdayToCourseDayIndex/);
+  assert.match(page, /notebookMovePublication\(/);
+  assert.match(page, /courseSessionKey: session\.key/);
 });
