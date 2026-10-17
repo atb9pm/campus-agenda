@@ -194,7 +194,7 @@ test("carnet — UI une carte = une CourseSession, Planifier sans picker", async
   assert.doesNotMatch(panel, /startPlanForWeek/);
   assert.doesNotMatch(panel, /data-control-session-picker/);
   assert.doesNotMatch(panel, /Choisir le cours/);
-  assert.match(panel, /\{count\} séance/);
+  assert.match(panel, /\{count\} séquence/);
   assert.match(panel, /data-pending-week-notes/);
   assert.match(panel, /classAnnualCourseIds/);
   assert.doesNotMatch(panel, /if \(!structuredCourse \|\| !courseSessions\?\.length\) return;/);
@@ -316,8 +316,8 @@ test("carnet — notes V2 indexées par séance, pas par semaine", () => {
 test("carnet — affichage séances et pas publicationDayIndexForCourseWeek dans le panel", async () => {
   const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(panel, /publicationDayIndexForCourseWeek/);
-  assert.match(panel, /Séances précédentes/);
-  assert.match(panel, /Séances suivantes/);
+  assert.match(panel, /Séquences précédentes/);
+  assert.match(panel, /Séquences suivantes/);
   assert.match(panel, /moveMenuCardId/);
   assert.doesNotMatch(panel, /moveMenuWeek/);
   assert.match(panel, /dropSlot\.sessionKey === session\.key/);
