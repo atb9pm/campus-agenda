@@ -48,6 +48,17 @@ export {
   resetMemoryYearTransitionPreviewStore,
 } from "./memory-year-transition-preview-store.ts";
 export { SqlYearTransitionPreviewStore } from "./sql/sql-year-transition-preview-store.ts";
+export {
+  MemoryYearTransitionApplyStore,
+  getMemoryYearTransitionApplyStore,
+  resetMemoryYearTransitionApplyStore,
+} from "./memory-year-transition-apply-store.ts";
+export { SqlYearTransitionApplyStore } from "./sql/sql-year-transition-apply-store.ts";
+export type {
+  PersistedYearTransitionApply,
+  PersistedYearTransitionApplyEntry,
+  YearTransitionApplyStore,
+} from "../../features/year-transition/apply-types.ts";
 export type { TeacherSetupBackupEntry } from "./teacher-setup-types.ts";
 export type { TeacherNotesBackupEntry } from "./teacher-notes-types.ts";
 export type { TeacherAccountBackupEntry } from "./teacher-account-types.ts";

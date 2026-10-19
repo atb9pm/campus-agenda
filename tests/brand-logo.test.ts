@@ -7,7 +7,7 @@ import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 
 test("version 2.61.8 — logo Campus Agenda dans sidebar, login, MFA et vue élève", async () => {
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0031_year_transition_preview.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0032_year_transition_apply.sql");
 
   const [
     brandLogo,

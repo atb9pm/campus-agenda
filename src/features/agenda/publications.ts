@@ -145,6 +145,8 @@ export function createPublication(
     referenceSessionId: input.referenceSessionId ?? null,
     referenceItemId: input.referenceItemId ?? null,
     studentVisible: defaultStudentVisibleForCreate(input),
+    sourceTransitionId: null,
+    sourceAgendaItemId: null,
   };
 
   return [...items, publication];

@@ -6,7 +6,7 @@ import type { PrototypeAgendaItem } from "../../../features/agenda/demo-items.ts
 import type { AgendaItemRow, SqlDatabase, StudentAccessRow } from "./types.ts";
 
 const AGENDA_ITEM_COLUMNS =
-  "id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id, annual_course_id, course_session_key, course_session_date, reference_session_id, reference_item_id, student_visible";
+  "id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id, annual_course_id, course_session_key, course_session_date, reference_session_id, reference_item_id, student_visible, source_transition_id, source_agenda_item_id";
 
 function rowToItem(row: AgendaItemRow): PrototypeAgendaItem {
   return {
@@ -29,6 +29,11 @@ function rowToItem(row: AgendaItemRow): PrototypeAgendaItem {
     referenceSessionId: row.reference_session_id ?? null,
     referenceItemId: row.reference_item_id ?? null,
     studentVisible: row.student_visible === 0 ? false : true,
+    sourceTransitionId: row.source_transition_id ?? null,
+    sourceAgendaItemId:
+      row.source_agenda_item_id === null || row.source_agenda_item_id === undefined
+        ? null
+        : Number(row.source_agenda_item_id),
   };
 }
 
@@ -74,8 +79,8 @@ export class SqlAgendaStore implements AgendaStore {
       result = await this.db
         .prepare(
           `INSERT INTO agenda_items
-            (classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id, annual_course_id, course_session_key, course_session_date, reference_session_id, reference_item_id, student_visible)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id, annual_course_id, course_session_key, course_session_date, reference_session_id, reference_item_id, student_visible, source_transition_id, source_agenda_item_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           input.classroomId,
@@ -96,6 +101,8 @@ export class SqlAgendaStore implements AgendaStore {
           input.referenceSessionId ?? null,
           input.referenceItemId ?? null,
           studentVisible,
+          null,
+          null,
         )
         .run();
     } catch (error) {
@@ -374,8 +381,8 @@ export class SqlAgendaStore implements AgendaStore {
       await this.db
         .prepare(
           `INSERT INTO agenda_items
-            (id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id, annual_course_id, course_session_key, course_session_date, reference_session_id, reference_item_id, student_visible)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (id, classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number, type, title, detail, template_id, school_year_id, annual_course_id, course_session_key, course_session_date, reference_session_id, reference_item_id, student_visible, source_transition_id, source_agenda_item_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           item.id,
@@ -397,6 +404,8 @@ export class SqlAgendaStore implements AgendaStore {
           item.referenceSessionId ?? null,
           item.referenceItemId ?? null,
           item.studentVisible === false ? 0 : 1,
+          item.sourceTransitionId?.trim() || null,
+          item.sourceAgendaItemId ?? null,
         )
         .run();
     }

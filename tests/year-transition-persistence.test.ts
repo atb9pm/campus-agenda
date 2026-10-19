@@ -244,8 +244,9 @@ test("1 — APP_VERSION toujours 2.62.0", () => {
   assert.equal(APP_VERSION, "2.62.0");
 });
 
-test("2 — dernière migration = 0031_year_transition_preview.sql", () => {
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0031_year_transition_preview.sql");
+test("2 — dernière migration listée après 0031 (PR3 ajoute 0032)", () => {
+  assert.ok(SQL_MIGRATION_FILES.includes("0031_year_transition_preview.sql"));
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0032_year_transition_apply.sql");
 });
 
 test("3 — migration crée les deux tables", async () => {

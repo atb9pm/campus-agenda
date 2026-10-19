@@ -47,7 +47,7 @@ const RAW_V3 = {
 
 test("version 2.44.0 — restauration admin sécurisée", async () => {
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0031_year_transition_preview.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0032_year_transition_apply.sql");
   assert.deepEqual([...COMPATIBLE_BACKUP_VERSIONS], [1, 2, 3, 4]);
 
   const panel = await readFile(new URL("../web/app/components/admin-backup-panel.tsx", import.meta.url), "utf8");
@@ -138,7 +138,7 @@ test("fichier JSON — enveloppé, brut, invalide et version incompatible", () =
   assert.equal(wrapped.meta.isLegacy, false);
   assert.equal(wrapped.meta.versionLabel, "4 — format courant");
   assert.equal(CURRENT_BACKUP_FORMAT_VERSION, 4);
-  assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 32);
+  assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 34);
   assert.equal(wrapped.meta.exportedAt, "2026-09-08T08:26:00.000Z");
   assert.equal(wrapped.meta.exportedAtLabel, "08/09/2026 08:26 UTC");
   assert.equal(wrapped.meta.itemCount, 12);

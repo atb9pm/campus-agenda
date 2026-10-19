@@ -264,7 +264,7 @@ async function firstSession(world: World, annualCourseId: string) {
 test("version 2.32.0 — publication manuelle TEST, migration 0024", async () => {
   assert.equal(APP_VERSION, "2.62.0");
   assert.equal(TEST_ALERT_THRESHOLD, 3);
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0031_year_transition_preview.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0032_year_transition_apply.sql");
   const parsed = manualControlIdsFromBody({
     annualCourseId: "ac-1",
     courseSessionKey: "key",

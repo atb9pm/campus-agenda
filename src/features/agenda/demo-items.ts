@@ -28,6 +28,9 @@ export interface PrototypeAgendaItem {
    * `undefined` = publié (lignes existantes). `false` = brouillon enseignant.
    */
   studentVisible?: boolean;
+  /** Provenance APPLY N→N+1. Pas une identité pédagogique. */
+  sourceTransitionId?: string | null;
+  sourceAgendaItemId?: number | null;
 }
 
 export const DEMO_PROTOTYPE_ITEMS: PrototypeAgendaItem[] = [

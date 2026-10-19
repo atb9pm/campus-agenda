@@ -53,6 +53,10 @@ import {
   exportMemoryYearTransitionPreviewTables,
   replaceMemoryYearTransitionPreviewTables,
 } from "./memory-year-transition-preview-store.ts";
+import {
+  exportMemoryYearTransitionApplyTables,
+  replaceMemoryYearTransitionApplyTables,
+} from "./memory-year-transition-apply-store.ts";
 
 export const BACKUP_FORMAT_VERSION = BACKUP_FORMAT_VERSION_V4;
 
@@ -209,6 +213,8 @@ async function buildMemoryTables(deps: CampusBackupDeps): Promise<CampusTableDum
     reference_session_id: item.referenceSessionId ?? null,
     reference_item_id: item.referenceItemId ?? null,
     student_visible: flag01(item.studentVisible !== false),
+    source_transition_id: item.sourceTransitionId ?? null,
+    source_agenda_item_id: item.sourceAgendaItemId ?? null,
   }));
 
   for (const year of years) {
@@ -407,6 +413,9 @@ async function buildMemoryTables(deps: CampusBackupDeps): Promise<CampusTableDum
   const yearTransition = exportMemoryYearTransitionPreviewTables();
   dump.year_transition_previews = yearTransition.year_transition_previews;
   dump.year_transition_preview_entries = yearTransition.year_transition_preview_entries;
+  const yearTransitionApply = exportMemoryYearTransitionApplyTables();
+  dump.year_transition_applies = yearTransitionApply.year_transition_applies;
+  dump.year_transition_apply_entries = yearTransitionApply.year_transition_apply_entries;
 
   return dump;
 }
@@ -614,6 +623,11 @@ async function restoreMemoryTables(deps: CampusBackupDeps, dump: CampusTableDump
       referenceSessionId: asNullableString(row.reference_session_id ?? row.referenceSessionId),
       referenceItemId: asNullableString(row.reference_item_id ?? row.referenceItemId),
       studentVisible: asBool(row.student_visible ?? row.studentVisible, true),
+      sourceTransitionId: asNullableString(row.source_transition_id ?? row.sourceTransitionId),
+      sourceAgendaItemId:
+        row.source_agenda_item_id == null && row.sourceAgendaItemId == null
+          ? null
+          : asNumber(row.source_agenda_item_id ?? row.sourceAgendaItemId),
     })),
   );
 
@@ -821,6 +835,10 @@ async function restoreMemoryTables(deps: CampusBackupDeps, dump: CampusTableDump
   replaceMemoryYearTransitionPreviewTables({
     year_transition_previews: dump.year_transition_previews,
     year_transition_preview_entries: dump.year_transition_preview_entries,
+  });
+  replaceMemoryYearTransitionApplyTables({
+    year_transition_applies: dump.year_transition_applies,
+    year_transition_apply_entries: dump.year_transition_apply_entries,
   });
 }
 
