@@ -555,6 +555,52 @@ test("25 — transition_id orphelin dans backup refusé", () => {
   }
 });
 
+function samplePreview(id: string, json: { snapshotJson?: string; previewJson?: string } = {}): Parameters<
+  YearTransitionPreviewStore["create"]
+>[0] {
+  return {
+    id,
+    sourceSchoolYearId: SOURCE_YEAR,
+    targetSchoolYearId: TARGET_YEAR,
+    fingerprint: "x",
+    engineVersion: 1,
+    appVersion: APP_VERSION,
+    snapshotJson: json.snapshotJson ?? "{}",
+    previewJson: json.previewJson ?? "{}",
+    createdAt: "2027-01-01T00:00:00.000Z",
+  };
+}
+
+function sampleEntry(
+  transitionId: string,
+  sourceAgendaItemId: number,
+): Parameters<YearTransitionPreviewStore["create"]>[1][number] {
+  return {
+    transitionId,
+    sourceAgendaItemId,
+    reason: "PROJECTABLE",
+    referenceItemId: null,
+    targetAnnualCourseId: null,
+    entryJson: "{}",
+  };
+}
+
+async function assertStoreEmpty(store: YearTransitionPreviewStore, id: string): Promise<void> {
+  assert.equal(await store.getById(id), null);
+  assert.equal((await store.list()).length, 0);
+  assert.equal((await store.listEntries(id)).length, 0);
+}
+
+async function assertSqliteTablesEmpty(db: NodeSqliteDatabase): Promise<void> {
+  const parent = await db.prepare("SELECT COUNT(*) AS count FROM year_transition_previews").bind().first<{ count: number }>();
+  const children = await db
+    .prepare("SELECT COUNT(*) AS count FROM year_transition_preview_entries")
+    .bind()
+    .first<{ count: number }>();
+  assert.equal(Number(parent?.count ?? -1), 0);
+  assert.equal(Number(children?.count ?? -1), 0);
+}
+
 test("26 — JSON invalide détecté à la lecture métier", async () => {
   const memory = new MemoryYearTransitionPreviewStore();
   await memory.create(
@@ -595,6 +641,84 @@ test("26 — JSON invalide détecté à la lecture métier", async () => {
       .bind("sql-bad", 10, "PROJECTABLE", "null")
       .run();
     await assert.rejects(() => store.listEntries("sql-bad"), /entry_json JSON invalide/);
+  } finally {
+    db.close();
+  }
+});
+
+test("Memory — transitionId incohérent → rejet, rien persisté", async () => {
+  const store = new MemoryYearTransitionPreviewStore();
+  await assert.rejects(
+    () => store.create(samplePreview("transition-A"), [sampleEntry("transition-B", 10)]),
+    /transition_id d’entrée incohérent/,
+  );
+  await assertStoreEmpty(store, "transition-A");
+});
+
+test("SQLite — transitionId incohérent → rejet, aucun parent/entry", async () => {
+  const { db, store } = await sqliteWorld();
+  try {
+    await assert.rejects(
+      () => store.create(samplePreview("transition-A"), [sampleEntry("transition-B", 10)]),
+      /transition_id d’entrée incohérent/,
+    );
+    await assertStoreEmpty(store, "transition-A");
+    await assertSqliteTablesEmpty(db);
+  } finally {
+    db.close();
+  }
+});
+
+test("Memory — doublon sourceAgendaItemId → rejet, rien persisté", async () => {
+  const store = new MemoryYearTransitionPreviewStore();
+  await assert.rejects(
+    () =>
+      store.create(samplePreview("transition-A"), [
+        sampleEntry("transition-A", 10),
+        sampleEntry("transition-A", 10),
+      ]),
+    /source_agenda_item_id en double/,
+  );
+  await assertStoreEmpty(store, "transition-A");
+});
+
+test("SQLite — doublon sourceAgendaItemId → rejet, aucun parent/entry", async () => {
+  const { db, store } = await sqliteWorld();
+  try {
+    await assert.rejects(
+      () =>
+        store.create(samplePreview("transition-A"), [
+          sampleEntry("transition-A", 10),
+          sampleEntry("transition-A", 10),
+        ]),
+      /source_agenda_item_id en double/,
+    );
+    await assertStoreEmpty(store, "transition-A");
+    await assertSqliteTablesEmpty(db);
+  } finally {
+    db.close();
+  }
+});
+
+test("Memory — list() refuse snapshot/preview JSON invalide", async () => {
+  const store = new MemoryYearTransitionPreviewStore();
+  await store.create(samplePreview("list-bad", { snapshotJson: "{not-json" }), []);
+  await assert.rejects(() => store.list(), /snapshot_json JSON invalide/);
+});
+
+test("SQLite — list() refuse snapshot/preview JSON invalide", async () => {
+  const { db, store } = await sqliteWorld();
+  try {
+    await db
+      .prepare(
+        `INSERT INTO year_transition_previews (
+          id, source_school_year_id, target_school_year_id, fingerprint, engine_version,
+          app_version, snapshot_json, preview_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind("list-sql-bad", SOURCE_YEAR, TARGET_YEAR, "x", 1, APP_VERSION, "{}", "not-json", "2027-01-01T00:00:00.000Z")
+      .run();
+    await assert.rejects(() => store.list(), /preview_json JSON invalide/);
   } finally {
     db.close();
   }

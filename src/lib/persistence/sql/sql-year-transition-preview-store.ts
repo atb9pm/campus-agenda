@@ -1,4 +1,8 @@
-import { parsePersistedObjectJson } from "../../../features/year-transition/persist-json.ts";
+import {
+  assertCreatePreviewEntries,
+  assertPersistedEntryJson,
+  assertPersistedPreviewJson,
+} from "../../../features/year-transition/persist-json.ts";
 import type {
   PersistedYearTransitionPreview,
   PersistedYearTransitionPreviewEntry,
@@ -53,15 +57,6 @@ function mapEntry(row: EntryRow): PersistedYearTransitionPreviewEntry {
   };
 }
 
-function assertPreviewJson(preview: PersistedYearTransitionPreview): void {
-  parsePersistedObjectJson(preview.snapshotJson, "snapshot_json");
-  parsePersistedObjectJson(preview.previewJson, "preview_json");
-}
-
-function assertEntryJson(entry: PersistedYearTransitionPreviewEntry): void {
-  parsePersistedObjectJson(entry.entryJson, "entry_json");
-}
-
 export class SqlYearTransitionPreviewStore implements YearTransitionPreviewStore {
   private readonly db: SqlDatabase;
 
@@ -73,6 +68,7 @@ export class SqlYearTransitionPreviewStore implements YearTransitionPreviewStore
     preview: PersistedYearTransitionPreview,
     entries: readonly PersistedYearTransitionPreviewEntry[],
   ): Promise<void> {
+    assertCreatePreviewEntries(preview.id, entries);
     const statements = [
       {
         sql: `INSERT INTO year_transition_previews (
@@ -116,7 +112,7 @@ export class SqlYearTransitionPreviewStore implements YearTransitionPreviewStore
       .first<PreviewRow>();
     if (!row) return null;
     const preview = mapPreview(row);
-    assertPreviewJson(preview);
+    assertPersistedPreviewJson(preview);
     return preview;
   }
 
@@ -134,7 +130,9 @@ export class SqlYearTransitionPreviewStore implements YearTransitionPreviewStore
     }
     sql += " ORDER BY created_at, id";
     const { results } = await this.db.prepare(sql).bind(...values).all<PreviewRow>();
-    return (results ?? []).map(mapPreview);
+    const previews = (results ?? []).map(mapPreview);
+    for (const preview of previews) assertPersistedPreviewJson(preview);
+    return previews;
   }
 
   async listEntries(transitionId: string): Promise<PersistedYearTransitionPreviewEntry[]> {
@@ -147,7 +145,7 @@ export class SqlYearTransitionPreviewStore implements YearTransitionPreviewStore
       .bind(transitionId)
       .all<EntryRow>();
     const entries = (results ?? []).map(mapEntry);
-    for (const entry of entries) assertEntryJson(entry);
+    for (const entry of entries) assertPersistedEntryJson(entry);
     return entries;
   }
 }

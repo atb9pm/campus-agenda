@@ -1,4 +1,8 @@
-import { parsePersistedObjectJson } from "../../features/year-transition/persist-json.ts";
+import {
+  assertCreatePreviewEntries,
+  assertPersistedEntryJson,
+  assertPersistedPreviewJson,
+} from "../../features/year-transition/persist-json.ts";
 import type {
   PersistedYearTransitionPreview,
   PersistedYearTransitionPreviewEntry,
@@ -14,15 +18,6 @@ function cloneEntry(entry: PersistedYearTransitionPreviewEntry): PersistedYearTr
   return { ...entry };
 }
 
-function assertPreviewJson(preview: PersistedYearTransitionPreview): void {
-  parsePersistedObjectJson(preview.snapshotJson, "snapshot_json");
-  parsePersistedObjectJson(preview.previewJson, "preview_json");
-}
-
-function assertEntryJson(entry: PersistedYearTransitionPreviewEntry): void {
-  parsePersistedObjectJson(entry.entryJson, "entry_json");
-}
-
 export class MemoryYearTransitionPreviewStore implements YearTransitionPreviewStore {
   private readonly previews = new Map<string, PersistedYearTransitionPreview>();
   private readonly entries = new Map<string, PersistedYearTransitionPreviewEntry[]>();
@@ -34,16 +29,7 @@ export class MemoryYearTransitionPreviewStore implements YearTransitionPreviewSt
     if (this.previews.has(preview.id)) {
       throw new Error(`PREVIEW ${preview.id} déjà persisté.`);
     }
-    const seen = new Set<number>();
-    for (const entry of entries) {
-      if (entry.transitionId !== preview.id) {
-        throw new Error("transition_id d’entrée incohérent.");
-      }
-      if (seen.has(entry.sourceAgendaItemId)) {
-        throw new Error("source_agenda_item_id en double pour ce PREVIEW.");
-      }
-      seen.add(entry.sourceAgendaItemId);
-    }
+    assertCreatePreviewEntries(preview.id, entries);
     this.previews.set(preview.id, clonePreview(preview));
     this.entries.set(
       preview.id,
@@ -56,12 +42,12 @@ export class MemoryYearTransitionPreviewStore implements YearTransitionPreviewSt
   async getById(id: string): Promise<PersistedYearTransitionPreview | null> {
     const preview = this.previews.get(id);
     if (!preview) return null;
-    assertPreviewJson(preview);
+    assertPersistedPreviewJson(preview);
     return clonePreview(preview);
   }
 
   async list(filter?: YearTransitionPreviewListFilter): Promise<PersistedYearTransitionPreview[]> {
-    return [...this.previews.values()]
+    const previews = [...this.previews.values()]
       .filter((preview) => {
         if (filter?.sourceSchoolYearId && preview.sourceSchoolYearId !== filter.sourceSchoolYearId) return false;
         if (filter?.targetSchoolYearId && preview.targetSchoolYearId !== filter.targetSchoolYearId) return false;
@@ -70,13 +56,14 @@ export class MemoryYearTransitionPreviewStore implements YearTransitionPreviewSt
       .sort(
         (left, right) =>
           left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
-      )
-      .map(clonePreview);
+      );
+    for (const preview of previews) assertPersistedPreviewJson(preview);
+    return previews.map(clonePreview);
   }
 
   async listEntries(transitionId: string): Promise<PersistedYearTransitionPreviewEntry[]> {
     const list = this.entries.get(transitionId) ?? [];
-    for (const entry of list) assertEntryJson(entry);
+    for (const entry of list) assertPersistedEntryJson(entry);
     return list.map(cloneEntry);
   }
 
