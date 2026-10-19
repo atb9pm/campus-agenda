@@ -1,4 +1,5 @@
 import type { SqlDatabase } from "./types.ts";
+import { parseAnnualNoteBody } from "../../../features/pedagogical-path/annual-notes.ts";
 import {
   CAMPUS_BACKUP_COLUMNS,
   CAMPUS_BACKUP_DELETE_ORDER,
@@ -176,6 +177,26 @@ export function validateCampusTables(tables: unknown): { ok: true; tables: Campu
   }
 
   const agendaIds = (dump.agenda_items ?? []).map((row) => asId(row, "id"));
+  const noteIds = new Set<string>();
+  const ownerLegacy = new Set<string>();
+  for (const note of dump.annual_course_notes ?? []) {
+    const id = asId(note, "id");
+    if (noteIds.has(id)) return { ok: false, reason: "Identifiants de note en double." };
+    noteIds.add(id);
+    if (note.owner_teacher_id != null && note.legacy_note_id != null) {
+      const identity = JSON.stringify([note.owner_teacher_id, note.legacy_note_id]);
+      if (ownerLegacy.has(identity)) return { ok: false, reason: "Identité propriétaire / note legacy en double." };
+      ownerLegacy.add(identity);
+    }
+    if (note.notebook_position != null && (typeof note.notebook_position !== "number" || !Number.isInteger(note.notebook_position) || note.notebook_position < 0)) {
+      return { ok: false, reason: "Position de note invalide." };
+    }
+    try {
+      parseAnnualNoteBody(note.body_json as string | null | undefined);
+    } catch {
+      return { ok: false, reason: "Contenu riche de note invalide." };
+    }
+  }
   if (new Set(agendaIds).size !== agendaIds.length) {
     return { ok: false, reason: "Identifiants de publication en double." };
   }

@@ -19,6 +19,7 @@
  */
 
 import type { CampusRichDoc } from "../class-notebook/rich-doc.ts";
+import { isValidStoredRichDoc } from "../class-notebook/rich-doc-validation.ts";
 
 export interface AnnualCourseNote {
   id: string;
@@ -45,6 +46,8 @@ export interface AnnualCourseNote {
   courseSessionKey: string | null;
   /** Id `TeacherWeekNote.id` dans le document legacy — pas un héritage N→N+1. */
   legacyNoteId: string | null;
+  /** Stable order inside the notebook session. Null for pre-existing structural notes. */
+  notebookPosition?: number | null;
   /** Métadonnées d'héritage (copie année précédente). */
   sourceNoteId: string | null;
   sourceSchoolYearId: string | null;
@@ -69,6 +72,7 @@ export interface AnnualCourseNoteInput {
   body?: CampusRichDoc | null;
   courseSessionKey?: string | null;
   legacyNoteId?: string | null;
+  notebookPosition?: number | null;
   sourceNoteId?: string | null;
   sourceSchoolYearId?: string | null;
   inheritedAt?: string | null;
@@ -101,14 +105,14 @@ export function serializeAnnualNoteBody(body: CampusRichDoc | null | undefined):
 }
 
 export function parseAnnualNoteBody(raw: string | null | undefined): CampusRichDoc | null {
-  if (!raw) return null;
+  if (raw == null) return null;
   try {
-    const parsed = JSON.parse(raw) as CampusRichDoc;
-    if (parsed?.format === "campus-rich-v1" && Array.isArray(parsed.blocks)) return parsed;
-    return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (isValidStoredRichDoc(parsed)) return parsed;
   } catch {
-    return null;
+    // A corrupt body must never be silently converted to plain text on the next save.
   }
+  throw new Error("Contenu riche de note invalide.");
 }
 
 export function createAnnualCourseNote(
@@ -143,6 +147,7 @@ export function createAnnualCourseNote(
       body: input.body ?? null,
       courseSessionKey: sessionKey,
       legacyNoteId: legacy,
+      notebookPosition: input.notebookPosition ?? null,
       sourceNoteId: input.sourceNoteId ?? null,
       sourceSchoolYearId: input.sourceSchoolYearId ?? null,
       inheritedAt: input.inheritedAt ?? null,
@@ -185,7 +190,8 @@ export function copyNoteToNewYear(
     ownerTeacherId:
       input.ownerTeacherId === undefined ? source.ownerTeacherId : input.ownerTeacherId,
     text: source.text,
-    body: source.body,
+    body: source.body ? structuredClone(source.body) : null,
+    notebookPosition: source.notebookPosition ?? null,
     courseSessionKey: null,
     legacyNoteId: null,
     sourceNoteId: source.id,

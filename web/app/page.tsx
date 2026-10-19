@@ -522,8 +522,9 @@ export default function Home() {
     }
 
     const timer = window.setTimeout(() => {
-      void saveTeacherNotesApi(classNotesDocument).catch(() => {
-        // Les notes restent en mémoire ; nouvel essai au prochain changement.
+      void saveTeacherNotesApi(classNotesDocument).catch((error: unknown) => {
+        // Keep the editor contents available when the server refuses a stale save.
+        setNotice(error instanceof Error ? error.message : "Enregistrement des notes impossible.");
       });
     }, 400);
 

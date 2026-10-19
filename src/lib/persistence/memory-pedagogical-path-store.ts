@@ -1,3 +1,4 @@
+import { preserveNotebookMetadata, validateOwnedNotes } from "./notebook-state.ts";
 import {
   createAnnualCourseNote,
   type AnnualCourseNote,
@@ -41,7 +42,7 @@ export class MemoryPedagogicalPathStore implements PedagogicalPathStore {
 }
 
 export class MemoryAnnualCourseNotesStore implements AnnualCourseNotesStore {
-  private readonly notes = new Map<string, AnnualCourseNote>();
+  private notes = new Map<string, AnnualCourseNote>();
 
   async listNotes(filter: AnnualCourseNoteFilter): Promise<AnnualCourseNote[]> {
     return [...this.notes.values()]
@@ -125,30 +126,23 @@ export class MemoryAnnualCourseNotesStore implements AnnualCourseNotesStore {
     return null;
   }
 
-  async replaceOwnedNotebookNotes(ownerTeacherId: string, notes: readonly AnnualCourseNote[]): Promise<void> {
-    const keepLegacy = new Set(
-      notes.map((note) => note.legacyNoteId).filter((id): id is string => Boolean(id)),
-    );
-    for (const [id, existing] of [...this.notes.entries()]) {
-      if (existing.ownerTeacherId !== ownerTeacherId) continue;
-      if (!existing.legacyNoteId || !keepLegacy.has(existing.legacyNoteId)) {
-        this.notes.delete(id);
-      }
-    }
+  /** Stage without writes; the commit is synchronous and cannot yield. */
+  stageOwnedNotebookNotes(owner: string, notes: readonly AnnualCourseNote[]): () => void {
+    validateOwnedNotes(owner, notes);
+    const next = new Map(this.notes);
+    for (const [id, note] of next) if (note.ownerTeacherId === owner) next.delete(id);
     for (const note of notes) {
-      if (note.ownerTeacherId !== ownerTeacherId) continue;
-      const current =
-        note.legacyNoteId != null
-          ? [...this.notes.values()].find(
-              (entry) => entry.ownerTeacherId === ownerTeacherId && entry.legacyNoteId === note.legacyNoteId,
-            )
-          : undefined;
-      if (current) {
-        this.notes.set(current.id, structuredClone({ ...note, id: current.id, createdAt: current.createdAt }));
-      } else {
-        this.notes.set(note.id, structuredClone(note));
-      }
+      if (next.has(note.id)) throw new Error("Notebook id belongs to another owner");
+      next.set(note.id, structuredClone(note));
     }
+    return () => { this.notes = next; };
+  }
+
+  async replaceOwnedNotebookNotes(owner: string, notes: readonly AnnualCourseNote[]): Promise<void> {
+    const current = [...this.notes.values()];
+    const next = notes.map(note => preserveNotebookMetadata(note,
+      current.find(row => row.ownerTeacherId === owner && row.legacyNoteId !== null && row.legacyNoteId === note.legacyNoteId)));
+    this.stageOwnedNotebookNotes(owner, next)();
   }
 
   exportAllNotes(): AnnualCourseNote[] {

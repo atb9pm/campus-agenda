@@ -2,7 +2,9 @@ import { isClassNotesPayload, normalizeClassNotes } from "@campus/features/class
 import {
   loadTeacherNotebookDocument,
   persistTeacherNotebookDocument,
+  notebookRevision,
 } from "@campus/features/class-notebook/annual-private-notes.ts";
+import { NotebookConflictError } from "@campus/lib/persistence/teacher-notes-types.ts";
 import { getAnnualCourseNotesStore, getAnnualCourseStore } from "@campus/lib/persistence/store-factory.ts";
 import {
   getTeacherNotesStore,
@@ -25,7 +27,7 @@ async function handleGet(request: Request) {
   if ("error" in auth && auth.error) return auth.error;
 
   const notes = await loadTeacherNotebookDocument(auth.session!.teacherId, await notebookDeps());
-  return jsonResponse({ ok: true, notes });
+  return jsonResponse({ ok: true, notes, revision: notebookRevision(notes) }, { headers: { "Cache-Control": "no-store" } });
 }
 
 async function handlePut(request: Request) {
@@ -48,12 +50,19 @@ async function handlePut(request: Request) {
     return jsonResponse({ ok: false, reason: "Document de notes invalide." }, { status: 400 });
   }
 
-  const notes = await persistTeacherNotebookDocument(
-    auth.session!.teacherId,
-    normalizeClassNotes(candidate),
-    await notebookDeps(),
-  );
-  return jsonResponse({ ok: true, notes });
+  const revision = body && typeof body === "object" && "revision" in body ? body.revision : undefined;
+  if (revision !== undefined && (typeof revision !== "string" || !/^[a-f0-9]{64}$/.test(revision))) {
+    return jsonResponse({ ok: false, reason: "Version des notes invalide." }, { status: 400 });
+  }
+  try {
+    const notes = await persistTeacherNotebookDocument(
+      auth.session!.teacherId, normalizeClassNotes(candidate), await notebookDeps(), revision,
+    );
+    return jsonResponse({ ok: true, notes, revision: notebookRevision(notes) });
+  } catch (error) {
+    if (!(error instanceof NotebookConflictError)) throw error;
+    return jsonResponse({ ok: false, code: "NOTES_CONFLICT", reason: error.message }, { status: 409 });
+  }
 }
 
 export const GET = withApiObservability("/api/teacher/notes", handleGet);

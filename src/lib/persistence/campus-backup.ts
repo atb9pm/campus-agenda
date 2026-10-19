@@ -392,6 +392,7 @@ async function buildMemoryTables(deps: CampusBackupDeps): Promise<CampusTableDum
       course_session_key: note.courseSessionKey,
       owner_teacher_id: note.ownerTeacherId,
       legacy_note_id: note.legacyNoteId,
+      notebook_position: note.notebookPosition ?? null,
       created_at: note.createdAt,
       updated_at: note.updatedAt,
     }));
@@ -577,6 +578,7 @@ function mapAnnualNote(row: Record<string, unknown>): AnnualCourseNote {
     ),
     courseSessionKey: asNullableString(row.course_session_key ?? row.courseSessionKey),
     legacyNoteId: asNullableString(row.legacy_note_id ?? row.legacyNoteId),
+    notebookPosition: typeof row.notebook_position === "number" ? row.notebook_position : null,
     sourceNoteId: asNullableString(row.source_note_id ?? row.sourceNoteId),
     sourceSchoolYearId: asNullableString(row.source_school_year_id ?? row.sourceSchoolYearId),
     inheritedAt: asNullableString(row.inherited_at ?? row.inheritedAt),

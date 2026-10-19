@@ -7,6 +7,7 @@ ALTER TABLE annual_course_notes ADD COLUMN body_json TEXT;
 ALTER TABLE annual_course_notes ADD COLUMN course_session_key TEXT;
 ALTER TABLE annual_course_notes ADD COLUMN owner_teacher_id TEXT;
 ALTER TABLE annual_course_notes ADD COLUMN legacy_note_id TEXT;
+ALTER TABLE annual_course_notes ADD COLUMN notebook_position INTEGER;
 
 CREATE INDEX IF NOT EXISTS idx_annual_course_notes_owner
   ON annual_course_notes (owner_teacher_id);

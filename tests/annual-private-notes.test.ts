@@ -6,7 +6,10 @@ import {
   loadTeacherNotebookDocument,
   persistTeacherNotebookDocument,
   splitResolvableNotebookNotes,
+  notebookRevision,
 } from "../src/features/class-notebook/annual-private-notes.ts";
+import { NotebookConflictError } from "../src/lib/persistence/teacher-notes-types.ts";
+import { NotebookAutosave } from "../web/lib/notebook-autosave.ts";
 import { fromPlainText, isNotesDocumentV1, isNotesDocumentV2 } from "../src/features/class-notebook/index.ts";
 import { copyNoteToNewYear, createAnnualCourseNote, studentMayAccessCourseNotes } from "../src/features/pedagogical-path/index.ts";
 import { APP_VERSION } from "../src/lib/app-version.ts";
@@ -475,4 +478,152 @@ test("PR3.4 — split ne choisit pas un cours pour V1", async () => {
   );
   assert.equal(split.resolved.length, 0);
   assert.equal(isNotesDocumentV1(split.leftover), true);
+});
+
+async function storageWorld(sql: boolean) {
+  const memory = memoryWorld();
+  await seedCourses(memory.courses);
+  if (!sql) return { ...memory, close() {} };
+  const db = createNodeSqliteDatabase(":memory:");
+  await applyMigrations(db);
+  await db.prepare("INSERT INTO teachers (id, display_name, initials, password_hash, is_admin) VALUES (?, 'A', 'A', 'x', 0)").bind(TEACHER_A).run();
+  return { courses: memory.courses, teacherNotes: new SqlTeacherNotesStore(db), courseNotes: new SqlAnnualCourseNotesStore(db), db, close: () => db.close() };
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+for (const sql of [false, true]) {
+  const backend = sql ? "SQLite" : "Memory";
+  test(`PR3.4 ${backend} — GET racing a completed PUT cannot erase newer notes`, async () => {
+    const world = await storageWorld(sql);
+    try {
+      await world.teacherNotes.saveNotes(TEACHER_A, v2Doc({ [SESSION_A]: [{ id: "old", text: "Old" }] }));
+      const entered = deferred(), release = deferred();
+      const commit = world.teacherNotes.commitNotebook.bind(world.teacherNotes);
+      let first = true;
+      world.teacherNotes.commitNotebook = async (...args) => {
+        if (first) { first = false; entered.resolve(); await release.promise; }
+        return commit(...args);
+      };
+      const loading = loadTeacherNotebookDocument(TEACHER_A, world);
+      await entered.promise;
+      const latest = v2Doc({ [SESSION_A]: [{ id: "old", text: "New" }, { id: "added", text: "Added" }] });
+      await persistTeacherNotebookDocument(TEACHER_A, latest, world);
+      release.resolve();
+      assert.deepEqual(await loading, latest);
+      assert.deepEqual(await loadTeacherNotebookDocument(TEACHER_A, world), latest);
+    } finally { world.close(); }
+  });
+
+  test(`PR3.4 ${backend} — stale tab and simultaneous PUTs fail without writes`, async () => {
+    const world = await storageWorld(sql);
+    try {
+      const old = await persistTeacherNotebookDocument(TEACHER_A, v2Doc({ [SESSION_A]: [{ id: "n", text: "Old" }] }), world);
+      const revision = notebookRevision(old);
+      const writes = await Promise.allSettled(["First", "Second"].map(text => persistTeacherNotebookDocument(
+        TEACHER_A, v2Doc({ [SESSION_A]: [{ id: "n", text }] }), world, revision,
+      )));
+      assert.equal(writes.filter(r => r.status === "fulfilled").length, 1);
+      assert.equal(writes.filter(r => r.status === "rejected" && r.reason instanceof NotebookConflictError).length, 1);
+      const before = await world.teacherNotes.readNotebook(TEACHER_A, world.courseNotes);
+      await assert.rejects(persistTeacherNotebookDocument(TEACHER_A, old, world, revision), NotebookConflictError);
+      assert.deepEqual(await world.teacherNotes.readNotebook(TEACHER_A, world.courseNotes), before);
+    } finally { world.close(); }
+  });
+
+  test(`PR3.4 ${backend} — ambiguous identities stay legacy, ordered and complete`, async () => {
+    const world = await storageWorld(sql);
+    try {
+      const doc = v2Doc({
+        [SESSION_A]: [{ id: "same", text: "First" }, { id: "unique", text: "Middle" }, { id: "same", text: "Last" }],
+        [SESSION_B]: [{ id: " white ", text: "Spaces" }, { id: "white", text: "Collision" }, { id: "", text: "Empty ID" }],
+      });
+      await world.teacherNotes.saveNotes(TEACHER_A, doc);
+      assert.deepEqual(await loadTeacherNotebookDocument(TEACHER_A, world), doc);
+      assert.deepEqual(await persistTeacherNotebookDocument(TEACHER_A, doc, world), doc);
+      assert.equal((await world.courseNotes.listNotesByOwner(TEACHER_A)).length, 0);
+    } finally { world.close(); }
+  });
+
+  test(`PR3.4 ${backend} — multi-note order, rich content and metadata survive edits`, async () => {
+    const world = await storageWorld(sql);
+    try {
+      const body = { format: "campus-rich-v1" as const, blocks: [
+        { type: "paragraph" as const, inlines: [{ text: "Styled", marks: { bold: true, color: "red" as const, highlight: true, href: "https://example.com/" } }] },
+        { type: "checklist" as const, items: [{ checked: true, inlines: [{ text: "Done" }] }] },
+        { type: "orderedList" as const, items: [[{ text: "First" }], [{ text: "Second" }]] },
+      ] };
+      const notes = Array.from({ length: 30 }, (_, i) => ({ id: `n${i}`, text: `Note ${i}`, ...(i === 0 ? { body } : {}) }));
+      await world.courseNotes.createNote("existing", { schoolYearId: YEAR_A, classId: "class-ma1", contextId: "ctx-moteur",
+        annualCourseId: COURSE_A, ownerTeacherId: TEACHER_A, authorTeacherId: TEACHER_B, text: "old", legacyNoteId: "n0",
+        courseSessionKey: SESSION_A, referenceSessionId: "ref", sourceNoteId: "source", sourceSchoolYearId: YEAR_B, inheritedAt: "2025-01-01" });
+      await world.courseNotes.createNote("general", { schoolYearId: YEAR_A, classId: "class-ma1", contextId: "ctx-moteur",
+        ownerTeacherId: TEACHER_A, authorTeacherId: TEACHER_A, text: "Not represented in the document" });
+      const doc = v2Doc({ [SESSION_A]: notes });
+      assert.deepEqual(await persistTeacherNotebookDocument(TEACHER_A, doc, world), doc);
+      assert.deepEqual(await loadTeacherNotebookDocument(TEACHER_A, world), doc);
+      const current = await world.courseNotes.getNote("existing");
+      assert.equal(current?.authorTeacherId, TEACHER_B);
+      assert.equal(current?.referenceSessionId, "ref");
+      assert.equal(current?.sourceNoteId, "source");
+      assert.equal(current?.sourceSchoolYearId, YEAR_B);
+      assert.equal(current?.inheritedAt, "2025-01-01");
+      assert.deepEqual(current?.body, body);
+      assert.ok(await world.courseNotes.getNote("general"));
+    } finally { world.close(); }
+  });
+}
+
+test("PR3.4 SQLite — failure at any write phase rolls back both tables", async () => {
+  const world = await storageWorld(true);
+  assert.ok("db" in world);
+  try {
+    const initial = v2Doc({ [SESSION_A]: [{ id: "n", text: "Keep" }] });
+    await persistTeacherNotebookDocument(TEACHER_A, initial, world);
+    const before = await world.teacherNotes.readNotebook(TEACHER_A, world.courseNotes);
+    for (const event of ["UPDATE ON teacher_notes", "DELETE ON annual_course_notes", "INSERT ON annual_course_notes"]) {
+      await world.db.exec(`CREATE TRIGGER fail_notebook BEFORE ${event} BEGIN SELECT RAISE(ABORT, 'injected failure'); END;`);
+      const moving = v2Doc({ [SESSION_B]: [{ id: "new", text: "New" }] }, { orphanedSessions: { [SESSION_A]: [{ id: "n", text: "Keep" }] } });
+      await assert.rejects(persistTeacherNotebookDocument(TEACHER_A, moving, world), /injected failure/);
+      assert.deepEqual(await world.teacherNotes.readNotebook(TEACHER_A, world.courseNotes), before);
+      await world.db.exec("DROP TRIGGER fail_notebook");
+    }
+    await applyMigrations(world.db);
+    assert.deepEqual(await world.teacherNotes.readNotebook(TEACHER_A, world.courseNotes), before);
+  } finally { world.close(); }
+});
+
+test("PR3.4 Memory — failed staging leaves both halves untouched", async () => {
+  const world = memoryWorld(); await seedCourses(world.courses);
+  const initial = v2Doc({ [SESSION_A]: [{ id: "n", text: "Keep" }] });
+  await persistTeacherNotebookDocument(TEACHER_A, initial, world);
+  const before = await world.teacherNotes.readNotebook(TEACHER_A, world.courseNotes);
+  world.courseNotes.stageOwnedNotebookNotes = () => { throw new Error("injected failure"); };
+  await assert.rejects(persistTeacherNotebookDocument(TEACHER_A, v2Doc({}, { orphanedSessions: { [SESSION_A]: [{ id: "n", text: "Keep" }] } }), world), /injected failure/);
+  assert.deepEqual(await world.teacherNotes.readNotebook(TEACHER_A, world.courseNotes), before);
+});
+
+test("PR3.4 autosave — requests are ordered, revision advances only on success", async () => {
+  const queue = new NotebookAutosave(); queue.reset("r0");
+  const entered = deferred(), release = deferred();
+  const revisions: Array<string | undefined> = [];
+  const send = async (notes: ClassNotesDocument, revision?: string) => {
+    revisions.push(revision);
+    if (revisions.length === 1) { entered.resolve(); await release.promise; }
+    return { notes, revision: `r${revisions.length}` };
+  };
+  const first = queue.save(v2Doc({}), send);
+  await entered.promise;
+  const second = queue.save(v2Doc({ [SESSION_A]: [{ id: "n", text: "Latest" }] }), send);
+  assert.deepEqual(revisions, ["r0"]);
+  release.resolve(); await Promise.all([first, second]);
+  assert.deepEqual(revisions, ["r0", "r1"]);
+  await assert.rejects(queue.save(v2Doc({}), async () => { throw new Error("conflict"); }), /conflict/);
+  await queue.save(v2Doc({}), async (notes, revision) => { assert.equal(revision, "r2"); return { notes, revision: "r3" }; });
+  queue.reset();
+  await assert.rejects(queue.save(v2Doc({}), send), /Rechargez/);
 });

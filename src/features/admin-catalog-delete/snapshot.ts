@@ -144,7 +144,7 @@ async function loadAllAnnualNotes(deps: CatalogDeleteSnapshotDeps): Promise<Annu
       .prepare(
         `SELECT id, school_year_id, class_id, context_id, reference_session_id, author_teacher_id,
                 text, source_note_id, source_school_year_id, inherited_at, annual_course_id,
-                body_json, course_session_key, owner_teacher_id, legacy_note_id,
+                body_json, course_session_key, owner_teacher_id, legacy_note_id, notebook_position,
                 created_at, updated_at
          FROM annual_course_notes`,
       )
@@ -165,6 +165,7 @@ async function loadAllAnnualNotes(deps: CatalogDeleteSnapshotDeps): Promise<Annu
         course_session_key: string | null;
         owner_teacher_id: string | null;
         legacy_note_id: string | null;
+        notebook_position: number | null;
         created_at: string;
         updated_at: string;
       }>();
@@ -180,6 +181,7 @@ async function loadAllAnnualNotes(deps: CatalogDeleteSnapshotDeps): Promise<Annu
       body: parseAnnualNoteBody(row.body_json),
       courseSessionKey: row.course_session_key,
       legacyNoteId: row.legacy_note_id,
+      notebookPosition: row.notebook_position,
       sourceNoteId: row.source_note_id,
       sourceSchoolYearId: row.source_school_year_id,
       inheritedAt: row.inherited_at,

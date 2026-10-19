@@ -324,6 +324,7 @@ export const CAMPUS_BACKUP_COLUMNS: Record<CampusBackupTableName, BackupColumnSp
     { name: "course_session_key", type: "text" },
     { name: "owner_teacher_id", type: "text" },
     { name: "legacy_note_id", type: "text" },
+    { name: "notebook_position", type: "integer" },
   ),
   course_schedule_slots: cols(
     { name: "id", type: "text", required: true },

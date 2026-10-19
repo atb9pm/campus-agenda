@@ -2,7 +2,7 @@ import type { SqlBatchStatement } from "../../lib/persistence/sql/types.ts";
 
 /**
  * Ordre de la transaction :
- * 1. détacher les publications / notes (conserver les lignes) ;
+ * 1. supprimer les notes privées du propriétaire, détacher l'auteur des autres notes et publications ;
  * 2. supprimer les données personnelles et les accès ;
  * 3. supprimer le compte.
  *

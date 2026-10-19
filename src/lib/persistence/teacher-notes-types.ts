@@ -1,4 +1,19 @@
 import type { ClassNotesDocument } from "../../features/class-notebook/types.ts";
+import type { AnnualCourseNote } from "../../features/pedagogical-path/annual-notes.ts";
+import type { AnnualCourseNotesStore } from "./pedagogical-path-types.ts";
+
+export interface NotebookState {
+  leftover: ClassNotesDocument | null;
+  owned: AnnualCourseNote[];
+  /** Internal compare-and-swap token, never sent to the client. */
+  token: string;
+}
+
+export class NotebookConflictError extends Error {
+  constructor() {
+    super("Les notes ont changé depuis leur chargement. Rechargez le Carnet avant de réessayer.");
+  }
+}
 
 export interface TeacherNotesBackupEntry {
   teacherId: string;
@@ -6,6 +21,10 @@ export interface TeacherNotesBackupEntry {
 }
 
 export interface TeacherNotesStore {
+  readNotebook(teacherId: string, courseNotes: AnnualCourseNotesStore): Promise<NotebookState>;
+  /** Atomically replaces both halves, only if the entire snapshot is still current. */
+  commitNotebook(teacherId: string, expected: NotebookState, leftover: ClassNotesDocument,
+    owned: readonly AnnualCourseNote[], courseNotes: AnnualCourseNotesStore): Promise<void>;
   /** Null si l'enseignant n'a encore rien enregistré côté serveur. */
   getNotes(teacherId: string): Promise<ClassNotesDocument | null>;
   saveNotes(teacherId: string, document: ClassNotesDocument): Promise<ClassNotesDocument>;

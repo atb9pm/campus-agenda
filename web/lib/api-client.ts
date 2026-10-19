@@ -1,3 +1,4 @@
+import { NotebookAutosave } from "./notebook-autosave.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import type { TeacherDeletePreview } from "@campus/features/admin-teacher-delete/index.ts";
 import type { TeacherAccountRecord } from "@campus/features/teacher-accounts";
@@ -526,30 +527,36 @@ export async function saveTeacherSetupApi(setup: TeacherSetupConfig): Promise<Te
   return payload.setup;
 }
 
+const notebookAutosave = new NotebookAutosave();
+
 /** Null si aucun document de notes n'a encore été enregistré côté serveur. */
 export async function fetchTeacherNotesApi(): Promise<ClassNotesDocument | null> {
+  notebookAutosave.reset();
   const response = await fetch("/api/teacher/notes", { credentials: "include" });
-  const payload = await parseJson<{ ok: boolean; reason?: string; notes?: ClassNotesDocument | null }>(
+  const payload = await parseJson<{ ok: boolean; reason?: string; notes?: ClassNotesDocument | null; revision?: string }>(
     response,
   );
   if (!response.ok || !payload.ok) {
     throw new Error(payload.reason ?? "Chargement des notes impossible.");
   }
+  notebookAutosave.reset(payload.revision);
   return payload.notes ?? null;
 }
 
 export async function saveTeacherNotesApi(notes: ClassNotesDocument): Promise<ClassNotesDocument> {
-  const response = await fetch("/api/teacher/notes", {
-    method: "PUT",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ notes }),
+  return notebookAutosave.save(notes, async (snapshot, revision) => {
+    const response = await fetch("/api/teacher/notes", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: snapshot, revision }),
+    });
+    const payload = await parseJson<{ ok: boolean; reason?: string; notes?: ClassNotesDocument; revision?: string }>(response);
+    if (!response.ok || !payload.ok || !payload.notes || !payload.revision) {
+      throw new Error(payload.reason ?? "Enregistrement des notes impossible.");
+    }
+    return { notes: payload.notes, revision: payload.revision };
   });
-  const payload = await parseJson<{ ok: boolean; reason?: string; notes?: ClassNotesDocument }>(response);
-  if (!response.ok || !payload.ok || !payload.notes) {
-    throw new Error(payload.reason ?? "Enregistrement des notes impossible.");
-  }
-  return payload.notes;
 }
 
 export async function fetchTeacherAccounts(): Promise<TeacherAccountRecord[]> {
