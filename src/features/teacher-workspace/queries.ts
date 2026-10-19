@@ -63,7 +63,7 @@ function compareWorkspaceEntries(
 export function buildTeacherCourseWorkspace(
   input: BuildTeacherCourseWorkspaceInput,
 ): TeacherCourseWorkspaceResult {
-  const at = input.at ?? new Date().toISOString();
+  const now = input.at ?? new Date().toISOString();
   const schoolYearId = resolveWorkspaceSchoolYearId(input.years, input.schoolYearId);
   if (!schoolYearId) {
     return { schoolYearId: null, courses: [] };
@@ -75,13 +75,18 @@ export function buildTeacherCourseWorkspace(
   const contextById = new Map(input.contexts.map((entry) => [entry.id, entry]));
   const branchById = new Map(input.branches.map((entry) => [entry.id, entry]));
   const professionById = new Map((input.professions ?? []).map((entry) => [entry.id, entry]));
+  const requestedYear = yearById.get(schoolYearId);
+  const assignmentInstants = [now];
+  if (input.schoolYearId && requestedYear?.status === "draft") {
+    assignmentInstants.push(`${requestedYear.startsOn}T12:00:00.000Z`);
+  }
 
   const operational = !input.schoolYearId;
   const entries: TeacherCourseWorkspaceEntry[] = [];
 
   for (const assignment of input.assignments) {
     if (assignment.teacherId !== input.teacherId) continue;
-    if (!isAssignmentActiveAt(assignment, at)) continue;
+    if (!assignmentInstants.some((instant) => isAssignmentActiveAt(assignment, instant))) continue;
 
     const course = courseById.get(assignment.annualCourseId);
     if (!course || course.isArchived) continue;

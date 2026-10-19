@@ -187,8 +187,9 @@ export async function changeTeacherPasswordApi(
   }
 }
 
-export async function fetchTeacherClassroomsApi(): Promise<NotebookRuntimeClassroom[]> {
-  const response = await fetch("/api/teacher/classrooms", { credentials: "include" });
+export async function fetchTeacherClassroomsApi(schoolYearId?: string | null): Promise<NotebookRuntimeClassroom[]> {
+  const params = schoolYearId?.trim() ? `?schoolYearId=${encodeURIComponent(schoolYearId.trim())}` : "";
+  const response = await fetch(`/api/teacher/classrooms${params}`, { credentials: "include" });
   const payload = await parseJson<{
     ok: boolean;
     classrooms?: NotebookRuntimeClassroom[];
@@ -1123,6 +1124,176 @@ export async function fetchOfficialSchoolCalendar(schoolYearId: string): Promise
     weeks: payload.weeks ?? [],
     events: payload.events,
     eventCount: payload.eventCount ?? payload.events.length,
+  };
+}
+
+export type YearTransitionYearOption = {
+  id: string;
+  label: string;
+  displayLabel: string;
+  status: "draft" | "active" | "archived";
+  statusLabel: string;
+  startsOn: string;
+  endsOn: string;
+};
+
+export type YearTransitionClassOption = {
+  id: string;
+  schoolYearId: string;
+  code: string;
+  label: string;
+  displayName: string;
+};
+
+export type YearTransitionPresentedRow = {
+  id: string;
+  kind: "publication" | "privateNote";
+  category: "projectable" | "alreadyPresent" | "excluded" | "blocking";
+  title: string;
+  reason: string;
+  reasonLabel: string;
+  explanation: string;
+  sourceCourseLabel: string | null;
+  targetCourseLabel: string | null;
+  sourceClassLabel: string | null;
+  targetClassLabel: string | null;
+  sessionLabel: string | null;
+  targetAnnualCourseId: string | null;
+  targetClassId: string | null;
+};
+
+export type YearTransitionPresentedPreview = {
+  fingerprint: string;
+  sourceYear: YearTransitionYearOption | null;
+  targetYear: YearTransitionYearOption | null;
+  blocking: boolean;
+  mappingIssues: string[];
+  publications: {
+    projectable: YearTransitionPresentedRow[];
+    alreadyPresent: YearTransitionPresentedRow[];
+    excluded: YearTransitionPresentedRow[];
+    blocking: YearTransitionPresentedRow[];
+  };
+  notes: YearTransitionPresentedPreview["publications"] | null;
+  targetCourses: Array<{
+    annualCourseId: string;
+    classId: string;
+    schoolYearId: string;
+    courseLabel: string;
+    classLabel: string;
+  }>;
+};
+
+export async function fetchYearTransitionPrepare(): Promise<{
+  years: YearTransitionYearOption[];
+  classesByYearId: Record<string, YearTransitionClassOption[]>;
+  capabilities: Array<{
+    id: string;
+    available: boolean;
+    defaultEnabled: boolean;
+    ownerBound: boolean;
+    title: string;
+    summary: string;
+  }>;
+  sessionTeacherId: string;
+}> {
+  const response = await fetch("/api/admin/year-transition/prepare", { credentials: "include" });
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    years?: YearTransitionYearOption[];
+    classesByYearId?: Record<string, YearTransitionClassOption[]>;
+    capabilities?: Array<{
+      id: string;
+      available: boolean;
+      defaultEnabled: boolean;
+      ownerBound: boolean;
+      title: string;
+      summary: string;
+    }>;
+    sessionTeacherId?: string;
+  }>(response);
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.reason ?? "Chargement de la préparation impossible.");
+  }
+  return {
+    years: payload.years ?? [],
+    classesByYearId: payload.classesByYearId ?? {},
+    capabilities: payload.capabilities ?? [],
+    sessionTeacherId: payload.sessionTeacherId ?? "",
+  };
+}
+
+export async function createYearTransitionPreviewApi(input: {
+  sourceSchoolYearId: string;
+  targetSchoolYearId: string;
+  classMappings: Array<{ sourceClassId: string | null; targetClassId: string | null }>;
+  includePrivateNotes: boolean;
+}): Promise<{ transitionId: string; blocking: boolean; preview: YearTransitionPresentedPreview }> {
+  const response = await fetch("/api/admin/year-transition/preview", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    transitionId?: string;
+    blocking?: boolean;
+    preview?: YearTransitionPresentedPreview;
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.transitionId || !payload.preview) {
+    throw new Error(payload.reason ?? "Aperçu impossible.");
+  }
+  return {
+    transitionId: payload.transitionId,
+    blocking: Boolean(payload.blocking),
+    preview: payload.preview,
+  };
+}
+
+export async function applyYearTransitionApi(transitionId: string): Promise<{
+  ok: boolean;
+  code: string;
+  codeLabel: string;
+  reason?: string;
+  createdCount?: number;
+  alreadyPresentCount?: number;
+  skippedCount?: number;
+  notes?: { createdCount: number; alreadyPresentCount: number; skippedCount: number };
+  targetCourses: YearTransitionPresentedPreview["targetCourses"];
+}> {
+  const response = await fetch("/api/admin/year-transition/apply", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transitionId, confirm: true }),
+  });
+  const payload = await parseJson<{
+    ok?: boolean;
+    code?: string;
+    codeLabel?: string;
+    reason?: string;
+    createdCount?: number;
+    alreadyPresentCount?: number;
+    skippedCount?: number;
+    notes?: { createdCount: number; alreadyPresentCount: number; skippedCount: number };
+    targetCourses?: YearTransitionPresentedPreview["targetCourses"];
+  }>(response);
+  if (!payload.code) {
+    throw new Error(payload.reason ?? "Application impossible.");
+  }
+  return {
+    ok: Boolean(payload.ok),
+    code: payload.code,
+    codeLabel: payload.codeLabel ?? payload.code,
+    reason: payload.reason,
+    createdCount: payload.createdCount,
+    alreadyPresentCount: payload.alreadyPresentCount,
+    skippedCount: payload.skippedCount,
+    notes: payload.notes,
+    targetCourses: payload.targetCourses ?? [],
   };
 }
 

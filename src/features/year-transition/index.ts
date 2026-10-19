@@ -50,6 +50,33 @@ export {
   extractClassMappingsFromSnapshotJson,
   YearTransitionSnapshotCorruptedError,
 } from "./snapshot-mappings.ts";
+export {
+  bindPrivateNotesOwner,
+  mappingIssueMessages,
+  parseYearTransitionClassMappings,
+  presentApplyOutcome,
+  presentSchoolYearOption,
+  presentTransitionClass,
+  presentYearTransitionPreview,
+  previewHasBlockingEntries,
+  YEAR_TRANSITION_APPLY_FAILURE_LABELS,
+  YEAR_TRANSITION_NOTE_REASON_EXPLANATIONS,
+  YEAR_TRANSITION_NOTE_REASON_LABELS,
+  YEAR_TRANSITION_TRANSFER_CAPABILITIES,
+} from "./presentation.ts";
+export type {
+  YearTransitionCatalogLookups,
+  YearTransitionClassOption,
+  YearTransitionPresentedPreview,
+  YearTransitionPresentedRow,
+  YearTransitionYearOption,
+} from "./presentation.ts";
+export {
+  applyAuthorizedYearTransition,
+  createAuthorizedYearTransitionPreview,
+  loadYearTransitionPrepareState,
+  parseYearTransitionPreviewRequest,
+} from "./prepare.ts";
 export { applyPersistedYearTransition, expectedApplyResultForPreviewReason } from "./apply.ts";
 export type { ApplyPersistedYearTransitionDeps } from "./apply.ts";
 export {

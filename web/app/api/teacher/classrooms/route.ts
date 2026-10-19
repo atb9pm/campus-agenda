@@ -22,6 +22,7 @@ async function handleGet(request: Request) {
   await reconcileRuntimeStructuredClassrooms();
 
   const teacherId = auth.session!.teacherId;
+  const schoolYearId = new URL(request.url).searchParams.get("schoolYearId")?.trim() || null;
   const catalog = await getSchoolCatalogStore();
   await catalog.ensureSeeded();
   const [classrooms, classes, courses, assignments, years, adapters] = await Promise.all([
@@ -40,6 +41,7 @@ async function handleGet(request: Request) {
     courses,
     assignments,
     years,
+    schoolYearId,
     teacherCanAccessClassroom: (id, classroomId) => auth.store!.teacherCanAccessClassroom(id, classroomId),
   });
 

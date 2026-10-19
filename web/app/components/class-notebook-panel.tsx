@@ -106,6 +106,7 @@ interface ClassNotebookPanelProps {
   branchLabel?: string | null;
   annualCourseId?: string | null;
   schoolYearLabel?: string | null;
+  schoolYearStatus?: "draft" | "active" | "archived" | null;
   subjectId?: string | null;
   schoolWeeks: SchoolWeek[];
   centerWeekNumber: number;
@@ -232,6 +233,7 @@ export function ClassNotebookPanel({
   branchLabel: selectedBranchLabel,
   annualCourseId,
   schoolYearLabel,
+  schoolYearStatus = null,
   subjectId,
   schoolWeeks,
   centerWeekNumber,
@@ -1458,7 +1460,13 @@ export function ClassNotebookPanel({
         </button>
         <div className="class-notebook-title">
           <span className="eyebrow">{classSetup.programLabel}</span>
-          <h2>{classSetup.name} · {branchLabel}</h2>
+          <h2>
+            {classSetup.name} · {branchLabel}
+            {schoolYearLabel ? ` · ${schoolYearLabel}` : ""}
+            {schoolYearStatus === "draft" ? (
+              <span className="school-year-badge draft">Brouillon</span>
+            ) : null}
+          </h2>
         </div>
         <div className="class-notebook-actions">
           <button

@@ -41,7 +41,13 @@ export function teacherHasStructuredClassroomReadAccess(options: {
   if (year?.status === "archived") return true;
 
   const at = options.at ?? new Date().toISOString();
-  return teacherAssignments.some((assignment) => isAssignmentActiveAt(assignment, at));
+  const instants = [at];
+  if (year?.status === "draft") {
+    instants.push(`${year.startsOn}T12:00:00.000Z`);
+  }
+  return teacherAssignments.some((assignment) =>
+    instants.some((instant) => isAssignmentActiveAt(assignment, instant)),
+  );
 }
 
 /** Publication pédagogique : TCA valable à la date de la CourseSession. Pas de privilège admin. */

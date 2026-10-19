@@ -17,6 +17,7 @@ import { ClassScheduleAdminPanel } from "./class-schedule-admin-panel.tsx";
 import { ClassesAdminPanel } from "./classes-admin-panel.tsx";
 import { ProfessionsAdminPanel } from "./professions-admin-panel.tsx";
 import { SchoolYearAdminPanel } from "./school-year-admin-panel.tsx";
+import { YearTransitionPreparePanel } from "./year-transition-prepare-panel.tsx";
 import { TeacherAccountsPanel } from "./teacher-accounts-panel.tsx";
 import { AdminSecurityPanel } from "./admin-security-panel.tsx";
 import { DestructiveConfirmDialog } from "./destructive-confirm-dialog.tsx";
@@ -42,6 +43,7 @@ type AdminTab =
   | "assignments"
   | "schedules"
   | "weeks"
+  | "transition"
   | "backup"
   | "restore"
   | "security";
@@ -50,6 +52,13 @@ interface AdministrationPanelProps {
   currentTeacherId: string;
   onCalendarUpdated: (weeks: SchoolCalendarWeek[]) => void;
   onNotice: (message: string) => void;
+  onOpenTargetCourse?: (target: {
+    schoolYearId: string;
+    annualCourseId: string;
+    classId: string;
+    courseLabel: string;
+    classLabel: string;
+  }) => void;
 }
 
 interface BranchEditDraft {
@@ -66,6 +75,7 @@ const TAB_LABELS: Record<AdminTab, string> = {
   assignments: "Attributions des cours",
   schedules: "Horaire des classes",
   weeks: "Année scolaire",
+  transition: "Préparer l’année suivante",
   backup: "Sauvegarde des données",
   restore: "Restaurer une sauvegarde",
   security: "Sécurité",
@@ -126,6 +136,7 @@ export function AdministrationPanel({
   currentTeacherId,
   onCalendarUpdated,
   onNotice,
+  onOpenTargetCourse,
 }: AdministrationPanelProps) {
   const [tab, setTab] = useState<AdminTab>("classes");
   const [classes, setClasses] = useState<SchoolClassRecord[]>([]);
@@ -336,7 +347,8 @@ export function AdministrationPanel({
     && tab !== "schedules"
     && tab !== "backup"
     && tab !== "restore"
-    && tab !== "security";
+    && tab !== "security"
+    && tab !== "transition";
 
   return (
     <section className="teacher-workspace admin-workspace" aria-label="Administration">
@@ -617,6 +629,10 @@ export function AdministrationPanel({
           </header>
           <SchoolYearAdminPanel onCalendarUpdated={onCalendarUpdated} onNotice={onNotice} />
         </div>
+      ) : null}
+
+      {tab === "transition" ? (
+        <YearTransitionPreparePanel onNotice={onNotice} onOpenTargetCourse={onOpenTargetCourse} />
       ) : null}
     </section>
   );

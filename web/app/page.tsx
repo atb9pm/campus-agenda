@@ -44,6 +44,7 @@ import {
   deleteAgendaItemApi,
   fetchAgendaItems,
   fetchApiSession,
+  fetchOfficialSchoolCalendar,
   fetchSchoolCalendar,
   fetchTeacherClassroomsApi,
   fetchTeacherClassAccessesApi,
@@ -193,13 +194,20 @@ function sectionTitle(
   return "Préférences";
 }
 
-function sectionDescription(activeSection: TeacherNavSection, isStudentView: boolean, notebookOpen: boolean) {
+function sectionDescription(
+  activeSection: TeacherNavSection,
+  isStudentView: boolean,
+  notebookOpen: boolean,
+  schoolYearLabel?: string | null,
+) {
   if (isStudentView) return "Consultation anonyme — agenda complet de la classe, toutes branches confondues.";
   if (notebookOpen) {
     return "Contrôles, publications élèves et notes prof — semaine par semaine.";
   }
   if (activeSection === "mes-cours") {
-    return "Cours qui vous sont attribués pour l’année scolaire active.";
+    return schoolYearLabel
+      ? `Cours qui vous sont attribués pour ${schoolYearLabel}.`
+      : "Cours qui vous sont attribués pour l’année scolaire active.";
   }
   if (activeSection === "controles") {
     return "Planification des contrôles publiés dans l’agenda.";
@@ -266,6 +274,13 @@ export default function Home() {
   const [teacherCourses, setTeacherCourses] = useState<TeacherCourseWorkspaceEntry[]>([]);
   const [teacherClassAccesses, setTeacherClassAccesses] = useState<Record<string, TeacherClassAccessView>>({});
   const [teacherCoursesYearLabel, setTeacherCoursesYearLabel] = useState<string | null>(null);
+  const [viewedSchoolYearId, setViewedSchoolYearId] = useState<string | null>(null);
+  const [viewedSchoolYearStatus, setViewedSchoolYearStatus] = useState<"draft" | "active" | "archived" | null>(null);
+  const pendingOpenCourseRef = useRef<{
+    schoolYearId: string;
+    annualCourseId: string;
+    classId: string;
+  } | null>(null);
   const [teacherCoursesReady, setTeacherCoursesReady] = useState(false);
   const [teacherCoursesError, setTeacherCoursesError] = useState("");
   /** Évite d'écrire sur le serveur juste après un chargement / une migration. */
@@ -411,7 +426,7 @@ export default function Home() {
 
     async function loadTeacherCourses() {
       try {
-        const payload = await fetchTeacherCoursesApi();
+        const payload = await fetchTeacherCoursesApi(viewedSchoolYearId);
         if (cancelled) return;
         setTeacherCourses(payload.courses);
         setTeacherClassAccesses(payload.classAccesses);
@@ -419,11 +434,40 @@ export default function Home() {
         setTeacherCoursesError("");
         setTeacherCoursesReady(true);
         try {
-          const accesses = await fetchTeacherClassAccessesApi();
+          const accesses = await fetchTeacherClassAccessesApi(viewedSchoolYearId);
           if (cancelled) return;
           setTeacherClassAccesses(accesses.classAccesses);
         } catch {
           // Conservez les codes déjà reçus avec les cours.
+        }
+        if (viewedSchoolYearId) {
+          try {
+            const calendar = await fetchOfficialSchoolCalendar(viewedSchoolYearId);
+            if (cancelled) return;
+            const status = calendar.year.status;
+            setViewedSchoolYearStatus(
+              status === "draft" || status === "active" || status === "archived" ? status : "draft",
+            );
+            if (calendar.weeks.length) {
+              setSchoolWeeks(buildSchoolWeeksFromEntries(calendar.weeks));
+            }
+          } catch {
+            if (!cancelled) setViewedSchoolYearStatus("draft");
+          }
+          try {
+            const runtime = await fetchTeacherClassroomsApi(viewedSchoolYearId);
+            if (cancelled) return;
+            setRuntimeClassrooms(runtime);
+            const classroomIds = runtime.map((entry) => entry.id);
+            const loadedItems = await loadTeacherAgendaItems(classroomIds);
+            if (cancelled) return;
+            setItems(loadedItems);
+            loadedAgendaClassroomIdsRef.current = new Set(classroomIds);
+          } catch {
+            // Conservez les classes déjà chargées.
+          }
+        } else {
+          setViewedSchoolYearStatus(null);
         }
       } catch (loadError) {
         if (cancelled) return;
@@ -441,7 +485,21 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [currentTeacherId, teacherAuthenticated]);
+  }, [currentTeacherId, teacherAuthenticated, viewedSchoolYearId]);
+
+  // Ouverture différée après rechargement des cours de l’année cible.
+  useEffect(() => {
+    const pending = pendingOpenCourseRef.current;
+    if (!pending || !teacherCoursesReady || viewedSchoolYearId !== pending.schoolYearId) return;
+    const course = teacherCourses.find((entry) => entry.annualCourseId === pending.annualCourseId);
+    pendingOpenCourseRef.current = null;
+    if (!course) {
+      setNotice("Ce cours cible ne vous est pas attribué ; le Carnet n’est ouvert qu’aux enseignants du cours.");
+      return;
+    }
+    openCourseInWeek(course);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teacherCourses, teacherCoursesReady, viewedSchoolYearId]);
 
   useEffect(() => {
     if (!teacherAuthenticated || !teacherSetupReady) return;
@@ -1175,6 +1233,31 @@ export default function Home() {
     return id;
   }
 
+  function openAssignedCourseInYear(target: {
+    schoolYearId: string;
+    annualCourseId: string;
+    classId: string;
+    courseLabel: string;
+    classLabel: string;
+  }) {
+    pendingOpenCourseRef.current = {
+      schoolYearId: target.schoolYearId,
+      annualCourseId: target.annualCourseId,
+      classId: target.classId,
+    };
+    setViewedSchoolYearId(target.schoolYearId);
+    setActiveSection("ma-semaine");
+    showNotice(`Consultation de ${target.courseLabel} — l’année cible reste en brouillon.`);
+  }
+
+  function returnToActiveSchoolYear() {
+    pendingOpenCourseRef.current = null;
+    setViewedSchoolYearId(null);
+    setViewedSchoolYearStatus(null);
+    closeClassNotebook();
+    setActiveSection("mes-cours");
+  }
+
   function openCourseInWeek(course: TeacherCourseWorkspaceEntry) {
     const target = openCourseInWeekTarget(course, selectedSchoolWeekNumber);
     setOpenNotebookCourse(notebookContextFromCourse(course));
@@ -1558,7 +1641,7 @@ export default function Home() {
         <div className="technical-note">
           <span>COURS ATTRIBUÉS</span>
           <strong>{teacherCourses.length}</strong>
-          <small>Année active</small>
+          <small>{viewedSchoolYearStatus === "draft" ? "Année brouillon" : "Année active"}</small>
         </div>
         <button className="signout" onClick={() => setStudentCodeModalOpen(true)}><span>👤</span> Espace élève</button>
         <button className="signout" onClick={logoutTeacher}><span>↪</span> Déconnexion</button>
@@ -1570,7 +1653,7 @@ export default function Home() {
           <div className="class-identity">
             <span className="eyebrow">Espace enseignant</span>
             <h1>{sectionTitle(activeSection, false, openNotebookClass?.name, teacherCoursesYearLabel)}</h1>
-            <p>{sectionDescription(activeSection, false, Boolean(openNotebookClass))}</p>
+            <p>{sectionDescription(activeSection, false, Boolean(openNotebookClass), teacherCoursesYearLabel)}</p>
           </div>
           <div className="header-actions">
             <button className="profile-disc" aria-label="Profil enseignant">
@@ -1578,6 +1661,18 @@ export default function Home() {
             </button>
           </div>
         </header>
+
+        {viewedSchoolYearStatus === "draft" ? (
+          <p className="year-transition-consult-banner" role="status">
+            Vous consultez <strong>{teacherCoursesYearLabel ?? "une année future"}</strong>
+            {" "}
+            <span className="school-year-badge draft">Brouillon</span>
+            . L’année n’est pas activée.
+            <button type="button" className="workspace-action secondary" onClick={returnToActiveSchoolYear}>
+              Revenir à l’année active
+            </button>
+          </p>
+        ) : null}
 
         {activeSection === "mes-cours" && (
           <MesCoursPanel
@@ -1604,6 +1699,7 @@ export default function Home() {
             branchLabel={openNotebookCourse.branchLabel}
             annualCourseId={openNotebookCourse.annualCourseId}
             schoolYearLabel={teacherCoursesYearLabel}
+            schoolYearStatus={viewedSchoolYearStatus}
             subjectId={notebookSubjectId}
             schoolWeeks={schoolWeeksMemo}
             centerWeekNumber={notebookCenterWeek}
@@ -1654,6 +1750,7 @@ export default function Home() {
             currentTeacherId={currentTeacherId}
             onCalendarUpdated={applySchoolCalendarWeeks}
             onNotice={showNotice}
+            onOpenTargetCourse={openAssignedCourseInYear}
           />
         )}
 

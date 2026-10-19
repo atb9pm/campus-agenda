@@ -50,6 +50,16 @@ import { SqlAnnualCourseStore } from "./sql/sql-annual-course-store.ts";
 import type { CourseScheduleStore } from "./course-schedule-types.ts";
 import { getMemoryCourseScheduleStore, MemoryCourseScheduleStore } from "./memory-course-schedule-store.ts";
 import { SqlCourseScheduleStore } from "./sql/sql-course-schedule-store.ts";
+import type { ApplyPersistedYearTransitionDeps } from "../../features/year-transition/apply.ts";
+import type { YearTransitionPrepareDeps } from "../../features/year-transition/prepare.ts";
+import {
+  getMemoryYearTransitionApplyStore,
+} from "./memory-year-transition-apply-store.ts";
+import {
+  getMemoryYearTransitionPreviewStore,
+} from "./memory-year-transition-preview-store.ts";
+import { SqlYearTransitionApplyStore } from "./sql/sql-year-transition-apply-store.ts";
+import { SqlYearTransitionPreviewStore } from "./sql/sql-year-transition-preview-store.ts";
 
 import type { StudentAccessStore } from "./student-access-types.ts";
 import type { AdminMfaStore } from "../../features/admin-mfa/types.ts";
@@ -428,6 +438,26 @@ export async function checkClassroomExists(classroomId: string): Promise<boolean
 
 export async function getRuntimeAgendaAdapterStore(): Promise<RuntimeAgendaAdapterStore> {
   return (await resolveAgendaStore()).adapters;
+}
+
+export async function getYearTransitionPrepareDeps(): Promise<YearTransitionPrepareDeps> {
+  const resolved = await resolveAgendaStore();
+  const engine: ApplyPersistedYearTransitionDeps = {
+    notes: resolved.annualCourseNotesStore,
+    previews: resolved.sqlDb
+      ? new SqlYearTransitionPreviewStore(resolved.sqlDb)
+      : getMemoryYearTransitionPreviewStore(),
+    applyStore: resolved.sqlDb
+      ? new SqlYearTransitionApplyStore(resolved.sqlDb)
+      : getMemoryYearTransitionApplyStore(),
+    years: resolved.schoolYearStore,
+    courses: resolved.annualCourseStore,
+    agenda: resolved.store,
+    paths: resolved.pedagogicalPathStore,
+    schedules: resolved.courseScheduleStore,
+    adapters: resolved.adapters,
+  };
+  return { ...engine, catalog: resolved.schoolCatalogStore };
 }
 
 export async function listRuntimeClassrooms(): Promise<RuntimeClassroomListItem[]> {

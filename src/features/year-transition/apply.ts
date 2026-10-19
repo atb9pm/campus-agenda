@@ -28,7 +28,8 @@ import {
 import { YEAR_TRANSITION_AGENDA_COMPAT_HOUR, buildYearTransitionPreview } from "./preview.ts";
 import { extractClassMappingsFromSnapshotJson, YearTransitionSnapshotCorruptedError } from "./snapshot-mappings.ts";
 import type { PersistedYearTransitionPreview, YearTransitionPreviewStore } from "./store.ts";
-import type { YearTransitionPreviewEntry, YearTransitionPreviewInput, YearTransitionPreviewReason } from "./types.ts";
+import type { YearTransitionPreviewReason } from "./reasons.ts";
+import type { YearTransitionPreviewEntry, YearTransitionPreviewInput } from "./types.ts";
 
 export interface ApplyPersistedYearTransitionDeps {
   notes?: AnnualCourseNotesStore;
