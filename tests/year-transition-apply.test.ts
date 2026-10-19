@@ -208,6 +208,7 @@ interface MemoryWorld {
 }
 
 async function seedMemory(options: {
+  sourceStatus?: SchoolYearWithWeeks["status"];
   targetStatus?: SchoolYearWithWeeks["status"];
   weekCount?: number;
   extraItems?: PrototypeAgendaItem[];
@@ -222,7 +223,7 @@ async function seedMemory(options: {
   resetMemoryLegacySchool();
   resetMemorySchoolYearStore();
   replaceMemorySchoolYears([
-    yearRecord(SOURCE_YEAR, "active"),
+    yearRecord(SOURCE_YEAR, options.sourceStatus ?? "active"),
     yearRecord(TARGET_YEAR, options.targetStatus ?? "draft", options.weekCount ?? 2),
   ]);
   replaceMemoryLegacySchool({
@@ -1467,6 +1468,140 @@ test("updateAgendaItem conserve la provenance APPLY (Memory + SQLite)", async ()
   assert.equal(Number(persisted?.source_agenda_item_id), 10);
   assert.equal(persisted?.title, "SQL modifié");
   db.close();
+});
+
+test("existing APPLY fingerprint différent du PREVIEW → DIVERGED", async () => {
+  const world = await seedMemory();
+  await persistLive(world);
+  await applyPersistedYearTransition("transition-1", world.deps);
+  const dump = world.applyStore.exportBackupTables();
+  dump.year_transition_applies = dump.year_transition_applies.map((row) => ({
+    ...row,
+    fingerprint: "0".repeat(64),
+  }));
+  world.applyStore.importBackupTables(dump);
+  const result = await applyPersistedYearTransition("transition-1", world.deps);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.code, "APPLY_LEDGER_DIVERGED");
+});
+
+test("existing APPLY engineVersion différent → DIVERGED", async () => {
+  const world = await seedMemory();
+  await persistLive(world);
+  await applyPersistedYearTransition("transition-1", world.deps);
+  const dump = world.applyStore.exportBackupTables();
+  dump.year_transition_applies = dump.year_transition_applies.map((row) => ({
+    ...row,
+    engine_version: 99,
+  }));
+  world.applyStore.importBackupTables(dump);
+  const result = await applyPersistedYearTransition("transition-1", world.deps);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.code, "APPLY_LEDGER_DIVERGED");
+});
+
+test("applyResult inconnu dans ledger → DIVERGED", async () => {
+  const world = await seedMemory();
+  await persistLive(world);
+  await applyPersistedYearTransition("transition-1", world.deps);
+  const dump = world.applyStore.exportBackupTables();
+  dump.year_transition_apply_entries = dump.year_transition_apply_entries.map((row) => ({
+    ...row,
+    apply_result: "HACKED",
+  }));
+  world.applyStore.importBackupTables(dump);
+  const result = await applyPersistedYearTransition("transition-1", world.deps);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.code, "APPLY_LEDGER_DIVERGED");
+});
+
+test("SKIPPED_NO_REFERENCE + AgendaItem même provenance → DIVERGED", async () => {
+  const world = await seedMemory({ extraItems: [sourceItem({ referenceItemId: null })] });
+  await persistLive(world);
+  await applyPersistedYearTransition("transition-1", world.deps);
+  const items = await world.agenda.exportAllItems();
+  world.agenda.installExactItemsCopyOnWrite([
+    ...items,
+    {
+      ...sourceItem({ id: 99, schoolYearId: TARGET_YEAR, annualCourseId: TARGET_COURSE }),
+      sourceTransitionId: "transition-1",
+      sourceAgendaItemId: 10,
+    },
+  ]);
+  const result = await applyPersistedYearTransition("transition-1", world.deps);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.code, "APPLY_LEDGER_DIVERGED");
+});
+
+test("SKIPPED_NO_CONTINUATION + AgendaItem même provenance → DIVERGED", async () => {
+  const world = await seedMemory();
+  await persistLive(world, [{ sourceClassId: SOURCE_CLASS, targetClassId: null }]);
+  await applyPersistedYearTransition("transition-1", world.deps);
+  const items = await world.agenda.exportAllItems();
+  world.agenda.installExactItemsCopyOnWrite([
+    ...items,
+    {
+      ...sourceItem({ id: 99, schoolYearId: TARGET_YEAR, annualCourseId: TARGET_COURSE }),
+      sourceTransitionId: "transition-1",
+      sourceAgendaItemId: 10,
+    },
+  ]);
+  const result = await applyPersistedYearTransition("transition-1", world.deps);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.code, "APPLY_LEDGER_DIVERGED");
+});
+
+test("CREATED avec deux AgendaItem même provenance → DIVERGED", async () => {
+  const world = await seedMemory();
+  await persistLive(world);
+  await applyPersistedYearTransition("transition-1", world.deps);
+  const items = await world.agenda.exportAllItems();
+  const created = items.find((item) => item.schoolYearId === TARGET_YEAR);
+  assert.ok(created);
+  world.agenda.installExactItemsCopyOnWrite([
+    ...items,
+    { ...created, id: created.id + 100 },
+  ]);
+  const result = await applyPersistedYearTransition("transition-1", world.deps);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.code, "APPLY_LEDGER_DIVERGED");
+});
+
+test("duplicate sourceAgendaItemId dans ledger Memory/import → DIVERGED", async () => {
+  const world = await seedMemory();
+  await persistLive(world);
+  await applyPersistedYearTransition("transition-1", world.deps);
+  const dump = world.applyStore.exportBackupTables();
+  const first = dump.year_transition_apply_entries[0];
+  assert.ok(first);
+  dump.year_transition_apply_entries = [first, { ...first, created_at: "2027-03-02T00:00:00.000Z" }];
+  world.applyStore.importBackupTables(dump);
+  const result = await applyPersistedYearTransition("transition-1", world.deps);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.code, "APPLY_LEDGER_DIVERGED");
+});
+
+test("source year absente au premier APPLY → SOURCE_YEAR_NOT_FOUND, 0 write", async () => {
+  const world = await seedMemory();
+  await persistLive(world);
+  const beforeItems = await world.agenda.exportAllItems();
+  replaceMemorySchoolYears([yearRecord(TARGET_YEAR, "draft")]);
+  const result = await applyPersistedYearTransition("transition-1", world.deps);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.code, "SOURCE_YEAR_NOT_FOUND");
+  assert.deepEqual(await world.agenda.exportAllItems(), beforeItems);
+  assert.equal(await world.applyStore.getByTransitionId("transition-1"), null);
+  assert.equal((await world.applyStore.listEntries("transition-1")).length, 0);
+});
+
+test("source year archived → APPLY autorisé", async () => {
+  const world = await seedMemory({ sourceStatus: "archived" });
+  await persistLive(world);
+  const result = await applyPersistedYearTransition("transition-1", world.deps);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.code, "APPLIED");
+  assert.equal((await world.agenda.exportAllItems()).filter((item) => item.schoolYearId === TARGET_YEAR).length, 1);
 });
 
 test("installExactItemsCopyOnWrite hors AgendaStore, hors routes/UI, hors barrel", async () => {

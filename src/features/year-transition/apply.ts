@@ -9,6 +9,7 @@ import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
 import { assembleLiveYearTransitionPreviewInput } from "./assemble.ts";
 import {
   YEAR_TRANSITION_APPLY_BLOCKING_REASONS,
+  YEAR_TRANSITION_APPLY_RESULTS,
   type PersistedYearTransitionApply,
   type PersistedYearTransitionApplyEntry,
   type YearTransitionApplyAgendaInsert,
@@ -25,7 +26,7 @@ import {
 } from "./fingerprint.ts";
 import { YEAR_TRANSITION_AGENDA_COMPAT_HOUR, buildYearTransitionPreview } from "./preview.ts";
 import { extractClassMappingsFromSnapshotJson, YearTransitionSnapshotCorruptedError } from "./snapshot-mappings.ts";
-import type { YearTransitionPreviewStore } from "./store.ts";
+import type { PersistedYearTransitionPreview, YearTransitionPreviewStore } from "./store.ts";
 import type { YearTransitionPreviewEntry, YearTransitionPreviewReason } from "./types.ts";
 
 export interface ApplyPersistedYearTransitionDeps {
@@ -41,6 +42,23 @@ export interface ApplyPersistedYearTransitionDeps {
 }
 
 const BLOCKING = new Set<string>(YEAR_TRANSITION_APPLY_BLOCKING_REASONS);
+const APPLY_RESULTS = new Set<string>(YEAR_TRANSITION_APPLY_RESULTS);
+
+function isKnownApplyResult(value: string): value is YearTransitionApplyResult {
+  return APPLY_RESULTS.has(value);
+}
+
+function itemsWithApplyProvenance(
+  items: readonly PrototypeAgendaItem[],
+  transitionId: string,
+  sourceAgendaItemId: number,
+): PrototypeAgendaItem[] {
+  return items.filter(
+    (item) =>
+      (item.sourceTransitionId ?? null) === transitionId &&
+      Number(item.sourceAgendaItemId) === sourceAgendaItemId,
+  );
+}
 
 function fail(code: YearTransitionApplyFailure["code"], extra: Partial<YearTransitionApplyFailure> = {}): YearTransitionApplyFailure {
   return { ok: false, code, reason: code, ...extra };
@@ -88,21 +106,29 @@ function success(
 async function verifyExistingApply(
   deps: ApplyPersistedYearTransitionDeps,
   apply: PersistedYearTransitionApply,
+  persisted: PersistedYearTransitionPreview,
 ): Promise<YearTransitionApplyOutcome> {
+  if (apply.transitionId !== persisted.id) return fail("APPLY_LEDGER_DIVERGED");
+  if (apply.fingerprint !== persisted.fingerprint) return fail("APPLY_LEDGER_DIVERGED");
+  if (apply.engineVersion !== persisted.engineVersion) return fail("APPLY_LEDGER_DIVERGED");
+
   const entries = await deps.applyStore.listEntries(apply.transitionId);
   const items = await deps.agenda.exportAllItems();
+  const seenSourceIds = new Set<number>();
   for (const entry of entries) {
+    if (entry.transitionId !== apply.transitionId) return fail("APPLY_LEDGER_DIVERGED");
+    if (seenSourceIds.has(entry.sourceAgendaItemId)) return fail("APPLY_LEDGER_DIVERGED");
+    seenSourceIds.add(entry.sourceAgendaItemId);
+    if (!isKnownApplyResult(entry.applyResult)) return fail("APPLY_LEDGER_DIVERGED");
+
     if (entry.applyResult === "CREATED") {
-      const found = items.find(
-        (item) =>
-          (item.sourceTransitionId ?? null) === apply.transitionId &&
-          Number(item.sourceAgendaItemId) === entry.sourceAgendaItemId,
-      );
-      if (!found) return fail("APPLY_LEDGER_DIVERGED");
-      if ((found.annualCourseId ?? null) !== (entry.targetAnnualCourseId ?? null)) {
+      const found = itemsWithApplyProvenance(items, apply.transitionId, entry.sourceAgendaItemId);
+      if (found.length !== 1) return fail("APPLY_LEDGER_DIVERGED");
+      const created = found[0]!;
+      if ((created.annualCourseId ?? null) !== (entry.targetAnnualCourseId ?? null)) {
         return fail("APPLY_LEDGER_DIVERGED");
       }
-      if ((found.referenceItemId ?? null) !== (entry.referenceItemId ?? null)) {
+      if ((created.referenceItemId ?? null) !== (entry.referenceItemId ?? null)) {
         return fail("APPLY_LEDGER_DIVERGED");
       }
       continue;
@@ -115,7 +141,10 @@ async function verifyExistingApply(
         (item) => (item.annualCourseId ?? null) === courseId && (item.referenceItemId ?? null) === referenceId,
       );
       if (!found) return fail("APPLY_LEDGER_DIVERGED");
+      continue;
     }
+    const unexpected = itemsWithApplyProvenance(items, apply.transitionId, entry.sourceAgendaItemId);
+    if (unexpected.length > 0) return fail("APPLY_LEDGER_DIVERGED");
   }
   return success("ALREADY_APPLIED", apply, entries);
 }
@@ -230,11 +259,15 @@ export async function applyPersistedYearTransition(
 
   const existingApply = await deps.applyStore.getByTransitionId(transitionId);
   if (existingApply) {
-    return verifyExistingApply(deps, existingApply);
+    return verifyExistingApply(deps, existingApply, persisted);
   }
 
   if (persisted.sourceSchoolYearId === persisted.targetSchoolYearId) {
     return fail("TARGET_YEAR_NOT_DRAFT");
+  }
+  const sourceYear = await deps.years.getSchoolYearById(persisted.sourceSchoolYearId);
+  if (!sourceYear) {
+    return fail("SOURCE_YEAR_NOT_FOUND");
   }
   const targetYear = await deps.years.getSchoolYearById(persisted.targetSchoolYearId);
   if (!targetYear || targetYear.status !== "draft") {
@@ -334,7 +367,7 @@ export async function applyPersistedYearTransition(
   } catch (error) {
     if (!isConstraintError(error)) throw error;
     const raced = await deps.applyStore.getByTransitionId(transitionId);
-    if (raced) return verifyExistingApply(deps, raced);
+    if (raced) return verifyExistingApply(deps, raced, persisted);
     return fail("APPLY_CONCURRENT_CONFLICT");
   }
 
