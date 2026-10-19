@@ -61,6 +61,7 @@ export const SQL_MIGRATION_FILES = [
   "0029_admin_mfa.sql",
   "0030_agenda_student_visible.sql",
   "0031_year_transition_preview.sql",
+  "0032_year_transition_apply.sql",
 ] as const;
 
 const SCHEMA_MIGRATIONS_DDL = `CREATE TABLE IF NOT EXISTS schema_migrations (

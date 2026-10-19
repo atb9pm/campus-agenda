@@ -296,7 +296,7 @@ test("backup v4 — roundtrip mémoire", async () => {
 
   const snapshot = await exportCampusSnapshot(deps);
   assert.equal(snapshot.version, 4);
-  assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 32);
+  assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 34);
   assert.deepEqual(Object.keys(snapshot.tables), [...CAMPUS_BACKUP_INSERT_ORDER]);
   for (const table of CAMPUS_BACKUP_INSERT_ORDER) {
     assert.ok(Array.isArray(snapshot.tables[table]), table);
@@ -341,7 +341,7 @@ test("backup v4 — roundtrip SQLite", async () => {
   await populateLibraryAndTimetable(deps, structured.yearId);
   const snapshot = await exportCampusSnapshot(deps);
   assert.equal(snapshot.version, 4);
-  assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 32);
+  assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 34);
   assert.deepEqual(Object.keys(snapshot.tables), [...CAMPUS_BACKUP_INSERT_ORDER]);
   for (const table of CAMPUS_BACKUP_INSERT_ORDER) {
     assert.ok(Array.isArray(snapshot.tables[table]), table);

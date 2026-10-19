@@ -31,7 +31,7 @@ function item(patch: Partial<PrototypeAgendaItem> & Pick<PrototypeAgendaItem, "i
 
 test("2.55.0 — brouillon / publié Carnet, migration 0030", async () => {
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0031_year_transition_preview.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0032_year_transition_apply.sql");
   const migration = await readFile(new URL("../migrations/0030_agenda_student_visible.sql", import.meta.url), "utf8");
   assert.match(migration, /student_visible/);
   assert.match(migration, /DEFAULT 1/);

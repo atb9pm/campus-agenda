@@ -42,6 +42,8 @@ export interface AgendaItemRow {
   reference_session_id: string | null;
   reference_item_id: string | null;
   student_visible: number | null;
+  source_transition_id?: string | null;
+  source_agenda_item_id?: number | null;
 }
 
 export interface StudentAccessRow {

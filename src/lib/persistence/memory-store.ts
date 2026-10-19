@@ -60,6 +60,11 @@ export class MemoryAgendaStore implements AgendaStore {
       referenceItemId: input.referenceItemId ?? null,
       studentVisible: input.studentVisible,
     });
+    const created = this.items.find((item) => item.id === id);
+    if (created) {
+      created.sourceTransitionId = null;
+      created.sourceAgendaItemId = null;
+    }
     return (await this.findAgendaItem(id))!;
   }
 
@@ -197,6 +202,14 @@ export class MemoryAgendaStore implements AgendaStore {
   }
 
   async replaceAllItems(items: PrototypeAgendaItem[]): Promise<void> {
+    this.items = items.map((item) => ({ ...item }));
+  }
+
+  /**
+   * Commit copy-on-write du chemin APPLY Memory uniquement.
+   * Hors AgendaStore. Hors routes/UI. Distinct de replaceAllItems.
+   */
+  installExactItemsCopyOnWrite(items: PrototypeAgendaItem[]): void {
     this.items = items.map((item) => ({ ...item }));
   }
 }

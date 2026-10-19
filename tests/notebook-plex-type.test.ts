@@ -7,7 +7,7 @@ import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 
 test("version 2.61.8 — carnet IBM Plex Sans 18 px, pas de migration", async () => {
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0031_year_transition_preview.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0032_year_transition_apply.sql");
   const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
   assert.match(css, /family=IBM\+Plex\+Sans/);
   assert.match(css, /--font-sans: "IBM Plex Sans"/);

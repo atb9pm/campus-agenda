@@ -37,6 +37,8 @@ export const CAMPUS_BACKUP_INSERT_ORDER = [
   "teacher_notes",
   "year_transition_previews",
   "year_transition_preview_entries",
+  "year_transition_applies",
+  "year_transition_apply_entries",
 ] as const;
 
 export type CampusBackupTableName = (typeof CAMPUS_BACKUP_INSERT_ORDER)[number];
@@ -180,6 +182,8 @@ export const CAMPUS_BACKUP_COLUMNS: Record<CampusBackupTableName, BackupColumnSp
     { name: "reference_session_id", type: "text" },
     { name: "reference_item_id", type: "text" },
     { name: "student_visible", type: "flag" },
+    { name: "source_transition_id", type: "text" },
+    { name: "source_agenda_item_id", type: "integer" },
   ),
   timetable_imports: cols(
     { name: "id", type: "text", required: true },
@@ -367,6 +371,22 @@ export const CAMPUS_BACKUP_COLUMNS: Record<CampusBackupTableName, BackupColumnSp
     { name: "target_annual_course_id", type: "text" },
     { name: "entry_json", type: "text", required: true },
   ),
+  year_transition_applies: cols(
+    { name: "transition_id", type: "text", required: true },
+    { name: "fingerprint", type: "text", required: true },
+    { name: "engine_version", type: "integer", required: true },
+    { name: "app_version", type: "text", required: true },
+    { name: "applied_at", type: "text", required: true },
+  ),
+  year_transition_apply_entries: cols(
+    { name: "transition_id", type: "text", required: true },
+    { name: "source_agenda_item_id", type: "integer", required: true },
+    { name: "preview_reason", type: "text", required: true },
+    { name: "apply_result", type: "text", required: true },
+    { name: "target_annual_course_id", type: "text" },
+    { name: "reference_item_id", type: "text" },
+    { name: "created_at", type: "text", required: true },
+  ),
 };
 
 /** FK non nulle → la référence doit exister dans le snapshot, même si le parent est vide. */
@@ -422,5 +442,17 @@ export const CAMPUS_BACKUP_FOREIGN_KEYS: Array<{
     column: "transition_id",
     parent: "year_transition_previews",
     parentColumn: "id",
+  },
+  {
+    table: "year_transition_applies",
+    column: "transition_id",
+    parent: "year_transition_previews",
+    parentColumn: "id",
+  },
+  {
+    table: "year_transition_apply_entries",
+    column: "transition_id",
+    parent: "year_transition_applies",
+    parentColumn: "transition_id",
   },
 ];
