@@ -159,7 +159,7 @@ function testItem(input: {
 
 test("version 2.38.0 — semestre visuel, pas de migration", () => {
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0031_year_transition_preview.sql");
 });
 
 test("semestres — tri par monday, coupe continue, aucune semaine inventée", () => {

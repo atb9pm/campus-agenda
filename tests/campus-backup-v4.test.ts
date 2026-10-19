@@ -40,6 +40,7 @@ import { getMemoryTeacherAccountStore, resetMemoryTeacherAccountStore } from "..
 import { getMemoryTeacherSetupStore, resetMemoryTeacherSetupStore } from "../src/lib/persistence/memory-teacher-setup-store.ts";
 import { getMemoryTeacherNotesStore, resetMemoryTeacherNotesStore } from "../src/lib/persistence/memory-teacher-notes-store.ts";
 import { resetMemoryAdminMfaStore } from "../src/lib/persistence/memory-admin-mfa-store.ts";
+import { resetMemoryYearTransitionPreviewStore } from "../src/lib/persistence/memory-year-transition-preview-store.ts";
 import { getMemorySchoolCatalogStore, resetMemorySchoolCatalogStore } from "../src/lib/persistence/memory-school-catalog-store.ts";
 import { MemorySchoolYearStore, resetMemorySchoolYearStore } from "../src/lib/persistence/memory-school-year-store.ts";
 import { getMemoryAnnualCourseStore, resetMemoryAnnualCourseStore } from "../src/lib/persistence/memory-annual-course-store.ts";
@@ -106,6 +107,7 @@ function resetMemoryWorld() {
   resetMemoryTeacherSetupStore();
   resetMemoryTeacherNotesStore();
   resetMemoryAdminMfaStore();
+  resetMemoryYearTransitionPreviewStore();
   resetMemoryTeacherAccountStore();
   resetMemorySchoolCatalogStore();
   resetMemorySchoolYearStore();
@@ -294,7 +296,7 @@ test("backup v4 — roundtrip mémoire", async () => {
 
   const snapshot = await exportCampusSnapshot(deps);
   assert.equal(snapshot.version, 4);
-  assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 30);
+  assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 32);
   assert.deepEqual(Object.keys(snapshot.tables), [...CAMPUS_BACKUP_INSERT_ORDER]);
   for (const table of CAMPUS_BACKUP_INSERT_ORDER) {
     assert.ok(Array.isArray(snapshot.tables[table]), table);
@@ -339,7 +341,7 @@ test("backup v4 — roundtrip SQLite", async () => {
   await populateLibraryAndTimetable(deps, structured.yearId);
   const snapshot = await exportCampusSnapshot(deps);
   assert.equal(snapshot.version, 4);
-  assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 30);
+  assert.equal(CAMPUS_BACKUP_INSERT_ORDER.length, 32);
   assert.deepEqual(Object.keys(snapshot.tables), [...CAMPUS_BACKUP_INSERT_ORDER]);
   for (const table of CAMPUS_BACKUP_INSERT_ORDER) {
     assert.ok(Array.isArray(snapshot.tables[table]), table);

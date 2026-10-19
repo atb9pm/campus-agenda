@@ -3,11 +3,14 @@ import { createHash } from "node:crypto";
 import { normalizeMappingClassId } from "./class-mapping.ts";
 import type { YearTransitionPreviewInput } from "./types.ts";
 
+/** Version des règles métier de projection. Fait partie de l’état matériel et du fingerprint. */
+export const YEAR_TRANSITION_PREVIEW_ENGINE_VERSION = 1;
+
 /**
  * Empreinte matérielle du PREVIEW.
  *
  * Inclus (tout ce qui change le résultat métier ou un APPLY futur) :
- * années, mappings de classes, identités de cours, snapshot de parcours
+ * version du moteur, années, mappings de classes, identités de cours, snapshot de parcours
  * (ids, positions, type/title/detail des items), CourseSession cibles,
  * publications source (id, cours, refs, type/title/detail),
  * publications cibles (refs, courseSessionKey/Date, semaine/jour/heure cibles).
@@ -45,6 +48,7 @@ function compareNullable(left: string | null | undefined, right: string | null |
 
 function materialState(input: YearTransitionPreviewInput) {
   return {
+    engineVersion: YEAR_TRANSITION_PREVIEW_ENGINE_VERSION,
     sourceSchoolYearId: input.sourceSchoolYearId,
     targetSchoolYearId: input.targetSchoolYearId,
     classMappings: [...input.classMappings]
@@ -165,8 +169,21 @@ function materialState(input: YearTransitionPreviewInput) {
   };
 }
 
+/** Objet matériel canonique (clés triées). Unique source de vérité du fingerprint. */
+export function yearTransitionPreviewMaterialSnapshot(input: YearTransitionPreviewInput): unknown {
+  return canonical(materialState(input));
+}
+
+/** JSON exact haché pour le fingerprint — identique à snapshot_json persisté. */
+export function yearTransitionPreviewMaterialSnapshotJson(input: YearTransitionPreviewInput): string {
+  return JSON.stringify(yearTransitionPreviewMaterialSnapshot(input));
+}
+
+export function yearTransitionPreviewFingerprintFromSnapshotJson(snapshotJson: string): string {
+  return createHash("sha256").update(snapshotJson).digest("hex");
+}
+
 /** SHA-256 hexadécimal du graphe matériel du PREVIEW. Déterministe, sans horodatage, indépendant de l’ordre d’entrée. */
 export function yearTransitionPreviewFingerprint(input: YearTransitionPreviewInput): string {
-  const payload = JSON.stringify(canonical(materialState(input)));
-  return createHash("sha256").update(payload).digest("hex");
+  return yearTransitionPreviewFingerprintFromSnapshotJson(yearTransitionPreviewMaterialSnapshotJson(input));
 }

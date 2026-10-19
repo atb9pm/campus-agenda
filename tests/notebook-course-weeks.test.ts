@@ -630,7 +630,7 @@ test("carnet — notes prof non régressées", () => {
 });
 
 test("carnet — aucune migration SQL CourseSession, dernière migration inchangée", () => {
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0031_year_transition_preview.sql");
   assert.equal(
     SQL_MIGRATION_FILES.some((file) => file.toLowerCase().includes("course_session")),
     false,

@@ -49,6 +49,10 @@ import type { TemplateStore } from "./types.ts";
 import type { TimetableStore } from "./timetable-types.ts";
 import { getMemoryAdminMfaStore } from "./memory-admin-mfa-store.ts";
 import type { AdminMfaStore } from "../../features/admin-mfa/types.ts";
+import {
+  exportMemoryYearTransitionPreviewTables,
+  replaceMemoryYearTransitionPreviewTables,
+} from "./memory-year-transition-preview-store.ts";
 
 export const BACKUP_FORMAT_VERSION = BACKUP_FORMAT_VERSION_V4;
 
@@ -399,6 +403,10 @@ async function buildMemoryTables(deps: CampusBackupDeps): Promise<CampusTableDum
   dump.timetable_slots = timetable.timetable_slots;
   dump.timetable_class_mappings = timetable.timetable_class_mappings;
   dump.timetable_teacher_codes = timetable.timetable_teacher_codes;
+
+  const yearTransition = exportMemoryYearTransitionPreviewTables();
+  dump.year_transition_previews = yearTransition.year_transition_previews;
+  dump.year_transition_preview_entries = yearTransition.year_transition_preview_entries;
 
   return dump;
 }
@@ -808,6 +816,11 @@ async function restoreMemoryTables(deps: CampusBackupDeps, dump: CampusTableDump
     timetable_slots: dump.timetable_slots,
     timetable_class_mappings: dump.timetable_class_mappings,
     timetable_teacher_codes: dump.timetable_teacher_codes,
+  });
+
+  replaceMemoryYearTransitionPreviewTables({
+    year_transition_previews: dump.year_transition_previews,
+    year_transition_preview_entries: dump.year_transition_preview_entries,
   });
 }
 

@@ -37,6 +37,17 @@ export {
   type CampusBackupDeps,
 } from "./campus-backup.ts";
 export { BACKUP_FORMAT_VERSION_V4, CAMPUS_BACKUP_INSERT_ORDER } from "./campus-backup-tables.ts";
+export type {
+  PersistedYearTransitionPreview,
+  PersistedYearTransitionPreviewEntry,
+  YearTransitionPreviewStore,
+} from "../../features/year-transition/store.ts";
+export {
+  MemoryYearTransitionPreviewStore,
+  getMemoryYearTransitionPreviewStore,
+  resetMemoryYearTransitionPreviewStore,
+} from "./memory-year-transition-preview-store.ts";
+export { SqlYearTransitionPreviewStore } from "./sql/sql-year-transition-preview-store.ts";
 export type { TeacherSetupBackupEntry } from "./teacher-setup-types.ts";
 export type { TeacherNotesBackupEntry } from "./teacher-notes-types.ts";
 export type { TeacherAccountBackupEntry } from "./teacher-account-types.ts";

@@ -86,7 +86,7 @@ function sampleDoc(): CampusRichDoc {
 
 test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async () => {
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0031_year_transition_preview.sql");
   const [panel, notesApi, studentPage, homeworkPanel] = await Promise.all([
     readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/api/teacher/notes/route.ts", import.meta.url), "utf8"),

@@ -35,6 +35,8 @@ export const CAMPUS_BACKUP_INSERT_ORDER = [
   "class_attendance_days",
   "teacher_setups",
   "teacher_notes",
+  "year_transition_previews",
+  "year_transition_preview_entries",
 ] as const;
 
 export type CampusBackupTableName = (typeof CAMPUS_BACKUP_INSERT_ORDER)[number];
@@ -346,6 +348,25 @@ export const CAMPUS_BACKUP_COLUMNS: Record<CampusBackupTableName, BackupColumnSp
     { name: "notes_json", type: "text", required: true },
     { name: "updated_at", type: "text" },
   ),
+  year_transition_previews: cols(
+    { name: "id", type: "text", required: true },
+    { name: "source_school_year_id", type: "text", required: true },
+    { name: "target_school_year_id", type: "text", required: true },
+    { name: "fingerprint", type: "text", required: true },
+    { name: "engine_version", type: "integer", required: true },
+    { name: "app_version", type: "text", required: true },
+    { name: "snapshot_json", type: "text", required: true },
+    { name: "preview_json", type: "text", required: true },
+    { name: "created_at", type: "text", required: true },
+  ),
+  year_transition_preview_entries: cols(
+    { name: "transition_id", type: "text", required: true },
+    { name: "source_agenda_item_id", type: "integer", required: true },
+    { name: "reason", type: "text", required: true },
+    { name: "reference_item_id", type: "text" },
+    { name: "target_annual_course_id", type: "text" },
+    { name: "entry_json", type: "text", required: true },
+  ),
 };
 
 /** FK non nulle → la référence doit exister dans le snapshot, même si le parent est vide. */
@@ -396,4 +417,10 @@ export const CAMPUS_BACKUP_FOREIGN_KEYS: Array<{
   { table: "teacher_setups", column: "teacher_id", parent: "teachers", parentColumn: "id" },
   { table: "teacher_notes", column: "teacher_id", parent: "teachers", parentColumn: "id" },
   { table: "teacher_mfa", column: "teacher_id", parent: "teachers", parentColumn: "id" },
+  {
+    table: "year_transition_preview_entries",
+    column: "transition_id",
+    parent: "year_transition_previews",
+    parentColumn: "id",
+  },
 ];
