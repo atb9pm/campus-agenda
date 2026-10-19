@@ -63,6 +63,8 @@ const BUSINESS_ZERO_TABLES = [
   "pedagogical_paths",
   "annual_course_notes",
   "teacher_notes",
+  "year_transition_previews",
+  "year_transition_preview_entries",
   "teacher_setups",
   "teacher_mfa",
   "school_day_exceptions",
@@ -114,7 +116,7 @@ async function bootstrapEmptyProduction(db: SqlDatabase) {
 
 test("version 2.48.0 — bootstrap production sans migration destructive", async () => {
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0030_agenda_student_visible.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0031_year_transition_preview.sql");
   assert.equal(SQL_MIGRATION_FILES.includes("0027_delete_demo_data.sql" as (typeof SQL_MIGRATION_FILES)[number]), false);
 
   const storeFactory = await readFile(new URL("../src/lib/persistence/store-factory.ts", import.meta.url), "utf8");
