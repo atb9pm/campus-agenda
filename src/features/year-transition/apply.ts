@@ -76,6 +76,31 @@ function skipResult(reason: YearTransitionPreviewReason | string): YearTransitio
   return null;
 }
 
+export function expectedApplyResultForPreviewReason(
+  reason: YearTransitionPreviewReason | string,
+): YearTransitionApplyResult | null {
+  if (reason === "PROJECTABLE") return "CREATED";
+  if (reason === "ALREADY_PRESENT") return "ALREADY_PRESENT";
+  return skipResult(reason);
+}
+
+function sameNullableId(left: string | null | undefined, right: string | null | undefined): boolean {
+  const normalizedLeft = left?.trim() ? left.trim() : null;
+  const normalizedRight = right?.trim() ? right.trim() : null;
+  return normalizedLeft === normalizedRight;
+}
+
+function mapBySourceAgendaItemId<T extends { sourceAgendaItemId: number }>(
+  entries: readonly T[],
+): Map<number, T> | null {
+  const map = new Map<number, T>();
+  for (const entry of entries) {
+    if (map.has(entry.sourceAgendaItemId)) return null;
+    map.set(entry.sourceAgendaItemId, entry);
+  }
+  return map;
+}
+
 function countByResult(entries: readonly PersistedYearTransitionApplyEntry[]) {
   let createdCount = 0;
   let alreadyPresentCount = 0;
@@ -112,14 +137,35 @@ async function verifyExistingApply(
   if (apply.fingerprint !== persisted.fingerprint) return fail("APPLY_LEDGER_DIVERGED");
   if (apply.engineVersion !== persisted.engineVersion) return fail("APPLY_LEDGER_DIVERGED");
 
-  const entries = await deps.applyStore.listEntries(apply.transitionId);
+  const previewEntries = await deps.previews.listEntries(persisted.id);
+  const applyEntries = await deps.applyStore.listEntries(apply.transitionId);
+  const previewBySource = mapBySourceAgendaItemId(previewEntries);
+  const applyBySource = mapBySourceAgendaItemId(applyEntries);
+  if (!previewBySource || !applyBySource) return fail("APPLY_LEDGER_DIVERGED");
+  if (previewBySource.size !== applyBySource.size) return fail("APPLY_LEDGER_DIVERGED");
+  for (const sourceAgendaItemId of previewBySource.keys()) {
+    if (!applyBySource.has(sourceAgendaItemId)) return fail("APPLY_LEDGER_DIVERGED");
+  }
+  for (const sourceAgendaItemId of applyBySource.keys()) {
+    if (!previewBySource.has(sourceAgendaItemId)) return fail("APPLY_LEDGER_DIVERGED");
+  }
+
   const items = await deps.agenda.exportAllItems();
-  const seenSourceIds = new Set<number>();
-  for (const entry of entries) {
+  for (const previewEntry of previewEntries) {
+    const entry = applyBySource.get(previewEntry.sourceAgendaItemId);
+    if (!entry) return fail("APPLY_LEDGER_DIVERGED");
     if (entry.transitionId !== apply.transitionId) return fail("APPLY_LEDGER_DIVERGED");
-    if (seenSourceIds.has(entry.sourceAgendaItemId)) return fail("APPLY_LEDGER_DIVERGED");
-    seenSourceIds.add(entry.sourceAgendaItemId);
-    if (!isKnownApplyResult(entry.applyResult)) return fail("APPLY_LEDGER_DIVERGED");
+    if (entry.previewReason !== previewEntry.reason) return fail("APPLY_LEDGER_DIVERGED");
+    if (!sameNullableId(entry.targetAnnualCourseId, previewEntry.targetAnnualCourseId)) {
+      return fail("APPLY_LEDGER_DIVERGED");
+    }
+    if (!sameNullableId(entry.referenceItemId, previewEntry.referenceItemId)) {
+      return fail("APPLY_LEDGER_DIVERGED");
+    }
+    const expectedResult = expectedApplyResultForPreviewReason(previewEntry.reason);
+    if (!expectedResult || !isKnownApplyResult(entry.applyResult) || entry.applyResult !== expectedResult) {
+      return fail("APPLY_LEDGER_DIVERGED");
+    }
 
     if (entry.applyResult === "CREATED") {
       const found = itemsWithApplyProvenance(items, apply.transitionId, entry.sourceAgendaItemId);
@@ -134,19 +180,21 @@ async function verifyExistingApply(
       continue;
     }
     if (entry.applyResult === "ALREADY_PRESENT") {
+      const provenance = itemsWithApplyProvenance(items, apply.transitionId, entry.sourceAgendaItemId);
+      if (provenance.length !== 0) return fail("APPLY_LEDGER_DIVERGED");
       const courseId = entry.targetAnnualCourseId?.trim() ?? "";
       const referenceId = entry.referenceItemId?.trim() ?? "";
       if (!courseId || !referenceId) return fail("APPLY_LEDGER_DIVERGED");
-      const found = items.find(
+      const found = items.filter(
         (item) => (item.annualCourseId ?? null) === courseId && (item.referenceItemId ?? null) === referenceId,
       );
-      if (!found) return fail("APPLY_LEDGER_DIVERGED");
+      if (found.length !== 1) return fail("APPLY_LEDGER_DIVERGED");
       continue;
     }
     const unexpected = itemsWithApplyProvenance(items, apply.transitionId, entry.sourceAgendaItemId);
-    if (unexpected.length > 0) return fail("APPLY_LEDGER_DIVERGED");
+    if (unexpected.length !== 0) return fail("APPLY_LEDGER_DIVERGED");
   }
-  return success("ALREADY_APPLIED", apply, entries);
+  return success("ALREADY_APPLIED", apply, applyEntries);
 }
 
 async function resolveClassroom(

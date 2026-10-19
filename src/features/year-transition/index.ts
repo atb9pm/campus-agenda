@@ -48,7 +48,7 @@ export {
   extractClassMappingsFromSnapshotJson,
   YearTransitionSnapshotCorruptedError,
 } from "./snapshot-mappings.ts";
-export { applyPersistedYearTransition } from "./apply.ts";
+export { applyPersistedYearTransition, expectedApplyResultForPreviewReason } from "./apply.ts";
 export type { ApplyPersistedYearTransitionDeps } from "./apply.ts";
 export {
   YEAR_TRANSITION_APPLY_BLOCKING_REASONS,
