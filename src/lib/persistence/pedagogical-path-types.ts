@@ -23,4 +23,12 @@ export interface AnnualCourseNotesStore {
   countByClassId(classId: string): Promise<number>;
   /** Lie les notes déjà présentes (même année + classe + CTX) à un AnnualCourse. */
   attachAnnualCourseId(filter: AnnualCourseNoteFilter, annualCourseId: string): Promise<number>;
+  /** Notes du document Carnet d'un enseignant (ownerTeacherId). */
+  listNotesByOwner(ownerTeacherId: string): Promise<AnnualCourseNote[]>;
+  findByOwnerLegacyNote(ownerTeacherId: string, legacyNoteId: string): Promise<AnnualCourseNote | null>;
+  /**
+   * Remplace les notes Carnet d'un propriétaire.
+   * Ne touche pas les notes d'un autre enseignant ni les notes sans owner.
+   */
+  replaceOwnedNotebookNotes(ownerTeacherId: string, notes: readonly AnnualCourseNote[]): Promise<void>;
 }

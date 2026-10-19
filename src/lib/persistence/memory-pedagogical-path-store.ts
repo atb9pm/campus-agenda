@@ -109,6 +109,48 @@ export class MemoryAnnualCourseNotesStore implements AnnualCourseNotesStore {
     return updated;
   }
 
+  async listNotesByOwner(ownerTeacherId: string): Promise<AnnualCourseNote[]> {
+    return [...this.notes.values()]
+      .filter((note) => note.ownerTeacherId === ownerTeacherId)
+      .map((note) => structuredClone(note))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  }
+
+  async findByOwnerLegacyNote(ownerTeacherId: string, legacyNoteId: string): Promise<AnnualCourseNote | null> {
+    for (const note of this.notes.values()) {
+      if (note.ownerTeacherId === ownerTeacherId && note.legacyNoteId === legacyNoteId) {
+        return structuredClone(note);
+      }
+    }
+    return null;
+  }
+
+  async replaceOwnedNotebookNotes(ownerTeacherId: string, notes: readonly AnnualCourseNote[]): Promise<void> {
+    const keepLegacy = new Set(
+      notes.map((note) => note.legacyNoteId).filter((id): id is string => Boolean(id)),
+    );
+    for (const [id, existing] of [...this.notes.entries()]) {
+      if (existing.ownerTeacherId !== ownerTeacherId) continue;
+      if (!existing.legacyNoteId || !keepLegacy.has(existing.legacyNoteId)) {
+        this.notes.delete(id);
+      }
+    }
+    for (const note of notes) {
+      if (note.ownerTeacherId !== ownerTeacherId) continue;
+      const current =
+        note.legacyNoteId != null
+          ? [...this.notes.values()].find(
+              (entry) => entry.ownerTeacherId === ownerTeacherId && entry.legacyNoteId === note.legacyNoteId,
+            )
+          : undefined;
+      if (current) {
+        this.notes.set(current.id, structuredClone({ ...note, id: current.id, createdAt: current.createdAt }));
+      } else {
+        this.notes.set(note.id, structuredClone(note));
+      }
+    }
+  }
+
   exportAllNotes(): AnnualCourseNote[] {
     return [...this.notes.values()].map((note) => structuredClone(note));
   }

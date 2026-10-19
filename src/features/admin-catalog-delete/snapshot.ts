@@ -1,7 +1,7 @@
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
 import type { AnnualCourse, TeacherCourseAssignment, TeacherCourseAssignmentEvent } from "../annual-courses/types.ts";
 import type { ClassAttendanceDay, CourseScheduleSlot } from "../course-schedule/types.ts";
-import type { AnnualCourseNote, ReferencePedagogicalPath } from "../pedagogical-path/index.ts";
+import { parseAnnualNoteBody, type AnnualCourseNote, type ReferencePedagogicalPath } from "../pedagogical-path/index.ts";
 import type { PublicationTemplate } from "../library/types.ts";
 import {
   type PedagogicalContextRecord,
@@ -144,6 +144,7 @@ async function loadAllAnnualNotes(deps: CatalogDeleteSnapshotDeps): Promise<Annu
       .prepare(
         `SELECT id, school_year_id, class_id, context_id, reference_session_id, author_teacher_id,
                 text, source_note_id, source_school_year_id, inherited_at, annual_course_id,
+                body_json, course_session_key, owner_teacher_id, legacy_note_id,
                 created_at, updated_at
          FROM annual_course_notes`,
       )
@@ -154,12 +155,16 @@ async function loadAllAnnualNotes(deps: CatalogDeleteSnapshotDeps): Promise<Annu
         class_id: string;
         context_id: string;
         reference_session_id: string | null;
-        author_teacher_id: string;
+        author_teacher_id: string | null;
         text: string;
         source_note_id: string | null;
         source_school_year_id: string | null;
         inherited_at: string | null;
         annual_course_id: string | null;
+        body_json: string | null;
+        course_session_key: string | null;
+        owner_teacher_id: string | null;
+        legacy_note_id: string | null;
         created_at: string;
         updated_at: string;
       }>();
@@ -169,8 +174,12 @@ async function loadAllAnnualNotes(deps: CatalogDeleteSnapshotDeps): Promise<Annu
       classId: row.class_id,
       contextId: row.context_id,
       referenceSessionId: row.reference_session_id,
-      authorTeacherId: row.author_teacher_id,
+      authorTeacherId: row.author_teacher_id ?? "",
+      ownerTeacherId: row.owner_teacher_id,
       text: row.text,
+      body: parseAnnualNoteBody(row.body_json),
+      courseSessionKey: row.course_session_key,
+      legacyNoteId: row.legacy_note_id,
       sourceNoteId: row.source_note_id,
       sourceSchoolYearId: row.source_school_year_id,
       inheritedAt: row.inherited_at,

@@ -1,5 +1,7 @@
 import {
   createAnnualCourseNote,
+  parseAnnualNoteBody,
+  serializeAnnualNoteBody,
   type AnnualCourseNote,
   type AnnualCourseNoteFilter,
   type AnnualCourseNoteInput,
@@ -33,6 +35,10 @@ type AnnualNoteRow = {
   source_school_year_id: string | null;
   inherited_at: string | null;
   annual_course_id: string | null;
+  body_json: string | null;
+  course_session_key: string | null;
+  owner_teacher_id: string | null;
+  legacy_note_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -45,7 +51,11 @@ function mapAnnualNote(row: AnnualNoteRow): AnnualCourseNote {
     contextId: row.context_id,
     referenceSessionId: row.reference_session_id,
     authorTeacherId: row.author_teacher_id ?? "",
+    ownerTeacherId: row.owner_teacher_id ?? null,
     text: row.text,
+    body: parseAnnualNoteBody(row.body_json),
+    courseSessionKey: row.course_session_key ?? null,
+    legacyNoteId: row.legacy_note_id ?? null,
     sourceNoteId: row.source_note_id,
     sourceSchoolYearId: row.source_school_year_id,
     inheritedAt: row.inherited_at,
@@ -53,6 +63,28 @@ function mapAnnualNote(row: AnnualNoteRow): AnnualCourseNote {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function bindAnnualNoteValues(note: AnnualCourseNote): unknown[] {
+  return [
+    note.id,
+    note.schoolYearId,
+    note.classId,
+    note.contextId,
+    note.referenceSessionId,
+    note.authorTeacherId || null,
+    note.text,
+    note.sourceNoteId,
+    note.sourceSchoolYearId,
+    note.inheritedAt,
+    note.annualCourseId,
+    serializeAnnualNoteBody(note.body),
+    note.courseSessionKey,
+    note.ownerTeacherId,
+    note.legacyNoteId,
+    note.createdAt,
+    note.updatedAt,
+  ];
 }
 
 export class SqlPedagogicalPathStore implements PedagogicalPathStore {
@@ -161,24 +193,11 @@ export class SqlAnnualCourseNotesStore implements AnnualCourseNotesStore {
         `INSERT INTO annual_course_notes (
            id, school_year_id, class_id, context_id, reference_session_id,
            author_teacher_id, text, source_note_id, source_school_year_id,
-           inherited_at, annual_course_id, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           inherited_at, annual_course_id, body_json, course_session_key,
+           owner_teacher_id, legacy_note_id, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(
-        note.id,
-        note.schoolYearId,
-        note.classId,
-        note.contextId,
-        note.referenceSessionId,
-        note.authorTeacherId || null,
-        note.text,
-        note.sourceNoteId,
-        note.sourceSchoolYearId,
-        note.inheritedAt,
-        note.annualCourseId,
-        note.createdAt,
-        note.updatedAt,
-      )
+      .bind(...bindAnnualNoteValues(note))
       .run();
     return note;
   }
@@ -230,5 +249,95 @@ export class SqlAnnualCourseNotesStore implements AnnualCourseNotesStore {
       .bind(annualCourseId, filter.schoolYearId, filter.classId, filter.contextId)
       .run();
     return result.meta?.changes ?? 0;
+  }
+
+  async listNotesByOwner(ownerTeacherId: string): Promise<AnnualCourseNote[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM annual_course_notes
+         WHERE owner_teacher_id = ?
+         ORDER BY created_at, id`,
+      )
+      .bind(ownerTeacherId)
+      .all<AnnualNoteRow>();
+    return results.map(mapAnnualNote);
+  }
+
+  async findByOwnerLegacyNote(ownerTeacherId: string, legacyNoteId: string): Promise<AnnualCourseNote | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT * FROM annual_course_notes
+         WHERE owner_teacher_id = ? AND legacy_note_id = ?
+         LIMIT 1`,
+      )
+      .bind(ownerTeacherId, legacyNoteId)
+      .first<AnnualNoteRow>();
+    return row ? mapAnnualNote(row) : null;
+  }
+
+  async replaceOwnedNotebookNotes(ownerTeacherId: string, notes: readonly AnnualCourseNote[]): Promise<void> {
+    const existing = await this.listNotesByOwner(ownerTeacherId);
+    const keepLegacy = new Set(
+      notes.map((note) => note.legacyNoteId).filter((id): id is string => Boolean(id)),
+    );
+    const now = new Date().toISOString();
+    for (const row of existing) {
+      if (!row.legacyNoteId || !keepLegacy.has(row.legacyNoteId)) {
+        await this.deleteNote(row.id);
+      }
+    }
+    for (const note of notes) {
+      if (note.ownerTeacherId !== ownerTeacherId) continue;
+      const current = note.legacyNoteId
+        ? await this.findByOwnerLegacyNote(ownerTeacherId, note.legacyNoteId)
+        : null;
+      if (current) {
+        await this.db
+          .prepare(
+            `UPDATE annual_course_notes SET
+               school_year_id = ?, class_id = ?, context_id = ?, reference_session_id = ?,
+               author_teacher_id = ?, text = ?, source_note_id = ?, source_school_year_id = ?,
+               inherited_at = ?, annual_course_id = ?, body_json = ?, course_session_key = ?,
+               owner_teacher_id = ?, legacy_note_id = ?, updated_at = ?
+             WHERE id = ?`,
+          )
+          .bind(
+            note.schoolYearId,
+            note.classId,
+            note.contextId,
+            note.referenceSessionId,
+            note.authorTeacherId || null,
+            note.text,
+            note.sourceNoteId,
+            note.sourceSchoolYearId,
+            note.inheritedAt,
+            note.annualCourseId,
+            serializeAnnualNoteBody(note.body),
+            note.courseSessionKey,
+            note.ownerTeacherId,
+            note.legacyNoteId,
+            now,
+            current.id,
+          )
+          .run();
+      } else {
+        await this.createNote(note.id, {
+          schoolYearId: note.schoolYearId,
+          classId: note.classId,
+          contextId: note.contextId,
+          referenceSessionId: note.referenceSessionId,
+          authorTeacherId: note.authorTeacherId,
+          ownerTeacherId: note.ownerTeacherId,
+          text: note.text,
+          body: note.body,
+          courseSessionKey: note.courseSessionKey,
+          legacyNoteId: note.legacyNoteId,
+          sourceNoteId: note.sourceNoteId,
+          sourceSchoolYearId: note.sourceSchoolYearId,
+          inheritedAt: note.inheritedAt,
+          annualCourseId: note.annualCourseId,
+        });
+      }
+    }
   }
 }

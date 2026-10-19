@@ -316,7 +316,7 @@ test("1 — APP_VERSION 2.62.0", () => {
 });
 
 test("2 — dernière migration 0032", () => {
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0032_year_transition_apply.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0033_annual_private_notes_storage.sql");
 });
 
 test("3-5 — migration crée tables APPLY, provenance, pas de CourseSession", async () => {

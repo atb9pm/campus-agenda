@@ -42,7 +42,11 @@ import type { AnnualCourse, TeacherCourseAssignment, TeacherCourseAssignmentEven
 import type { PrototypeAgendaItem } from "../../features/agenda/demo-items.ts";
 import type { SchoolClassRecord, SchoolBranchRecord } from "../../features/school-catalog/types.ts";
 import type { SchoolProfessionRecord, PedagogicalContextRecord } from "../../features/school-catalog/profession-types.ts";
-import type { AnnualCourseNote, ReferencePedagogicalPath } from "../../features/pedagogical-path/index.ts";
+import {
+  parseAnnualNoteBody,
+  type AnnualCourseNote,
+  type ReferencePedagogicalPath,
+} from "../../features/pedagogical-path/index.ts";
 import type { PublicationTemplate } from "../../features/library/types.ts";
 import type { AdminCodeKind } from "../../features/school-catalog/admin-codes.ts";
 import type { TemplateStore } from "./types.ts";
@@ -384,6 +388,10 @@ async function buildMemoryTables(deps: CampusBackupDeps): Promise<CampusTableDum
       source_school_year_id: note.sourceSchoolYearId,
       inherited_at: note.inheritedAt,
       annual_course_id: note.annualCourseId,
+      body_json: note.body ? JSON.stringify(note.body) : null,
+      course_session_key: note.courseSessionKey,
+      owner_teacher_id: note.ownerTeacherId,
+      legacy_note_id: note.legacyNoteId,
       created_at: note.createdAt,
       updated_at: note.updatedAt,
     }));
@@ -554,6 +562,7 @@ function mapAssignmentEvent(row: Record<string, unknown>): TeacherCourseAssignme
 }
 
 function mapAnnualNote(row: Record<string, unknown>): AnnualCourseNote {
+  const bodyRaw = row.body_json ?? row.bodyJson;
   return {
     id: asString(row.id),
     schoolYearId: asString(row.school_year_id ?? row.schoolYearId),
@@ -561,7 +570,13 @@ function mapAnnualNote(row: Record<string, unknown>): AnnualCourseNote {
     contextId: asString(row.context_id ?? row.contextId),
     referenceSessionId: asNullableString(row.reference_session_id ?? row.referenceSessionId),
     authorTeacherId: asString(row.author_teacher_id ?? row.authorTeacherId),
+    ownerTeacherId: asNullableString(row.owner_teacher_id ?? row.ownerTeacherId),
     text: asString(row.text),
+    body: typeof bodyRaw === "string" ? parseAnnualNoteBody(bodyRaw) : parseAnnualNoteBody(
+      bodyRaw == null ? null : JSON.stringify(bodyRaw),
+    ),
+    courseSessionKey: asNullableString(row.course_session_key ?? row.courseSessionKey),
+    legacyNoteId: asNullableString(row.legacy_note_id ?? row.legacyNoteId),
     sourceNoteId: asNullableString(row.source_note_id ?? row.sourceNoteId),
     sourceSchoolYearId: asNullableString(row.source_school_year_id ?? row.sourceSchoolYearId),
     inheritedAt: asNullableString(row.inherited_at ?? row.inheritedAt),

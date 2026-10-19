@@ -55,9 +55,12 @@ export async function applyTeacherDeleteInMemory(
   if (deps.notes && "exportAllNotes" in deps.notes && "replaceAllNotes" in deps.notes) {
     const annual = deps.notes as unknown as AnnualNotesBulkStore;
     annual.replaceAllNotes(
-      annual.exportAllNotes().map((note) =>
-        note.authorTeacherId === teacherId ? { ...note, authorTeacherId: "" } : note,
-      ),
+      annual
+        .exportAllNotes()
+        .filter((note) => note.ownerTeacherId !== teacherId)
+        .map((note) =>
+          note.authorTeacherId === teacherId ? { ...note, authorTeacherId: "" } : note,
+        ),
     );
   }
 

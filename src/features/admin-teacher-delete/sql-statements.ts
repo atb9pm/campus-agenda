@@ -28,6 +28,10 @@ export function buildTeacherDeleteStatements(teacherId: string): SqlBatchStateme
       values: [teacherId],
     },
     {
+      sql: "DELETE FROM annual_course_notes WHERE owner_teacher_id = ?",
+      values: [teacherId],
+    },
+    {
       sql: "UPDATE annual_course_notes SET author_teacher_id = NULL WHERE author_teacher_id = ?",
       values: [teacherId],
     },

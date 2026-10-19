@@ -49,6 +49,14 @@ export {
   type ResolvedNotebookPublishContext,
 } from "./notebook-publication-service.ts";
 export {
+  annualNotesToSessionMap,
+  composeTeacherNotebookDocument,
+  loadTeacherNotebookDocument,
+  persistTeacherNotebookDocument,
+  splitResolvableNotebookNotes,
+  type TeacherNotebookNotesDeps,
+} from "./annual-private-notes.ts";
+export {
   appendWeekNote,
   assignOrphanedSessionNotes,
   assignPendingWeekNotes,
