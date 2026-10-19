@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import { normalizeMappingClassId } from "./class-mapping.ts";
 import type { YearTransitionPreviewInput } from "./types.ts";
 
 /**
@@ -8,13 +9,17 @@ import type { YearTransitionPreviewInput } from "./types.ts";
  * Inclus (tout ce qui change le résultat métier ou un APPLY futur) :
  * années, mappings de classes, identités de cours, snapshot de parcours
  * (ids, positions, type/title/detail des items), CourseSession cibles,
- * publications source (id, cours, refs, type/title/detail), publications cibles.
+ * publications source (id, cours, refs, type/title/detail),
+ * publications cibles (refs, courseSessionKey/Date, semaine/jour/heure cibles).
+ *
+ * Les IDs de mapping sont trimés comme indexClassMappings.
  *
  * Exclus volontairement — diagnostics / provenance historique de N uniquement,
  * jamais utilisés pour le placement ni pour un APPLY :
  * schoolWeekNumber, day, hour, weekOffset, courseSessionDate, courseSessionKey
- * des publications source, ainsi que classroomId, subjectId, authorTeacherId,
+ * des publications SOURCE, ainsi que classroomId, subjectId, authorTeacherId,
  * templateId, studentVisible.
+ * Les champs temporels TARGET N+1 sont matériels (conformité ALREADY_PRESENT).
  */
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
@@ -44,8 +49,8 @@ function materialState(input: YearTransitionPreviewInput) {
     targetSchoolYearId: input.targetSchoolYearId,
     classMappings: [...input.classMappings]
       .map((mapping) => ({
-        sourceClassId: mapping.sourceClassId,
-        targetClassId: mapping.targetClassId,
+        sourceClassId: normalizeMappingClassId(mapping.sourceClassId),
+        targetClassId: normalizeMappingClassId(mapping.targetClassId),
       }))
       .sort(
         (left, right) =>
@@ -146,6 +151,12 @@ function materialState(input: YearTransitionPreviewInput) {
         schoolYearId: item.schoolYearId ?? null,
         annualCourseId: item.annualCourseId ?? null,
         referenceItemId: item.referenceItemId ?? null,
+        referenceSessionId: item.referenceSessionId ?? null,
+        courseSessionKey: item.courseSessionKey ?? null,
+        courseSessionDate: item.courseSessionDate ?? null,
+        schoolWeekNumber: item.schoolWeekNumber,
+        day: item.day,
+        hour: item.hour,
         type: item.type,
         title: item.title,
         detail: item.detail,

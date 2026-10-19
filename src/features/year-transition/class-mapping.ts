@@ -4,11 +4,13 @@ export type ResolvedClassMapping =
   | { status: "one_to_one"; targetClassId: string }
   | { status: "no_continuation" }
   | { status: "missing" }
+  | { status: "conflict"; targetClassId: string; sourceClassIds: string[] }
   | { status: "unsupported"; sourceClassIds: string[]; targetClassIds: string[] };
 
 export interface MappingIndex {
   sourcesToTargets: Map<string, Set<string | null>>;
   targetsToSources: Map<string, Set<string>>;
+  conflictTargets: Map<string, Set<string>>;
   summary: YearTransitionClassMappingSummary;
 }
 
@@ -16,13 +18,19 @@ function sortedUnique(values: Iterable<string>): string[] {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right));
 }
 
+export function normalizeMappingClassId(value: string | null | undefined): string | null {
+  const trimmed = value?.trim() ?? "";
+  return trimmed ? trimmed : null;
+}
+
 export function indexClassMappings(mappings: readonly YearTransitionClassMapping[]): MappingIndex {
   const sourcesToTargets = new Map<string, Set<string | null>>();
   const targetsToSources = new Map<string, Set<string>>();
+  const nullSourceTargets = new Set<string>();
 
   for (const mapping of mappings) {
-    const source = mapping.sourceClassId?.trim() || null;
-    const target = mapping.targetClassId?.trim() || null;
+    const source = normalizeMappingClassId(mapping.sourceClassId);
+    const target = normalizeMappingClassId(mapping.targetClassId);
     if (!source && !target) continue;
 
     if (source) {
@@ -35,6 +43,13 @@ export function indexClassMappings(mappings: readonly YearTransitionClassMapping
       sources.add(source);
       targetsToSources.set(target, sources);
     }
+    if (!source && target) nullSourceTargets.add(target);
+  }
+
+  const conflictTargets = new Map<string, Set<string>>();
+  for (const targetId of nullSourceTargets) {
+    const sources = targetsToSources.get(targetId);
+    if (sources && sources.size > 0) conflictTargets.set(targetId, new Set(sources));
   }
 
   const oneToOne: YearTransitionClassMappingSummary["oneToOne"] = [];
@@ -43,7 +58,12 @@ export function indexClassMappings(mappings: readonly YearTransitionClassMapping
   const seenUnsupported = new Set<string>();
 
   for (const sourceClassId of sortedUnique(sourcesToTargets.keys())) {
-    const resolved = resolveIndexedMapping(sourceClassId, sourcesToTargets, targetsToSources);
+    const resolved = resolveIndexedMapping(
+      sourceClassId,
+      sourcesToTargets,
+      targetsToSources,
+      conflictTargets,
+    );
     if (resolved.status === "one_to_one") {
       oneToOne.push({ sourceClassId, targetClassId: resolved.targetClassId });
     } else if (resolved.status === "no_continuation") {
@@ -61,14 +81,20 @@ export function indexClassMappings(mappings: readonly YearTransitionClassMapping
   }
 
   const targetOnly = sortedUnique(
-    mappings
-      .filter((mapping) => !(mapping.sourceClassId?.trim()) && Boolean(mapping.targetClassId?.trim()))
-      .map((mapping) => mapping.targetClassId!.trim()),
+    [...nullSourceTargets].filter((targetId) => !conflictTargets.has(targetId)),
   );
+
+  const conflicts = [...conflictTargets.entries()]
+    .map(([targetClassId, sources]) => ({
+      targetClassId,
+      sourceClassIds: sortedUnique(sources),
+    }))
+    .sort((left, right) => left.targetClassId.localeCompare(right.targetClassId));
 
   return {
     sourcesToTargets,
     targetsToSources,
+    conflictTargets,
     summary: {
       oneToOne: oneToOne.sort(
         (left, right) =>
@@ -77,6 +103,7 @@ export function indexClassMappings(mappings: readonly YearTransitionClassMapping
       ),
       noContinuation,
       targetOnly,
+      conflicts,
       unsupported,
     },
   };
@@ -86,6 +113,7 @@ function resolveIndexedMapping(
   sourceClassId: string,
   sourcesToTargets: Map<string, Set<string | null>>,
   targetsToSources: Map<string, Set<string>>,
+  conflictTargets: Map<string, Set<string>>,
 ): ResolvedClassMapping {
   const targets = sourcesToTargets.get(sourceClassId);
   if (!targets || targets.size === 0) return { status: "missing" };
@@ -105,6 +133,15 @@ function resolveIndexedMapping(
   }
 
   const targetClassId = concreteTargets[0]!;
+  const conflictSources = conflictTargets.get(targetClassId);
+  if (conflictSources) {
+    return {
+      status: "conflict",
+      targetClassId,
+      sourceClassIds: sortedUnique(conflictSources),
+    };
+  }
+
   const sourcesForTarget = targetsToSources.get(targetClassId) ?? new Set<string>();
   if (sourcesForTarget.size > 1) {
     return {
@@ -119,5 +156,10 @@ function resolveIndexedMapping(
 
 export function resolveClassMapping(sourceClassId: string, index: MappingIndex): ResolvedClassMapping {
   if (!index.sourcesToTargets.has(sourceClassId)) return { status: "missing" };
-  return resolveIndexedMapping(sourceClassId, index.sourcesToTargets, index.targetsToSources);
+  return resolveIndexedMapping(
+    sourceClassId,
+    index.sourcesToTargets,
+    index.targetsToSources,
+    index.conflictTargets,
+  );
 }

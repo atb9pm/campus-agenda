@@ -77,6 +77,7 @@ export interface YearTransitionClassMappingSummary {
   oneToOne: Array<{ sourceClassId: string; targetClassId: string }>;
   noContinuation: string[];
   targetOnly: string[];
+  conflicts: Array<{ targetClassId: string; sourceClassIds: string[] }>;
   unsupported: Array<{ sourceClassIds: string[]; targetClassIds: string[] }>;
 }
 

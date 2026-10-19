@@ -27,14 +27,20 @@ const CTX = "ctx-moteur-y1";
 const ITEM_X = "item-X";
 const SESS_P = "session-p";
 
-function course(id: string, classId: string, schoolYearId: string, contextId = CTX): AnnualCourse {
+function course(
+  id: string,
+  classId: string,
+  schoolYearId: string,
+  contextId = CTX,
+  archived = false,
+): AnnualCourse {
   return {
     id,
     schoolYearId,
     classId,
     contextId,
-    isArchived: false,
-    archivedAt: null,
+    isArchived: archived,
+    archivedAt: archived ? "2027-08-01T00:00:00.000Z" : null,
     createdAt: "2026-08-01T00:00:00.000Z",
     updatedAt: "2026-08-01T00:00:00.000Z",
   };
@@ -102,7 +108,7 @@ function sourceItem(patch: Partial<PrototypeAgendaItem> = {}): PrototypeAgendaIt
     title: patch.title ?? "Travail historique",
     detail: patch.detail ?? "N",
     schoolYearId: patch.schoolYearId ?? SOURCE_YEAR,
-    annualCourseId: patch.annualCourseId ?? SOURCE_COURSE,
+    annualCourseId: patch.annualCourseId === undefined ? SOURCE_COURSE : patch.annualCourseId,
     courseSessionKey: patch.courseSessionKey ?? `${SOURCE_YEAR}|${SOURCE_COURSE}|2026-10-12`,
     courseSessionDate: patch.courseSessionDate ?? "2026-10-12",
     referenceSessionId: patch.referenceSessionId === undefined ? SESS_P : patch.referenceSessionId,
@@ -132,6 +138,22 @@ function baseInput(patch: Partial<YearTransitionPreviewInput> = {}): YearTransit
       session({ sequenceNumber: 2, date: "2027-09-27", schoolWeekNumber: 6 }),
     ],
   };
+}
+
+function congruentTargetItem(patch: Partial<PrototypeAgendaItem> = {}): PrototypeAgendaItem {
+  return sourceItem({
+    id: 99,
+    schoolYearId: TARGET_YEAR,
+    annualCourseId: TARGET_COURSE,
+    referenceItemId: ITEM_X,
+    referenceSessionId: SESS_P,
+    courseSessionKey: `${TARGET_YEAR}|${TARGET_COURSE}|2027-09-27`,
+    courseSessionDate: "2027-09-27",
+    schoolWeekNumber: 6,
+    day: 0,
+    hour: 8,
+    ...patch,
+  });
 }
 
 function projectable(input: YearTransitionPreviewInput = baseInput()) {
@@ -319,22 +341,11 @@ test("13 — cours cible ambigu", () => {
   assert.equal(preview.entries[0]?.reason, "TARGET_COURSE_AMBIGUOUS");
 });
 
-test("14 — élément déjà présent en cible → ALREADY_PRESENT", () => {
-  const preview = buildYearTransitionPreview(
-    baseInput({
-      targetItems: [
-        sourceItem({
-          id: 99,
-          schoolYearId: TARGET_YEAR,
-          annualCourseId: TARGET_COURSE,
-          referenceItemId: ITEM_X,
-          schoolWeekNumber: 1,
-        }),
-      ],
-    }),
-  );
+test("14 — élément déjà présent et conforme → ALREADY_PRESENT", () => {
+  const preview = buildYearTransitionPreview(baseInput({ targetItems: [congruentTargetItem()] }));
   assert.equal(preview.entries[0]?.reason, "ALREADY_PRESENT");
   assert.equal(preview.entries[0]?.proposedPlacement, null);
+  assert.equal(preview.entries[0]?.pedagogicalPosition, 2);
 });
 
 test("15 — doublon source de la même référence → conflit", () => {
@@ -595,9 +606,7 @@ test("fingerprint — changements matériels", () => {
     [
       "item déjà en cible",
       baseInput({
-        targetItems: [
-          sourceItem({ id: 99, schoolYearId: TARGET_YEAR, annualCourseId: TARGET_COURSE, referenceItemId: ITEM_X }),
-        ],
+        targetItems: [congruentTargetItem()],
       }),
     ],
   ];
@@ -681,7 +690,7 @@ test("aucun fallback heuristique si la référence structurée échoue", () => {
   assert.equal(deadRefSameWeek.entries[0]?.proposedPlacement, null);
 });
 
-test("taxonomie — ORPHAN_DEAD_REFERENCE_SESSION retiré", () => {
+test("taxonomie — codes fail-closed", () => {
   assert.equal(
     (YEAR_TRANSITION_PREVIEW_REASONS as readonly string[]).includes("ORPHAN_DEAD_REFERENCE_SESSION"),
     false,
@@ -689,4 +698,148 @@ test("taxonomie — ORPHAN_DEAD_REFERENCE_SESSION retiré", () => {
   assert.ok(YEAR_TRANSITION_PREVIEW_REASONS.includes("SNAPSHOT_REFERENCE_CONFLICT"));
   assert.ok(YEAR_TRANSITION_PREVIEW_REASONS.includes("TARGET_SESSION_AMBIGUOUS"));
   assert.ok(YEAR_TRANSITION_PREVIEW_REASONS.includes("INVALID_REFERENCE_SESSION_POSITION"));
+  assert.ok(YEAR_TRANSITION_PREVIEW_REASONS.includes("TARGET_EXISTING_DIVERGED"));
+  assert.ok(YEAR_TRANSITION_PREVIEW_REASONS.includes("SOURCE_COURSE_MISSING"));
+  assert.ok(YEAR_TRANSITION_PREVIEW_REASONS.includes("TARGET_COURSE_ARCHIVED"));
+  assert.ok(YEAR_TRANSITION_PREVIEW_REASONS.includes("CLASS_MAPPING_CONFLICT"));
+});
+
+test("A — déjà présent sur la CourseSession attendue → ALREADY_PRESENT", () => {
+  const preview = buildYearTransitionPreview(baseInput({ targetItems: [congruentTargetItem()] }));
+  assert.equal(preview.entries[0]?.reason, "ALREADY_PRESENT");
+});
+
+test("B — déjà présent mais mauvaise CourseSession → TARGET_EXISTING_DIVERGED", () => {
+  const preview = buildYearTransitionPreview(
+    baseInput({
+      targetItems: [
+        congruentTargetItem({
+          courseSessionKey: `${TARGET_YEAR}|${TARGET_COURSE}|2027-08-23`,
+          courseSessionDate: "2027-08-23",
+          schoolWeekNumber: 1,
+        }),
+      ],
+    }),
+  );
+  assert.equal(preview.entries[0]?.reason, "TARGET_EXISTING_DIVERGED");
+  assert.equal(preview.entries[0]?.proposedPlacement?.courseSessionDate, "2027-09-27");
+  assert.equal(preview.entries[0]?.proposedPlacement?.schoolWeekNumber, 6);
+});
+
+test("C — déjà présent mais referenceItemId mort dans le snapshot → pas ALREADY_PRESENT", () => {
+  const preview = buildYearTransitionPreview(
+    baseInput({
+      targetItems: [congruentTargetItem()],
+      pathSnapshots: [pathFor([refSession("session-other", 1, [{ id: "item-other" }])])],
+    }),
+  );
+  assert.equal(preview.entries[0]?.reason, "ORPHAN_DEAD_REFERENCE_ITEM");
+  assert.notEqual(preview.entries[0]?.reason, "ALREADY_PRESENT");
+});
+
+test("D — déjà présent, item déplacé vers une autre ReferenceSession → DIVERGED", () => {
+  const preview = buildYearTransitionPreview(
+    baseInput({
+      targetItems: [congruentTargetItem()],
+      pathSnapshots: [
+        pathFor([
+          refSession("session-moved", 1, [{ id: ITEM_X }]),
+          refSession(SESS_P, 2, [{ id: "item-other" }]),
+        ]),
+      ],
+    }),
+  );
+  assert.equal(preview.entries[0]?.reason, "TARGET_EXISTING_DIVERGED");
+  assert.equal(preview.entries[0]?.resolvedReferenceSessionId, "session-moved");
+  assert.equal(preview.entries[0]?.pedagogicalPosition, 1);
+  assert.equal(preview.entries[0]?.proposedPlacement?.schoolWeekNumber, 1);
+  assert.notEqual(preview.entries[0]?.reason, "ALREADY_PRESENT");
+});
+
+test("fingerprint — placement cible matériel", () => {
+  const present = buildYearTransitionPreview(baseInput({ targetItems: [congruentTargetItem()] }));
+  const movedKey = buildYearTransitionPreview(
+    baseInput({
+      targetItems: [
+        congruentTargetItem({
+          courseSessionKey: `${TARGET_YEAR}|${TARGET_COURSE}|2027-08-23`,
+        }),
+      ],
+    }),
+  );
+  const movedDate = buildYearTransitionPreview(
+    baseInput({
+      targetItems: [congruentTargetItem({ courseSessionDate: "2027-08-23" })],
+    }),
+  );
+  assert.notEqual(movedKey.fingerprint, present.fingerprint);
+  assert.notEqual(movedDate.fingerprint, present.fingerprint);
+});
+
+test("annualCourseId source null → SOURCE_COURSE_MISSING", () => {
+  const preview = buildYearTransitionPreview(
+    baseInput({ sourceItems: [sourceItem({ annualCourseId: null })] }),
+  );
+  assert.equal(preview.entries[0]?.reason, "SOURCE_COURSE_MISSING");
+});
+
+test("annualCourseId source inconnu → SOURCE_COURSE_MISSING", () => {
+  const preview = buildYearTransitionPreview(
+    baseInput({ sourceItems: [sourceItem({ annualCourseId: "ac-inconnu" })] }),
+  );
+  assert.equal(preview.entries[0]?.reason, "SOURCE_COURSE_MISSING");
+});
+
+test("cours cible unique mais archivé → TARGET_COURSE_ARCHIVED", () => {
+  const preview = buildYearTransitionPreview(
+    baseInput({
+      targetCourses: [course(TARGET_COURSE, TARGET_CLASS, TARGET_YEAR, CTX, true)],
+    }),
+  );
+  assert.equal(preview.entries[0]?.reason, "TARGET_COURSE_ARCHIVED");
+  assert.equal(preview.entries[0]?.proposedPlacement, null);
+});
+
+test("mapping contradictoire 0→1 et 1→1 sur la même cible", () => {
+  const preview = buildYearTransitionPreview(
+    baseInput({
+      classMappings: [
+        { sourceClassId: null, targetClassId: TARGET_CLASS },
+        { sourceClassId: SOURCE_CLASS, targetClassId: TARGET_CLASS },
+      ],
+    }),
+  );
+  assert.equal(preview.entries[0]?.reason, "CLASS_MAPPING_CONFLICT");
+  assert.deepEqual(preview.mappingSummary.oneToOne, []);
+  assert.deepEqual(preview.mappingSummary.targetOnly, []);
+  assert.deepEqual(preview.mappingSummary.conflicts, [
+    { targetClassId: TARGET_CLASS, sourceClassIds: [SOURCE_CLASS] },
+  ]);
+});
+
+test("doublons identiques de mapping A→B normalisés sans conflit", () => {
+  const preview = buildYearTransitionPreview(
+    baseInput({
+      classMappings: [
+        { sourceClassId: SOURCE_CLASS, targetClassId: TARGET_CLASS },
+        { sourceClassId: SOURCE_CLASS, targetClassId: TARGET_CLASS },
+      ],
+    }),
+  );
+  assert.equal(preview.entries[0]?.reason, "PROJECTABLE");
+  assert.deepEqual(preview.mappingSummary.oneToOne, [
+    { sourceClassId: SOURCE_CLASS, targetClassId: TARGET_CLASS },
+  ]);
+  assert.deepEqual(preview.mappingSummary.conflicts, []);
+});
+
+test("fingerprint — IDs de mapping trimés comme le moteur", () => {
+  const plain = buildYearTransitionPreview(baseInput());
+  const padded = buildYearTransitionPreview(
+    baseInput({
+      classMappings: [{ sourceClassId: ` ${SOURCE_CLASS} `, targetClassId: ` ${TARGET_CLASS} ` }],
+    }),
+  );
+  assert.equal(padded.fingerprint, plain.fingerprint);
+  assert.deepEqual(padded.entries, plain.entries);
 });

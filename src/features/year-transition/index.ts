@@ -15,6 +15,12 @@ export type {
   YearTransitionProposedPlacement,
   YearTransitionSourceTemporal,
 } from "./types.ts";
-export { indexClassMappings, resolveClassMapping, type MappingIndex, type ResolvedClassMapping } from "./class-mapping.ts";
+export {
+  indexClassMappings,
+  normalizeMappingClassId,
+  resolveClassMapping,
+  type MappingIndex,
+  type ResolvedClassMapping,
+} from "./class-mapping.ts";
 export { yearTransitionPreviewFingerprint } from "./fingerprint.ts";
 export { buildYearTransitionPreview, YEAR_TRANSITION_AGENDA_COMPAT_HOUR } from "./preview.ts";
