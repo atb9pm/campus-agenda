@@ -68,7 +68,7 @@ export function mapAnnualNote(row: AnnualNoteRow): AnnualCourseNote {
   };
 }
 
-function bindAnnualNoteValues(note: AnnualCourseNote): unknown[] {
+export function bindAnnualNoteValues(note: AnnualCourseNote): unknown[] {
   return [
     note.id,
     note.schoolYearId,

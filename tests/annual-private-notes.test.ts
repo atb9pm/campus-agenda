@@ -92,18 +92,7 @@ test("PR3.4 — version et migration 0033", async () => {
   assert.doesNotMatch(sql, /includePrivateNotes/);
 });
 
-test("PR3.4 — year-transition non modifié (PR3.5 non commencé)", async () => {
-  const files = [
-    "src/features/year-transition/preview.ts",
-    "src/features/year-transition/fingerprint.ts",
-    "src/features/year-transition/apply.ts",
-    "src/features/year-transition/assemble.ts",
-  ];
-  for (const file of files) {
-    const src = await readFile(new URL(`../${file}`, import.meta.url), "utf8");
-    assert.equal(src.includes("includePrivateNotes"), false, file);
-  }
-});
+// Annual-transfer coverage is in year-transition-apply.test.ts (PR3.5).
 
 test("PR3.4 — V2 simple normalisation sans perte + mapping", async () => {
   const world = memoryWorld();

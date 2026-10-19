@@ -4,6 +4,7 @@ import type { CourseSession } from "../course-sessions/types.ts";
 import type { ReferencePedagogicalItem, ReferencePedagogicalPath, ReferenceSession } from "../pedagogical-path/types.ts";
 import { indexClassMappings, resolveClassMapping } from "./class-mapping.ts";
 import { yearTransitionPreviewFingerprint } from "./fingerprint.ts";
+import { previewPrivateNotes } from "./private-notes.ts";
 import {
   YEAR_TRANSITION_PREVIEW_REASON_ORDER,
   type YearTransitionPreviewReason,
@@ -469,6 +470,7 @@ export function buildYearTransitionPreview(input: YearTransitionPreviewInput): Y
     targetSchoolYearId: input.targetSchoolYearId,
     fingerprint: yearTransitionPreviewFingerprint(input),
     mappingSummary: mappingIndex.summary,
+    ...(input.includePrivateNotes ? { privateNotes: previewPrivateNotes(input) } : {}),
     entries,
   };
 }

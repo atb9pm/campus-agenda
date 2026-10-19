@@ -5,6 +5,14 @@ import type {
   YearTransitionApplyStore,
 } from "../../../features/year-transition/apply-types.ts";
 import type { SqlDatabase } from "./types.ts";
+import { NOTEBOOK_COLUMNS, bindAnnualNoteValues } from "./sql-pedagogical-path-store.ts";
+import type { AnnualCourseNote } from "../../../features/pedagogical-path/annual-notes.ts";
+
+export function transitionNoteToken(notes: readonly AnnualCourseNote[]): string {
+  return JSON.stringify([...notes].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+    .map(n => Object.fromEntries(NOTEBOOK_COLUMNS.map((column, i) => [column,
+      column === "body_json" ? n.body ?? null : bindAnnualNoteValues(n)[i]]))));
+}
 
 interface ApplyRow {
   transition_id: string;
@@ -75,6 +83,24 @@ export class SqlYearTransitionApplyStore implements YearTransitionApplyStore {
 
   async applyAtomically(plan: YearTransitionApplyPlan): Promise<void> {
     const statements = [
+      ...(plan.noteGuard ? [{
+        // Compare in the same transaction as all copies and ledger writes.
+        sql: `WITH current(token) AS (
+          SELECT json_group_array(json_object(${NOTEBOOK_COLUMNS.map(c => `'${c}', ${c === "body_json" ? "json(body_json)" : c}`).join(", ")}))
+          FROM (SELECT * FROM annual_course_notes WHERE owner_teacher_id = ? AND school_year_id IN (?, ?) ORDER BY id))
+          UPDATE year_transition_previews SET fingerprint = CASE WHEN
+          NOT EXISTS (SELECT fullkey, type, atom FROM json_tree((SELECT token FROM current))
+            EXCEPT SELECT fullkey, type, atom FROM json_tree(?))
+          AND NOT EXISTS (SELECT fullkey, type, atom FROM json_tree(?)
+            EXCEPT SELECT fullkey, type, atom FROM json_tree((SELECT token FROM current)))
+          THEN fingerprint ELSE NULL END WHERE id = ?`,
+        values: [plan.noteGuard.ownerTeacherId, plan.noteGuard.sourceSchoolYearId, plan.noteGuard.targetSchoolYearId,
+          transitionNoteToken(plan.noteGuard.expected), transitionNoteToken(plan.noteGuard.expected), plan.apply.transitionId],
+      }] : []),
+      ...(plan.notes ?? []).map(note => ({
+        sql: `INSERT INTO annual_course_notes (${NOTEBOOK_COLUMNS.join(", ")}) VALUES (${NOTEBOOK_COLUMNS.map(() => "?").join(", ")})`,
+        values: bindAnnualNoteValues(note),
+      })),
       ...plan.items.map((item) => ({
         sql: `INSERT INTO agenda_items (
           classroom_id, subject_id, author_teacher_id, day, hour, week_offset, school_week_number,

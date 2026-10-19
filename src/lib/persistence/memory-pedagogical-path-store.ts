@@ -149,6 +149,16 @@ export class MemoryAnnualCourseNotesStore implements AnnualCourseNotesStore {
     return [...this.notes.values()].map((note) => structuredClone(note));
   }
 
+  /** Stage inherited copies before publishing the transition's other tables. */
+  stageInsertedNotes(notes: readonly AnnualCourseNote[]): () => void {
+    const next = new Map(this.notes);
+    for (const note of notes) {
+      if (next.has(note.id)) throw new Error("UNIQUE constraint failed: annual_course_notes.id");
+      next.set(note.id, structuredClone(note));
+    }
+    return () => { this.notes = next; };
+  }
+
   replaceAllNotes(notes: AnnualCourseNote[]): void {
     this.notes.clear();
     for (const note of notes) this.notes.set(note.id, structuredClone(note));

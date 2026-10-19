@@ -4,7 +4,7 @@ import { normalizeMappingClassId } from "./class-mapping.ts";
 import type { YearTransitionPreviewInput } from "./types.ts";
 
 /** Version des règles métier de projection. Fait partie de l’état matériel et du fingerprint. */
-export const YEAR_TRANSITION_PREVIEW_ENGINE_VERSION = 1;
+export const YEAR_TRANSITION_PREVIEW_ENGINE_VERSION = 2;
 
 /**
  * Empreinte matérielle du PREVIEW.
@@ -48,6 +48,12 @@ function compareNullable(left: string | null | undefined, right: string | null |
 
 function materialState(input: YearTransitionPreviewInput) {
   return {
+    ...(input.includePrivateNotes ? {
+      includePrivateNotes: true,
+      privateNotesOwnerTeacherId: input.privateNotesOwnerTeacherId,
+      sourceNotes: [...(input.sourceNotes ?? [])].sort((a, b) => a.id.localeCompare(b.id)),
+      targetNotes: [...(input.targetNotes ?? [])].sort((a, b) => a.id.localeCompare(b.id)),
+    } : {}),
     engineVersion: YEAR_TRANSITION_PREVIEW_ENGINE_VERSION,
     sourceSchoolYearId: input.sourceSchoolYearId,
     targetSchoolYearId: input.targetSchoolYearId,
@@ -144,6 +150,7 @@ function materialState(input: YearTransitionPreviewInput) {
         annualCourseId: item.annualCourseId ?? null,
         referenceItemId: item.referenceItemId ?? null,
         referenceSessionId: item.referenceSessionId ?? null,
+        ...(input.includePrivateNotes ? { courseSessionKey: item.courseSessionKey ?? null } : {}),
         type: item.type,
         title: item.title,
         detail: item.detail,

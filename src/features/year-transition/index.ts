@@ -30,6 +30,8 @@ export {
   yearTransitionPreviewMaterialSnapshotJson,
 } from "./fingerprint.ts";
 export { buildYearTransitionPreview, YEAR_TRANSITION_AGENDA_COMPAT_HOUR } from "./preview.ts";
+export { previewPrivateNotes } from "./private-notes.ts";
+export type { PrivateNotePreviewEntry } from "./private-notes.ts";
 export { YearTransitionPreviewJsonError, parsePersistedObjectJson } from "./persist-json.ts";
 export {
   createPersistedYearTransitionPreview,
