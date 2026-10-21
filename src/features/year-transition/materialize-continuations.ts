@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { replaceAnnualCourseMeetingDays } from "../annual-courses/meeting-days.ts";
 import type { AnnualCourseStore } from "../../lib/persistence/annual-course-types.ts";
 import type { CourseScheduleStore } from "../../lib/persistence/course-schedule-types.ts";
 import type { RuntimeAgendaAdapterStore } from "../../lib/persistence/runtime-agenda-types.ts";
@@ -10,12 +11,17 @@ import {
   ensureRuntimeSubjectForAnnualCourse,
 } from "../agenda-bridge/reconcile.ts";
 import { buildClassCode, buildClassLabel } from "../school-catalog/class-codes.ts";
-import type { SchoolClassRecord } from "../school-catalog/types.ts";
 import {
   classContinuationIdentity,
   resolveClassContinuations,
   type ContinuationResolution,
 } from "./continuation-identity.ts";
+import {
+  continuationSourceCourses,
+  requireTargetMeetingDayPlans,
+  usesExplicitTargetMeetingDayPlans,
+  type YearTransitionTargetMeetingDayPlan,
+} from "./target-meeting-days.ts";
 import type { YearTransitionClassMapping } from "./types.ts";
 
 export interface MaterializeContinuationDeps {
@@ -59,12 +65,71 @@ export async function loadContinuationResolution(
   });
 }
 
+/**
+ * Persiste les MeetingDays N+1 du PREVIEW sur les AnnualCourse cibles réels.
+ * Indexés par cours source, remappés vers l’id cible. Aucun lien temporel vers N.
+ */
+export async function persistTargetMeetingDayPlans(
+  deps: Pick<MaterializeContinuationDeps, "courses" | "schedules" | "now">,
+  options: {
+    mappings: readonly YearTransitionClassMapping[];
+    plans: readonly YearTransitionTargetMeetingDayPlan[];
+    sourceSchoolYearId: string;
+    targetSchoolYearId: string;
+    selectedSourceClassIds?: readonly string[];
+  },
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const courses = await deps.courses.listCourses();
+  const sourceCourses = courses.filter((course) => course.schoolYearId === options.sourceSchoolYearId);
+  const required = continuationSourceCourses(
+    options.mappings,
+    sourceCourses,
+    options.selectedSourceClassIds,
+  );
+  let canonical;
+  try {
+    canonical = requireTargetMeetingDayPlans(options.plans, required);
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : "Plan de jours N+1 invalide." };
+  }
+  const bySource = new Map(canonical.map((plan) => [plan.sourceAnnualCourseId, plan]));
+
+  for (const sourceCourse of required) {
+    const plan = bySource.get(sourceCourse.id);
+    if (!plan) {
+      return { ok: false, reason: "Chaque cours repris doit avoir un plan de jours N+1." };
+    }
+    const mapping = options.mappings.find((row) => row.sourceClassId === sourceCourse.classId);
+    const targetClassId = mapping?.targetClassId?.trim() || "";
+    if (!targetClassId) continue;
+    const targetCourse = courses.find(
+      (course) =>
+        course.classId === targetClassId &&
+        course.schoolYearId === options.targetSchoolYearId &&
+        course.contextId === sourceCourse.contextId &&
+        !course.isArchived,
+    );
+    if (!targetCourse) {
+      return { ok: false, reason: "Cours cible introuvable pour persister les jours de séance." };
+    }
+    const saved = await replaceAnnualCourseMeetingDays(deps, targetCourse.id, plan.days);
+    if (!saved.ok) return { ok: false, reason: saved.reason };
+  }
+  return { ok: true };
+}
+
 export async function materializeSelectedContinuations(
   deps: MaterializeContinuationDeps,
   options: {
     selectedSourceClassIds: readonly string[];
     sourceSchoolYearId: string;
     targetSchoolYearId: string;
+    /**
+     * Présent = nouveau flux : pas de copie slots / enseignants / attendance.
+     * MeetingDays du plan persistés sur chaque AnnualCourse cible.
+     * Absent = legacy : copie encore l’organisation de N.
+     */
+    targetMeetingDayPlans?: readonly YearTransitionTargetMeetingDayPlan[];
   },
 ): Promise<{ ok: true; mappings: YearTransitionClassMapping[]; createdClassIds: string[] } | { ok: false; reason: string }> {
   const targetYear = await deps.years.getSchoolYearById(options.targetSchoolYearId);
@@ -141,6 +206,7 @@ export async function materializeSelectedContinuations(
     return { ok: false, reason: resolution.issues[0] ?? "Correspondances de classes bloquantes." };
   }
 
+  const newFlow = usesExplicitTargetMeetingDayPlans(options.targetMeetingDayPlans);
   const [courses, contexts, branches, slots, attendance, assignments] = await Promise.all([
     deps.courses.listCourses(),
     deps.catalog.listContexts(),
@@ -158,20 +224,22 @@ export async function materializeSelectedContinuations(
     const targetClass = classes.find((entry) => entry.id === targetClassId);
     if (!sourceClass || !targetClass) continue;
 
-    const sourceAttendance = attendance.filter((day) => day.classId === sourceClassId);
-    if (sourceAttendance.length > 0) {
-      const existingAttendance = attendance.filter((day) => day.classId === targetClassId);
-      if (existingAttendance.length === 0) {
-        await deps.schedules.replaceAttendanceDaysForClass(
-          targetClassId,
-          sourceAttendance.map((day) => ({
-            ...day,
-            id: createAttendanceId(),
-            classId: targetClassId,
-            createdAt: now,
-            updatedAt: now,
-          })),
-        );
+    if (!newFlow) {
+      const sourceAttendance = attendance.filter((day) => day.classId === sourceClassId);
+      if (sourceAttendance.length > 0) {
+        const existingAttendance = attendance.filter((day) => day.classId === targetClassId);
+        if (existingAttendance.length === 0) {
+          await deps.schedules.replaceAttendanceDaysForClass(
+            targetClassId,
+            sourceAttendance.map((day) => ({
+              ...day,
+              id: createAttendanceId(),
+              classId: targetClassId,
+              createdAt: now,
+              updatedAt: now,
+            })),
+          );
+        }
       }
     }
 
@@ -218,6 +286,8 @@ export async function materializeSelectedContinuations(
         if (!subject.ok) return { ok: false, reason: subject.reason };
       }
 
+      if (newFlow) continue;
+
       const sourceSlots = slots.filter((slot) => slot.annualCourseId === sourceCourse.id);
       const existingTargetSlots = slots.filter((slot) => slot.annualCourseId === targetCourse.id);
       if (existingTargetSlots.length === 0) {
@@ -249,6 +319,17 @@ export async function materializeSelectedContinuations(
         }
       }
     }
+  }
+
+  if (usesExplicitTargetMeetingDayPlans(options.targetMeetingDayPlans)) {
+    const persistedDays = await persistTargetMeetingDayPlans(deps, {
+      mappings: resolution.mappings,
+      plans: options.targetMeetingDayPlans,
+      sourceSchoolYearId: options.sourceSchoolYearId,
+      targetSchoolYearId: options.targetSchoolYearId,
+      selectedSourceClassIds: options.selectedSourceClassIds,
+    });
+    if (!persistedDays.ok) return persistedDays;
   }
 
   return { ok: true, mappings: resolution.mappings, createdClassIds };

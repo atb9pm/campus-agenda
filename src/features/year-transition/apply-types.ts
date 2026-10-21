@@ -95,9 +95,35 @@ export interface YearTransitionApplyAgendaInsert {
   sourceAgendaItemId: number;
 }
 
+export interface YearTransitionApplyNoteGuard {
+  /**
+   * Legacy : compare les notes d’un propriétaire.
+   * Nouveau flux (`annualCourseIds`) : compare les notes des cours repris, tous propriétaires.
+   */
+  ownerTeacherId?: string;
+  annualCourseIds?: readonly string[];
+  sourceSchoolYearId: string;
+  targetSchoolYearId: string;
+  expected: readonly AnnualCourseNote[];
+}
+
+export function notesMatchingApplyGuard(
+  notes: readonly AnnualCourseNote[],
+  guard: YearTransitionApplyNoteGuard,
+): AnnualCourseNote[] {
+  const years = new Set([guard.sourceSchoolYearId, guard.targetSchoolYearId]);
+  const courseIds = (guard.annualCourseIds ?? []).map((id) => id.trim()).filter(Boolean);
+  return notes.filter((note) => {
+    if (!years.has(note.schoolYearId)) return false;
+    if (courseIds.length > 0) {
+      return Boolean(note.annualCourseId && courseIds.includes(note.annualCourseId));
+    }
+    return Boolean(guard.ownerTeacherId && note.ownerTeacherId === guard.ownerTeacherId);
+  });
+}
+
 export interface YearTransitionApplyPlan {
-  noteGuard?: { ownerTeacherId: string; sourceSchoolYearId: string; targetSchoolYearId: string;
-    expected: readonly AnnualCourseNote[] };
+  noteGuard?: YearTransitionApplyNoteGuard;
   notes?: readonly AnnualCourseNote[];
   apply: PersistedYearTransitionApply;
   items: readonly YearTransitionApplyAgendaInsert[];
