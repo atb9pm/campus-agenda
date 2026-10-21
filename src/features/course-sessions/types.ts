@@ -22,7 +22,9 @@ export interface CourseSessionSegment {
  * Chaîne :
  * Plan de formation (CTX = profession + année + branche)
  * → Classe + CTX + année scolaire → AnnualCourse
- * → CourseScheduleSlot (segments d’horaire)
+ * → AnnualCourseMeetingDay (dates, si un plan est fourni au calcul)
+ *    sinon CourseScheduleSlot (legacy : les créneaux créent les dates)
+ * → CourseScheduleSlot (segments d’horaire uniquement, si plan meeting days)
  * → calendrier scolaire (A/B, vacances, fériés, exceptions)
  * → CourseSession (date réelle + numéro de séance + segments).
  *
