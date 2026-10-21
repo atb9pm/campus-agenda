@@ -19,6 +19,7 @@ export interface CatalogDeleteCounts {
   annualCourseNotes: number;
   courseScheduleSlots: number;
   attendanceDays: number;
+  meetingDays: number;
   publications: number;
   memberships: number;
   studentAccesses: number;
@@ -46,6 +47,7 @@ export interface CatalogDeletePlan {
   annualCourseNoteIds: string[];
   courseScheduleSlotIds: string[];
   attendanceDayIds: string[];
+  meetingDayIds: string[];
   agendaItemIds: number[];
   classroomIds: string[];
   subjectIds: string[];
@@ -84,6 +86,7 @@ export function emptyCatalogDeleteCounts(): CatalogDeleteCounts {
     annualCourseNotes: 0,
     courseScheduleSlots: 0,
     attendanceDays: 0,
+    meetingDays: 0,
     publications: 0,
     memberships: 0,
     studentAccesses: 0,
@@ -115,6 +118,7 @@ export function hasDestructiveDependencies(plan: CatalogDeletePlan): boolean {
     counts.annualCourseNotes +
     counts.courseScheduleSlots +
     counts.attendanceDays +
+    counts.meetingDays +
     counts.publications +
     counts.memberships +
     counts.studentAccesses +

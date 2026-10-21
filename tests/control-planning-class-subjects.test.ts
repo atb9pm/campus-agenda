@@ -263,7 +263,7 @@ function assignedForFrancois() {
 
 test("version 2.52.1 — affectations à maintenant et matières du professeur, sans migration", async () => {
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0033_annual_private_notes_storage.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0034_annual_course_meeting_days.sql");
   const [classroomsSrc, serviceSrc, panel, filterSrc, route] = await Promise.all([
     readFile(new URL("../src/features/control-planning/classrooms.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/features/control-planning/service.ts", import.meta.url), "utf8"),

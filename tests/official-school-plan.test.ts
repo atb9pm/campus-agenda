@@ -254,7 +254,7 @@ function normalizeEventLabel(label: string): string {
 
 test("version 2.49.0 — semaines de cours, kind nullable", () => {
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0033_annual_private_notes_storage.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0034_annual_course_meeting_days.sql");
 });
 
 test("A — PDF officiel 2028-2029 : année, début, fin", async () => {

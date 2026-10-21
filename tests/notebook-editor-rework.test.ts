@@ -836,7 +836,7 @@ test("éditeur 2.62.0 — structures génériques, callouts hérités neutres, l
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
   const { SQL_MIGRATION_FILES } = await import("../src/lib/persistence/sql/migrate.ts");
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0033_annual_private_notes_storage.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0034_annual_course_meeting_days.sql");
 
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   const view = await readFile(new URL("../web/app/components/rich-doc-view.tsx", import.meta.url), "utf8");
@@ -916,7 +916,7 @@ test("éditeur — puces, numéros et cases dans la zone de saisie commune", asy
   const { SQL_MIGRATION_FILES } = await import("../src/lib/persistence/sql/migrate.ts");
   assert.equal(APP_VERSION, "2.62.0");
   assert.equal(CAMPUS_RICH_FORMAT, "campus-rich-v1");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0033_annual_private_notes_storage.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0034_annual_course_meeting_days.sql");
 
   const bullets = applyStructureToLine(paragraphDoc("Devoir :"), 0, null, "bulletList");
   assert.equal(bullets.doc.blocks[0]?.type, "bulletList");
@@ -1568,7 +1568,7 @@ test("surface continue — canvas unique, pas de carte au focus, campus-rich-v1"
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
   const { SQL_MIGRATION_FILES } = await import("../src/lib/persistence/sql/migrate.ts");
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0033_annual_private_notes_storage.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0034_annual_course_meeting_days.sql");
   assert.equal(CAMPUS_RICH_FORMAT, "campus-rich-v1");
 
   const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");

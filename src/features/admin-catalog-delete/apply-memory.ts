@@ -75,13 +75,18 @@ export async function applyCatalogDeleteInMemory(
   if ("replaceSnapshot" in deps.schedules && typeof deps.schedules.replaceSnapshot === "function") {
     const slots = await deps.schedules.listSlots();
     const days = await deps.schedules.listAttendanceDays();
+    const meetingDays = await deps.schedules.listMeetingDays();
     deps.schedules.replaceSnapshot(
       slots.filter((entry) => !plan.courseScheduleSlotIds.includes(entry.id)),
       days.filter((entry) => !plan.attendanceDayIds.includes(entry.id)),
+      meetingDays.filter((entry) => !plan.meetingDayIds.includes(entry.id)),
     );
   } else {
     for (const id of plan.courseScheduleSlotIds) await deps.schedules.deleteSlot(id);
     for (const classId of plan.classIds) await deps.schedules.replaceAttendanceDaysForClass(classId, []);
+    for (const courseId of plan.annualCourseIds) {
+      await deps.schedules.replaceMeetingDaysForAnnualCourse(courseId, []);
+    }
   }
 
   const bulkNotes = deps.notes as Partial<AnnualNotesBulkStore>;

@@ -77,6 +77,23 @@ export {
   buildTemporaryReplacement,
 } from "./replace.ts";
 export {
+  MEETING_DAY_COURSE_MISSING_REASON,
+  MEETING_DAY_NO_PRIMARY_REASON,
+  MEETING_DAY_ROLE_REASON,
+  MEETING_DAY_SAME_DAY_REASON,
+  MEETING_DAY_TOO_MANY_REASON,
+  MEETING_DAY_TWO_PRIMARY_REASON,
+  MEETING_DAY_WEEKDAY_REASON,
+  MEETING_DAY_WEEK_KIND_REASON,
+  replaceAnnualCourseMeetingDays,
+  validateAnnualCourseMeetingDayPlan,
+  type AnnualCourseMeetingDay,
+  type AnnualCourseMeetingDayInput,
+  type MeetingDayPlanErr,
+  type MeetingDayPlanOk,
+  type MeetingDayPlanResult,
+} from "./meeting-days.ts";
+export {
   createAnnualCourse,
   ensureAnnualCourse,
   archiveAnnualCourse,

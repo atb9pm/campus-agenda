@@ -82,7 +82,7 @@ function v2Doc(
 
 test("PR3.4 — version et migration 0033", async () => {
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0033_annual_private_notes_storage.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0034_annual_course_meeting_days.sql");
   const sql = await readFile(new URL("../migrations/0033_annual_private_notes_storage.sql", import.meta.url), "utf8");
   assert.match(sql, /body_json/);
   assert.match(sql, /course_session_key/);

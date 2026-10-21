@@ -41,7 +41,13 @@ export interface AnnualCourseServiceDeps {
   teachers: TeacherAccountStore;
   notes: AnnualCourseNotesStore;
   /** Présent en production : les créneaux bloquent la suppression définitive. */
-  schedules?: Pick<CourseScheduleStore, "listSlotsByAnnualCourse">;
+  schedules?: Pick<
+    CourseScheduleStore,
+    | "listSlotsByAnnualCourse"
+    | "listMeetingDays"
+    | "listMeetingDaysByAnnualCourse"
+    | "replaceMeetingDaysForAnnualCourse"
+  >;
   /** Publications Agenda structurées : bloquent la suppression définitive. */
   agenda?: Pick<AgendaStore, "countAgendaItemsByAnnualCourse">;
 }
@@ -261,6 +267,9 @@ export async function deleteAnnualCourse(
     hasLinkedPublications: publicationCount > 0,
   });
   if (blocker) return { ok: false, reason: blocker, status: 409, code: "USED" };
+  if (deps.schedules) {
+    await deps.schedules.replaceMeetingDaysForAnnualCourse(courseId, []);
+  }
   const deleted = await deps.courses.deleteCourse(courseId);
   if (!deleted) return { ok: false, reason: "Cours annuel introuvable.", status: 404 };
   return { ok: true, value: { id: courseId } };

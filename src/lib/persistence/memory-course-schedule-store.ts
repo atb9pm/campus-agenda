@@ -1,9 +1,11 @@
+import type { AnnualCourseMeetingDay } from "../../features/annual-courses/meeting-days.ts";
 import type { ClassAttendanceDay, CourseScheduleSlot } from "../../features/course-schedule/types.ts";
 import type { CourseScheduleStore } from "./course-schedule-types.ts";
 
 export class MemoryCourseScheduleStore implements CourseScheduleStore {
   private readonly slots = new Map<string, CourseScheduleSlot>();
   private attendanceDays = new Map<string, ClassAttendanceDay>();
+  private meetingDays = new Map<string, AnnualCourseMeetingDay>();
 
   async listSlots(): Promise<CourseScheduleSlot[]> {
     return [...this.slots.values()]
@@ -57,10 +59,38 @@ export class MemoryCourseScheduleStore implements CourseScheduleStore {
     return this.listAttendanceDaysByClass(classId);
   }
 
-  replaceSnapshot(slots: CourseScheduleSlot[], days: ClassAttendanceDay[]): void {
+  async listMeetingDays(): Promise<AnnualCourseMeetingDay[]> {
+    return [...this.meetingDays.values()]
+      .map((entry) => ({ ...entry }))
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id));
+  }
+
+  async listMeetingDaysByAnnualCourse(annualCourseId: string): Promise<AnnualCourseMeetingDay[]> {
+    return (await this.listMeetingDays()).filter((entry) => entry.annualCourseId === annualCourseId);
+  }
+
+  async replaceMeetingDaysForAnnualCourse(
+    annualCourseId: string,
+    days: AnnualCourseMeetingDay[],
+  ): Promise<AnnualCourseMeetingDay[]> {
+    const next = new Map(this.meetingDays);
+    for (const [id, day] of next) {
+      if (day.annualCourseId === annualCourseId) next.delete(id);
+    }
+    for (const day of days) next.set(day.id, { ...day });
+    this.meetingDays = next;
+    return this.listMeetingDaysByAnnualCourse(annualCourseId);
+  }
+
+  replaceSnapshot(
+    slots: CourseScheduleSlot[],
+    days: ClassAttendanceDay[],
+    meetingDays: AnnualCourseMeetingDay[] = [],
+  ): void {
     this.slots.clear();
     for (const slot of slots) this.slots.set(slot.id, { ...slot });
     this.attendanceDays = new Map(days.map((day) => [day.id, { ...day }]));
+    this.meetingDays = new Map(meetingDays.map((day) => [day.id, { ...day }]));
   }
 }
 

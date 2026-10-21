@@ -32,6 +32,7 @@ function mergePlans(kind: CatalogDeleteKind, target: CatalogDeletePlan["target"]
     annualCourseNoteIds: unique(parts.flatMap((part) => part.annualCourseNoteIds)),
     courseScheduleSlotIds: unique(parts.flatMap((part) => part.courseScheduleSlotIds)),
     attendanceDayIds: unique(parts.flatMap((part) => part.attendanceDayIds)),
+    meetingDayIds: unique(parts.flatMap((part) => part.meetingDayIds)),
     agendaItemIds: unique(parts.flatMap((part) => part.agendaItemIds)),
     classroomIds: unique(parts.flatMap((part) => part.classroomIds)),
     subjectIds: unique(parts.flatMap((part) => part.subjectIds)),
@@ -78,6 +79,7 @@ function emptyPlan(
     annualCourseNoteIds: [],
     courseScheduleSlotIds: [],
     attendanceDayIds: [],
+    meetingDayIds: [],
     agendaItemIds: [],
     classroomIds: [],
     subjectIds: [],
@@ -112,6 +114,7 @@ function finalizeCounts(plan: CatalogDeletePlan, snapshot: CatalogDeleteSnapshot
     annualCourseNotes: plan.annualCourseNoteIds.length,
     courseScheduleSlots: plan.courseScheduleSlotIds.length,
     attendanceDays: plan.attendanceDayIds.length,
+    meetingDays: plan.meetingDayIds.length,
     publications: plan.agendaItemIds.length,
     memberships: plan.membershipIds.length,
     studentAccesses: plan.studentAccessIds.length,
@@ -179,6 +182,10 @@ function attachCourseGraph(plan: CatalogDeletePlan, courseIds: string[], snapsho
   plan.courseScheduleSlotIds = unique([
     ...plan.courseScheduleSlotIds,
     ...snapshot.scheduleSlots.filter((entry) => courseIds.includes(entry.annualCourseId)).map((entry) => entry.id),
+  ]);
+  plan.meetingDayIds = unique([
+    ...plan.meetingDayIds,
+    ...snapshot.meetingDays.filter((entry) => courseIds.includes(entry.annualCourseId)).map((entry) => entry.id),
   ]);
   plan.annualCourseNoteIds = unique([
     ...plan.annualCourseNoteIds,

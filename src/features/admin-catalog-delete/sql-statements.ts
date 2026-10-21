@@ -65,7 +65,7 @@ export function buildTeacherJsonUpdates(
  * - agenda_items.template_id → publication_templates
  * - agenda_items.subject_id → subjects
  * - publication_templates.subject_id → subjects
- * - assignments / slots / notes → annual_courses
+ * - assignments / slots / meeting days / notes → annual_courses
  * - class_attendance_days → school_classes
  * - subjects → classrooms
  * - timetable_class_mappings → classrooms
@@ -91,6 +91,7 @@ export function buildCatalogDeleteStatements(
     ...deleteIn("teacher_course_assignment_events", "id", plan.assignmentEventIds),
     ...deleteIn("teacher_course_assignments", "id", plan.assignmentIds),
     ...deleteIn("course_schedule_slots", "id", plan.courseScheduleSlotIds),
+    ...deleteIn("annual_course_meeting_days", "id", plan.meetingDayIds),
     ...deleteIn("annual_course_notes", "id", plan.annualCourseNoteIds),
     ...deleteIn("class_attendance_days", "id", plan.attendanceDayIds),
     ...deleteIn("subjects", "id", plan.subjectIds),
