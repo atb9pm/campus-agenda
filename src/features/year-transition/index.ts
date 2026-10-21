@@ -1,5 +1,6 @@
 export {
   YEAR_TRANSITION_PREVIEW_REASONS,
+  YEAR_TRANSITION_PREVIEW_REASON_EXPLANATIONS,
   YEAR_TRANSITION_PREVIEW_REASON_LABELS,
   YEAR_TRANSITION_PREVIEW_REASON_ORDER,
   YEAR_TRANSITION_PREVIEW_WARNINGS,
@@ -81,6 +82,10 @@ export {
 } from "./prepare.ts";
 export {
   classContinuationIdentity,
+  isPendingTargetClassId,
+  isPendingTargetCourseId,
+  pendingTargetClassId,
+  pendingTargetCourseId,
   resolveClassContinuations,
 } from "./continuation-identity.ts";
 export { applyPersistedYearTransition, expectedApplyResultForPreviewReason } from "./apply.ts";

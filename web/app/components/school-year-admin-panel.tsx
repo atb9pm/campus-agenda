@@ -119,6 +119,10 @@ export function SchoolYearAdminPanel({
   const activeYear = years.find((year) => year.status === "active") ?? null;
   const workingYear = years.find((year) => year.id === workingYearId) ?? null;
   const orderedYears = useMemo(() => sortSchoolYearsChronologically(years), [years]);
+  const workingWeekCount = workingWeeks.length;
+  const workingYearComplete = workingWeekCount === 38;
+  const switchKind =
+    workingYear?.status === "draft" ? "activate" : workingYear?.status === "archived" ? "reactivate" : null;
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -323,23 +327,44 @@ export function SchoolYearAdminPanel({
               )}
             </div>
           </div>
-        </article>
-      )}
-
-      {workingYear && (
-        <article className="school-year-card">
-          <div className="year-transition-actions">
-            {onConsultYear ? (
-              <button type="button" className="workspace-action secondary" onClick={() => onConsultYear(workingYear.id)}>
-                Consulter les cours de cette année
-              </button>
-            ) : null}
-            {workingYear.status === "draft" ? (
-              <button type="button" className="workspace-action" onClick={() => setActivateOpen(true)}>
-                Activer {formatSchoolYearLabelFr(workingYear.label)}
-              </button>
-            ) : null}
-          </div>
+          {workingYear && (
+            <div className="year-transition-actions">
+              {onConsultYear ? (
+                <button type="button" className="workspace-action secondary" onClick={() => onConsultYear(workingYear.id)}>
+                  Consulter les cours de cette année
+                </button>
+              ) : null}
+              {switchKind === "activate" ? (
+                <button
+                  type="button"
+                  className="workspace-action"
+                  disabled={working || !workingYearComplete}
+                  onClick={() => setActivateOpen(true)}
+                >
+                  Activer {formatSchoolYearLabelFr(workingYear.label)}
+                </button>
+              ) : null}
+              {switchKind === "reactivate" ? (
+                <button
+                  type="button"
+                  className="workspace-action"
+                  disabled={working || !workingYearComplete}
+                  onClick={() => setActivateOpen(true)}
+                >
+                  Réactiver {formatSchoolYearLabelFr(workingYear.label)}
+                </button>
+              ) : null}
+            </div>
+          )}
+          {workingYear?.status === "active" ? (
+            <p className="school-year-hint">Cette année est déjà l’année active des enseignants et des élèves.</p>
+          ) : null}
+          {workingYear && switchKind && !workingYearComplete ? (
+            <p className="school-year-hint" role="status">
+              Impossible d’{switchKind === "reactivate" ? "réactiver" : "activer"} {formatSchoolYearLabelFr(workingYear.label)} :
+              le calendrier officiel doit contenir 38 semaines ({workingWeekCount} actuellement).
+            </p>
+          ) : null}
         </article>
       )}
 
@@ -478,10 +503,22 @@ export function SchoolYearAdminPanel({
       )}
 
       <ConfirmDialog
-        open={activateOpen && Boolean(workingYear) && workingYear?.status === "draft"}
-        title={`Activer ${workingYear ? formatSchoolYearLabelFr(workingYear.label) : "cette année"} ?`}
-        body={`Année active actuelle : ${activeYear ? formatSchoolYearLabelFr(activeYear.label) : "aucune"}. Année à activer : ${workingYear ? formatSchoolYearLabelFr(workingYear.label) : ""}. Cette action est manuelle. Elle n’a lieu ni à la rentrée, ni à l’import, ni après la préparation ou le transfert. L’année actuellement active sera archivée.`}
-        confirmLabel={workingYear ? `Activer ${formatSchoolYearLabelFr(workingYear.label)}` : "Activer"}
+        open={activateOpen && Boolean(workingYear) && Boolean(switchKind) && workingYearComplete}
+        title={
+          switchKind === "reactivate"
+            ? `Réactiver ${workingYear ? formatSchoolYearLabelFr(workingYear.label) : "cette année"} ?`
+            : `Activer ${workingYear ? formatSchoolYearLabelFr(workingYear.label) : "cette année"} ?`
+        }
+        body={
+          switchKind === "reactivate"
+            ? `Année active actuelle : ${activeYear ? formatSchoolYearLabelFr(activeYear.label) : "aucune"}. Année qui deviendra active : ${workingYear ? formatSchoolYearLabelFr(workingYear.label) : ""}. Les enseignants et les élèves basculeront sur l’année réactivée. L’année quittée restera en préparation, sans transfert inverse ni suppression. Les données des deux années sont conservées.`
+            : `Année active actuelle : ${activeYear ? formatSchoolYearLabelFr(activeYear.label) : "aucune"}. Année qui deviendra active : ${workingYear ? formatSchoolYearLabelFr(workingYear.label) : ""}. Les enseignants et les élèves basculeront sur cette nouvelle année. L’année actuellement active sera archivée en lecture seule. Cette action est manuelle : elle n’a lieu ni à la rentrée, ni à l’import, ni après la préparation ou le transfert. Les données des deux années sont conservées.`
+        }
+        confirmLabel={
+          workingYear
+            ? `${switchKind === "reactivate" ? "Réactiver" : "Activer"} ${formatSchoolYearLabelFr(workingYear.label)}`
+            : "Confirmer"
+        }
         cancelLabel="Annuler"
         onConfirm={() => void confirmActivation()}
         onCancel={() => setActivateOpen(false)}

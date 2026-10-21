@@ -4,7 +4,7 @@ import { normalizeMappingClassId } from "./class-mapping.ts";
 import type { YearTransitionPreviewInput } from "./types.ts";
 
 /** Version des règles métier de projection. Fait partie de l’état matériel et du fingerprint. */
-export const YEAR_TRANSITION_PREVIEW_ENGINE_VERSION = 2;
+export const YEAR_TRANSITION_PREVIEW_ENGINE_VERSION = 3;
 
 /**
  * Empreinte matérielle du PREVIEW.
@@ -12,14 +12,15 @@ export const YEAR_TRANSITION_PREVIEW_ENGINE_VERSION = 2;
  * Inclus (tout ce qui change le résultat métier ou un APPLY futur) :
  * version du moteur, années, mappings de classes, identités de cours, snapshot de parcours
  * (ids, positions, type/title/detail des items), CourseSession cibles,
- * publications source (id, cours, refs, type/title/detail),
+ * publications source (id, cours, refs, courseSessionKey, type/title/detail),
+ * CourseSession source (clé, position, cours),
  * publications cibles (refs, courseSessionKey/Date, semaine/jour/heure cibles).
  *
  * Les IDs de mapping sont trimés comme indexClassMappings.
  *
  * Exclus volontairement — diagnostics / provenance historique de N uniquement,
  * jamais utilisés pour le placement ni pour un APPLY :
- * schoolWeekNumber, day, hour, weekOffset, courseSessionDate, courseSessionKey
+ * schoolWeekNumber, day, hour, weekOffset, courseSessionDate
  * des publications SOURCE, ainsi que classroomId, subjectId, authorTeacherId,
  * templateId, studentVisible.
  * Les champs temporels TARGET N+1 sont matériels (conformité ALREADY_PRESENT).
@@ -121,6 +122,16 @@ function materialState(input: YearTransitionPreviewInput) {
           .sort((left, right) => compareIds(left.id, right.id) || left.position - right.position),
       }))
       .sort((left, right) => compareIds(left.contextId, right.contextId) || compareIds(left.id, right.id)),
+    sourceCourseSessions: [...(input.sourceCourseSessions ?? [])]
+      .map((session) => ({
+        key: session.key,
+        schoolYearId: session.schoolYearId,
+        annualCourseId: session.annualCourseId,
+        classId: session.classId,
+        contextId: session.contextId,
+        sequenceNumber: session.sequenceNumber,
+      }))
+      .sort((left, right) => compareIds(left.key, right.key) || left.sequenceNumber - right.sequenceNumber),
     targetCourseSessions: [...input.targetCourseSessions]
       .map((session) => ({
         key: session.key,
@@ -154,7 +165,7 @@ function materialState(input: YearTransitionPreviewInput) {
         annualCourseId: item.annualCourseId ?? null,
         referenceItemId: item.referenceItemId ?? null,
         referenceSessionId: item.referenceSessionId ?? null,
-        ...(input.includePrivateNotes ? { courseSessionKey: item.courseSessionKey ?? null } : {}),
+        courseSessionKey: item.courseSessionKey ?? null,
         type: item.type,
         title: item.title,
         detail: item.detail,

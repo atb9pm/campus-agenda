@@ -296,3 +296,18 @@ test("backfill mémoire — label unique renseigné, ambigu laissé null", async
   const ambiguous = (await catalog.listClasses()).find((entry) => entry.code === "AMBIG");
   assert.equal(ambiguous?.schoolYearId, null);
 });
+
+test("réactiver une année archivée conserve l’année quittée en préparation", async () => {
+  const yearsStore = freshMemoryYears();
+  await yearsStore.seedDefaultActiveYearIfEmpty();
+  const first = await yearsStore.getActiveSchoolYear();
+  assert.ok(first);
+  const draft = await yearsStore.importDraftFromPlan(buildPlan("2027-2028"), "plan-test.pdf");
+  const next = await yearsStore.activateSchoolYear(draft.id);
+  assert.equal(next.id, draft.id);
+  assert.equal((await yearsStore.getSchoolYearById(first.id))?.status, "archived");
+  const reactivated = await yearsStore.activateSchoolYear(first.id);
+  assert.equal(reactivated.id, first.id);
+  assert.equal(reactivated.status, "active");
+  assert.equal((await yearsStore.getSchoolYearById(draft.id))?.status, "draft");
+});

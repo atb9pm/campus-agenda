@@ -736,7 +736,7 @@ test("66 — DUPLICATE_SOURCE_REFERENCE bloque", async () => {
 });
 
 test("68 — ORPHAN_NO_REFERENCE_ITEM skip autorisé + no-op ledger", async () => {
-  const world = await seedMemory({ extraItems: [sourceItem({ referenceItemId: null })] });
+  const world = await seedMemory({ extraItems: [sourceItem({ referenceItemId: null, referenceSessionId: null })] });
   await persistLive(world);
   const result = await applyPersistedYearTransition("transition-1", world.deps);
   assert.equal(result.ok, true);
@@ -770,7 +770,7 @@ test("70 — CLASS_CONTINUATION_ABSENT skip", async () => {
 
 test("71 — PROJECTABLE + orphan", async () => {
   const world = await seedMemory({
-    extraItems: [sourceItem({ id: 10 }), sourceItem({ id: 11, referenceItemId: null })],
+    extraItems: [sourceItem({ id: 10 }), sourceItem({ id: 11, referenceItemId: null, referenceSessionId: null })],
   });
   await persistLive(world);
   const result = await applyPersistedYearTransition("transition-1", world.deps);
@@ -792,7 +792,7 @@ test("72 — blocker + PROJECTABLE → 0 AgendaItem", async () => {
 });
 
 test("73-75 — no-op skips puis second APPLY ALREADY_APPLIED", async () => {
-  const world = await seedMemory({ extraItems: [sourceItem({ referenceItemId: null })] });
+  const world = await seedMemory({ extraItems: [sourceItem({ referenceItemId: null, referenceSessionId: null })] });
   await persistLive(world);
   const first = await applyPersistedYearTransition("transition-1", world.deps);
   assert.equal(first.ok, true);
@@ -1527,7 +1527,7 @@ test("applyResult inconnu dans ledger → DIVERGED", async () => {
 });
 
 test("SKIPPED_NO_REFERENCE + AgendaItem même provenance → DIVERGED", async () => {
-  const world = await seedMemory({ extraItems: [sourceItem({ referenceItemId: null })] });
+  const world = await seedMemory({ extraItems: [sourceItem({ referenceItemId: null, referenceSessionId: null })] });
   await persistLive(world);
   await applyPersistedYearTransition("transition-1", world.deps);
   const items = await world.agenda.exportAllItems();
@@ -1641,7 +1641,7 @@ function alreadyPresentTarget(id = 50): PrototypeAgendaItem {
 
 test("PREVIEW 2 entries, APPLY ledger n'en contient qu'1 → DIVERGED", async () => {
   const world = await seedMemory({
-    extraItems: [sourceItem({ id: 10 }), sourceItem({ id: 11, referenceItemId: null })],
+    extraItems: [sourceItem({ id: 10 }), sourceItem({ id: 11, referenceItemId: null, referenceSessionId: null })],
   });
   await persistLive(world);
   await applyPersistedYearTransition("transition-1", world.deps);
@@ -1732,7 +1732,7 @@ test("PROJECTABLE + applyResult SKIPPED_NO_REFERENCE → DIVERGED", async () => 
 });
 
 test("ORPHAN_NO_REFERENCE_ITEM + applyResult CREATED → DIVERGED", async () => {
-  const world = await seedMemory({ extraItems: [sourceItem({ referenceItemId: null })] });
+  const world = await seedMemory({ extraItems: [sourceItem({ referenceItemId: null, referenceSessionId: null })] });
   await persistLive(world);
   await applyPersistedYearTransition("transition-1", world.deps);
   const dump = world.applyStore.exportBackupTables();
@@ -1798,7 +1798,7 @@ test("ledger normal complet → ALREADY_APPLIED", async () => {
 });
 
 test("no-op uniquement SKIPPED → second APPLY ALREADY_APPLIED", async () => {
-  const world = await seedMemory({ extraItems: [sourceItem({ referenceItemId: null })] });
+  const world = await seedMemory({ extraItems: [sourceItem({ referenceItemId: null, referenceSessionId: null })] });
   await persistLive(world);
   const first = await applyPersistedYearTransition("transition-1", world.deps);
   assert.equal(first.ok, true);

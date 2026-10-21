@@ -15,6 +15,11 @@ import {
   assertGeneratedWeeksMatchOfficialTotal,
   generateOfficialCourseWeeks,
 } from "../../features/school-year/official-course-weeks.ts";
+import {
+  previousActiveStatusAfterSwitch,
+  SCHOOL_YEAR_ACTIVATE_INCOMPLETE,
+  SCHOOL_YEAR_ALREADY_ACTIVE,
+} from "../../features/school-year/activate-year.ts";
 import { preserveExistingPedagogicalWeekKinds } from "../../features/school-year/pedagogical-week-kinds.ts";
 import type {
   OfficialPlanImportOptions,
@@ -146,14 +151,18 @@ export class MemorySchoolYearStore implements SchoolYearStore {
   async activateSchoolYear(id: string): Promise<SchoolYearWithWeeks> {
     const target = memorySchoolYears.find((year) => year.id === id);
     if (!target) throw new Error("Année scolaire introuvable.");
+    if (target.status === "active") {
+      throw new Error(SCHOOL_YEAR_ALREADY_ACTIVE);
+    }
     if (target.weeks.length !== 38) {
-      throw new Error("Impossible d'activer une année incomplète (38 semaines requises).");
+      throw new Error(SCHOOL_YEAR_ACTIVATE_INCOMPLETE);
     }
 
+    const demoteTo = previousActiveStatusAfterSwitch(target.status);
     const now = new Date().toISOString();
     memorySchoolYears = memorySchoolYears.map((year) => {
-      if (year.status === "active") {
-        return { ...year, status: "archived" as const };
+      if (year.status === "active" && demoteTo) {
+        return { ...year, status: demoteTo };
       }
       if (year.id === id) {
         return { ...year, status: "active" as const, activatedAt: now };

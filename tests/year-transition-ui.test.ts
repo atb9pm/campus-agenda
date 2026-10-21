@@ -298,6 +298,7 @@ test("apply refuse l’absence de confirmation et les routes exigent une session
   );
   assert.match(schoolYearAdmin, /Consulter les cours de cette année/);
   assert.match(schoolYearAdmin, /Activer /);
+  assert.match(schoolYearAdmin, /Réactiver /);
   assert.match(schoolYearAdmin, /Année active actuelle/);
   const activateRoute = await readFile(
     new URL("../web/app/api/admin/school-year/activate/route.ts", import.meta.url),

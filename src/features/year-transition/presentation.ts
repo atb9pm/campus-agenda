@@ -8,9 +8,18 @@ import type { AnnualCourse } from "../annual-courses/types.ts";
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
 import type { SchoolYearRecord } from "../school-year/types.ts";
 import { YEAR_TRANSITION_APPLY_BLOCKING_REASONS, type YearTransitionApplyFailureCode, type YearTransitionApplyOutcome } from "./apply-types.ts";
-import { YEAR_TRANSITION_PREVIEW_REASON_LABELS, type YearTransitionPreviewReason } from "./reasons.ts";
+import {
+  YEAR_TRANSITION_PREVIEW_REASON_EXPLANATIONS,
+  YEAR_TRANSITION_PREVIEW_REASON_LABELS,
+  type YearTransitionPreviewReason,
+} from "./reasons.ts";
 import { indexClassMappings } from "./class-mapping.ts";
-import { resolveClassContinuations } from "./continuation-identity.ts";
+import {
+  isPendingTargetClassId,
+  isPendingTargetCourseId,
+  PENDING_TARGET_COURSE_PREFIX,
+  resolveClassContinuations,
+} from "./continuation-identity.ts";
 import type { PrivateNotePreviewEntry } from "./private-notes.ts";
 import type {
   YearTransitionClassMapping,
@@ -307,12 +316,17 @@ function noteCategory(reason: PrivateNotePreviewEntry["reason"]): YearTransition
 
 function classLabel(lookups: YearTransitionCatalogLookups, classId: string | null): string | null {
   if (!classId) return null;
+  if (isPendingTargetClassId(classId)) return "Classe cible à créer à la confirmation";
   const found = lookups.classes.find((entry) => entry.id === classId);
   return found ? presentTransitionClass(found, lookups.professions).displayName : classId;
 }
 
 function courseLabel(lookups: YearTransitionCatalogLookups, courseId: string | null): string | null {
   if (!courseId) return null;
+  if (isPendingTargetCourseId(courseId)) {
+    const sourceLabel = courseLabel(lookups, courseId.slice(PENDING_TARGET_COURSE_PREFIX.length));
+    return sourceLabel ? `${sourceLabel} (cible à créer)` : "Cours cible à créer à la confirmation";
+  }
   const course = lookups.courses.find((entry) => entry.id === courseId);
   if (!course) return courseId;
   const context = lookups.contexts.find((entry) => entry.id === course.contextId);
@@ -405,7 +419,7 @@ export function presentYearTransitionPreview(
         : `Publication n° ${entry.sourceAgendaItemId}`,
       reason: entry.reason,
       reasonLabel: YEAR_TRANSITION_PREVIEW_REASON_LABELS[entry.reason] ?? entry.reason,
-      explanation: YEAR_TRANSITION_PREVIEW_REASON_LABELS[entry.reason] ?? entry.reason,
+      explanation: YEAR_TRANSITION_PREVIEW_REASON_EXPLANATIONS[entry.reason] ?? YEAR_TRANSITION_PREVIEW_REASON_LABELS[entry.reason] ?? entry.reason,
       sourceCourseLabel: courseLabel(lookups, entry.sourceAnnualCourseId),
       targetCourseLabel: courseLabel(lookups, entry.targetAnnualCourseId),
       sourceClassId: entry.sourceClassId,
@@ -435,8 +449,8 @@ export function presentYearTransitionPreview(
         explanation: YEAR_TRANSITION_NOTE_REASON_EXPLANATIONS[entry.reason],
         sourceCourseLabel: null,
         targetCourseLabel: courseLabel(lookups, entry.targetAnnualCourseId),
-        sourceClassId: null,
-        sourceClassLabel: null,
+        sourceClassId: entry.sourceClassId,
+        sourceClassLabel: classLabel(lookups, entry.sourceClassId),
         targetClassLabel: classLabel(lookups, entry.targetClassId),
         sessionLabel: formatNoteSessionLabel(entry.courseSessionKey),
         sourceSessionLabel: null,
@@ -452,7 +466,15 @@ export function presentYearTransitionPreview(
   const targetCourses: YearTransitionPresentedPreview["targetCourses"] = [];
   const consider = [...publications.projectable, ...publications.alreadyPresent, ...(notes?.projectable ?? []), ...(notes?.alreadyPresent ?? [])];
   for (const row of consider) {
-    if (!row.targetAnnualCourseId || !row.targetClassId || targetCourseIds.has(row.targetAnnualCourseId)) continue;
+    if (
+      !row.targetAnnualCourseId ||
+      !row.targetClassId ||
+      isPendingTargetClassId(row.targetClassId) ||
+      isPendingTargetCourseId(row.targetAnnualCourseId) ||
+      targetCourseIds.has(row.targetAnnualCourseId)
+    ) {
+      continue;
+    }
     targetCourseIds.add(row.targetAnnualCourseId);
     targetCourses.push({
       annualCourseId: row.targetAnnualCourseId,
@@ -490,7 +512,7 @@ export function presentYearTransitionPreview(
             .filter(Boolean)
             .join(" — ") || presentedClass.displayName
         : row.sourceClassId;
-      const rows = allRows.filter((entry) => entry.sourceClassId === row.sourceClassId || entry.targetClassId === row.targetClassId);
+      const rows = allRows.filter((entry) => Boolean(entry.sourceClassId) && entry.sourceClassId === row.sourceClassId);
       return {
         sourceClassId: row.sourceClassId,
         identityLabel,
