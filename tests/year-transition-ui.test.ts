@@ -263,6 +263,77 @@ test("l’aperçu présenté n’expose pas le contenu des notes et classe les m
   assert.equal(previewHasBlockingEntries(preview), true);
 });
 
+test("l’aperçu affiche le jour ISO de la séance cible, pas l’index agenda", () => {
+  const emptySummary: YearTransitionPreviewResult["mappingSummary"] = {
+    oneToOne: [],
+    noContinuation: [],
+    targetOnly: [],
+    conflicts: [],
+    unsupported: [],
+  };
+  function projectable(id: number, day: number, date: string, sequenceNumber: number): YearTransitionPreviewResult["entries"][number] {
+    return {
+      reason: "PROJECTABLE",
+      warnings: [],
+      sourceAgendaItemId: id,
+      sourceAnnualCourseId: "ac-n",
+      sourceClassId: "class-a",
+      targetClassId: "class-b",
+      targetAnnualCourseId: "ac-n1",
+      referenceItemId: null,
+      sourceReferenceSessionId: null,
+      resolvedReferenceSessionId: null,
+      pedagogicalPosition: sequenceNumber,
+      targetCourseSession: null,
+      proposedPlacement: {
+        schoolYearId: TARGET_YEAR.id,
+        annualCourseId: "ac-n1",
+        courseSessionKey: `k-${date}`,
+        courseSessionDate: date,
+        schoolWeekNumber: sequenceNumber,
+        day,
+        hour: 8,
+        sequenceNumber,
+      },
+      sourceTemporal: {
+        schoolWeekNumber: sequenceNumber,
+        day,
+        hour: 8,
+        weekOffset: 0,
+        courseSessionDate: date,
+        courseSessionKey: `old-${date}`,
+      },
+    };
+  }
+  const presented = presentYearTransitionPreview(
+    {
+      sourceSchoolYearId: SOURCE_YEAR.id,
+      targetSchoolYearId: TARGET_YEAR.id,
+      fingerprint: "days",
+      mappingSummary: emptySummary,
+      entries: [
+        projectable(1, 0, "2027-10-04", 7),
+        projectable(2, 3, "2027-09-23", 6),
+        projectable(3, 4, "2027-09-24", 8),
+      ],
+    },
+    {
+      years: [SOURCE_YEAR, TARGET_YEAR],
+      classes: [],
+      professions: [],
+      contexts: [],
+      branches: [],
+      courses: [],
+      items: [],
+    },
+  );
+  const labels = presented.publications.projectable.map((row) => row.sessionLabel);
+  assert.equal(labels[0], "Séance cible n° 7 · lundi 04.10.2027");
+  assert.equal(labels[1], "Séance cible n° 6 · jeudi 23.09.2027");
+  assert.equal(labels[2], "Séance cible n° 8 · vendredi 24.09.2027");
+  assert.equal(labels.some((label) => label?.includes("jour 0")), false);
+});
+
 test("apply refuse l’absence de confirmation et les routes exigent une session admin", async () => {
   const { applyAuthorizedYearTransition } = await import("../src/features/year-transition/prepare.ts");
   await assert.rejects(
