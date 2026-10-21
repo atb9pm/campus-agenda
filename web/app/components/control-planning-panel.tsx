@@ -3,12 +3,16 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
 
 import {
+  CONTROL_SESSION_ATTACH_ACTION,
+  CONTROL_UNLINKED_READONLY_HINT,
+  CONTROL_UNLINKED_SESSION_HINT,
   canManageOwnStructuredControlCard,
   classDayControlsForPlacementOption,
   confirmationRequiredForPlacementOption,
   controlMatchesSubjectFilter,
   formatControlPlanningYearLabel,
   isMovableStructuredControlCard,
+  needsControlSessionAttachment,
   resolveControlPlanningSubjectFilter,
   toggleControlPlanningClassroomSelection,
   type ControlPlacementOption,
@@ -145,12 +149,14 @@ function ControlCard({
   toneIndex = 0,
   movable = false,
   manageable = false,
+  unlinked = false,
   dragging = false,
   selected = false,
   onDragStart,
   onDragEnd,
   onEditClick,
   onMoveClick,
+  onAttachClick,
   onDeleteClick,
 }: {
   card: ControlPlanningCard;
@@ -159,18 +165,25 @@ function ControlCard({
   toneIndex?: number;
   movable?: boolean;
   manageable?: boolean;
+  unlinked?: boolean;
   dragging?: boolean;
   selected?: boolean;
   onDragStart?: (event: DragEvent<HTMLElement>) => void;
   onDragEnd?: () => void;
   onEditClick?: () => void;
   onMoveClick?: () => void;
+  onAttachClick?: () => void;
   onDeleteClick?: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const title = [card.classroomName, card.branchLabel, card.title, card.teacherName].filter(Boolean).join(" · ");
   const palette = branchPalette(card.branchLabel, card.subjectId);
+  const unlinkedHint = unlinked
+    ? manageable
+      ? CONTROL_UNLINKED_SESSION_HINT
+      : CONTROL_UNLINKED_READONLY_HINT
+    : null;
   const classes = [
     "control-planning-card",
     compact ? "is-compact" : "",
@@ -178,6 +191,7 @@ function ControlCard({
     movable ? "is-draggable" : "",
     dragging ? "is-dragging" : "",
     selected ? "is-move-source" : "",
+    unlinked ? "is-unlinked" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -216,6 +230,7 @@ function ControlCard({
       data-classroom-name={card.classroomName}
       data-own={card.isOwn ? "true" : "false"}
       data-movable={movable ? "true" : "false"}
+      data-unlinked={unlinked ? "true" : "false"}
       data-class-tone={toneIndex}
       data-agenda-item-id={card.agendaItemId}
       data-annual-course-id={card.annualCourseId ?? ""}
@@ -267,19 +282,36 @@ function ControlCard({
                 >
                   Modifier
                 </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  data-control-move=""
-                  onMouseDown={stopCardGesture}
-                  onClick={(event) => {
-                    stopCardGesture(event);
-                    setMenuOpen(false);
-                    onMoveClick?.();
-                  }}
-                >
-                  Déplacer
-                </button>
+                {movable ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    data-control-move=""
+                    onMouseDown={stopCardGesture}
+                    onClick={(event) => {
+                      stopCardGesture(event);
+                      setMenuOpen(false);
+                      onMoveClick?.();
+                    }}
+                  >
+                    Déplacer
+                  </button>
+                ) : null}
+                {unlinked && manageable ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    data-control-attach=""
+                    onMouseDown={stopCardGesture}
+                    onClick={(event) => {
+                      stopCardGesture(event);
+                      setMenuOpen(false);
+                      onAttachClick?.();
+                    }}
+                  >
+                    {CONTROL_SESSION_ATTACH_ACTION}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   role="menuitem"
@@ -307,6 +339,11 @@ function ControlCard({
       </span>
       <strong>{card.title}</strong>
       {showTeacher ? <span className="control-planning-teacher">{card.teacherName}</span> : null}
+      {unlinkedHint ? (
+        <p className="control-planning-card-hint" data-control-unlinked-hint="">
+          {unlinkedHint}
+        </p>
+      ) : null}
     </article>
   );
 }
@@ -316,6 +353,7 @@ function MoveModal({
   day,
   option,
   card,
+  attaching = false,
   classDayControls,
   teacherWeekControls,
   submitting,
@@ -328,6 +366,7 @@ function MoveModal({
   day: ControlPlanningDay;
   option: ControlPlacementOption;
   card: ControlPlanningCard;
+  attaching?: boolean;
   classDayControls: ControlCoordinationLine[];
   teacherWeekControls: ControlCoordinationLine[];
   submitting: boolean;
@@ -345,11 +384,12 @@ function MoveModal({
         aria-modal="true"
         aria-labelledby="control-move-title"
         data-control-move-modal=""
+        data-control-attach-modal={attaching ? "true" : "false"}
       >
         <header>
           <div>
-            <span className="eyebrow">DÉPLACER UN CONTRÔLE</span>
-            <h2 id="control-move-title">Déplacer un contrôle</h2>
+            <span className="eyebrow">{attaching ? "RATTACHER UN CONTRÔLE" : "DÉPLACER UN CONTRÔLE"}</span>
+            <h2 id="control-move-title">{attaching ? "Rattacher à une séance" : "Déplacer un contrôle"}</h2>
           </div>
           <button type="button" onClick={onClose} aria-label="Fermer" disabled={submitting}>
             ×
@@ -361,6 +401,11 @@ function MoveModal({
           <span>{dayLabel}</span>
           <span>{placementCaption(option)}</span>
         </p>
+        {attaching ? (
+          <p className="control-planning-hint">
+            Choisissez explicitement le cours et la séance. Rien n’est déduit du titre ni du nom de branche.
+          </p>
+        ) : null}
         <ControlCoordinationBlock
           classroomName={classroomName}
           dayLabel={`ce ${day.weekdayLabel.toLocaleLowerCase("fr-CH")}`}
@@ -379,7 +424,17 @@ function MoveModal({
             disabled={submitting}
             onClick={() => onSubmit(confirmationRequired)}
           >
-            {submitting ? "Déplacement…" : confirmationRequired ? "Déplacer quand même" : "Déplacer"}
+            {submitting
+              ? attaching
+                ? "Rattachement…"
+                : "Déplacement…"
+              : confirmationRequired
+                ? attaching
+                  ? "Rattacher quand même"
+                  : "Déplacer quand même"
+                : attaching
+                  ? "Rattacher"
+                  : "Déplacer"}
           </button>
         </footer>
       </section>
@@ -646,6 +701,10 @@ export function ControlPlanningPanel({
 
   function cardIsManageable(card: ControlPlanningCard): boolean {
     return canManageOwnStructuredControlCard(card, Boolean(view?.canCreate));
+  }
+
+  function cardIsUnlinked(card: ControlPlanningCard): boolean {
+    return needsControlSessionAttachment(card);
   }
 
   function openEdit(card: ControlPlanningCard) {
@@ -1117,11 +1176,12 @@ export function ControlPlanningPanel({
         {moveSource ? (
           <div className="control-planning-move-bar" data-control-move-mode="">
             <p>
-              Choisissez la séance destination pour « {moveSource.title} ». Seules les cases avec une
-              CourseSession réelle sont valides.
+              {needsControlSessionAttachment(moveSource)
+                ? `Choisissez explicitement la séance à rattacher pour « ${moveSource.title} ». Le cours et la séance ne sont jamais déduits du titre ou du nom de branche.`
+                : `Choisissez la séance destination pour « ${moveSource.title} ». Seules les cases avec une CourseSession réelle sont valides.`}
             </p>
             <button type="button" onClick={cancelMoveMode}>
-              Annuler le déplacement
+              {needsControlSessionAttachment(moveSource) ? "Annuler le rattachement" : "Annuler le déplacement"}
             </button>
           </div>
         ) : null}
@@ -1297,12 +1357,14 @@ export function ControlPlanningPanel({
                                               toneIndex={classToneIndex(card.classroomId, assignedIds)}
                                               movable={cardIsMovable(card)}
                                               manageable={cardIsManageable(card)}
+                                              unlinked={cardIsUnlinked(card)}
                                               dragging={draggingCard?.agendaItemId === card.agendaItemId}
                                               selected={moveSource?.agendaItemId === card.agendaItemId}
                                               onDragStart={(event) => startCardDrag(card, event)}
                                               onDragEnd={() => setDraggingCard(null)}
                                               onEditClick={() => openEdit(card)}
                                               onMoveClick={() => setMoveSource(card)}
+                                              onAttachClick={() => setMoveSource(card)}
                                               onDeleteClick={() => openDelete(card)}
                                             />
                                           </li>
@@ -1414,12 +1476,14 @@ export function ControlPlanningPanel({
                             toneIndex={classToneIndex(card.classroomId, assignedIds)}
                             movable={cardIsMovable(card)}
                             manageable={cardIsManageable(card)}
+                            unlinked={cardIsUnlinked(card)}
                             dragging={draggingCard?.agendaItemId === card.agendaItemId}
                             selected={moveSource?.agendaItemId === card.agendaItemId}
                             onDragStart={(event) => startCardDrag(card, event)}
                             onDragEnd={() => setDraggingCard(null)}
                             onEditClick={() => openEdit(card)}
                             onMoveClick={() => setMoveSource(card)}
+                            onAttachClick={() => setMoveSource(card)}
                             onDeleteClick={() => openDelete(card)}
                           />
                         </li>
@@ -1537,12 +1601,14 @@ export function ControlPlanningPanel({
                                 toneIndex={classToneIndex(card.classroomId, assignedIds)}
                                 movable={cardIsMovable(card)}
                                 manageable={cardIsManageable(card)}
+                                unlinked={cardIsUnlinked(card)}
                                 dragging={draggingCard?.agendaItemId === card.agendaItemId}
                                 selected={moveSource?.agendaItemId === card.agendaItemId}
                                 onDragStart={(event) => startCardDrag(card, event)}
                                 onDragEnd={() => setDraggingCard(null)}
                                 onEditClick={() => openEdit(card)}
                                 onMoveClick={() => setMoveSource(card)}
+                                onAttachClick={() => setMoveSource(card)}
                                 onDeleteClick={() => openDelete(card)}
                               />
                             </li>
@@ -1651,6 +1717,7 @@ export function ControlPlanningPanel({
           day={moveDay}
           option={moveOption}
           card={moveCard}
+          attaching={needsControlSessionAttachment(moveCard)}
           classDayControls={
             serverCoordination
               ? serverCoordination.classDayControls
