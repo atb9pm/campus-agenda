@@ -11,7 +11,12 @@ import type {
   AnnualCourseNotesStore,
   PedagogicalPathStore,
 } from "../pedagogical-path-types.ts";
-import { preserveNotebookMetadata, validateOwnedNotes } from "../notebook-state.ts";
+import {
+  isCarnetManagedNote,
+  preserveNotebookMetadata,
+  validateCourseNotebookNotes,
+  validateOwnedNotes,
+} from "../notebook-state.ts";
 import type { SqlBatchStatement, SqlDatabase } from "./types.ts";
 
 function parsePath(raw: string): ReferencePedagogicalPath | null {
@@ -267,6 +272,18 @@ export class SqlAnnualCourseNotesStore implements AnnualCourseNotesStore {
     return results.map(mapAnnualNote);
   }
 
+  async listNotesByAnnualCourse(annualCourseId: string): Promise<AnnualCourseNote[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM annual_course_notes
+         WHERE annual_course_id = ?
+         ORDER BY created_at, id`,
+      )
+      .bind(annualCourseId)
+      .all<AnnualNoteRow>();
+    return results.map(mapAnnualNote);
+  }
+
   async findByOwnerLegacyNote(ownerTeacherId: string, legacyNoteId: string): Promise<AnnualCourseNote | null> {
     const row = await this.db
       .prepare(
@@ -285,6 +302,20 @@ export class SqlAnnualCourseNotesStore implements AnnualCourseNotesStore {
       existing.find(row => row.legacyNoteId !== null && row.legacyNoteId === note.legacyNoteId)));
     await this.db.batch(buildNotebookStatements(ownerTeacherId, next));
   }
+
+  async replaceNotebookNotesForAnnualCourse(
+    annualCourseId: string,
+    notes: readonly AnnualCourseNote[],
+  ): Promise<void> {
+    const existing = await this.listNotesByAnnualCourse(annualCourseId);
+    const next = notes.map((note) =>
+      preserveNotebookMetadata(
+        note,
+        existing.find((row) => row.legacyNoteId !== null && row.legacyNoteId === note.legacyNoteId),
+      ),
+    );
+    await this.db.batch(buildCourseNotebookStatements(annualCourseId, next));
+  }
 }
 
 export const NOTEBOOK_COLUMNS = [
@@ -300,6 +331,34 @@ export function buildNotebookStatements(owner: string, notes: readonly AnnualCou
     { sql: "DELETE FROM annual_course_notes WHERE owner_teacher_id = ?", values: [owner] },
     ...notes.map(note => ({
       sql: "INSERT INTO annual_course_notes (" + NOTEBOOK_COLUMNS.join(", ") + ") VALUES (" + NOTEBOOK_COLUMNS.map(() => "?").join(", ") + ")",
+      values: bindAnnualNoteValues(note),
+    })),
+  ];
+}
+
+export const CARNET_NOTE_SQL =
+  "(course_session_key IS NOT NULL OR legacy_note_id IS NOT NULL OR owner_teacher_id IS NOT NULL)";
+
+export function buildCourseNotebookStatements(
+  annualCourseId: string,
+  notes: readonly AnnualCourseNote[],
+): SqlBatchStatement[] {
+  validateCourseNotebookNotes(annualCourseId, notes);
+  for (const note of notes) {
+    if (!isCarnetManagedNote(note)) throw new Error("Invalid notebook course identity");
+  }
+  return [
+    {
+      sql: `DELETE FROM annual_course_notes WHERE annual_course_id = ? AND ${CARNET_NOTE_SQL}`,
+      values: [annualCourseId],
+    },
+    ...notes.map((note) => ({
+      sql:
+        "INSERT INTO annual_course_notes (" +
+        NOTEBOOK_COLUMNS.join(", ") +
+        ") VALUES (" +
+        NOTEBOOK_COLUMNS.map(() => "?").join(", ") +
+        ")",
       values: bindAnnualNoteValues(note),
     })),
   ];

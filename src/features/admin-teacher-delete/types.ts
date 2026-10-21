@@ -19,11 +19,11 @@ export const TEACHER_DELETE_WILL_REMOVE = [
   "le compte du professeur",
   "ses accès",
   "ses affectations aux cours",
-  "ses notes privées du Carnet (annuelles et legacy)",
+  "ses notes personnelles legacy (non rattachées à un cours)",
 ] as const;
 
 export const TEACHER_DELETE_WILL_KEEP =
-  "Les devoirs, contrôles, informations et l'historique pédagogique seront conservés.";
+  "Les devoirs, contrôles, informations, l'historique pédagogique et les notes de cours seront conservés.";
 
 export interface TeacherDeleteCounts {
   assignments: number;

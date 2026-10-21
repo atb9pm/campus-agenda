@@ -21,10 +21,24 @@ export interface TeacherNotesBackupEntry {
 }
 
 export interface TeacherNotesStore {
-  readNotebook(teacherId: string, courseNotes: AnnualCourseNotesStore): Promise<NotebookState>;
-  /** Atomically replaces both halves, only if the entire snapshot is still current. */
-  commitNotebook(teacherId: string, expected: NotebookState, leftover: ClassNotesDocument,
-    owned: readonly AnnualCourseNote[], courseNotes: AnnualCourseNotesStore): Promise<void>;
+  readNotebook(
+    teacherId: string,
+    courseNotes: AnnualCourseNotesStore,
+    annualCourseIds: readonly string[],
+  ): Promise<NotebookState>;
+  /**
+   * Atomically replaces leftover JSON + Carnet notes of `replaceCourseIds`.
+   * The CAS token covers `annualCourseIds` (typically every accessible course).
+   */
+  commitNotebook(
+    teacherId: string,
+    expected: NotebookState,
+    leftover: ClassNotesDocument,
+    owned: readonly AnnualCourseNote[],
+    courseNotes: AnnualCourseNotesStore,
+    annualCourseIds: readonly string[],
+    replaceCourseIds?: readonly string[],
+  ): Promise<void>;
   /** Null si l'enseignant n'a encore rien enregistré côté serveur. */
   getNotes(teacherId: string): Promise<ClassNotesDocument | null>;
   saveNotes(teacherId: string, document: ClassNotesDocument): Promise<ClassNotesDocument>;

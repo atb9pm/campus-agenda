@@ -685,7 +685,9 @@ test("M — foreign_keys=ON : aucune violation après suppression", async () => 
       classId: seeded.schoolClass.id,
       contextId: seeded.ctx.id,
       authorTeacherId: "teacher-chf",
+      ownerTeacherId: "teacher-chf",
       text: "Note annuelle pédagogique",
+      annualCourseId: seeded.course.id,
     });
     const deleted = await deleteTeacherPermanently(world.deps, {
       teacherId: "teacher-chf",
@@ -701,6 +703,7 @@ test("M — foreign_keys=ON : aucune violation après suppression", async () => 
     const note = await world.notes.getNote("note-chf");
     assert.equal(note?.text, "Note annuelle pédagogique");
     assert.equal(note?.authorTeacherId, "");
+    assert.equal(note?.ownerTeacherId, null);
     assert.equal(await foreignKeyViolations(world.db), 0);
 
     const dump = await dumpCampusTables(world.db);

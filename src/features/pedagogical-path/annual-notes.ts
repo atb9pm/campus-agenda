@@ -5,10 +5,11 @@
  * - Le parcours de référence CTX porte Devoir / Contrôle / Information.
  * - Les notes NE sont PAS un 4ᵉ type Agenda.
  *
- * Confidentialité PR3.4 :
- * - `ownerTeacherId` = propriétaire / visibilité Carnet (équivalent teacher_notes.teacher_id).
+ * Confidentialité :
+ * - Appartenance fonctionnelle = AnnualCourse (année, classe, CTX, séance éventuelle).
+ * - `ownerTeacherId` = provenance Carnet legacy ; ne gouverne plus lecture / écriture / suppression.
  * - `authorTeacherId` = provenance de création (nullable en SQL si le compte est supprimé).
- * - PR3.4 ne partage PAS une note entre enseignants du même cours.
+ * - Les enseignants attribués au même cours voient et éditent le même ensemble de notes.
  * - Les élèves n'ont jamais accès aux notes.
  *
  * Identité d'héritage N→N+1 (`sourceNoteId` / `sourceSchoolYearId` / `inheritedAt`)
@@ -32,8 +33,8 @@ export interface AnnualCourseNote {
   /** Provenance de création — ne confère pas l'exclusivité de consultation future. */
   authorTeacherId: string;
   /**
-   * Propriétaire Carnet PR3.4 (visibilité). Distinct de l'auteur.
-   * Null = note structurelle hors document Carnet (tests / données préparatoires).
+   * Provenance Carnet legacy. Distinct de l'auteur.
+   * Ne constitue pas un droit d'accès. Null = note structurelle ou professeur retiré.
    */
   ownerTeacherId: string | null;
   text: string;
@@ -209,15 +210,17 @@ export function filterInheritedNotes(notes: AnnualCourseNote[]): AnnualCourseNot
 }
 
 /**
- * Droit de consultation futur : réservé aux enseignants autorisés sur le cours.
- * PR3.4 applique encore ownerTeacherId pour le Carnet (pas de partage silencieux).
+ * Droit de consultation : enseignant autorisé sur l'AnnualCourse.
+ * Jamais par `ownerTeacherId`. Les élèves sont exclus.
  */
 export function teacherMayConsultCourseNotes(options: {
   isTeacher: boolean;
   isStudent: boolean;
+  canAccessAnnualCourse: boolean;
 }): boolean {
   if (options.isStudent) return false;
-  return options.isTeacher;
+  if (!options.isTeacher) return false;
+  return options.canAccessAnnualCourse;
 }
 
 /** Les élèves n'ont jamais accès aux notes de cours. */

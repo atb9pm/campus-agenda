@@ -1,19 +1,23 @@
 /**
- * Convergence Carnet PR3.4 : teacher_notes (legacy) → annual_course_notes (résolu).
+ * Convergence Carnet : teacher_notes (legacy) → annual_course_notes (résolu).
+ *
+ * Appartenance fonctionnelle : AnnualCourse, pas l'enseignant.
+ * `ownerTeacherId` reste une provenance legacy ; l'accès suit l'attribution au cours.
  *
  * Source de vérité :
  * - notes V2 rattachées à un CourseSession.key dont l'AnnualCourse existe
- *   → annual_course_notes (ownerTeacherId = enseignant de la session)
- * - V1, pendingWeeks, orphanedSessions, clés invalides, cours manquant
+ *   et que l'enseignant peut consulter → annual_course_notes
+ * - V1, pendingWeeks, orphanedSessions, clés invalides, cours manquant / non autorisé
  *   → restent dans teacher_notes
  *
  * Une seule écriture applicative par sauvegarde : le document HTTP est découpé.
- * Pas de double source de vérité pour une note résolue.
+ * Le replace est scoped par AnnualCourse.
  * referenceSessionId n'est jamais inventé.
  */
 
 import { createHash, randomUUID } from "node:crypto";
 
+import { isAssignmentActiveAt } from "../annual-courses/assignments.ts";
 import type { AnnualCourse } from "../annual-courses/types.ts";
 import { parseCourseSessionKey } from "../course-sessions/compute.ts";
 import {
@@ -101,11 +105,39 @@ export function composeTeacherNotebookDocument(
   };
 }
 
+export async function accessibleAnnualCourseIdsForTeacher(
+  courses: AnnualCourseStore,
+  teacherId: string,
+  at = new Date().toISOString(),
+): Promise<string[]> {
+  const assignments = await courses.listAssignmentsForTeacher(teacherId);
+  const ids = new Set<string>();
+  for (const assignment of assignments) {
+    if (isAssignmentActiveAt(assignment, at)) ids.add(assignment.annualCourseId);
+  }
+  return [...ids].sort();
+}
+
+/** Cours explicitement présents dans le document V2 (y compris séances vidées). */
+export function annualCourseIdsTouchedByNotebookDocument(
+  document: ClassNotesDocument,
+  allowedCourseIds: ReadonlySet<string>,
+): string[] {
+  if (!isNotesDocumentV2(document)) return [];
+  const ids = new Set<string>();
+  for (const sessionKey of Object.keys(document.sessions ?? {})) {
+    const parsed = parseCourseSessionKey(sessionKey);
+    if (parsed && allowedCourseIds.has(parsed.annualCourseId)) ids.add(parsed.annualCourseId);
+  }
+  return [...ids].sort();
+}
+
 export async function splitResolvableNotebookNotes(
   teacherId: string,
   document: ClassNotesDocument,
   courses: AnnualCourseStore,
   blockedIds: ReadonlySet<string> = new Set(),
+  allowedCourseIds?: ReadonlySet<string>,
 ): Promise<{ leftover: ClassNotesDocument; resolved: AnnualCourseNote[] }> {
   const normalized = normalizeClassNotes(document);
   if (isNotesDocumentV1(normalized)) {
@@ -142,6 +174,10 @@ export async function splitResolvableNotebookNotes(
     }
     const course = await courseFor(parsed.annualCourseId);
     if (!course || course.schoolYearId !== parsed.schoolYearId) {
+      leftoverSessions[sessionKey] = notes;
+      continue;
+    }
+    if (allowedCourseIds && !allowedCourseIds.has(course.id)) {
       leftoverSessions[sessionKey] = notes;
       continue;
     }
@@ -210,10 +246,18 @@ export async function persistTeacherNotebookDocument(
   deps: TeacherNotebookNotesDeps,
   expectedRevision?: string,
 ): Promise<ClassNotesDocument> {
-  const state = await deps.teacherNotes.readNotebook(teacherId, deps.courseNotes);
+  const courseIds = await accessibleAnnualCourseIdsForTeacher(deps.courses, teacherId);
+  const allowed = new Set(courseIds);
+  const state = await deps.teacherNotes.readNotebook(teacherId, deps.courseNotes, courseIds);
   const previous = composeTeacherNotebookDocument(state.leftover, state.owned);
   if (expectedRevision !== undefined && notebookRevision(previous) !== expectedRevision) throw new NotebookConflictError();
-  const { leftover, resolved } = await splitResolvableNotebookNotes(teacherId, document, deps.courses);
+  const { leftover, resolved } = await splitResolvableNotebookNotes(
+    teacherId,
+    document,
+    deps.courses,
+    new Set(),
+    allowed,
+  );
   const isV2 = isNotesDocumentV2(normalizeClassNotes(document));
   const owned = isV2 ? [
     // Notes without a calendar location are not represented in the HTTP document.
@@ -222,7 +266,16 @@ export async function persistTeacherNotebookDocument(
       (current.legacyNoteId || current.id) === note.legacyNoteId))),
   ] : state.owned;
   const leftoverToStore = leftoverIsEmpty(leftover) && isV2 ? createEmptyNotesDocumentV2() : leftover;
-  await deps.teacherNotes.commitNotebook(teacherId, state, leftoverToStore, owned, deps.courseNotes);
+  const touchedCourseIds = isV2 ? annualCourseIdsTouchedByNotebookDocument(document, allowed) : [];
+  await deps.teacherNotes.commitNotebook(
+    teacherId,
+    state,
+    leftoverToStore,
+    owned,
+    deps.courseNotes,
+    courseIds,
+    touchedCourseIds,
+  );
   return composeTeacherNotebookDocument(leftoverToStore, owned) ?? createEmptyNotesDocument();
 }
 
@@ -230,18 +283,26 @@ export async function loadTeacherNotebookDocument(
   teacherId: string,
   deps: TeacherNotebookNotesDeps,
 ): Promise<ClassNotesDocument | null> {
+  const courseIds = await accessibleAnnualCourseIdsForTeacher(deps.courses, teacherId);
+  const allowed = new Set(courseIds);
   for (let attempt = 0; attempt < 4; attempt++) {
-    const state = await deps.teacherNotes.readNotebook(teacherId, deps.courseNotes);
+    const state = await deps.teacherNotes.readNotebook(teacherId, deps.courseNotes, courseIds);
     if (!state.leftover || !isNotesDocumentV2(state.leftover)) {
       return composeTeacherNotebookDocument(state.leftover, state.owned);
     }
     // An identity already present in annual storage is ambiguous, never silently discarded.
     const blocked = new Set(state.owned.map(note => note.legacyNoteId || note.id));
-    const { leftover, resolved } = await splitResolvableNotebookNotes(teacherId, state.leftover, deps.courses, blocked);
+    const { leftover, resolved } = await splitResolvableNotebookNotes(
+      teacherId,
+      state.leftover,
+      deps.courses,
+      blocked,
+      allowed,
+    );
     if (!resolved.length) return composeTeacherNotebookDocument(state.leftover, state.owned);
     const owned = [...state.owned, ...resolved];
     try {
-      await deps.teacherNotes.commitNotebook(teacherId, state, leftover, owned, deps.courseNotes);
+      await deps.teacherNotes.commitNotebook(teacherId, state, leftover, owned, deps.courseNotes, courseIds);
       return composeTeacherNotebookDocument(leftover, owned);
     } catch (error) {
       if (!(error instanceof NotebookConflictError)) throw error;

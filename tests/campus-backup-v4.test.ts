@@ -268,7 +268,7 @@ async function populateStructured(deps: CampusBackupDeps, teacherId: string) {
   });
   assert.equal(slot.ok, true);
   const key = `${year.id}|${created.value.id}|${year.weeks[0]!.monday}`;
-  await persistTeacherNotebookDocument(teacherId, {
+  await persistTeacherNotebookDocument(structuredTeacherId, {
     version: 2,
     sessions: { [key]: [
       { id: "backup-note-1", text: "Rich", body: { format: "campus-rich-v1", blocks: [
@@ -280,7 +280,12 @@ async function populateStructured(deps: CampusBackupDeps, teacherId: string) {
     pendingWeeks: { "ambiguous:4": [{ id: "pending", text: "Keep legacy" }] },
     orphanedSessions: { "missing": [{ id: "orphan", text: "Keep orphan" }] },
   }, { teacherNotes: deps.teacherNotes, courseNotes: deps.courseNotes!, courses: deps.courses });
-  return { yearId: year.id, classId: schoolClass.id, courseId: created.value.id };
+  return {
+    yearId: year.id,
+    classId: schoolClass.id,
+    courseId: created.value.id,
+    notebookTeacherId: structuredTeacherId,
+  };
 }
 
 test("backup v4 — roundtrip mémoire", async () => {
@@ -392,10 +397,11 @@ test("backup v4 — roundtrip SQLite", async () => {
   assert.equal(cross.ok, true, cross.ok ? "" : cross.reason);
   // Cross-backend coverage concerns the notebook; agenda audit timestamps are SQL-only.
   const memoryDump = (await exportCampusSnapshot(target)).tables;
+  assert.ok((snapshot.tables.annual_course_notes ?? []).length > 0);
   assert.deepEqual(memoryDump.annual_course_notes, snapshot.tables.annual_course_notes);
-  assert.deepEqual(await loadTeacherNotebookDocument(DEMO_CURRENT_TEACHER_ID, {
+  assert.deepEqual(await loadTeacherNotebookDocument(structured.notebookTeacherId, {
     teacherNotes: target.teacherNotes, courseNotes: target.courseNotes!, courses: target.courses,
-  }), await loadTeacherNotebookDocument(DEMO_CURRENT_TEACHER_ID, {
+  }), await loadTeacherNotebookDocument(structured.notebookTeacherId, {
     teacherNotes: deps2.teacherNotes, courseNotes: deps2.courseNotes!, courses: deps2.courses,
   }));
   db.close(); db2.close();
