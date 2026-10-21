@@ -169,11 +169,123 @@ function compareEntries(left: YearTransitionPreviewEntry, right: YearTransitionP
 interface PartialResolution {
   item: PrototypeAgendaItem;
   referenceItemId: string | null;
+  resolvedReferenceSessionId: string | null;
+  pedagogicalPosition: number | null;
+  carnetOwned: boolean;
   sourceCourse: AnnualCourse | null;
   sourceClassId: string | null;
   targetClassId: string | null;
   targetCourse: AnnualCourse | null;
   structuralReason: YearTransitionPreviewReason | null;
+}
+
+function emptyStructure(
+  item: PrototypeAgendaItem,
+  reason: YearTransitionPreviewReason,
+  extras: Partial<PartialResolution> = {},
+): PartialResolution {
+  return {
+    item,
+    referenceItemId: trimId(item.referenceItemId),
+    resolvedReferenceSessionId: trimId(item.referenceSessionId),
+    pedagogicalPosition: null,
+    carnetOwned: !trimId(item.referenceItemId) && !trimId(item.referenceSessionId),
+    sourceCourse: null,
+    sourceClassId: null,
+    targetClassId: null,
+    targetCourse: null,
+    structuralReason: reason,
+    ...extras,
+  };
+}
+
+function resolvePedagogicalAnchor(
+  item: PrototypeAgendaItem,
+  sourceCourse: AnnualCourse,
+  pathSnapshots: readonly ReferencePedagogicalPath[],
+  sourceSessions: readonly CourseSession[],
+): Pick<PartialResolution, "referenceItemId" | "resolvedReferenceSessionId" | "pedagogicalPosition" | "structuralReason"> {
+  const sessions = pathSnapshots
+    .filter((path) => path.contextId === sourceCourse.contextId)
+    .flatMap((path) => path.sessions);
+  const itemRef = trimId(item.referenceItemId);
+  if (itemRef) {
+    return {
+      referenceItemId: itemRef,
+      resolvedReferenceSessionId: trimId(item.referenceSessionId),
+      pedagogicalPosition: null,
+      structuralReason: null,
+    };
+  }
+
+  const sessionRef = trimId(item.referenceSessionId);
+  if (sessionRef) {
+    const hits = sessions.filter((session) => session.id === sessionRef);
+    const position = hits[0]?.position ?? null;
+    if (hits.length !== 1 || position == null || !Number.isInteger(position) || position < 1) {
+      return {
+        referenceItemId: null,
+        resolvedReferenceSessionId: sessionRef,
+        pedagogicalPosition: null,
+        structuralReason: "ORPHAN_DEAD_REFERENCE_ITEM",
+      };
+    }
+    if (sessions.filter((session) => session.position === position).length !== 1) {
+      return {
+        referenceItemId: null,
+        resolvedReferenceSessionId: sessionRef,
+        pedagogicalPosition: position,
+        structuralReason: "SNAPSHOT_REFERENCE_CONFLICT",
+      };
+    }
+    const uniqueItem = hits[0]!.items.length === 1 ? hits[0]!.items[0]!.id : null;
+    return {
+      referenceItemId: uniqueItem,
+      resolvedReferenceSessionId: sessionRef,
+      pedagogicalPosition: position,
+      structuralReason: null,
+    };
+  }
+
+  const sessionKey = trimId(item.courseSessionKey);
+  if (!sessionKey) {
+    return {
+      referenceItemId: null,
+      resolvedReferenceSessionId: null,
+      pedagogicalPosition: null,
+      structuralReason: "ORPHAN_NO_REFERENCE_ITEM",
+    };
+  }
+  const matches = sourceSessions.filter(
+    (session) =>
+      session.key === sessionKey &&
+      session.annualCourseId === sourceCourse.id &&
+      session.schoolYearId === sourceCourse.schoolYearId,
+  );
+  if (matches.length !== 1) {
+    return {
+      referenceItemId: null,
+      resolvedReferenceSessionId: null,
+      pedagogicalPosition: null,
+      structuralReason: "ORPHAN_NO_REFERENCE_ITEM",
+    };
+  }
+  const position = matches[0]!.sequenceNumber;
+  const atPosition = sessions.filter((session) => session.position === position);
+  if (atPosition.length !== 1) {
+    return {
+      referenceItemId: null,
+      resolvedReferenceSessionId: null,
+      pedagogicalPosition: position,
+      structuralReason: "ORPHAN_NO_REFERENCE_ITEM",
+    };
+  }
+  return {
+    referenceItemId: null,
+    resolvedReferenceSessionId: atPosition[0]!.id,
+    pedagogicalPosition: position,
+    structuralReason: null,
+  };
 }
 
 function resolveStructure(
@@ -182,79 +294,32 @@ function resolveStructure(
   targetCourses: readonly AnnualCourse[],
   targetYearId: string,
   mappingIndex: ReturnType<typeof indexClassMappings>,
+  pathSnapshots: readonly ReferencePedagogicalPath[],
+  sourceSessions: readonly CourseSession[],
 ): PartialResolution {
-  const referenceItemId = trimId(item.referenceItemId);
-  if (!referenceItemId) {
-    return {
-      item,
-      referenceItemId: null,
-      sourceCourse: null,
-      sourceClassId: null,
-      targetClassId: null,
-      targetCourse: null,
-      structuralReason: "ORPHAN_NO_REFERENCE_ITEM",
-    };
-  }
-
   const sourceCourseId = trimId(item.annualCourseId);
   const sourceCourse = sourceCourseId ? sourceCourses.get(sourceCourseId) ?? null : null;
   if (!sourceCourseId || !sourceCourse) {
-    return {
-      item,
-      referenceItemId,
-      sourceCourse: null,
-      sourceClassId: null,
-      targetClassId: null,
-      targetCourse: null,
-      structuralReason: "SOURCE_COURSE_MISSING",
-    };
+    return emptyStructure(item, "SOURCE_COURSE_MISSING");
   }
   const sourceClassId = sourceCourse.classId;
 
   const mapping = resolveClassMapping(sourceClassId, mappingIndex);
+  const withSource = { sourceCourse, sourceClassId };
   if (mapping.status === "missing") {
-    return {
-      item,
-      referenceItemId,
-      sourceCourse,
-      sourceClassId,
-      targetClassId: null,
-      targetCourse: null,
-      structuralReason: "CLASS_MAPPING_MISSING",
-    };
+    return emptyStructure(item, "CLASS_MAPPING_MISSING", withSource);
   }
   if (mapping.status === "no_continuation") {
-    return {
-      item,
-      referenceItemId,
-      sourceCourse,
-      sourceClassId,
-      targetClassId: null,
-      targetCourse: null,
-      structuralReason: "CLASS_CONTINUATION_ABSENT",
-    };
+    return emptyStructure(item, "CLASS_CONTINUATION_ABSENT", withSource);
   }
   if (mapping.status === "conflict") {
-    return {
-      item,
-      referenceItemId,
-      sourceCourse,
-      sourceClassId,
+    return emptyStructure(item, "CLASS_MAPPING_CONFLICT", {
+      ...withSource,
       targetClassId: mapping.targetClassId,
-      targetCourse: null,
-      structuralReason: "CLASS_MAPPING_CONFLICT",
-    };
+    });
   }
   if (mapping.status === "unsupported") {
-    return {
-      item,
-      referenceItemId,
-      sourceCourse,
-      sourceClassId,
-      targetClassId: null,
-      targetCourse: null,
-      structuralReason: "UNSUPPORTED_CLASS_MAPPING_CARDINALITY",
-    };
+    return emptyStructure(item, "UNSUPPORTED_CLASS_MAPPING_CARDINALITY", withSource);
   }
 
   const candidates = targetCourses.filter(
@@ -264,49 +329,39 @@ function resolveStructure(
       course.contextId === sourceCourse.contextId,
   );
   if (candidates.length === 0) {
-    return {
-      item,
-      referenceItemId,
-      sourceCourse,
-      sourceClassId,
+    return emptyStructure(item, "TARGET_COURSE_MISSING", {
+      ...withSource,
       targetClassId: mapping.targetClassId,
-      targetCourse: null,
-      structuralReason: "TARGET_COURSE_MISSING",
-    };
+    });
   }
   if (candidates.length > 1) {
-    return {
-      item,
-      referenceItemId,
-      sourceCourse,
-      sourceClassId,
+    return emptyStructure(item, "TARGET_COURSE_AMBIGUOUS", {
+      ...withSource,
       targetClassId: mapping.targetClassId,
-      targetCourse: null,
-      structuralReason: "TARGET_COURSE_AMBIGUOUS",
-    };
+    });
   }
 
   const targetCourse = candidates[0]!;
   if (targetCourse.isArchived) {
-    return {
-      item,
-      referenceItemId,
-      sourceCourse,
-      sourceClassId,
+    return emptyStructure(item, "TARGET_COURSE_ARCHIVED", {
+      ...withSource,
       targetClassId: mapping.targetClassId,
       targetCourse,
-      structuralReason: "TARGET_COURSE_ARCHIVED",
-    };
+    });
   }
 
+  const anchor = resolvePedagogicalAnchor(item, sourceCourse, pathSnapshots, sourceSessions);
   return {
     item,
-    referenceItemId,
+    carnetOwned: !trimId(item.referenceItemId) && !trimId(item.referenceSessionId),
     sourceCourse,
     sourceClassId,
     targetClassId: mapping.targetClassId,
     targetCourse,
-    structuralReason: null,
+    referenceItemId: anchor.referenceItemId,
+    resolvedReferenceSessionId: anchor.resolvedReferenceSessionId,
+    pedagogicalPosition: anchor.pedagogicalPosition,
+    structuralReason: anchor.structuralReason,
   };
 }
 
@@ -322,6 +377,8 @@ function applyEntry(
     targetClassId: resolved.targetClassId,
     targetAnnualCourseId: resolved.targetCourse?.id ?? null,
     referenceItemId: resolved.referenceItemId,
+    resolvedReferenceSessionId: resolved.resolvedReferenceSessionId,
+    pedagogicalPosition: resolved.pedagogicalPosition,
     ...extras,
     reason,
   };
@@ -337,15 +394,24 @@ export function buildYearTransitionPreview(input: YearTransitionPreviewInput): Y
   const pathHits = indexPathHits(input.pathSnapshots);
   const targetRefs = indexTargetRefs(input.targetItems, input.targetSchoolYearId);
   const targetSessions = indexTargetSessions(input.targetCourseSessions, input.targetSchoolYearId);
+  const sourceSessions = input.sourceCourseSessions ?? [];
 
   const sourceItems = input.sourceItems.filter((item) => (item.schoolYearId ?? null) === input.sourceSchoolYearId);
   const partials = sourceItems.map((item) =>
-    resolveStructure(item, sourceCourses, input.targetCourses, input.targetSchoolYearId, mappingIndex),
+    resolveStructure(
+      item,
+      sourceCourses,
+      input.targetCourses,
+      input.targetSchoolYearId,
+      mappingIndex,
+      input.pathSnapshots,
+      sourceSessions,
+    ),
   );
 
   const duplicateKeys = new Map<string, number>();
   for (const partial of partials) {
-    if (!partial.referenceItemId || partial.structuralReason) continue;
+    if (partial.carnetOwned || !partial.referenceItemId || partial.structuralReason) continue;
     const key = `${partial.targetCourse!.id}\0${partial.referenceItemId}`;
     duplicateKeys.set(key, (duplicateKeys.get(key) ?? 0) + 1);
   }
@@ -359,39 +425,46 @@ export function buildYearTransitionPreview(input: YearTransitionPreviewInput): Y
     }
 
     const targetCourse = partial.targetCourse!;
-    const referenceItemId = partial.referenceItemId!;
-    const dupKey = `${targetCourse.id}\0${referenceItemId}`;
-    if ((duplicateKeys.get(dupKey) ?? 0) > 1) {
+    const referenceItemId = partial.referenceItemId;
+    if (referenceItemId && !partial.carnetOwned && (duplicateKeys.get(`${targetCourse.id}\0${referenceItemId}`) ?? 0) > 1) {
       entries.push(applyEntry(partial, "DUPLICATE_SOURCE_REFERENCE"));
       continue;
     }
 
-    const hits = pathHits.get(referenceItemId) ?? [];
-    const scoped = hits.filter((hit) => hit.path.contextId === targetCourse.contextId);
-    if (scoped.length === 0) {
-      entries.push(applyEntry(partial, "ORPHAN_DEAD_REFERENCE_ITEM"));
-      continue;
+    let position = partial.pedagogicalPosition;
+    let resolvedSessionId = partial.resolvedReferenceSessionId;
+    if (referenceItemId && position == null) {
+      const hits = pathHits.get(referenceItemId) ?? [];
+      const scoped = hits.filter((hit) => hit.path.contextId === targetCourse.contextId);
+      if (scoped.length === 0) {
+        entries.push(applyEntry(partial, "ORPHAN_DEAD_REFERENCE_ITEM"));
+        continue;
+      }
+      if (scoped.length > 1) {
+        entries.push(applyEntry(partial, "SNAPSHOT_REFERENCE_CONFLICT"));
+        continue;
+      }
+      const hit = scoped[0]!;
+      position = hit.session.position;
+      resolvedSessionId = hit.session.id;
     }
-    if (scoped.length > 1) {
-      entries.push(applyEntry(partial, "SNAPSHOT_REFERENCE_CONFLICT"));
-      continue;
-    }
-
-    const hit = scoped[0]!;
-    const position = hit.session.position;
-    if (!Number.isInteger(position) || position < 1) {
+    if (position == null || !Number.isInteger(position) || position < 1) {
       entries.push(
         applyEntry(partial, "INVALID_REFERENCE_SESSION_POSITION", {
-          resolvedReferenceSessionId: hit.session.id,
+          resolvedReferenceSessionId: resolvedSessionId,
           pedagogicalPosition: Number.isInteger(position) ? position : null,
         }),
       );
       continue;
     }
+    if (!resolvedSessionId) {
+      entries.push(applyEntry(partial, "ORPHAN_NO_REFERENCE_ITEM", { pedagogicalPosition: position }));
+      continue;
+    }
 
     const warnings: YearTransitionPreviewWarning[] = [];
     const sourceSessionId = trimId(partial.item.referenceSessionId);
-    if (sourceSessionId && sourceSessionId !== hit.session.id) {
+    if (sourceSessionId && sourceSessionId !== resolvedSessionId) {
       warnings.push("REFERENCE_SESSION_CHANGED");
     }
 
@@ -402,7 +475,7 @@ export function buildYearTransitionPreview(input: YearTransitionPreviewInput): Y
       entries.push(
         applyEntry(partial, "UNSCHEDULED_REFERENCE_SESSION", {
           warnings,
-          resolvedReferenceSessionId: hit.session.id,
+          resolvedReferenceSessionId: resolvedSessionId,
           pedagogicalPosition: position,
         }),
       );
@@ -412,7 +485,7 @@ export function buildYearTransitionPreview(input: YearTransitionPreviewInput): Y
       entries.push(
         applyEntry(partial, "TARGET_SESSION_AMBIGUOUS", {
           warnings,
-          resolvedReferenceSessionId: hit.session.id,
+          resolvedReferenceSessionId: resolvedSessionId,
           pedagogicalPosition: position,
         }),
       );
@@ -420,12 +493,23 @@ export function buildYearTransitionPreview(input: YearTransitionPreviewInput): Y
     }
 
     const courseSession = cloneCourseSession(sessions[0]!);
-    const existing = [...(targetRefs.get(dupKey) ?? [])].sort((left, right) => left.id - right.id);
-    if (existing.length > 1) {
+    const existing = partial.carnetOwned
+      ? input.targetItems
+          .filter(
+            (candidate) =>
+              (candidate.schoolYearId ?? null) === input.targetSchoolYearId &&
+              trimId(candidate.annualCourseId) === targetCourse.id &&
+              candidate.sourceAgendaItemId === partial.item.id,
+          )
+          .sort((left, right) => left.id - right.id)
+      : [...(targetRefs.get(`${targetCourse.id}\0${referenceItemId ?? ""}`) ?? [])].sort(
+          (left, right) => left.id - right.id,
+        );
+    if (!partial.carnetOwned && existing.length > 1) {
       entries.push(
         applyEntry(partial, "TARGET_REFERENCE_CONFLICT", {
           warnings,
-          resolvedReferenceSessionId: hit.session.id,
+          resolvedReferenceSessionId: resolvedSessionId,
           pedagogicalPosition: position,
           targetCourseSession: courseSession,
           proposedPlacement: placementFromSession(courseSession),
@@ -434,16 +518,18 @@ export function buildYearTransitionPreview(input: YearTransitionPreviewInput): Y
       continue;
     }
     if (existing.length === 1) {
-      const matches = existingMatchesExpected(existing[0]!, {
-        course: targetCourse,
-        session: courseSession,
-        referenceItemId,
-        referenceSessionId: hit.session.id,
-      });
+      const matches = partial.carnetOwned
+        ? trimId(existing[0]!.courseSessionKey) === courseSession.key
+        : existingMatchesExpected(existing[0]!, {
+            course: targetCourse,
+            session: courseSession,
+            referenceItemId: referenceItemId ?? "",
+            referenceSessionId: resolvedSessionId,
+          });
       entries.push(
         applyEntry(partial, matches ? "ALREADY_PRESENT" : "TARGET_EXISTING_DIVERGED", {
           warnings,
-          resolvedReferenceSessionId: hit.session.id,
+          resolvedReferenceSessionId: resolvedSessionId,
           pedagogicalPosition: position,
           targetCourseSession: courseSession,
           proposedPlacement: matches ? null : placementFromSession(courseSession),
@@ -455,7 +541,7 @@ export function buildYearTransitionPreview(input: YearTransitionPreviewInput): Y
     entries.push(
       applyEntry(partial, "PROJECTABLE", {
         warnings,
-        resolvedReferenceSessionId: hit.session.id,
+        resolvedReferenceSessionId: resolvedSessionId,
         pedagogicalPosition: position,
         targetCourseSession: courseSession,
         proposedPlacement: placementFromSession(courseSession),

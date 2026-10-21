@@ -216,8 +216,15 @@ async function verifyExistingApply(
       const provenance = itemsWithApplyProvenance(items, apply.transitionId, entry.sourceAgendaItemId);
       if (provenance.length !== 0) return fail("APPLY_LEDGER_DIVERGED");
       const courseId = entry.targetAnnualCourseId?.trim() ?? "";
+      if (!courseId) return fail("APPLY_LEDGER_DIVERGED");
+      const fromSource = items.filter(
+        (item) =>
+          (item.annualCourseId ?? null) === courseId &&
+          item.sourceAgendaItemId === entry.sourceAgendaItemId,
+      );
+      if (fromSource.length === 1) continue;
       const referenceId = entry.referenceItemId?.trim() ?? "";
-      if (!courseId || !referenceId) return fail("APPLY_LEDGER_DIVERGED");
+      if (!referenceId) return fail("APPLY_LEDGER_DIVERGED");
       const found = items.filter(
         (item) => (item.annualCourseId ?? null) === courseId && (item.referenceItemId ?? null) === referenceId,
       );
@@ -270,10 +277,14 @@ function buildInsert(
   subjectId: string,
 ): YearTransitionApplyAgendaInsert | YearTransitionApplyFailure {
   const placement = entry.proposedPlacement;
-  const referenceItemId = entry.referenceItemId?.trim() ?? "";
-  const referenceSessionId = entry.resolvedReferenceSessionId?.trim() ?? "";
+  const carnetOwned = !source.referenceItemId?.trim() && !source.referenceSessionId?.trim();
+  const referenceItemId = carnetOwned ? "" : entry.referenceItemId?.trim() ?? "";
+  const referenceSessionId = carnetOwned ? "" : entry.resolvedReferenceSessionId?.trim() ?? "";
   const annualCourseId = entry.targetAnnualCourseId?.trim() ?? "";
-  if (!placement || !referenceItemId || !referenceSessionId || !annualCourseId) {
+  if (!placement || !annualCourseId) {
+    return fail("APPLY_BLOCKED");
+  }
+  if (!carnetOwned && (!referenceItemId || !referenceSessionId)) {
     return fail("APPLY_BLOCKED");
   }
   if (placement.schoolYearId !== targetYearId) {
@@ -296,8 +307,8 @@ function buildInsert(
     annualCourseId: placement.annualCourseId,
     courseSessionKey: placement.courseSessionKey,
     courseSessionDate: placement.courseSessionDate,
-    referenceSessionId,
-    referenceItemId,
+    referenceSessionId: referenceSessionId || null,
+    referenceItemId: referenceItemId || null,
     studentVisible: false,
     sourceTransitionId: transitionId,
     sourceAgendaItemId: source.id,

@@ -286,12 +286,12 @@ test("4 — aucune table CourseSession persistée", async () => {
   }
 });
 
-test("5 — engineVersion = 2", () => {
-  assert.equal(YEAR_TRANSITION_PREVIEW_ENGINE_VERSION, 2);
+test("5 — engineVersion = 3", () => {
+  assert.equal(YEAR_TRANSITION_PREVIEW_ENGINE_VERSION, 3);
   const snapshot = JSON.parse(yearTransitionPreviewMaterialSnapshotJson(baseInput())) as {
     engineVersion: number;
   };
-  assert.equal(snapshot.engineVersion, 2);
+  assert.equal(snapshot.engineVersion, 3);
 });
 
 test("6 — snapshot canonique déterministe", () => {
@@ -327,11 +327,17 @@ test("9 — temporels SOURCE N différents → même fingerprint", () => {
         hour: 16,
         weekOffset: 9,
         courseSessionDate: "2026-12-01",
-        courseSessionKey: "other-key",
       }),
     ],
   });
   assert.equal(yearTransitionPreviewFingerprint(mutated), yearTransitionPreviewFingerprint(baseInput()));
+});
+
+test("9b — courseSessionKey source est matériel", () => {
+  const mutated = baseInput({
+    sourceItems: [sourceItem({ courseSessionKey: "other-key" })],
+  });
+  assert.notEqual(yearTransitionPreviewFingerprint(mutated), yearTransitionPreviewFingerprint(baseInput()));
 });
 
 test("10 — changement matériel TARGET → fingerprint différent", () => {
@@ -353,7 +359,7 @@ test("11 — création memory", async () => {
   const store = new MemoryYearTransitionPreviewStore();
   const created = await persist(store, baseInput(), { id: "mem-1", now: "2027-01-01T00:00:00.000Z" });
   assert.equal(created.id, "mem-1");
-  assert.equal(created.engineVersion, 2);
+  assert.equal(created.engineVersion, 3);
   assert.equal(created.appVersion, "2.62.0");
   assert.equal(created.entries.length, 1);
 });
@@ -749,10 +755,10 @@ test("28 — duplicateItemsFromArchivedYear non utilisé", async () => {
   }
 });
 
-test("29 — les 46 tests PR1 restent dans year-transition-preview.test.ts", async () => {
+test("29 — les tests PR1 restent dans year-transition-preview.test.ts", async () => {
   const source = await readFile(join(ROOT, "tests/year-transition-preview.test.ts"), "utf8");
   const count = [...source.matchAll(/^test\(/gm)].length;
-  assert.equal(count, 46);
+  assert.ok(count >= 46, `expected at least 46 preview tests, got ${count}`);
 });
 
 test("30 — APP_VERSION inchangée dans app-version.ts", async () => {

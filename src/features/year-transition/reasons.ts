@@ -54,3 +54,29 @@ export const YEAR_TRANSITION_PREVIEW_REASON_LABELS: Record<YearTransitionPreview
   DUPLICATE_SOURCE_REFERENCE: "Plusieurs publications source pour la même référence",
   TARGET_REFERENCE_CONFLICT: "Incohérence de référence déjà présente en cible",
 };
+
+export const YEAR_TRANSITION_PREVIEW_REASON_EXPLANATIONS: Record<YearTransitionPreviewReason, string> = {
+  PROJECTABLE: "La publication sera copiée sur la séance réelle de l’année cible qui correspond à la même position du parcours CTX.",
+  ALREADY_PRESENT: "Une copie conforme existe déjà dans l’année cible.",
+  TARGET_EXISTING_DIVERGED: "Une copie existe déjà mais n’est pas à la séance attendue. Le transfert est bloqué.",
+  ORPHAN_NO_REFERENCE_ITEM:
+    "Cette publication n’a ni élément de parcours CTX, ni séance annuelle unique retrouvée dans l’horaire source. Elle reste dans l’année source. Pour la transférer, rattachez-la à une séance réelle du Carnet.",
+  ORPHAN_DEAD_REFERENCE_ITEM: "La référence indiquée n’existe plus dans le snapshot du parcours CTX.",
+  SNAPSHOT_REFERENCE_CONFLICT: "La même référence apparaît plusieurs fois dans le parcours CTX. Impossible de choisir une position unique.",
+  INVALID_REFERENCE_SESSION_POSITION: "La séance de référence n’a pas de position 1-based valide.",
+  UNSCHEDULED_REFERENCE_SESSION:
+    "Le parcours CTX indique une position, mais l’horaire cible n’a aucune séance réelle correspondante. Vérifiez l’horaire de la classe cible.",
+  TARGET_SESSION_AMBIGUOUS: "Plusieurs séances réelles de l’année cible correspondent à la même position du parcours CTX.",
+  SOURCE_COURSE_MISSING: "La publication n’est rattachée à aucun cours annuel de l’année source.",
+  CLASS_MAPPING_MISSING: "Aucune correspondance de classe n’a été fournie pour ce cours.",
+  CLASS_CONTINUATION_ABSENT:
+    "Cette classe n’est pas cochée pour la reprise. Son contenu reste dans l’année source.",
+  CLASS_MAPPING_CONFLICT: "Plusieurs correspondances contradictoires visent la même classe cible.",
+  UNSUPPORTED_CLASS_MAPPING_CARDINALITY: "Une fusion ou une séparation de classes n’est pas supportée.",
+  TARGET_COURSE_MISSING:
+    "Le cours annuel cible (même parcours CTX, classe correspondante) n’existe pas. Il sera créé à la confirmation si l’horaire source peut être repris.",
+  TARGET_COURSE_AMBIGUOUS: "Plusieurs cours annuels cibles correspondent au même parcours CTX.",
+  TARGET_COURSE_ARCHIVED: "Le cours annuel cible est archivé. Aucune copie n’est faite.",
+  DUPLICATE_SOURCE_REFERENCE: "Plusieurs publications source portent la même référence pédagogique.",
+  TARGET_REFERENCE_CONFLICT: "Plusieurs publications cibles portent déjà cette référence.",
+};

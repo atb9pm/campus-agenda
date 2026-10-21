@@ -68,8 +68,9 @@ export class MemoryYearTransitionApplyStore implements YearTransitionApplyStore 
       let nextId = Math.max(0, ...nextItems.map((item) => item.id)) + 1;
       for (const insert of plan.items) {
         const annualCourseId = insert.annualCourseId.trim();
-        const referenceItemId = insert.referenceItemId.trim();
+        const referenceItemId = insert.referenceItemId?.trim() ?? "";
         if (
+          referenceItemId &&
           nextItems.some(
             (item) => item.annualCourseId === annualCourseId && item.referenceItemId === referenceItemId,
           )

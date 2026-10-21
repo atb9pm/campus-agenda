@@ -5,6 +5,7 @@ import { indexClassMappings, resolveClassMapping } from "./class-mapping.ts";
 
 export interface PrivateNotePreviewEntry {
   sourceNoteId: string;
+  sourceClassId: string | null;
   reason: "PROJECTABLE" | "ALREADY_PRESENT" | "NO_CONTINUATION" | "NO_REFERENCE"
     | "MAPPING_UNRESOLVED" | "TARGET_COURSE_UNRESOLVED" | "REFERENCE_UNRESOLVED"
     | "TARGET_SESSION_UNRESOLVED" | "TARGET_NOTE_DIVERGED";
@@ -22,7 +23,7 @@ export function previewPrivateNotes(input: YearTransitionPreviewInput): PrivateN
   const mapping = indexClassMappings(input.classMappings);
   return [...(input.sourceNotes ?? [])].filter(n => n.ownerTeacherId === owner && n.schoolYearId === input.sourceSchoolYearId)
     .sort((a, b) => a.id.localeCompare(b.id)).map(note => {
-      const entry: PrivateNotePreviewEntry = { sourceNoteId: note.id, reason: "PROJECTABLE",
+      const entry: PrivateNotePreviewEntry = { sourceNoteId: note.id, sourceClassId: note.classId, reason: "PROJECTABLE",
         targetAnnualCourseId: null, targetClassId: null, referenceSessionId: null, courseSessionKey: null };
       const result = (reason: PrivateNotePreviewEntry["reason"]) => ({ ...entry, reason });
       const source = input.sourceCourses.find(c => c.id === note.annualCourseId && c.schoolYearId === note.schoolYearId
@@ -36,15 +37,29 @@ export function previewPrivateNotes(input: YearTransitionPreviewInput): PrivateN
         && c.classId === resolved.targetClassId && c.contextId === source.contextId);
       if (courses.length !== 1 || courses[0]!.isArchived) return result("TARGET_COURSE_UNRESOLVED");
       entry.targetAnnualCourseId = courses[0]!.id;
-      // A legacy Carnet note often has no reference. Publications on that exact
-      // source session may establish one, but conflicting evidence is never guessed.
       const refs = new Set(input.sourceItems.filter(item => note.courseSessionKey && item.courseSessionKey === note.courseSessionKey
         && item.annualCourseId === source.id && item.schoolYearId === input.sourceSchoolYearId)
         .map(item => item.referenceSessionId).filter((id): id is string => Boolean(id)));
       if (note.referenceSessionId) refs.add(note.referenceSessionId);
-      if (refs.size === 0) return result("NO_REFERENCE");
-      if (refs.size !== 1) return result("REFERENCE_UNRESOLVED");
-      const ref = [...refs][0]!;
+      let ref = refs.size === 1 ? [...refs][0]! : null;
+      if (!ref && refs.size === 0 && note.courseSessionKey) {
+        const sourceSessions = (input.sourceCourseSessions ?? []).filter(
+          (session) =>
+            session.key === note.courseSessionKey &&
+            session.annualCourseId === source.id &&
+            session.classId === source.classId,
+        );
+        if (sourceSessions.length === 1) {
+          const position = sourceSessions[0]!.sequenceNumber;
+          const pathSessions = input.pathSnapshots
+            .filter((path) => path.contextId === source.contextId)
+            .flatMap((path) => path.sessions)
+            .filter((session) => session.position === position);
+          if (pathSessions.length === 1) ref = pathSessions[0]!.id;
+        }
+      }
+      if (!ref && refs.size === 0) return result("NO_REFERENCE");
+      if (!ref) return result("REFERENCE_UNRESOLVED");
       const sessions = input.pathSnapshots.filter(p => p.contextId === source.contextId)
         .flatMap(p => p.sessions);
       const hits = sessions.filter(s => s.id === ref);

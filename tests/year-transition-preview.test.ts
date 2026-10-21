@@ -137,6 +137,7 @@ function baseInput(patch: Partial<YearTransitionPreviewInput> = {}): YearTransit
       session({ sequenceNumber: 1, date: "2027-08-23", schoolWeekNumber: 1 }),
       session({ sequenceNumber: 2, date: "2027-09-27", schoolWeekNumber: 6 }),
     ],
+    sourceCourseSessions: patch.sourceCourseSessions,
   };
 }
 
@@ -229,12 +230,13 @@ test("hasard semaine 8 en N+1 : la valeur vient de la CourseSession, pas de la s
   assert.notEqual(entry.proposedPlacement?.day, entry.sourceTemporal.day);
 });
 
-test("4 — referenceItemId absent → orphelin", () => {
+test("4 — referenceSessionId seul rattache la publication à la position CTX", () => {
   const preview = buildYearTransitionPreview(
     baseInput({ sourceItems: [sourceItem({ referenceItemId: null, referenceSessionId: SESS_P })] }),
   );
-  assert.equal(preview.entries[0]?.reason, "ORPHAN_NO_REFERENCE_ITEM");
-  assert.equal(preview.entries[0]?.proposedPlacement, null);
+  assert.equal(preview.entries[0]?.reason, "PROJECTABLE");
+  assert.equal(preview.entries[0]?.pedagogicalPosition, 2);
+  assert.equal(preview.entries[0]?.resolvedReferenceSessionId, SESS_P);
 });
 
 test("5 — referenceItemId mort → orphelin", () => {
@@ -627,7 +629,6 @@ test("fingerprint — champs temporels N exclus (diagnostics seulement)", () => 
           hour: 16,
           weekOffset: 2,
           courseSessionDate: "2026-01-01",
-          courseSessionKey: "forged-key",
         }),
       ],
     }),
@@ -842,4 +843,60 @@ test("fingerprint — IDs de mapping trimés comme le moteur", () => {
   );
   assert.equal(padded.fingerprint, plain.fingerprint);
   assert.deepEqual(padded.entries, plain.entries);
+});
+
+test("classe à créer : mapping pending n’est pas une absence de continuation", () => {
+  const pendingClass = "pending-class:class-ma1a-n";
+  const pendingCourse = "pending-course:ac-source";
+  const preview = buildYearTransitionPreview(
+    baseInput({
+      classMappings: [{ sourceClassId: SOURCE_CLASS, targetClassId: pendingClass }],
+      targetCourses: [course(pendingCourse, pendingClass, TARGET_YEAR)],
+      targetCourseSessions: [
+        session({
+          annualCourseId: pendingCourse,
+          classId: pendingClass,
+          sequenceNumber: 2,
+          date: "2027-09-27",
+          schoolWeekNumber: 6,
+        }),
+      ],
+    }),
+  );
+  assert.equal(preview.entries[0]?.reason, "PROJECTABLE");
+  assert.equal(preview.entries[0]?.targetClassId, pendingClass);
+  assert.equal(preview.entries[0]?.targetAnnualCourseId, pendingCourse);
+  assert.deepEqual(preview.mappingSummary.noContinuation, []);
+});
+
+test("publication Carnet : séance annuelle source → position CTX → séance cible", () => {
+  const sourceKey = `${SOURCE_YEAR}|${SOURCE_COURSE}|2026-10-12`;
+  const preview = buildYearTransitionPreview(
+    baseInput({
+      sourceItems: [
+        sourceItem({
+          referenceItemId: null,
+          referenceSessionId: null,
+          courseSessionKey: sourceKey,
+        }),
+      ],
+      sourceCourseSessions: [
+        session({
+          schoolYearId: SOURCE_YEAR,
+          annualCourseId: SOURCE_COURSE,
+          classId: SOURCE_CLASS,
+          sequenceNumber: 2,
+          date: "2026-10-12",
+          schoolWeekNumber: 8,
+          key: sourceKey,
+        }),
+      ],
+    }),
+  );
+  assert.equal(preview.entries[0]?.reason, "PROJECTABLE");
+  assert.equal(preview.entries[0]?.sourceClassId, SOURCE_CLASS);
+  assert.equal(preview.entries[0]?.referenceItemId, null);
+  assert.equal(preview.entries[0]?.resolvedReferenceSessionId, SESS_P);
+  assert.equal(preview.entries[0]?.pedagogicalPosition, 2);
+  assert.equal(preview.entries[0]?.proposedPlacement?.courseSessionDate, "2027-09-27");
 });
