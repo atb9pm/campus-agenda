@@ -1637,41 +1637,39 @@ export function ClassNotebookPanel({
 
               <section className="class-notebook-zone class-notebook-zone-control" aria-label="Contrôle">
                 <h3>Contrôle</h3>
-                {weekControls.length ? (
-                  <ul>
-                    {weekControls.map((item) => (
-                      <li
-                        key={item.id}
-                        className="class-notebook-control-line"
-                        data-control-line=""
-                        draggable
-                        onDragStart={(event) => handlePublicationDragStart(event, item.id, weekNumber, session)}
+                <ul className="class-notebook-control-list">
+                  {weekControls.map((item) => (
+                    <li
+                      key={item.id}
+                      className="class-notebook-control-line"
+                      data-control-line=""
+                      draggable
+                      onDragStart={(event) => handlePublicationDragStart(event, item.id, weekNumber, session)}
+                    >
+                      <button
+                        type="button"
+                        className="class-notebook-control-open"
+                        onClick={() => openEditControl(item)}
                       >
-                        <button
-                          type="button"
-                          className="class-notebook-control-open"
-                          onClick={() => openEditControl(item)}
-                        >
-                          <span className="class-notebook-control-title">{item.title}</span>
-                          <span className="class-notebook-control-day">
-                            {weekdayLabelForCourseDayIndex(item.day) || (item.day === 3 ? "jeudi" : "lundi")}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          className="class-notebook-control-delete"
-                          aria-label={`Supprimer le contrôle ${item.title}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void onDeleteControl(item.id);
-                          }}
-                        >
-                          ×
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
+                        <span className="class-notebook-control-title">{item.title}</span>
+                        <span className="class-notebook-control-day">
+                          {weekdayLabelForCourseDayIndex(item.day) || (item.day === 3 ? "jeudi" : "lundi")}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="class-notebook-control-delete"
+                        aria-label={`Supprimer le contrôle ${item.title}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void onDeleteControl(item.id);
+                        }}
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
                 {session ? (
                   <button
                     type="button"
@@ -1758,16 +1756,30 @@ export function ClassNotebookPanel({
                       ) : null}
                     </div>
                   ) : null}
-                  {visibility === "draft" ? (
-                    <span className="class-notebook-visibility-badge is-draft">Brouillon</span>
-                  ) : null}
-                  {visibility === "published" ? (
-                    <span className="class-notebook-visibility-badge is-published">Visible aux élèves</span>
-                  ) : null}
+                  <span
+                    className={`class-notebook-visibility-badge${
+                      visibility === "draft"
+                        ? " is-draft"
+                        : visibility === "published"
+                          ? " is-published"
+                          : " is-reserved"
+                    }`}
+                    aria-hidden={visibility === "empty"}
+                  >
+                    {visibility === "draft"
+                      ? "Brouillon"
+                      : visibility === "published"
+                        ? "Visible aux élèves"
+                        : ""}
+                  </span>
                 </div>
-                {visibility === "draft" ? (
-                  <p className="class-notebook-visibility-hint">Les élèves ne voient pas encore ce texte.</p>
-                ) : null}
+                <p
+                  className={`class-notebook-visibility-hint${visibility === "draft" ? "" : " is-reserved"}`}
+                  aria-hidden={visibility !== "draft"}
+                >
+                  {visibility === "draft" ? "Les élèves ne voient pas encore ce texte." : ""}
+                </p>
+                <div className="class-notebook-publication-body">
                 <div className="class-notebook-lines">
                   <RichDocView
                     doc={composeWeekPublicationDoc(weekCarnetPublications)}
@@ -1832,6 +1844,7 @@ export function ClassNotebookPanel({
                     {item.title}
                   </p>
                 ))}
+                </div>
                 <div className="class-notebook-zone-actions">
                   <button
                     type="button"
@@ -1844,7 +1857,7 @@ export function ClassNotebookPanel({
                   {visibility === "draft" && canPublish ? (
                     <button
                       type="button"
-                      className="workspace-action"
+                      className="workspace-action class-notebook-publish-action"
                       onClick={() => void onSetWeekPublicationVisibility(weekNumber, true, session?.key)}
                     >
                       Publier aux élèves
@@ -1853,7 +1866,7 @@ export function ClassNotebookPanel({
                   {visibility === "published" && canPublish ? (
                     <button
                       type="button"
-                      className="workspace-action secondary"
+                      className="workspace-action secondary class-notebook-publish-action"
                       onClick={() => setUnpublishCardId(card.id)}
                     >
                       Repasser en brouillon
@@ -1873,6 +1886,7 @@ export function ClassNotebookPanel({
 
               <section className="class-notebook-zone class-notebook-zone-notes" aria-label="Notes prof">
                 <h3>Notes prof</h3>
+                <div className="class-notebook-notes-extra">
                 {pendingNotes.length && session ? (
                   <div className="class-notebook-pending-notes" data-pending-week-notes="">
                     <p>Note ancienne de la semaine — séance à attribuer</p>
@@ -1909,6 +1923,8 @@ export function ClassNotebookPanel({
                       </div>
                     ))
                   : null}
+                </div>
+                <div className="class-notebook-notes-body">
                 <div className="class-notebook-lines">
                   <RichDocView
                     doc={composeWeekNotesDoc(weekNotes)}
@@ -1946,6 +1962,7 @@ export function ClassNotebookPanel({
                     onInsertSlotDrop={(at, event) => handleDropOnSlot(event, "notes", weekNumber, at, session)}
                     onMoveLine={(line, direction) => nudgeSelectedLine("notes", weekNumber, line, direction, session)}
                   />
+                </div>
                 </div>
                 <div className="class-notebook-zone-actions">
                   <button
