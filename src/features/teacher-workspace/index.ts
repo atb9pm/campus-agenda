@@ -17,6 +17,7 @@ export {
   groupTeacherCoursesByClass,
   teacherCoursesForClass,
   removeSetupPreferenceForCourse,
+  resolveTeacherWorkspaceYearRequest,
   resolveWorkspaceSchoolYearId,
   toDisplayClassSetup,
   upsertSetupPreferenceForCourse,

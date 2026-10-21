@@ -16,6 +16,7 @@ import {
   groupTeacherCoursesByClass,
   listTeacherCourses,
   matchSetupPreference,
+  resolveTeacherWorkspaceYearRequest,
   schoolYearIdFromSearchParams,
   sessionTeacherIdForCoursesApi,
   TEACHER_COURSES_EMPTY_MESSAGE,
@@ -206,12 +207,14 @@ async function fixture() {
 async function listFor(
   fx: Awaited<ReturnType<typeof fixture>>,
   teacherId: string,
-  extra: { schoolYearId?: string | null; at?: string } = {},
+  extra: { schoolYearId?: string | null; at?: string; isAdmin?: boolean; adminConsult?: boolean } = {},
 ) {
   return listTeacherCourses(fx.deps, {
     teacherId,
     at: extra.at ?? TODAY,
     schoolYearId: extra.schoolYearId,
+    isAdmin: extra.isAdmin,
+    adminConsult: extra.adminConsult,
   });
 }
 
@@ -457,7 +460,14 @@ test("I — année scolaire différente absente", async () => {
   });
   const operational = await listFor(fx, fx.alice.id);
   assert.equal(operational.courses.length, 0);
-  const history = await listFor(fx, fx.alice.id, { schoolYearId: "year-2026" });
+  const ignoredYearParam = await listFor(fx, fx.alice.id, { schoolYearId: "year-2026" });
+  assert.equal(ignoredYearParam.courses.length, 0);
+  assert.equal(ignoredYearParam.schoolYearId, "year-2027");
+  const history = await listFor(fx, fx.alice.id, {
+    schoolYearId: "year-2026",
+    isAdmin: true,
+    adminConsult: true,
+  });
   assert.equal(history.courses.length, 1);
   assert.equal(history.schoolYearId, "year-2026");
 });
@@ -991,4 +1001,56 @@ test("Memory et SQLite — même résultat Mes cours", async () => {
   assert.equal(sqlResult.courses[0]?.classCode, memoryResult.courses[0]?.classCode);
   assert.equal(sqlResult.courses[0]?.branchLabel, memoryResult.courses[0]?.branchLabel);
   db.close();
+});
+
+test("consultation admin : année demandée, tous les cours de l’année, pas seulement les attributions", async () => {
+  const fx = await fixture();
+  const assigned = await createAnnualCourse(fx.deps, {
+    schoolYearId: "year-2027",
+    classId: fx.classA.id,
+    contextId: fx.ctxMoteur.id,
+  });
+  const unassigned = await createAnnualCourse(fx.deps, {
+    schoolYearId: "year-2027",
+    classId: fx.classB.id,
+    contextId: fx.ctxChassis.id,
+  });
+  assert.equal(assigned.ok && unassigned.ok, true);
+  if (!assigned.ok || !unassigned.ok) return;
+  await assignTeacherToCourse(fx.deps, {
+    annualCourseId: assigned.value.id,
+    teacherId: fx.alice.id,
+    role: "PRIMARY",
+    createdByAdminId: "admin-1",
+    validFrom: "2027-08-01",
+  });
+  const teacherOnly = await listFor(fx, fx.alice.id, { schoolYearId: "year-2026" });
+  assert.equal(teacherOnly.schoolYearId, "year-2027");
+  assert.equal(teacherOnly.courses.length, 1);
+  const consult = await listFor(fx, fx.alice.id, {
+    schoolYearId: "year-2027",
+    isAdmin: true,
+    adminConsult: true,
+  });
+  assert.equal(consult.schoolYearId, "year-2027");
+  assert.equal(consult.courses.length, 2);
+  const years = await fx.deps.years.listSchoolYears();
+  assert.equal(
+    resolveTeacherWorkspaceYearRequest({
+      years,
+      requestedSchoolYearId: "year-2026",
+      isAdmin: false,
+      adminConsult: false,
+    }),
+    "year-2027",
+  );
+  assert.equal(
+    resolveTeacherWorkspaceYearRequest({
+      years,
+      requestedSchoolYearId: "year-2026",
+      isAdmin: true,
+      adminConsult: true,
+    }),
+    "year-2026",
+  );
 });

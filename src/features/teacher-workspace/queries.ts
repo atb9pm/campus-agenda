@@ -19,6 +19,8 @@ export interface BuildTeacherCourseWorkspaceInput {
   at?: string;
   /** Année ciblée. Absent = année scolaire active (espace opérationnel). */
   schoolYearId?: string | null;
+  isAdmin?: boolean;
+  adminConsult?: boolean;
   assignments: TeacherCourseAssignment[];
   courses: AnnualCourse[];
   classes: SchoolClassRecord[];
@@ -37,6 +39,19 @@ export function resolveWorkspaceSchoolYearId(
     return years.some((year) => year.id === requested) ? requested : null;
   }
   return years.find((year) => year.status === "active")?.id ?? null;
+}
+
+/** Menus enseignants = année active. Consultation d’une autre année = admin + consult explicite. */
+export function resolveTeacherWorkspaceYearRequest(options: {
+  years: SchoolYearRecord[];
+  requestedSchoolYearId?: string | null;
+  isAdmin?: boolean;
+  adminConsult?: boolean;
+}): string | null {
+  if (options.adminConsult && options.isAdmin) {
+    return resolveWorkspaceSchoolYearId(options.years, options.requestedSchoolYearId);
+  }
+  return options.years.find((year) => year.status === "active")?.id ?? null;
 }
 
 function compareWorkspaceEntries(
@@ -77,6 +92,7 @@ export function buildTeacherCourseWorkspace(
   const professionById = new Map((input.professions ?? []).map((entry) => [entry.id, entry]));
   const requestedYear = yearById.get(schoolYearId);
   const assignmentInstants = [now];
+  const adminConsultAll = Boolean(input.adminConsult && input.isAdmin);
   if (input.schoolYearId && requestedYear?.status === "draft") {
     assignmentInstants.push(`${requestedYear.startsOn}T12:00:00.000Z`);
   }
@@ -84,31 +100,24 @@ export function buildTeacherCourseWorkspace(
   const operational = !input.schoolYearId;
   const entries: TeacherCourseWorkspaceEntry[] = [];
 
-  for (const assignment of input.assignments) {
-    if (assignment.teacherId !== input.teacherId) continue;
-    if (!assignmentInstants.some((instant) => isAssignmentActiveAt(assignment, instant))) continue;
-
-    const course = courseById.get(assignment.annualCourseId);
-    if (!course || course.isArchived) continue;
-    if (course.schoolYearId !== schoolYearId) continue;
-
+  const pushEntry = (
+    course: AnnualCourse,
+    assignment: { id: string; role: TeacherCourseWorkspaceEntry["role"]; validFrom: string; validTo: string | null },
+  ) => {
+    if (course.isArchived) return;
+    if (course.schoolYearId !== schoolYearId) return;
     const year = yearById.get(course.schoolYearId);
-    if (!year) continue;
-    if (operational && year.status === "archived") continue;
-
+    if (!year) return;
+    if (operational && year.status === "archived") return;
     const schoolClass = classById.get(course.classId);
-    if (!schoolClass || !isOperationalSchoolClass(schoolClass, schoolYearId)) continue;
-
+    if (!schoolClass || !isOperationalSchoolClass(schoolClass, schoolYearId)) return;
     const context = contextById.get(course.contextId);
-    if (!context) continue;
-
+    if (!context) return;
     const branch = branchById.get(context.branchId);
-    if (!branch) continue;
-
+    if (!branch) return;
     const profession = schoolClass.professionId
       ? professionById.get(schoolClass.professionId) ?? null
       : null;
-
     entries.push({
       annualCourseId: course.id,
       assignmentId: assignment.id,
@@ -133,6 +142,30 @@ export function buildTeacherCourseWorkspace(
       branchSortOrder: branch.sortOrder,
       teachingType: branch.teachingType,
     });
+  };
+
+  if (adminConsultAll) {
+    for (const course of input.courses) {
+      const assignment = input.assignments.find(
+        (entry) =>
+          entry.annualCourseId === course.id &&
+          assignmentInstants.some((instant) => isAssignmentActiveAt(entry, instant)),
+      );
+      pushEntry(course, {
+        id: assignment?.id ?? `consult:${course.id}`,
+        role: assignment?.role ?? "PRIMARY",
+        validFrom: assignment?.validFrom ?? requestedYear?.startsOn ?? now,
+        validTo: assignment?.validTo ?? null,
+      });
+    }
+  } else {
+    for (const assignment of input.assignments) {
+      if (assignment.teacherId !== input.teacherId) continue;
+      if (!assignmentInstants.some((instant) => isAssignmentActiveAt(assignment, instant))) continue;
+      const course = courseById.get(assignment.annualCourseId);
+      if (!course) continue;
+      pushEntry(course, assignment);
+    }
   }
 
   entries.sort(compareWorkspaceEntries);

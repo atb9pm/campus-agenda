@@ -7,9 +7,15 @@ async function handlePost(request: Request) {
   const auth = await requireAdminSession(request);
   if ("error" in auth && auth.error) return auth.error;
 
-  const body = (await request.json()) as { schoolYearId?: string };
+  const body = (await request.json()) as { schoolYearId?: string; confirm?: boolean };
   if (!body.schoolYearId) {
     return jsonResponse({ ok: false, reason: "Identifiant d'année scolaire requis." }, { status: 400 });
+  }
+  if (body.confirm !== true) {
+    return jsonResponse(
+      { ok: false, reason: "Une confirmation explicite est requise pour activer une année." },
+      { status: 400 },
+    );
   }
 
   try {

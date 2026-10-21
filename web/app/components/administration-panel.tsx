@@ -59,6 +59,7 @@ interface AdministrationPanelProps {
     courseLabel: string;
     classLabel: string;
   }) => void;
+  onConsultPreparedYear?: (schoolYearId: string) => void;
 }
 
 interface BranchEditDraft {
@@ -137,6 +138,7 @@ export function AdministrationPanel({
   onCalendarUpdated,
   onNotice,
   onOpenTargetCourse,
+  onConsultPreparedYear,
 }: AdministrationPanelProps) {
   const [tab, setTab] = useState<AdminTab>("classes");
   const [classes, setClasses] = useState<SchoolClassRecord[]>([]);
@@ -600,7 +602,12 @@ export function AdministrationPanel({
       ) : null}
 
       {tab === "schedules" ? (
-        <ClassScheduleAdminPanel onNotice={onNotice} onOpenAssignments={() => setTab("assignments")} />
+        <ClassScheduleAdminPanel
+          onNotice={onNotice}
+          onOpenAssignments={() => setTab("assignments")}
+          workingYearId={workingYearId}
+          onWorkingYearChange={handleWorkingYearChange}
+        />
       ) : null}
 
       {deleteBranchTarget ? (
@@ -627,12 +634,22 @@ export function AdministrationPanel({
               <p>Plan de scolarité officiel, année de travail administrateur et calendrier.</p>
             </div>
           </header>
-          <SchoolYearAdminPanel onCalendarUpdated={onCalendarUpdated} onNotice={onNotice} />
+          <SchoolYearAdminPanel
+            onCalendarUpdated={onCalendarUpdated}
+            onNotice={onNotice}
+            workingYearId={workingYearId}
+            onWorkingYearChange={handleWorkingYearChange}
+            onConsultYear={onConsultPreparedYear}
+          />
         </div>
       ) : null}
 
       {tab === "transition" ? (
-        <YearTransitionPreparePanel onNotice={onNotice} onOpenTargetCourse={onOpenTargetCourse} />
+        <YearTransitionPreparePanel
+          onNotice={onNotice}
+          onOpenTargetCourse={onOpenTargetCourse}
+          onConsultPreparedYear={onConsultPreparedYear}
+        />
       ) : null}
     </section>
   );

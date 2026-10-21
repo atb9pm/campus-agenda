@@ -7,6 +7,7 @@ import {
 import { runtimeClassroomIdForSchoolClass } from "../agenda-bridge/ids.ts";
 import type { CourseSession } from "../course-sessions/types.ts";
 import type { PedagogicalContextRecord } from "../school-catalog/profession-types.ts";
+import { isOperationalSchoolClass } from "../school-catalog/class-lifecycle.ts";
 import type { SchoolBranchRecord, SchoolClassRecord } from "../school-catalog/types.ts";
 import type { SchoolYearRecord } from "../school-year/types.ts";
 import {
@@ -61,7 +62,16 @@ export async function listAccessibleRuntimeClassroomsForTeacher(options: {
   teacherCanAccessClassroom: (teacherId: string, classroomId: string) => Promise<boolean>;
   /** Si fourni, les SchoolClass structurées hors de cette année sont exclues. */
   schoolYearId?: string | null;
+  isAdmin?: boolean;
+  adminConsult?: boolean;
 }): Promise<ControlPlanningClass[]> {
+  if (options.adminConsult && options.isAdmin) {
+    const yearId = options.schoolYearId?.trim() || "";
+    return listRuntimeClassroomsWhere(options, (linked) => {
+      if (yearId && !structuredClassMatchesPlanningYear(linked, yearId)) return false;
+      return isOperationalSchoolClass(linked, yearId || linked.schoolYearId);
+    });
+  }
   return listRuntimeClassroomsWhere(options, (linked) =>
     teacherHasStructuredClassroomReadAccess({
       teacherId: options.teacherId,

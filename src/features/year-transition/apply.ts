@@ -4,6 +4,7 @@ import type { CourseScheduleStore } from "../../lib/persistence/course-schedule-
 import type { AnnualCourseNotesStore, PedagogicalPathStore } from "../../lib/persistence/pedagogical-path-types.ts";
 import { planPrivateNoteCopies, privateNoteCopyId, previewPrivateNotes, type PrivateNotePreviewEntry } from "./private-notes.ts";
 import type { RuntimeAgendaAdapterStore } from "../../lib/persistence/runtime-agenda-types.ts";
+import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-types.ts";
 import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
 import type { AgendaStore } from "../../lib/persistence/types.ts";
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
@@ -24,7 +25,9 @@ import {
   YEAR_TRANSITION_PREVIEW_ENGINE_VERSION,
   yearTransitionPreviewFingerprintFromSnapshotJson,
   yearTransitionPreviewMaterialSnapshotJson,
+  yearTransitionSourceMaterialFingerprint,
 } from "./fingerprint.ts";
+import { materializeSelectedContinuations } from "./materialize-continuations.ts";
 import { YEAR_TRANSITION_AGENDA_COMPAT_HOUR, buildYearTransitionPreview } from "./preview.ts";
 import { extractClassMappingsFromSnapshotJson, YearTransitionSnapshotCorruptedError } from "./snapshot-mappings.ts";
 import type { PersistedYearTransitionPreview, YearTransitionPreviewStore } from "./store.ts";
@@ -36,6 +39,7 @@ export interface ApplyPersistedYearTransitionDeps {
   previews: YearTransitionPreviewStore;
   applyStore: YearTransitionApplyStore;
   years: SchoolYearStore;
+  catalog?: SchoolCatalogStore;
   courses: AnnualCourseStore;
   agenda: AgendaStore;
   paths: PedagogicalPathStore;
@@ -360,21 +364,47 @@ export async function applyPersistedYearTransition(
   }
 
   const snapshotOptions = JSON.parse(persisted.snapshotJson) as YearTransitionPreviewInput;
+  const selectedSourceClassIds = [...(snapshotOptions.selectedSourceClassIds ?? [])];
+  let liveMappings = classMappings;
+  if (selectedSourceClassIds.length > 0) {
+    if (!deps.catalog) {
+      return fail("APPLY_BLOCKED", { reason: "Catalogue scolaire requis pour reprendre les classes." });
+    }
+    const materialized = await materializeSelectedContinuations(
+      { ...deps, catalog: deps.catalog },
+      {
+        selectedSourceClassIds,
+        sourceSchoolYearId: persisted.sourceSchoolYearId,
+        targetSchoolYearId: persisted.targetSchoolYearId,
+      },
+    );
+    if (!materialized.ok) {
+      return fail("APPLY_BLOCKED", { reason: materialized.reason });
+    }
+    liveMappings = materialized.mappings;
+  }
   const liveInput = await assembleLiveYearTransitionPreviewInput(
     {
       includePrivateNotes: snapshotOptions.includePrivateNotes,
       privateNotesOwnerTeacherId: snapshotOptions.privateNotesOwnerTeacherId,
       sourceSchoolYearId: persisted.sourceSchoolYearId,
       targetSchoolYearId: persisted.targetSchoolYearId,
-      classMappings,
+      classMappings: liveMappings,
+      selectedSourceClassIds,
     },
     deps,
   );
-  const currentSnapshotJson = yearTransitionPreviewMaterialSnapshotJson(liveInput);
-  const currentFingerprint = yearTransitionPreviewFingerprintFromSnapshotJson(currentSnapshotJson);
-  if (currentFingerprint !== persisted.fingerprint) {
+  const persistedInput = JSON.parse(persisted.snapshotJson) as YearTransitionPreviewInput;
+  const pendingCreates = selectedSourceClassIds.length > 0;
+  const currentFingerprint = pendingCreates
+    ? yearTransitionSourceMaterialFingerprint(liveInput)
+    : yearTransitionPreviewFingerprintFromSnapshotJson(yearTransitionPreviewMaterialSnapshotJson(liveInput));
+  const expectedFingerprint = pendingCreates
+    ? yearTransitionSourceMaterialFingerprint(persistedInput)
+    : persisted.fingerprint;
+  if (currentFingerprint !== expectedFingerprint) {
     return fail("PREVIEW_STALE", {
-      persistedFingerprint: persisted.fingerprint,
+      persistedFingerprint: expectedFingerprint,
       currentFingerprint,
     });
   }

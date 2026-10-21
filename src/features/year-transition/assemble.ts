@@ -33,6 +33,7 @@ export async function assembleLiveYearTransitionPreviewInput(
     sourceSchoolYearId: string;
     targetSchoolYearId: string;
     classMappings: readonly YearTransitionClassMapping[];
+    selectedSourceClassIds?: readonly string[];
   },
   deps: AssembleLiveYearTransitionPreviewInputDeps,
 ): Promise<YearTransitionPreviewInput> {
@@ -85,6 +86,7 @@ export async function assembleLiveYearTransitionPreviewInput(
     sourceSchoolYearId: options.sourceSchoolYearId,
     targetSchoolYearId: options.targetSchoolYearId,
     classMappings: options.classMappings.map((mapping) => ({ ...mapping })),
+    selectedSourceClassIds: options.selectedSourceClassIds?.map((id) => id.trim()).filter(Boolean),
     sourceCourses,
     targetCourses,
     sourceItems: sourceItems.map((item) => ({ ...item })),

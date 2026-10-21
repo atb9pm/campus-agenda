@@ -22,7 +22,10 @@ async function handleGet(request: Request) {
   await reconcileRuntimeStructuredClassrooms();
 
   const teacherId = auth.session!.teacherId;
-  const schoolYearId = new URL(request.url).searchParams.get("schoolYearId")?.trim() || null;
+  const url = new URL(request.url);
+  const schoolYearId = url.searchParams.get("schoolYearId")?.trim() || null;
+  const adminConsult = url.searchParams.get("consult") === "1";
+  const isAdmin = await auth.store!.teacherIsAdmin(teacherId);
   const catalog = await getSchoolCatalogStore();
   await catalog.ensureSeeded();
   const [classrooms, classes, courses, assignments, years, adapters] = await Promise.all([
@@ -34,6 +37,7 @@ async function handleGet(request: Request) {
     getRuntimeAgendaAdapterStore(),
   ]);
 
+  const operationalYearId = years.find((year) => year.status === "active")?.id ?? null;
   const accessible = await listAccessibleRuntimeClassroomsForTeacher({
     teacherId,
     classrooms,
@@ -41,7 +45,9 @@ async function handleGet(request: Request) {
     courses,
     assignments,
     years,
-    schoolYearId,
+    schoolYearId: adminConsult && isAdmin ? schoolYearId || operationalYearId : operationalYearId,
+    isAdmin,
+    adminConsult: adminConsult && isAdmin,
     teacherCanAccessClassroom: (id, classroomId) => auth.store!.teacherCanAccessClassroom(id, classroomId),
   });
 
