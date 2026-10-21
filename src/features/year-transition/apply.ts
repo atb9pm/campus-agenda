@@ -34,6 +34,10 @@ import {
   type YearTransitionApplyStore,
 } from "./apply-types.ts";
 import {
+  isNoteReclassifyReason,
+  isPublicationReclassifyReason,
+} from "./disposition.ts";
+import {
   YEAR_TRANSITION_PREVIEW_ENGINE_VERSION,
   yearTransitionPreviewFingerprintFromSnapshotJson,
   yearTransitionPreviewMaterialSnapshotJson,
@@ -132,9 +136,17 @@ function skipResult(reason: YearTransitionPreviewReason | string): YearTransitio
 
 export function expectedApplyResultForPreviewReason(
   reason: YearTransitionPreviewReason | string,
+  options?: { zeroLoss?: boolean; targetAnnualCourseId?: string | null },
 ): YearTransitionApplyResult | null {
   if (reason === "PROJECTABLE") return "CREATED";
   if (reason === "ALREADY_PRESENT") return "ALREADY_PRESENT";
+  if (
+    options?.zeroLoss &&
+    options.targetAnnualCourseId?.trim() &&
+    isPublicationReclassifyReason(reason)
+  ) {
+    return "CREATED_UNPLACED";
+  }
   return skipResult(reason);
 }
 
@@ -180,14 +192,16 @@ function mapBySourceAgendaItemId<T extends { sourceAgendaItemId: number }>(
 
 function countByResult(entries: readonly PersistedYearTransitionApplyEntry[]) {
   let createdCount = 0;
+  let toReclassifyCount = 0;
   let alreadyPresentCount = 0;
   let skippedCount = 0;
   for (const entry of entries) {
     if (entry.applyResult === "CREATED") createdCount += 1;
+    else if (entry.applyResult === "CREATED_UNPLACED") toReclassifyCount += 1;
     else if (entry.applyResult === "ALREADY_PRESENT") alreadyPresentCount += 1;
     else skippedCount += 1;
   }
-  return { createdCount, alreadyPresentCount, skippedCount };
+  return { createdCount, toReclassifyCount, alreadyPresentCount, skippedCount };
 }
 
 function success(
@@ -198,9 +212,12 @@ function success(
 ): YearTransitionApplyOutcome {
   return {
     ...(privateNotes ? { privateNotes: {
-      createdCount: privateNotes.filter(e => e.reason === "PROJECTABLE").length,
+      createdCount: privateNotes.filter(e => e.disposition === "PROJECTABLE" || e.reason === "PROJECTABLE").length,
+      toReclassifyCount: privateNotes.filter(e => e.disposition === "TO_RECLASSIFY").length,
       alreadyPresentCount: privateNotes.filter(e => e.reason === "ALREADY_PRESENT").length,
-      skippedCount: privateNotes.filter(e => e.reason !== "PROJECTABLE" && e.reason !== "ALREADY_PRESENT").length,
+      skippedCount: privateNotes.filter(
+        e => e.disposition !== "PROJECTABLE" && e.disposition !== "TO_RECLASSIFY" && e.reason !== "PROJECTABLE" && e.reason !== "ALREADY_PRESENT",
+      ).length,
       entries: privateNotes,
     } } : {}),
     ok: true,
@@ -233,7 +250,12 @@ async function verifyExistingApply(
         ).flat()
       : await deps.notes.listNotesByOwner(snapshot.privateNotesOwnerTeacherId!);
     for (const entry of notePreview) {
-      if (entry.reason !== "PROJECTABLE" && entry.reason !== "ALREADY_PRESENT") continue;
+      const copiedNow =
+        entry.disposition === "PROJECTABLE" ||
+        entry.disposition === "TO_RECLASSIFY" ||
+        entry.reason === "PROJECTABLE" ||
+        (newFlow && isNoteReclassifyReason(entry.reason));
+      if (!copiedNow && entry.reason !== "ALREADY_PRESENT") continue;
       const candidates = listed.filter(n =>
         n.schoolYearId === persisted.targetSchoolYearId && n.sourceNoteId === entry.sourceNoteId);
       if (candidates.length !== 1) return fail("APPLY_LEDGER_DIVERGED");
@@ -243,6 +265,7 @@ async function verifyExistingApply(
         entry.targetAnnualCourseId && isPendingTargetCourseId(entry.targetAnnualCourseId),
       );
       const liveTarget = liveTargetCourses.find((course) => course.id === note.annualCourseId);
+      const unplaced = !entry.courseSessionKey?.trim() || entry.disposition === "TO_RECLASSIFY";
       const sessionDate = parseCourseSessionKey(entry.courseSessionKey ?? "")?.date;
       const copiedDate = parseCourseSessionKey(note.courseSessionKey ?? "")?.date;
       const idsMatch = pendingTarget
@@ -250,17 +273,16 @@ async function verifyExistingApply(
             liveTarget &&
               liveTarget.contextId === source?.contextId &&
               note.classId === liveTarget.classId &&
-              sessionDate &&
-              sessionDate === copiedDate,
+              (unplaced ? !note.courseSessionKey?.trim() : Boolean(sessionDate && sessionDate === copiedDate)),
           )
         : note.annualCourseId === entry.targetAnnualCourseId &&
-          note.courseSessionKey === entry.courseSessionKey &&
+          (unplaced ? !note.courseSessionKey?.trim() : note.courseSessionKey === entry.courseSessionKey) &&
           note.classId === entry.targetClassId;
       if (!idsMatch
         || note.referenceSessionId !== entry.referenceSessionId
         || note.contextId !== source?.contextId
         || note.sourceSchoolYearId !== persisted.sourceSchoolYearId
-        || (entry.reason === "PROJECTABLE" && note.id !== privateNoteCopyId(persisted.id, entry.sourceNoteId))) {
+        || (copiedNow && note.id !== privateNoteCopyId(persisted.id, entry.sourceNoteId))) {
         return fail("APPLY_LEDGER_DIVERGED");
       }
     }
@@ -302,20 +324,37 @@ async function verifyExistingApply(
     if (!sameNullableId(entry.referenceItemId, previewEntry.referenceItemId)) {
       return fail("APPLY_LEDGER_DIVERGED");
     }
-    const expectedResult = expectedApplyResultForPreviewReason(previewEntry.reason);
+    const expectedResult = expectedApplyResultForPreviewReason(previewEntry.reason, {
+      zeroLoss: usesExplicitTargetMeetingDayPlans(snapshot.targetMeetingDayPlans),
+      targetAnnualCourseId: previewEntry.targetAnnualCourseId,
+    });
     if (!expectedResult || !isKnownApplyResult(entry.applyResult) || entry.applyResult !== expectedResult) {
       return fail("APPLY_LEDGER_DIVERGED");
     }
 
-    if (entry.applyResult === "CREATED") {
+    if (entry.applyResult === "CREATED" || entry.applyResult === "CREATED_UNPLACED") {
       const found = itemsWithApplyProvenance(items, apply.transitionId, entry.sourceAgendaItemId);
       if (found.length !== 1) return fail("APPLY_LEDGER_DIVERGED");
       const created = found[0]!;
-      if ((created.annualCourseId ?? null) !== (entry.targetAnnualCourseId ?? null)) {
+      if (
+        !liveTargetMatchesPreviewTarget(
+          previewEntry.targetAnnualCourseId,
+          created.annualCourseId,
+          snapshot,
+          liveTargetCoursesForVerify,
+          persisted.targetSchoolYearId,
+        )
+      ) {
         return fail("APPLY_LEDGER_DIVERGED");
       }
       if ((created.referenceItemId ?? null) !== (entry.referenceItemId ?? null)) {
         return fail("APPLY_LEDGER_DIVERGED");
+      }
+      if (entry.applyResult === "CREATED_UNPLACED") {
+        if (created.courseSessionKey?.trim() || created.courseSessionDate?.trim()) {
+          return fail("APPLY_LEDGER_DIVERGED");
+        }
+        if (created.studentVisible !== false) return fail("APPLY_LEDGER_DIVERGED");
       }
       continue;
     }
@@ -382,13 +421,47 @@ function buildInsert(
   source: PrototypeAgendaItem,
   classroomId: string,
   subjectId: string,
+  unplaced: boolean,
 ): YearTransitionApplyAgendaInsert | YearTransitionApplyFailure {
   const placement = entry.proposedPlacement;
   const carnetOwned = !source.referenceItemId?.trim() && !source.referenceSessionId?.trim();
-  const referenceItemId = carnetOwned ? "" : entry.referenceItemId?.trim() ?? "";
-  const referenceSessionId = carnetOwned ? "" : entry.resolvedReferenceSessionId?.trim() ?? "";
-  const annualCourseId = entry.targetAnnualCourseId?.trim() ?? "";
-  if (!placement || !annualCourseId) {
+  const referenceItemId = carnetOwned ? "" : (entry.referenceItemId?.trim() || source.referenceItemId?.trim() || "");
+  const referenceSessionId = carnetOwned
+    ? ""
+    : (entry.resolvedReferenceSessionId?.trim() || source.referenceSessionId?.trim() || "");
+  const annualCourseId = (unplaced ? entry.targetAnnualCourseId : placement?.annualCourseId)?.trim()
+    || entry.targetAnnualCourseId?.trim()
+    || "";
+  if (!annualCourseId) {
+    return fail("APPLY_BLOCKED");
+  }
+  if (unplaced) {
+    if (placement) return fail("APPLY_BLOCKED");
+    const author = source.authorTeacherId?.trim() ? source.authorTeacherId.trim() : null;
+    return {
+      classroomId,
+      subjectId,
+      authorTeacherId: author,
+      day: 0,
+      hour: YEAR_TRANSITION_AGENDA_COMPAT_HOUR,
+      weekOffset: 0,
+      schoolWeekNumber: 0,
+      type: source.type,
+      title: source.title,
+      detail: source.detail,
+      templateId: null,
+      schoolYearId: targetYearId,
+      annualCourseId,
+      courseSessionKey: null,
+      courseSessionDate: null,
+      referenceSessionId: referenceSessionId || null,
+      referenceItemId: referenceItemId || null,
+      studentVisible: false,
+      sourceTransitionId: transitionId,
+      sourceAgendaItemId: source.id,
+    };
+  }
+  if (!placement) {
     return fail("APPLY_BLOCKED");
   }
   if (!carnetOwned && (!referenceItemId || !referenceSessionId)) {
@@ -543,15 +616,23 @@ export async function applyPersistedYearTransition(
   const livePreview = buildYearTransitionPreview(liveInput);
   const applyNotesInput = notesInputForApply(liveInput);
   const applyNotePreview = previewPrivateNotes(applyNotesInput);
+  const zeroLoss = usesExplicitTargetMeetingDayPlans(applyNotesInput.targetMeetingDayPlans);
   const noteBlockers = applyNotePreview.filter(
     (entry) =>
-      entry.reason !== "PROJECTABLE" &&
-      entry.reason !== "ALREADY_PRESENT" &&
-      !isPrivateNoteApplySkipReason(entry.reason),
+      entry.disposition === "BLOCKING" ||
+      (entry.reason !== "PROJECTABLE" &&
+        entry.reason !== "ALREADY_PRESENT" &&
+        !isPrivateNoteApplySkipReason(entry.reason, { zeroLoss }) &&
+        entry.disposition !== "TO_RECLASSIFY"),
   );
   if (noteBlockers.length) return fail("APPLY_BLOCKED", { noteBlockers });
   const blockers = livePreview.entries
-    .filter((entry) => BLOCKING.has(entry.reason) || (entry.reason !== "PROJECTABLE" && entry.reason !== "ALREADY_PRESENT" && !skipResult(entry.reason)))
+    .filter((entry) => {
+      if (BLOCKING.has(entry.reason) || entry.disposition === "BLOCKING") return true;
+      if (entry.reason === "PROJECTABLE" || entry.reason === "ALREADY_PRESENT") return false;
+      if (entry.disposition === "TO_RECLASSIFY") return false;
+      return !skipResult(entry.reason);
+    })
     .map((entry) => ({ sourceAgendaItemId: entry.sourceAgendaItemId, reason: entry.reason }));
   if (blockers.length > 0) {
     return fail("APPLY_BLOCKED", { blockers });
@@ -563,7 +644,8 @@ export async function applyPersistedYearTransition(
   const subjectByCourse = new Map<string, string>();
 
   for (const entry of livePreview.entries) {
-    if (entry.reason !== "PROJECTABLE") continue;
+    const unplaced = entry.disposition === "TO_RECLASSIFY";
+    if (entry.reason !== "PROJECTABLE" && !unplaced) continue;
     const source = sourceItems.get(entry.sourceAgendaItemId);
     if (!source) return fail("APPLY_BLOCKED");
     const classId = entry.targetClassId?.trim() ?? "";
@@ -587,7 +669,15 @@ export async function applyPersistedYearTransition(
       subjectByCourse.set(subjectKey, subjectId);
     }
 
-    const insert = buildInsert(transitionId, persisted.targetSchoolYearId, entry, source, classroomId, subjectId);
+    const insert = buildInsert(
+      transitionId,
+      persisted.targetSchoolYearId,
+      entry,
+      source,
+      classroomId,
+      subjectId,
+      unplaced,
+    );
     if ("ok" in insert && insert.ok === false) return insert;
     inserts.push(insert as YearTransitionApplyAgendaInsert);
   }
@@ -601,10 +691,11 @@ export async function applyPersistedYearTransition(
     appliedAt,
   };
   const entries: PersistedYearTransitionApplyEntry[] = livePreview.entries.map((entry) => {
-    if (entry.reason === "PROJECTABLE") return ledgerEntry(transitionId, appliedAt, entry, "CREATED");
-    if (entry.reason === "ALREADY_PRESENT") return ledgerEntry(transitionId, appliedAt, entry, "ALREADY_PRESENT");
-    const skipped = skipResult(entry.reason);
-    return ledgerEntry(transitionId, appliedAt, entry, skipped ?? "SKIPPED_NO_REFERENCE");
+    const applyResult = expectedApplyResultForPreviewReason(entry.reason, {
+      zeroLoss,
+      targetAnnualCourseId: entry.targetAnnualCourseId,
+    });
+    return ledgerEntry(transitionId, appliedAt, entry, applyResult ?? "SKIPPED_NO_REFERENCE");
   });
 
   for (const item of inserts) {

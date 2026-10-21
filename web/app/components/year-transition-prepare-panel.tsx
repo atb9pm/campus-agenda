@@ -93,9 +93,10 @@ export function YearTransitionPreparePanel({
     code: string;
     codeLabel: string;
     createdCount?: number;
+    toReclassifyCount?: number;
     alreadyPresentCount?: number;
     skippedCount?: number;
-    notes?: { createdCount: number; alreadyPresentCount: number; skippedCount: number };
+    notes?: { createdCount: number; toReclassifyCount: number; alreadyPresentCount: number; skippedCount: number };
     targetCourses: YearTransitionPresentedPreview["targetCourses"];
     classSummaries: YearTransitionPresentedPreview["classSummaries"];
   } | null>(null);
@@ -526,12 +527,14 @@ export function YearTransitionPreparePanel({
               réutilisées :{" "}
               {(appliedPreview?.classSummaries ?? result.classSummaries).filter((entry) => entry.status === "reuse").length}
             </li>
-            <li>Publications copiées : {result.createdCount ?? 0}</li>
+            <li>Publications planifiées : {result.createdCount ?? 0}</li>
+            <li>Publications à reclasser : {result.toReclassifyCount ?? 0}</li>
             <li>Déjà présentes : {result.alreadyPresentCount ?? 0}</li>
             <li>Non transférées : {result.skippedCount ?? 0}</li>
             {result.notes ? (
               <li>
-                Notes privées copiées : {result.notes.createdCount} · déjà présentes : {result.notes.alreadyPresentCount}
+                Notes planifiées : {result.notes.createdCount} · à reclasser : {result.notes.toReclassifyCount ?? 0}
+                {" · "}déjà présentes : {result.notes.alreadyPresentCount}
                 {" · "}non transférées : {result.notes.skippedCount}
               </li>
             ) : (

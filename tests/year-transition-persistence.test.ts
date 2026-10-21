@@ -286,12 +286,12 @@ test("4 — aucune table CourseSession persistée", async () => {
   }
 });
 
-test("5 — engineVersion = 4", () => {
-  assert.equal(YEAR_TRANSITION_PREVIEW_ENGINE_VERSION, 4);
+test("5 — engineVersion = 5", () => {
+  assert.equal(YEAR_TRANSITION_PREVIEW_ENGINE_VERSION, 5);
   const snapshot = JSON.parse(yearTransitionPreviewMaterialSnapshotJson(baseInput())) as {
     engineVersion: number;
   };
-  assert.equal(snapshot.engineVersion, 4);
+  assert.equal(snapshot.engineVersion, 5);
 });
 
 test("6 — snapshot canonique déterministe", () => {
@@ -359,7 +359,7 @@ test("11 — création memory", async () => {
   const store = new MemoryYearTransitionPreviewStore();
   const created = await persist(store, baseInput(), { id: "mem-1", now: "2027-01-01T00:00:00.000Z" });
   assert.equal(created.id, "mem-1");
-  assert.equal(created.engineVersion, 4);
+  assert.equal(created.engineVersion, 5);
   assert.equal(created.appVersion, "2.62.0");
   assert.equal(created.entries.length, 1);
 });

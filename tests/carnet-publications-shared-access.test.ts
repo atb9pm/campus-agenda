@@ -626,7 +626,7 @@ test("sources — filtres auteur remplacés, studentVisible uniforme, hors trans
   assert.match(openCourse, /if \(annual && item\.annualCourseId === annual\) return true/);
   assert.match(publications, /canAccessAnnualCourse/);
   assert.match(publications, /authorTeacherId.*reste une provenance/);
-  assert.match(visibility, /return isStudentVisible\(item\)/);
+  assert.match(visibility, /if \(!isStudentVisible\(item\)\) return false/);
   assert.doesNotMatch(visibility, /item\.type === "TEST"/);
   assert.match(agendaGet, /session\?\.kind === "student"/);
   assert.match(agendaGet, /isVisibleToStudent/);

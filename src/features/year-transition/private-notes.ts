@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
 import { copyNoteToNewYear, type AnnualCourseNote } from "../pedagogical-path/annual-notes.ts";
+import {
+  noteContentDisposition,
+  type YearTransitionContentDisposition,
+} from "./disposition.ts";
+import { usesExplicitTargetMeetingDayPlans } from "./target-meeting-days.ts";
 import type { YearTransitionPreviewInput } from "./types.ts";
 import { indexClassMappings, resolveClassMapping } from "./class-mapping.ts";
 import {
@@ -16,6 +21,7 @@ export interface PrivateNotePreviewEntry {
     | "SOURCE_SESSION_UNRESOLVED" | "PATH_ABSENT" | "PATH_POSITION_UNRESOLVED"
     | "MAPPING_UNRESOLVED" | "TARGET_COURSE_UNRESOLVED" | "REFERENCE_UNRESOLVED"
     | "TARGET_SESSION_UNRESOLVED" | "TARGET_NOTE_DIVERGED";
+  disposition?: YearTransitionContentDisposition;
   targetAnnualCourseId: string | null;
   targetClassId: string | null;
   referenceSessionId: string | null;
@@ -31,8 +37,25 @@ const NOTE_SKIP_WITHOUT_PLACEMENT = new Set<PrivateNotePreviewEntry["reason"]>([
   "TARGET_SESSION_UNRESOLVED",
 ]);
 
-export function isPrivateNoteApplySkipReason(reason: PrivateNotePreviewEntry["reason"]): boolean {
+export function isPrivateNoteApplySkipReason(
+  reason: PrivateNotePreviewEntry["reason"],
+  options?: { zeroLoss?: boolean },
+): boolean {
+  if (options?.zeroLoss) return reason === "NO_CONTINUATION";
   return NOTE_SKIP_WITHOUT_PLACEMENT.has(reason);
+}
+
+function withNoteDisposition(
+  entry: PrivateNotePreviewEntry,
+  zeroLoss: boolean,
+): PrivateNotePreviewEntry {
+  return {
+    ...entry,
+    disposition: noteContentDisposition(entry.reason, {
+      zeroLoss,
+      targetAnnualCourseId: entry.targetAnnualCourseId,
+    }),
+  };
 }
 
 /** Placement N+1 : séance annuelle réelle, parcours CTX facultatif. */
@@ -40,12 +63,14 @@ export function previewPrivateNotes(input: YearTransitionPreviewInput): PrivateN
   if (!input.includePrivateNotes) return [];
   const owner = input.privateNotesOwnerTeacherId?.trim();
   if (!owner) throw new Error("Le propriétaire des notes privées est obligatoire.");
+  const zeroLoss = usesExplicitTargetMeetingDayPlans(input.targetMeetingDayPlans);
   const mapping = indexClassMappings(input.classMappings);
   return [...(input.sourceNotes ?? [])].filter(n => n.schoolYearId === input.sourceSchoolYearId)
     .sort((a, b) => a.id.localeCompare(b.id)).map(note => {
       const entry: PrivateNotePreviewEntry = { sourceNoteId: note.id, sourceClassId: note.classId, reason: "PROJECTABLE",
-        targetAnnualCourseId: null, targetClassId: null, referenceSessionId: null, courseSessionKey: null };
-      const result = (reason: PrivateNotePreviewEntry["reason"]) => ({ ...entry, reason });
+        targetAnnualCourseId: null, targetClassId: null, referenceSessionId: note.referenceSessionId ?? null, courseSessionKey: null };
+      const result = (reason: PrivateNotePreviewEntry["reason"]) =>
+        withNoteDisposition({ ...entry, reason }, zeroLoss);
       const source = input.sourceCourses.find(c => c.id === note.annualCourseId && c.schoolYearId === note.schoolYearId
         && c.classId === note.classId && c.contextId === note.contextId);
       if (!source) return result("MAPPING_UNRESOLVED");
@@ -58,6 +83,9 @@ export function previewPrivateNotes(input: YearTransitionPreviewInput): PrivateN
       if (courses.length !== 1 || courses[0]!.isArchived) return result("TARGET_COURSE_UNRESOLVED");
       entry.targetAnnualCourseId = courses[0]!.id;
 
+      const placed = (next: PrivateNotePreviewEntry) =>
+        withNoteDisposition(notePresence(input, note, next, source.contextId), zeroLoss);
+
       const sourceSession = resolveUniqueSourceCourseSessionFromKey(
         note.courseSessionKey,
         source,
@@ -66,7 +94,7 @@ export function previewPrivateNotes(input: YearTransitionPreviewInput): PrivateN
       if (sourceSession) {
         const pathSessions = pathSessionsForContext(input.pathSnapshots, source.contextId);
         const ctx = uniquePathSessionAtPosition(pathSessions, sourceSession.sequenceNumber);
-        entry.referenceSessionId = ctx?.id ?? null;
+        entry.referenceSessionId = ctx?.id ?? note.referenceSessionId ?? null;
         const target = uniqueTargetSessionAtSequence(
           input.targetCourseSessions,
           {
@@ -77,9 +105,12 @@ export function previewPrivateNotes(input: YearTransitionPreviewInput): PrivateN
           },
           sourceSession.sequenceNumber,
         );
-        if (!target) return result("TARGET_SESSION_UNRESOLVED");
+        if (!target) {
+          entry.courseSessionKey = null;
+          return placed({ ...entry, reason: "TARGET_SESSION_UNRESOLVED" });
+        }
         entry.courseSessionKey = target.key;
-        return notePresence(input, note, entry, source.contextId);
+        return placed(entry);
       }
 
       const refs = new Set(input.sourceItems.filter(item => note.courseSessionKey && item.courseSessionKey === note.courseSessionKey
@@ -89,13 +120,22 @@ export function previewPrivateNotes(input: YearTransitionPreviewInput): PrivateN
       const ref = refs.size === 1 ? [...refs][0]! : null;
       if (!ref && refs.size > 0) return result("REFERENCE_UNRESOLVED");
       if (!ref) {
-        if (note.courseSessionKey?.trim()) return result("SOURCE_SESSION_UNRESOLVED");
-        return result("NO_REFERENCE");
+        entry.courseSessionKey = null;
+        if (note.courseSessionKey?.trim()) return placed({ ...entry, reason: "SOURCE_SESSION_UNRESOLVED" });
+        return placed({ ...entry, reason: "NO_REFERENCE" });
       }
       const sessions = pathSessionsForContext(input.pathSnapshots, source.contextId);
-      if (sessions.length === 0) return result("PATH_ABSENT");
+      if (sessions.length === 0) {
+        entry.referenceSessionId = ref;
+        entry.courseSessionKey = null;
+        return placed({ ...entry, reason: "PATH_ABSENT" });
+      }
       const hits = sessions.filter(s => s.id === ref);
-      if (hits.length === 0) return result("PATH_POSITION_UNRESOLVED");
+      if (hits.length === 0) {
+        entry.referenceSessionId = ref;
+        entry.courseSessionKey = null;
+        return placed({ ...entry, reason: "PATH_POSITION_UNRESOLVED" });
+      }
       if (hits.length !== 1 || !Number.isInteger(hits[0]!.position) || hits[0]!.position < 1
         || sessions.filter(s => s.position === hits[0]!.position).length !== 1) return result("REFERENCE_UNRESOLVED");
       entry.referenceSessionId = ref;
@@ -109,9 +149,12 @@ export function previewPrivateNotes(input: YearTransitionPreviewInput): PrivateN
         },
         hits[0]!.position,
       );
-      if (!target) return result("TARGET_SESSION_UNRESOLVED");
+      if (!target) {
+        entry.courseSessionKey = null;
+        return placed({ ...entry, reason: "TARGET_SESSION_UNRESOLVED" });
+      }
       entry.courseSessionKey = target.key;
-      return notePresence(input, note, entry, source.contextId);
+      return placed(entry);
     });
 }
 
@@ -136,14 +179,21 @@ export function privateNoteCopyId(transitionId: string, sourceId: string): strin
   return "yn-" + createHash("sha256").update(JSON.stringify([transitionId, sourceId])).digest("hex");
 }
 
+function shouldCopyPrivateNote(entry: PrivateNotePreviewEntry): boolean {
+  return entry.disposition === "PROJECTABLE" || entry.disposition === "TO_RECLASSIFY" || entry.reason === "PROJECTABLE";
+}
+
 export function planPrivateNoteCopies(input: YearTransitionPreviewInput, entries: readonly PrivateNotePreviewEntry[],
   transitionId: string, inheritedAt: string): AnnualCourseNote[] {
-  return entries.filter(e => e.reason === "PROJECTABLE").map(entry => {
+  return entries.filter(shouldCopyPrivateNote).map(entry => {
     const source = input.sourceNotes!.find(n => n.id === entry.sourceNoteId)!;
     const copy = copyNoteToNewYear(source, { id: privateNoteCopyId(transitionId, source.id),
       schoolYearId: input.targetSchoolYearId, classId: entry.targetClassId!, annualCourseId: entry.targetAnnualCourseId!,
       authorTeacherId: source.authorTeacherId, ownerTeacherId: source.ownerTeacherId,
       referenceSessionId: entry.referenceSessionId }, inheritedAt);
-    return { ...copy, courseSessionKey: entry.courseSessionKey };
+    return {
+      ...copy,
+      courseSessionKey: entry.disposition === "TO_RECLASSIFY" ? null : entry.courseSessionKey,
+    };
   });
 }

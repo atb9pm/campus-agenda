@@ -8,6 +8,7 @@ import type { AnnualCourse } from "../annual-courses/types.ts";
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
 import type { SchoolYearRecord } from "../school-year/types.ts";
 import { YEAR_TRANSITION_APPLY_BLOCKING_REASONS, type YearTransitionApplyFailureCode, type YearTransitionApplyOutcome } from "./apply-types.ts";
+import type { YearTransitionContentDisposition } from "./disposition.ts";
 import {
   YEAR_TRANSITION_PREVIEW_REASON_EXPLANATIONS,
   YEAR_TRANSITION_PREVIEW_REASON_LABELS,
@@ -144,7 +145,7 @@ export interface YearTransitionCatalogLookups {
 export interface YearTransitionPresentedRow {
   id: string;
   kind: "publication" | "privateNote";
-  category: "projectable" | "alreadyPresent" | "excluded" | "blocking";
+  category: "projectable" | "alreadyPresent" | "toReclassify" | "excluded" | "blocking";
   title: string;
   reason: string;
   reasonLabel: string;
@@ -170,12 +171,14 @@ export interface YearTransitionPresentedPreview {
   publications: {
     projectable: YearTransitionPresentedRow[];
     alreadyPresent: YearTransitionPresentedRow[];
+    toReclassify: YearTransitionPresentedRow[];
     excluded: YearTransitionPresentedRow[];
     blocking: YearTransitionPresentedRow[];
   };
   notes: {
     projectable: YearTransitionPresentedRow[];
     alreadyPresent: YearTransitionPresentedRow[];
+    toReclassify: YearTransitionPresentedRow[];
     excluded: YearTransitionPresentedRow[];
     blocking: YearTransitionPresentedRow[];
   } | null;
@@ -311,18 +314,44 @@ export function mappingIssueMessages(
   return issues;
 }
 
-function publicationCategory(reason: YearTransitionPreviewReason): YearTransitionPresentedRow["category"] {
-  if (reason === "PROJECTABLE") return "projectable";
-  if (reason === "ALREADY_PRESENT") return "alreadyPresent";
-  if (BLOCKING_PUBLICATION.has(reason)) return "blocking";
-  return "excluded";
+function categoryFromDisposition(
+  disposition: YearTransitionContentDisposition | undefined,
+  fallback: YearTransitionPresentedRow["category"],
+): YearTransitionPresentedRow["category"] {
+  if (disposition === "PROJECTABLE") return "projectable";
+  if (disposition === "ALREADY_PRESENT") return "alreadyPresent";
+  if (disposition === "TO_RECLASSIFY") return "toReclassify";
+  if (disposition === "BLOCKING") return "blocking";
+  if (disposition === "SKIPPED") return "excluded";
+  return fallback;
 }
 
-function noteCategory(reason: PrivateNotePreviewEntry["reason"]): YearTransitionPresentedRow["category"] {
-  if (reason === "PROJECTABLE") return "projectable";
-  if (reason === "ALREADY_PRESENT") return "alreadyPresent";
-  if (BLOCKING_NOTES.has(reason)) return "blocking";
-  return "excluded";
+function publicationCategory(
+  reason: YearTransitionPreviewReason,
+  disposition?: YearTransitionContentDisposition,
+): YearTransitionPresentedRow["category"] {
+  const fallback: YearTransitionPresentedRow["category"] = reason === "PROJECTABLE"
+    ? "projectable"
+    : reason === "ALREADY_PRESENT"
+      ? "alreadyPresent"
+      : BLOCKING_PUBLICATION.has(reason)
+        ? "blocking"
+        : "excluded";
+  return categoryFromDisposition(disposition, fallback);
+}
+
+function noteCategory(
+  reason: PrivateNotePreviewEntry["reason"],
+  disposition?: YearTransitionContentDisposition,
+): YearTransitionPresentedRow["category"] {
+  const fallback: YearTransitionPresentedRow["category"] = reason === "PROJECTABLE"
+    ? "projectable"
+    : reason === "ALREADY_PRESENT"
+      ? "alreadyPresent"
+      : BLOCKING_NOTES.has(reason)
+        ? "blocking"
+        : "excluded";
+  return categoryFromDisposition(disposition, fallback);
 }
 
 function classLabel(lookups: YearTransitionCatalogLookups, classId: string | null): string | null {
@@ -382,7 +411,7 @@ function targetDurationLabel(
 }
 
 function emptyGroups(): YearTransitionPresentedPreview["publications"] {
-  return { projectable: [], alreadyPresent: [], excluded: [], blocking: [] };
+  return { projectable: [], alreadyPresent: [], toReclassify: [], excluded: [], blocking: [] };
 }
 
 const CLASS_STATUS_LABELS: Record<YearTransitionClassSummary["status"], string> = {
@@ -421,7 +450,10 @@ export function presentYearTransitionPreview(
   const publications = emptyGroups();
   for (const entry of preview.entries) {
     const item = lookups.items.find((candidate) => candidate.id === entry.sourceAgendaItemId);
-    const category = publicationCategory(entry.reason);
+    const category = publicationCategory(entry.reason, entry.disposition);
+    const diagnosticLabel = YEAR_TRANSITION_PREVIEW_REASON_LABELS[entry.reason] ?? entry.reason;
+    const diagnosticExplanation =
+      YEAR_TRANSITION_PREVIEW_REASON_EXPLANATIONS[entry.reason] ?? diagnosticLabel;
     const row: YearTransitionPresentedRow = {
       id: `pub-${entry.sourceAgendaItemId}`,
       kind: "publication",
@@ -430,8 +462,11 @@ export function presentYearTransitionPreview(
         ? `${PUBLICATION_TYPE_LABELS[item.type] ?? item.type} — ${item.title.trim() || "Sans titre"}`
         : `Publication n° ${entry.sourceAgendaItemId}`,
       reason: entry.reason,
-      reasonLabel: YEAR_TRANSITION_PREVIEW_REASON_LABELS[entry.reason] ?? entry.reason,
-      explanation: YEAR_TRANSITION_PREVIEW_REASON_EXPLANATIONS[entry.reason] ?? YEAR_TRANSITION_PREVIEW_REASON_LABELS[entry.reason] ?? entry.reason,
+      reasonLabel: category === "toReclassify" ? `À reclasser — ${diagnosticLabel}` : diagnosticLabel,
+      explanation:
+        category === "toReclassify"
+          ? `${diagnosticExplanation} L’élément sera repris dans le cours cible sans séance (À reclasser).`
+          : diagnosticExplanation,
       sourceCourseLabel: courseLabel(lookups, entry.sourceAnnualCourseId),
       targetCourseLabel: courseLabel(lookups, entry.targetAnnualCourseId),
       sourceClassId: entry.sourceClassId,
@@ -450,15 +485,20 @@ export function presentYearTransitionPreview(
   if (preview.privateNotes) {
     notes = emptyGroups();
     for (const entry of preview.privateNotes) {
-      const category = noteCategory(entry.reason);
+      const category = noteCategory(entry.reason, entry.disposition);
+      const diagnosticLabel = YEAR_TRANSITION_NOTE_REASON_LABELS[entry.reason];
+      const diagnosticExplanation = YEAR_TRANSITION_NOTE_REASON_EXPLANATIONS[entry.reason];
       const row: YearTransitionPresentedRow = {
         id: `note-${entry.sourceNoteId}`,
         kind: "privateNote",
         category,
         title: "Note privée",
         reason: entry.reason,
-        reasonLabel: YEAR_TRANSITION_NOTE_REASON_LABELS[entry.reason],
-        explanation: YEAR_TRANSITION_NOTE_REASON_EXPLANATIONS[entry.reason],
+        reasonLabel: category === "toReclassify" ? `À reclasser — ${diagnosticLabel}` : diagnosticLabel,
+        explanation:
+          category === "toReclassify"
+            ? `${diagnosticExplanation} La note sera reprise dans le cours cible sans séance (À reclasser).`
+            : diagnosticExplanation,
         sourceCourseLabel: null,
         targetCourseLabel: courseLabel(lookups, entry.targetAnnualCourseId),
         sourceClassId: entry.sourceClassId,
@@ -476,7 +516,14 @@ export function presentYearTransitionPreview(
 
   const targetCourseIds = new Set<string>();
   const targetCourses: YearTransitionPresentedPreview["targetCourses"] = [];
-  const consider = [...publications.projectable, ...publications.alreadyPresent, ...(notes?.projectable ?? []), ...(notes?.alreadyPresent ?? [])];
+  const consider = [
+    ...publications.projectable,
+    ...publications.alreadyPresent,
+    ...publications.toReclassify,
+    ...(notes?.projectable ?? []),
+    ...(notes?.alreadyPresent ?? []),
+    ...(notes?.toReclassify ?? []),
+  ];
   for (const row of consider) {
     if (
       !row.targetAnnualCourseId ||
@@ -507,10 +554,12 @@ export function presentYearTransitionPreview(
   const allRows = [
     ...publications.projectable,
     ...publications.alreadyPresent,
+    ...publications.toReclassify,
     ...publications.excluded,
     ...publications.blocking,
     ...(notes?.projectable ?? []),
     ...(notes?.alreadyPresent ?? []),
+    ...(notes?.toReclassify ?? []),
     ...(notes?.excluded ?? []),
     ...(notes?.blocking ?? []),
   ];
@@ -566,9 +615,10 @@ export function presentApplyOutcome(
   codeLabel: string;
   reason?: string;
   createdCount?: number;
+  toReclassifyCount?: number;
   alreadyPresentCount?: number;
   skippedCount?: number;
-  notes?: { createdCount: number; alreadyPresentCount: number; skippedCount: number };
+  notes?: { createdCount: number; toReclassifyCount: number; alreadyPresentCount: number; skippedCount: number };
   targetCourses: YearTransitionPresentedPreview["targetCourses"];
   classSummaries: YearTransitionClassSummary[];
   blocking?: boolean;
@@ -592,11 +642,13 @@ export function presentApplyOutcome(
     code: outcome.code,
     codeLabel,
     createdCount: outcome.createdCount,
+    toReclassifyCount: outcome.toReclassifyCount,
     alreadyPresentCount: outcome.alreadyPresentCount,
     skippedCount: outcome.skippedCount,
     notes: outcome.privateNotes
       ? {
           createdCount: outcome.privateNotes.createdCount,
+          toReclassifyCount: outcome.privateNotes.toReclassifyCount,
           alreadyPresentCount: outcome.privateNotes.alreadyPresentCount,
           skippedCount: outcome.privateNotes.skippedCount,
         }

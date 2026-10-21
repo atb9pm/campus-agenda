@@ -5,6 +5,7 @@ import type { YearTransitionPreviewReason } from "./reasons.ts";
 
 export const YEAR_TRANSITION_APPLY_RESULTS = [
   "CREATED",
+  "CREATED_UNPLACED",
   "ALREADY_PRESENT",
   "SKIPPED_NO_CONTINUATION",
   "SKIPPED_NO_REFERENCE",
@@ -86,8 +87,8 @@ export interface YearTransitionApplyAgendaInsert {
   templateId: null;
   schoolYearId: string;
   annualCourseId: string;
-  courseSessionKey: string;
-  courseSessionDate: string;
+  courseSessionKey: string | null;
+  courseSessionDate: string | null;
   referenceSessionId: string | null;
   referenceItemId: string | null;
   studentVisible: false;
@@ -137,13 +138,19 @@ export interface YearTransitionApplyStore {
 }
 
 export interface YearTransitionApplySuccess {
-  privateNotes?: { createdCount: number; alreadyPresentCount: number; skippedCount: number;
-    entries: PrivateNotePreviewEntry[] };
+  privateNotes?: {
+    createdCount: number;
+    toReclassifyCount: number;
+    alreadyPresentCount: number;
+    skippedCount: number;
+    entries: PrivateNotePreviewEntry[];
+  };
   ok: true;
   code: YearTransitionApplySuccessCode;
   transitionId: string;
   fingerprint: string;
   createdCount: number;
+  toReclassifyCount: number;
   alreadyPresentCount: number;
   skippedCount: number;
   entries: PersistedYearTransitionApplyEntry[];

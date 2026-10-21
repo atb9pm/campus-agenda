@@ -26,9 +26,20 @@ export function defaultStudentVisibleForCreate(input: {
 /**
  * Filtre agenda élève, uniforme HOMEWORK / TEST / INFORMATION.
  * `undefined` = publié (données existantes). `false` = brouillon, jamais visible.
+ * Un élément « À reclasser » (cours annuel, sans séance, provenance de transition
+ * ou sentinelle semaine 0) n’est jamais visible, même si `studentVisible` est vrai.
  */
 export function isVisibleToStudent(
-  item: Pick<PrototypeAgendaItem, "type" | "studentVisible">,
+  item: Pick<
+    PrototypeAgendaItem,
+    "type" | "studentVisible" | "annualCourseId" | "courseSessionKey" | "sourceTransitionId" | "schoolWeekNumber"
+  >,
 ): boolean {
-  return isStudentVisible(item);
+  if (!isStudentVisible(item)) return false;
+  const courseBound = Boolean(item.annualCourseId?.trim());
+  const unplaced = !item.courseSessionKey?.trim();
+  if (courseBound && unplaced && (item.sourceTransitionId?.trim() || item.schoolWeekNumber === 0)) {
+    return false;
+  }
+  return true;
 }
