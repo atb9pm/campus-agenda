@@ -42,6 +42,8 @@ export {
   createAnnualCourseNote,
   copyNoteToNewYear,
   filterInheritedNotes,
+  parseAnnualNoteBody,
+  serializeAnnualNoteBody,
   teacherMayConsultCourseNotes,
   studentMayAccessCourseNotes,
   NOTES_ARE_NOT_AGENDA_TYPE,

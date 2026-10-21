@@ -4,7 +4,7 @@ import { normalizeMappingClassId } from "./class-mapping.ts";
 import type { YearTransitionPreviewInput } from "./types.ts";
 
 /** Version des règles métier de projection. Fait partie de l’état matériel et du fingerprint. */
-export const YEAR_TRANSITION_PREVIEW_ENGINE_VERSION = 1;
+export const YEAR_TRANSITION_PREVIEW_ENGINE_VERSION = 2;
 
 /**
  * Empreinte matérielle du PREVIEW.
@@ -48,9 +48,19 @@ function compareNullable(left: string | null | undefined, right: string | null |
 
 function materialState(input: YearTransitionPreviewInput) {
   return {
+    ...(input.includePrivateNotes ? {
+      includePrivateNotes: true,
+      privateNotesOwnerTeacherId: input.privateNotesOwnerTeacherId,
+      sourceNotes: [...(input.sourceNotes ?? [])].sort((a, b) => a.id.localeCompare(b.id)),
+      targetNotes: [...(input.targetNotes ?? [])].sort((a, b) => a.id.localeCompare(b.id)),
+    } : {}),
     engineVersion: YEAR_TRANSITION_PREVIEW_ENGINE_VERSION,
     sourceSchoolYearId: input.sourceSchoolYearId,
     targetSchoolYearId: input.targetSchoolYearId,
+    selectedSourceClassIds: [...(input.selectedSourceClassIds ?? [])]
+      .map((id) => id.trim())
+      .filter(Boolean)
+      .sort((left, right) => left.localeCompare(right)),
     classMappings: [...input.classMappings]
       .map((mapping) => ({
         sourceClassId: normalizeMappingClassId(mapping.sourceClassId),
@@ -144,6 +154,7 @@ function materialState(input: YearTransitionPreviewInput) {
         annualCourseId: item.annualCourseId ?? null,
         referenceItemId: item.referenceItemId ?? null,
         referenceSessionId: item.referenceSessionId ?? null,
+        ...(input.includePrivateNotes ? { courseSessionKey: item.courseSessionKey ?? null } : {}),
         type: item.type,
         title: item.title,
         detail: item.detail,
@@ -186,4 +197,19 @@ export function yearTransitionPreviewFingerprintFromSnapshotJson(snapshotJson: s
 /** SHA-256 hexadécimal du graphe matériel du PREVIEW. Déterministe, sans horodatage, indépendant de l’ordre d’entrée. */
 export function yearTransitionPreviewFingerprint(input: YearTransitionPreviewInput): string {
   return yearTransitionPreviewFingerprintFromSnapshotJson(yearTransitionPreviewMaterialSnapshotJson(input));
+}
+
+/** Empreinte hors structure cible, pour un APPLY qui crée encore des classes. */
+export function yearTransitionSourceMaterialFingerprint(input: YearTransitionPreviewInput): string {
+  const material = materialState(input) as Record<string, unknown>;
+  delete material.targetCourses;
+  delete material.targetItems;
+  delete material.targetCourseSessions;
+  material.classMappings = (input.classMappings ?? []).map((mapping) => ({
+    sourceClassId: normalizeMappingClassId(mapping.sourceClassId),
+    selected: Boolean(mapping.targetClassId?.trim()) || Boolean(
+      (input.selectedSourceClassIds ?? []).includes(mapping.sourceClassId ?? ""),
+    ),
+  }));
+  return yearTransitionPreviewFingerprintFromSnapshotJson(JSON.stringify(canonical(material)));
 }

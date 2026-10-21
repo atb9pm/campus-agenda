@@ -1,4 +1,6 @@
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
+import type { AnnualCourseNote } from "../pedagogical-path/annual-notes.ts";
+import type { PrivateNotePreviewEntry } from "./private-notes.ts";
 import type { AnnualCourse } from "../annual-courses/types.ts";
 import type { CourseSession } from "../course-sessions/types.ts";
 import type { ReferencePedagogicalPath } from "../pedagogical-path/types.ts";
@@ -21,9 +23,16 @@ export interface YearTransitionClassMapping {
 }
 
 export interface YearTransitionPreviewInput {
+  includePrivateNotes?: boolean;
+  /** Must come from the authenticated teacher, never an arbitrary request owner. */
+  privateNotesOwnerTeacherId?: string;
+  sourceNotes?: readonly AnnualCourseNote[];
+  targetNotes?: readonly AnnualCourseNote[];
   sourceSchoolYearId: string;
   targetSchoolYearId: string;
   classMappings: readonly YearTransitionClassMapping[];
+  /** Classes cochées à l’étape 2. Les autres sont des non-reprises volontaires. */
+  selectedSourceClassIds?: readonly string[];
   sourceCourses: readonly AnnualCourse[];
   targetCourses: readonly AnnualCourse[];
   sourceItems: readonly PrototypeAgendaItem[];
@@ -82,6 +91,7 @@ export interface YearTransitionClassMappingSummary {
 }
 
 export interface YearTransitionPreviewResult {
+  privateNotes?: PrivateNotePreviewEntry[];
   sourceSchoolYearId: string;
   targetSchoolYearId: string;
   /**

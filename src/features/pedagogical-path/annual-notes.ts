@@ -1,23 +1,25 @@
 /**
- * Notes de cours annuelles — architecture cible (préparation).
+ * Notes de cours annuelles.
  *
  * IMPORTANT — séparation stricte :
  * - Le parcours de référence CTX porte Devoir / Contrôle / Information.
  * - Les notes NE sont PAS un 4ᵉ type Agenda.
- * - Les notes appartiennent au cours annuel réel :
- *   schoolYearId + classId + contextId (+ referenceSessionId) + authorTeacherId (provenance).
  *
- * Legacy actuel (`src/features/class-notebook`) :
- * - Document JSON par enseignant (`teacher_notes`), clés `${classSetupId}:${schoolWeekNumber}`.
- * - Conservé intact : aucune migration destructrice dans cette PR.
- * - L'UI carnet existante continue de fonctionner.
+ * Confidentialité PR3.4 :
+ * - `ownerTeacherId` = propriétaire / visibilité Carnet (équivalent teacher_notes.teacher_id).
+ * - `authorTeacherId` = provenance de création (nullable en SQL si le compte est supprimé).
+ * - PR3.4 ne partage PAS une note entre enseignants du même cours.
+ * - Les élèves n'ont jamais accès aux notes.
  *
- * Cible future :
- * - Table `annual_course_notes` (créée additivement ici).
- * - Plusieurs classes parallèles (MMA 1A/1B/1C) sur le même CTX → notes distinctes.
- * - Transmission au professeur suivant : consultation par cours, pas propriété exclusive auteur.
- * - Reprise année N+1 = copie (sourceNoteId / sourceSchoolYearId / inheritedAt), jamais lien vivant.
+ * Identité d'héritage N→N+1 (`sourceNoteId` / `sourceSchoolYearId` / `inheritedAt`)
+ * n'est PAS la provenance du JSON legacy. Celle-ci est `legacyNoteId`.
+ *
+ * Legacy (`teacher_notes`) : document JSON par enseignant. Les notes non résolues
+ * (V1, pendingWeeks, orphanedSessions, CourseSession invalide) y restent.
  */
+
+import type { CampusRichDoc } from "../class-notebook/rich-doc.ts";
+import { isValidStoredRichDoc } from "../class-notebook/rich-doc-validation.ts";
 
 export interface AnnualCourseNote {
   id: string;
@@ -25,11 +27,27 @@ export interface AnnualCourseNote {
   /** Classe annuelle (school_classes.id), pas le classSetup enseignant. */
   classId: string;
   contextId: string;
-  /** Séance de référence du parcours CTX — peut être null si non encore rattachée. */
+  /** Séance de référence du parcours CTX — null si non déterminable avec certitude. */
   referenceSessionId: string | null;
-  /** Provenance uniquement — ne confère pas l'exclusivité de consultation. */
+  /** Provenance de création — ne confère pas l'exclusivité de consultation future. */
   authorTeacherId: string;
+  /**
+   * Propriétaire Carnet PR3.4 (visibilité). Distinct de l'auteur.
+   * Null = note structurelle hors document Carnet (tests / données préparatoires).
+   */
+  ownerTeacherId: string | null;
   text: string;
+  /** Document riche complet. Null = texte brut uniquement. */
+  body: CampusRichDoc | null;
+  /**
+   * Emplacement calendaire courant (`schoolYearId|annualCourseId|date`).
+   * Identité d'affichage dans l'année, jamais une identité cross-year.
+   */
+  courseSessionKey: string | null;
+  /** Id `TeacherWeekNote.id` dans le document legacy — pas un héritage N→N+1. */
+  legacyNoteId: string | null;
+  /** Stable order inside the notebook session. Null for pre-existing structural notes. */
+  notebookPosition?: number | null;
   /** Métadonnées d'héritage (copie année précédente). */
   sourceNoteId: string | null;
   sourceSchoolYearId: string | null;
@@ -49,7 +67,12 @@ export interface AnnualCourseNoteInput {
   contextId: string;
   referenceSessionId?: string | null;
   authorTeacherId: string;
+  ownerTeacherId?: string | null;
   text: string;
+  body?: CampusRichDoc | null;
+  courseSessionKey?: string | null;
+  legacyNoteId?: string | null;
+  notebookPosition?: number | null;
   sourceNoteId?: string | null;
   sourceSchoolYearId?: string | null;
   inheritedAt?: string | null;
@@ -76,6 +99,22 @@ export function annualCourseKey(parts: {
   return `${parts.schoolYearId}:${parts.classId}:${parts.contextId}`;
 }
 
+export function serializeAnnualNoteBody(body: CampusRichDoc | null | undefined): string | null {
+  if (!body) return null;
+  return JSON.stringify(body);
+}
+
+export function parseAnnualNoteBody(raw: string | null | undefined): CampusRichDoc | null {
+  if (raw == null) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (isValidStoredRichDoc(parsed)) return parsed;
+  } catch {
+    // A corrupt body must never be silently converted to plain text on the next save.
+  }
+  throw new Error("Contenu riche de note invalide.");
+}
+
 export function createAnnualCourseNote(
   id: string,
   input: AnnualCourseNoteInput,
@@ -90,6 +129,10 @@ export function createAnnualCourseNote(
     return { ok: false, reason: "authorTeacherId (provenance) est obligatoire." };
   }
 
+  const owner = input.ownerTeacherId?.trim() ? input.ownerTeacherId.trim() : null;
+  const legacy = input.legacyNoteId?.trim() ? input.legacyNoteId.trim() : null;
+  const sessionKey = input.courseSessionKey?.trim() ? input.courseSessionKey.trim() : null;
+
   return {
     ok: true,
     value: {
@@ -99,7 +142,12 @@ export function createAnnualCourseNote(
       contextId: input.contextId,
       referenceSessionId: input.referenceSessionId ?? null,
       authorTeacherId: input.authorTeacherId,
+      ownerTeacherId: owner,
       text,
+      body: input.body ?? null,
+      courseSessionKey: sessionKey,
+      legacyNoteId: legacy,
+      notebookPosition: input.notebookPosition ?? null,
       sourceNoteId: input.sourceNoteId ?? null,
       sourceSchoolYearId: input.sourceSchoolYearId ?? null,
       inheritedAt: input.inheritedAt ?? null,
@@ -113,6 +161,8 @@ export function createAnnualCourseNote(
 /**
  * Copie vers une nouvelle année — jamais un lien vivant.
  * La note source reste intacte.
+ * `courseSessionKey` n'est pas recopié (identité calendaire d'une seule année).
+ * `legacyNoteId` n'est pas recopié (provenance JSON, pas héritage annuel).
  */
 export function copyNoteToNewYear(
   source: AnnualCourseNote,
@@ -121,7 +171,9 @@ export function copyNoteToNewYear(
     schoolYearId: string;
     classId: string;
     authorTeacherId: string;
+    ownerTeacherId?: string | null;
     referenceSessionId?: string | null;
+    annualCourseId?: string | null;
   },
   inheritedAt = new Date().toISOString(),
 ): AnnualCourseNote {
@@ -135,11 +187,17 @@ export function copyNoteToNewYear(
         ? source.referenceSessionId
         : input.referenceSessionId,
     authorTeacherId: input.authorTeacherId,
+    ownerTeacherId:
+      input.ownerTeacherId === undefined ? source.ownerTeacherId : input.ownerTeacherId,
     text: source.text,
+    body: source.body ? structuredClone(source.body) : null,
+    notebookPosition: source.notebookPosition ?? null,
+    courseSessionKey: null,
+    legacyNoteId: null,
     sourceNoteId: source.id,
     sourceSchoolYearId: source.schoolYearId,
     inheritedAt,
-    annualCourseId: null,
+    annualCourseId: input.annualCourseId ?? null,
     createdAt: inheritedAt,
     updatedAt: inheritedAt,
   };
@@ -152,7 +210,7 @@ export function filterInheritedNotes(notes: AnnualCourseNote[]): AnnualCourseNot
 
 /**
  * Droit de consultation futur : réservé aux enseignants autorisés sur le cours.
- * L'auteur n'est PAS le seul habilité — un professeur B qui reprend le cours doit voir les notes.
+ * PR3.4 applique encore ownerTeacherId pour le Carnet (pas de partage silencieux).
  */
 export function teacherMayConsultCourseNotes(options: {
   isTeacher: boolean;

@@ -11,6 +11,10 @@ import {
 } from "../evaluations/coordination.ts";
 import type { Subject } from "../../types/classroom.ts";
 import { groupItemsBySubject, type SubjectAgendaGroup } from "./course-day-view.ts";
+import {
+  orderByDaySchedule,
+  type StudentDayScheduleSlot,
+} from "./course-day-order.ts";
 
 export type ControlUrgency = "later" | "week" | "tomorrow" | "today";
 
@@ -124,11 +128,18 @@ export function buildStudentCourseDaySections(
   dayItems: PrototypeAgendaItem[],
   subjects: Subject[],
   futureTests: UpcomingTestEntry[],
-  options: { includeNextControls?: boolean } = {},
+  options: {
+    includeNextControls?: boolean;
+    scheduleSlots?: readonly StudentDayScheduleSlot[];
+    courseDay?: CourseDaySlot;
+  } = {},
 ): StudentCourseDaySection[] {
   const includeNextControls = options.includeNextControls !== false;
   const publications = sortPublications(dayItems);
-  const groups: SubjectAgendaGroup[] = groupItemsBySubject(publications, subjects);
+  const groups: SubjectAgendaGroup[] = groupItemsBySubject(publications, subjects, {
+    scheduleSlots: options.scheduleSlots,
+    courseDay: options.courseDay,
+  });
   const nextBySubject = new Map<string, UpcomingTestEntry[]>();
 
   if (includeNextControls) {
@@ -160,17 +171,14 @@ export function buildStudentCourseDaySections(
     }
   }
 
-  const orderedIds: string[] = [];
-  for (const subject of subjects) {
-    if (sections.has(subject.id)) orderedIds.push(subject.id);
-  }
-  for (const id of sections.keys()) {
-    if (!orderedIds.includes(id)) orderedIds.push(id);
-  }
-
-  return orderedIds
-    .map((id) => sections.get(id)!)
-    .filter((section) => section.publications.length > 0 || section.nextControls.length > 0);
+  return orderByDaySchedule(
+    [...sections.values()].filter(
+      (section) => section.publications.length > 0 || section.nextControls.length > 0,
+    ),
+    subjects,
+    options.scheduleSlots,
+    options.courseDay,
+  );
 }
 
 export const STUDENT_CONTROL_PREVIEW_LIMIT = 3;

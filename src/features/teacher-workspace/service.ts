@@ -2,7 +2,7 @@ import type { AnnualCourseStore } from "../../lib/persistence/annual-course-type
 import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-types.ts";
 import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
 import type { TeacherAccountStore } from "../../lib/persistence/teacher-account-types.ts";
-import { buildTeacherCourseWorkspace } from "./queries.ts";
+import { buildTeacherCourseWorkspace, resolveTeacherWorkspaceYearRequest } from "./queries.ts";
 import type { TeacherCourseWorkspaceResult } from "./types.ts";
 
 export interface TeacherCourseWorkspaceDeps {
@@ -23,6 +23,8 @@ export async function listTeacherCourses(
     teacherId: string;
     schoolYearId?: string | null;
     at?: string;
+    isAdmin?: boolean;
+    adminConsult?: boolean;
   },
 ): Promise<TeacherCourseWorkspaceResult> {
   const [assignments, courses, classes, contexts, branches, professions, years] = await Promise.all([
@@ -35,10 +37,19 @@ export async function listTeacherCourses(
     deps.years.listSchoolYears(),
   ]);
 
+  const schoolYearId = resolveTeacherWorkspaceYearRequest({
+    years,
+    requestedSchoolYearId: options.schoolYearId,
+    isAdmin: options.isAdmin,
+    adminConsult: options.adminConsult,
+  });
+
   return buildTeacherCourseWorkspace({
     teacherId: options.teacherId,
     at: options.at,
-    schoolYearId: options.schoolYearId,
+    schoolYearId,
+    isAdmin: options.isAdmin,
+    adminConsult: options.adminConsult,
     assignments,
     courses,
     classes,

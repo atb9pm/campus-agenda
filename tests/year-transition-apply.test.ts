@@ -35,6 +35,11 @@ import { MemoryCourseScheduleStore } from "../src/lib/persistence/memory-course-
 import { MemoryRuntimeAgendaAdapterStore } from "../src/lib/persistence/memory-runtime-adapter-store.ts";
 import { MemorySchoolYearStore, replaceMemorySchoolYears, resetMemorySchoolYearStore } from "../src/lib/persistence/memory-school-year-store.ts";
 import { MemoryTeacherNotesStore } from "../src/lib/persistence/memory-teacher-notes-store.ts";
+import { loadTeacherNotebookDocument, persistTeacherNotebookDocument } from "../src/features/class-notebook/annual-private-notes.ts";
+import { previewPrivateNotes } from "../src/features/year-transition/private-notes.ts";
+import type { AnnualCourseNotesStore } from "../src/lib/persistence/pedagogical-path-types.ts";
+import { SqlAnnualCourseNotesStore } from "../src/lib/persistence/sql/sql-pedagogical-path-store.ts";
+import { SqlTeacherNotesStore } from "../src/lib/persistence/sql/sql-teacher-notes-store.ts";
 import { MemoryYearTransitionApplyStore } from "../src/lib/persistence/memory-year-transition-apply-store.ts";
 import { MemoryYearTransitionPreviewStore } from "../src/lib/persistence/memory-year-transition-preview-store.ts";
 import { replaceMemoryLegacySchool, resetMemoryLegacySchool } from "../src/lib/persistence/memory-legacy-school.ts";
@@ -316,7 +321,7 @@ test("1 — APP_VERSION 2.62.0", () => {
 });
 
 test("2 — dernière migration 0032", () => {
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0032_year_transition_apply.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0033_annual_private_notes_storage.sql");
 });
 
 test("3-5 — migration crée tables APPLY, provenance, pas de CourseSession", async () => {
@@ -984,7 +989,7 @@ test("94-99 — backup APPLY + orphelins refusés", async () => {
   assert.equal(orphanEntry.ok, false);
 });
 
-test("100 — APPLY n'appelle pas duplicateItemsFromArchivedYear / replaceAllItems / notes", async () => {
+test("100 — APPLY ne réutilise pas les mutations legacy de l'agenda", async () => {
   const files = [
     "src/features/year-transition/apply.ts",
     "src/features/year-transition/assemble.ts",
@@ -1002,7 +1007,6 @@ test("100 — APPLY n'appelle pas duplicateItemsFromArchivedYear / replaceAllIte
     assert.equal(src.includes("moveStructuredControlPlacement"), false, file);
     assert.equal(src.includes("ensureRuntime"), false, file);
     assert.equal(src.includes("teacher_notes"), false, file);
-    assert.equal(src.includes("annual_course_notes"), false, file);
   }
   assert.ok(YEAR_TRANSITION_APPLY_BLOCKING_REASONS.includes("TARGET_SESSION_AMBIGUOUS"));
   assert.ok(YEAR_TRANSITION_APPLY_BLOCKING_REASONS.includes("TARGET_COURSE_AMBIGUOUS"));
@@ -1093,7 +1097,12 @@ test("SQLite PROJECTABLE + rollback + Memory/SQLite parité", async () => {
   const applyStore = new SqlYearTransitionApplyStore(db);
   const years = new SqlSchoolYearStore(db);
   const adapters = new SqlRuntimeAgendaAdapterStore(db);
+  const notes = new SqlAnnualCourseNotesStore(db);
+  await notes.createNote("full-sql-source", { schoolYearId: SOURCE_YEAR, classId: SOURCE_CLASS,
+    contextId: CTX, annualCourseId: SOURCE_COURSE, ownerTeacherId: "teacher-1", authorTeacherId: "teacher-1",
+    referenceSessionId: SESS_P, text: "Transferred with publications" });
   const deps: ApplyPersistedYearTransitionDeps = {
+    notes,
     previews,
     applyStore,
     years,
@@ -1105,7 +1114,8 @@ test("SQLite PROJECTABLE + rollback + Memory/SQLite parité", async () => {
     now: () => "2027-03-01T00:00:00.000Z",
   };
   const input = await assembleLiveYearTransitionPreviewInput(
-    { sourceSchoolYearId: SOURCE_YEAR, targetSchoolYearId: TARGET_YEAR, classMappings: mappings() },
+    { sourceSchoolYearId: SOURCE_YEAR, targetSchoolYearId: TARGET_YEAR, classMappings: mappings(),
+      includePrivateNotes: true, privateNotesOwnerTeacherId: "teacher-1" },
     deps,
   );
   await createPersistedYearTransitionPreview(input, {
@@ -1116,6 +1126,7 @@ test("SQLite PROJECTABLE + rollback + Memory/SQLite parité", async () => {
   const beforeN = (await agenda.exportAllItems()).filter((item) => item.schoolYearId === SOURCE_YEAR);
   const sqlResult = await applyPersistedYearTransition("transition-sql", deps);
   assert.equal(sqlResult.ok, true);
+  assert.equal((await notes.listNotesByOwner("teacher-1")).filter(n => n.schoolYearId === TARGET_YEAR).length, 1);
   if (!sqlResult.ok) {
     db.close();
     return;
@@ -1846,3 +1857,179 @@ test("installExactItemsCopyOnWrite hors AgendaStore, hors routes/UI, hors barrel
     assert.equal(src.includes("installExactItemsCopyOnWrite"), false, file);
   }
 });
+
+// PR3.5: exercise the persisted PREVIEW -> APPLY -> Carnet path on both stores.
+for (const sql of [false, true]) {
+  const backend = sql ? "SQLite" : "Memory";
+  async function privateWorld() {
+    const world = await seedMemory({ extraItems: [] });
+    const db = sql ? createNodeSqliteDatabase(":memory:") : null;
+    if (db) await applyMigrations(db);
+    if (db) await db.exec("INSERT INTO teachers (id, display_name, initials, password_hash, is_admin) VALUES ('teacher-1', 'Test', 'T', 'x', 0)");
+    const notes: AnnualCourseNotesStore = db ? new SqlAnnualCourseNotesStore(db) : world.notes;
+    const teacherNotes = db ? new SqlTeacherNotesStore(db) : world.teacherNotes;
+    const previews = db ? new SqlYearTransitionPreviewStore(db) : world.previews;
+    const applyStore = db ? new SqlYearTransitionApplyStore(db) : new MemoryYearTransitionApplyStore(world.agenda, world.notes);
+    const deps = { ...world.deps, notes, previews, applyStore };
+    const body = { format: "campus-rich-v1" as const, blocks: [
+      { type: "paragraph" as const, inlines: [{ text: "Rich", marks: { bold: true, color: "blue" as const } }] },
+      { type: "orderedList" as const, items: [[{ text: "First" }], [{ text: "Second" }]] },
+    ] };
+    for (const [i, owner] of ["teacher-1", "teacher-1", "teacher-2"].entries()) {
+      await notes.createNote(`private-${i}`, { schoolYearId: SOURCE_YEAR, classId: SOURCE_CLASS,
+        contextId: CTX, annualCourseId: SOURCE_COURSE, ownerTeacherId: owner, authorTeacherId: "teacher-author",
+        referenceSessionId: SESS_P, courseSessionKey: `${SOURCE_YEAR}|${SOURCE_COURSE}|2026-10-12`,
+        legacyNoteId: `legacy-${i}`, text: `Note ${i}`, notebookPosition: i, body });
+    }
+    const preview = async (id = "private-transition", include = true) => {
+      const input = await assembleLiveYearTransitionPreviewInput({ sourceSchoolYearId: SOURCE_YEAR,
+        targetSchoolYearId: TARGET_YEAR, classMappings: mappings(), includePrivateNotes: include,
+        privateNotesOwnerTeacherId: "teacher-1" }, deps);
+      return createPersistedYearTransitionPreview(input, { store: previews, idGenerator: () => id });
+    };
+    return { ...world, deps, notes, teacherNotes, preview, db, body, close: () => db?.close() };
+  }
+
+  test(`PR3.5 ${backend} — rich notes transfer privately, source intact, retry and second preview do not duplicate`, async () => {
+    const w = await privateWorld();
+    try {
+      const before = await w.notes.listNotesByOwner("teacher-1");
+      if (w.db) await w.db.prepare("UPDATE annual_course_notes SET body_json = ? WHERE id = 'private-0'")
+        .bind(JSON.stringify(w.body, null, 2)).run();
+      const p = await w.preview();
+      assert.deepEqual(p.preview.privateNotes?.map(e => e.reason), ["PROJECTABLE", "PROJECTABLE"]);
+      assert.equal((await w.notes.listNotesByOwner("teacher-1")).length, 2, "PREVIEW is read-only");
+      const first = await applyPersistedYearTransition(p.id, w.deps);
+      assert.equal(first.ok, true, JSON.stringify(first));
+      if (first.ok) assert.equal(first.privateNotes?.createdCount, 2);
+      const all = await w.notes.listNotesByOwner("teacher-1");
+      assert.deepEqual(all.filter(n => n.schoolYearId === SOURCE_YEAR), before);
+      const copies = all.filter(n => n.schoolYearId === TARGET_YEAR);
+      assert.equal(copies.length, 2);
+      assert.deepEqual(copies[0]!.body, w.body);
+      assert.equal(copies[0]!.authorTeacherId, "teacher-author");
+      assert.equal(copies[0]!.legacyNoteId, null);
+      assert.equal(copies[0]!.sourceSchoolYearId, SOURCE_YEAR);
+      assert.equal(copies[0]!.courseSessionKey, `${TARGET_YEAR}|${TARGET_COURSE}|2027-08-30`);
+      assert.equal((await w.notes.listNotesByOwner("teacher-2")).length, 1);
+      const carnet = { teacherNotes: w.teacherNotes, courseNotes: w.notes, courses: w.courses };
+      const document = await loadTeacherNotebookDocument("teacher-1", carnet);
+      assert.ok(document && document.version === 2);
+      assert.equal(document.sessions[`${TARGET_YEAR}|${TARGET_COURSE}|2027-08-30`]!.length, 2);
+      assert.deepEqual(document.sessions[`${TARGET_YEAR}|${TARGET_COURSE}|2027-08-30`]!.map(n => n.text), ["Note 0", "Note 1"]);
+      await persistTeacherNotebookDocument("teacher-1", document, carnet);
+      assert.deepEqual(await loadTeacherNotebookDocument("teacher-1", carnet), document);
+      document.sessions[`${TARGET_YEAR}|${TARGET_COURSE}|2027-08-30`]![0]!.text = "Edited in N+1";
+      await persistTeacherNotebookDocument("teacher-1", document, carnet);
+      // Saving the complete Carnet refreshes updatedAt even on unchanged rows.
+      const sourceAfterEdit = (await w.notes.listNotesByOwner("teacher-1")).filter(n => n.schoolYearId === SOURCE_YEAR);
+      assert.deepEqual(sourceAfterEdit.map(n => ({ ...n, updatedAt: null })), before.map(n => ({ ...n, updatedAt: null })));
+      const retry = await applyPersistedYearTransition(p.id, w.deps);
+      assert.ok(retry.ok && retry.code === "ALREADY_APPLIED", JSON.stringify(retry));
+      const second = await w.preview("private-transition-2");
+      assert.ok(second.preview.privateNotes?.every(e => e.reason === "ALREADY_PRESENT"));
+      assert.equal((await applyPersistedYearTransition(second.id, w.deps)).ok, true);
+      assert.equal((await w.notes.listNotesByOwner("teacher-1")).filter(n => n.schoolYearId === TARGET_YEAR).length, 2);
+    } finally { w.close(); }
+  });
+
+  test(`PR3.5 ${backend} — only an unambiguous source publication can resolve a missing note reference`, async () => {
+    const w = await privateWorld();
+    try {
+      const p = await w.preview();
+      const input = JSON.parse(p.snapshotJson);
+      input.sourceNotes[0].referenceSessionId = null;
+      input.sourceItems = [sourceItem({ courseSessionKey: input.sourceNotes[0].courseSessionKey })];
+      assert.equal(previewPrivateNotes(input)[0]!.reason, "PROJECTABLE");
+      input.sourceItems.push(sourceItem({ id: 11, courseSessionKey: input.sourceNotes[0].courseSessionKey,
+        referenceSessionId: "session-other" }));
+      assert.equal(previewPrivateNotes(input)[0]!.reason, "REFERENCE_UNRESOLVED");
+      delete input.privateNotesOwnerTeacherId;
+      assert.throws(() => previewPrivateNotes(input), /propriétaire/);
+    } finally { w.close(); }
+  });
+
+  test(`PR3.5 ${backend} — default excludes private notes, rich edits invalidate preview`, async () => {
+    const w = await privateWorld();
+    try {
+      const disabled = await w.preview("without-notes", false);
+      assert.equal(disabled.preview.privateNotes, undefined);
+      assert.equal((await applyPersistedYearTransition(disabled.id, w.deps)).ok, true);
+      assert.equal((await w.notes.listNotesByOwner("teacher-1")).length, 2);
+      const p = await w.preview();
+      const source = await w.notes.getNote("private-0");
+      assert.ok(source);
+      await w.notes.deleteNote(source.id);
+      await w.notes.createNote(source.id, { ...source, text: "Changed after preview" });
+      const result = await applyPersistedYearTransition(p.id, w.deps);
+      assert.ok(!result.ok && result.code === "PREVIEW_STALE");
+      assert.equal(await w.deps.applyStore.getByTransitionId(p.id), null);
+    } finally { w.close(); }
+  });
+
+  test(`PR3.5 ${backend} — note mutation after live verification aborts transaction`, async () => {
+    const w = await privateWorld();
+    try {
+      const p = await w.preview();
+      const inner = w.deps.applyStore;
+      w.deps.applyStore = { getByTransitionId: id => inner.getByTransitionId(id), listEntries: id => inner.listEntries(id),
+        async applyAtomically(plan) {
+          await w.notes.createNote("concurrent", { schoolYearId: TARGET_YEAR, classId: TARGET_CLASS,
+            contextId: CTX, authorTeacherId: "teacher-1", ownerTeacherId: "teacher-1", text: "Concurrent" });
+          return inner.applyAtomically(plan);
+        } };
+      const result = await applyPersistedYearTransition(p.id, w.deps);
+      assert.ok(!result.ok && result.code === "PREVIEW_STALE", JSON.stringify(result));
+      assert.equal(await inner.getByTransitionId(p.id), null);
+      assert.equal((await w.notes.listNotesByOwner("teacher-1")).filter(n => n.sourceNoteId !== null).length, 0);
+      assert.ok(await w.notes.getNote("concurrent"));
+    } finally { w.close(); }
+  });
+
+  test(`PR3.5 ${backend} — simultaneous APPLY creates only one set of private copies`, async () => {
+    const w = await privateWorld();
+    try {
+      const p = await w.preview();
+      const results = await Promise.all([applyPersistedYearTransition(p.id, w.deps), applyPersistedYearTransition(p.id, w.deps)]);
+      assert.ok(results.every(r => r.ok), JSON.stringify(results));
+      assert.deepEqual(results.map(r => r.code).sort(), ["ALREADY_APPLIED", "APPLIED"]);
+      assert.equal((await w.notes.listNotesByOwner("teacher-1")).filter(n => n.schoolYearId === TARGET_YEAR).length, 2);
+    } finally { w.close(); }
+  });
+
+  test(`PR3.5 ${backend} — failed ledger write rolls back all note copies`, async () => {
+    const w = await privateWorld();
+    try {
+      const p = await w.preview();
+      const before = await w.notes.listNotesByOwner("teacher-1");
+      if (w.db) {
+        await w.db.exec("CREATE TRIGGER fail_transfer BEFORE INSERT ON year_transition_applies BEGIN SELECT RAISE(ABORT, 'injected'); END");
+      } else {
+        assert.ok(w.notes instanceof MemoryAnnualCourseNotesStore);
+        w.notes.stageInsertedNotes = () => { throw new Error("injected"); };
+      }
+      await assert.rejects(applyPersistedYearTransition(p.id, w.deps), /injected/);
+      assert.deepEqual(await w.notes.listNotesByOwner("teacher-1"), before);
+      assert.equal(await w.deps.applyStore.getByTransitionId(p.id), null);
+    } finally { w.close(); }
+  });
+
+  test(`PR3.5 ${backend} — unresolved reference is reported, ambiguous target blocks`, async () => {
+    const w = await privateWorld();
+    try {
+      await w.notes.createNote("unresolved", { schoolYearId: SOURCE_YEAR, classId: SOURCE_CLASS,
+        contextId: CTX, annualCourseId: SOURCE_COURSE, ownerTeacherId: "teacher-1", authorTeacherId: "teacher-1", text: "No reference" });
+      const p = await w.preview();
+      assert.equal(p.preview.privateNotes?.find(n => n.sourceNoteId === "unresolved")?.reason, "NO_REFERENCE");
+      const material = JSON.parse(p.snapshotJson);
+      material.targetCourseSessions.push({ ...material.targetCourseSessions[1], key: "ambiguous" });
+      assert.ok(previewPrivateNotes(material).some(n => n.reason === "TARGET_SESSION_UNRESOLVED"));
+      const list = w.courses.listCourses.bind(w.courses);
+      w.courses.listCourses = async () => [...await list(), course("duplicate-target", TARGET_CLASS, TARGET_YEAR)];
+      const blocked = await w.preview("blocked");
+      const result = await applyPersistedYearTransition(blocked.id, w.deps);
+      assert.ok(!result.ok && result.code === "APPLY_BLOCKED");
+      assert.equal((await w.notes.listNotesByOwner("teacher-1")).filter(n => n.schoolYearId === TARGET_YEAR).length, 0);
+    } finally { w.close(); }
+  });
+}

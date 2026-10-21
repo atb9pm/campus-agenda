@@ -17,6 +17,7 @@ import {
 import { formatPedagogicalWeekLabel } from "@campus/features/school-year/official-course-weeks.ts";
 import { SCHOOL_YEAR_UNCONFIGURED_MESSAGE } from "@campus/features/teacher-workspace";
 import {
+  activateSchoolYear,
   fetchOfficialSchoolCalendar,
   fetchSchoolYears,
   importSchoolYearPdf,
@@ -30,6 +31,7 @@ import {
   type SchoolYearWeekPreview,
 } from "../../lib/api-client.ts";
 import { ActiveYearPlanPanel } from "./active-year-plan-panel.tsx";
+import { ConfirmDialog } from "./confirm-dialog.tsx";
 
 const STATUS_LABELS: Record<SchoolYearSummary["status"], string> = {
   active: "Active",
@@ -83,12 +85,23 @@ function OfficialEventsByMonth({
 interface SchoolYearAdminPanelProps {
   onCalendarUpdated: (weeks: SchoolCalendarWeek[]) => void;
   onNotice: (message: string) => void;
+  workingYearId?: string | null;
+  onWorkingYearChange?: (schoolYearId: string) => void;
+  onConsultYear?: (schoolYearId: string) => void;
 }
 
-export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYearAdminPanelProps) {
+export function SchoolYearAdminPanel({
+  onCalendarUpdated,
+  onNotice,
+  workingYearId: workingYearIdProp,
+  onWorkingYearChange,
+  onConsultYear,
+}: SchoolYearAdminPanelProps) {
   const officialFileId = useId();
   const [years, setYears] = useState<SchoolYearSummary[]>([]);
-  const [workingYearId, setWorkingYearId] = useState<string | null>(null);
+  const [workingYearIdState, setWorkingYearIdState] = useState<string | null>(null);
+  const [activateOpen, setActivateOpen] = useState(false);
+  const workingYearId = workingYearIdProp ?? workingYearIdState;
   const [workingEvents, setWorkingEvents] = useState<OfficialCalendarEvent[]>([]);
   const [workingWeeks, setWorkingWeeks] = useState<SchoolCalendarWeek[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -115,19 +128,41 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
       setYears(yearList);
       const stored = typeof window === "undefined" ? null : readAdminWorkingYearId(window.localStorage);
       const nextWorkingId = resolveAdminWorkingYearId(yearList, stored);
-      setWorkingYearId(nextWorkingId);
+      if (workingYearIdProp === undefined) setWorkingYearIdState(nextWorkingId);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Chargement impossible.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [workingYearIdProp]);
 
   useEffect(() => {
     queueMicrotask(() => {
       void refresh();
     });
   }, [refresh]);
+
+  useEffect(() => {
+    if (!workingYearIdProp) return;
+    queueMicrotask(() => setWorkingYearIdState(workingYearIdProp));
+  }, [workingYearIdProp]);
+
+  async function confirmActivation() {
+    if (!workingYear) return;
+    setActivateOpen(false);
+    setWorking(true);
+    setError("");
+    try {
+      const active = await activateSchoolYear(workingYear.id, { confirm: true });
+      onNotice(`${formatSchoolYearLabelFr(active.label ?? workingYear.label)} est maintenant l’année active.`);
+      onCalendarUpdated(active.weeks);
+      await refresh();
+    } catch (activateError) {
+      setError(activateError instanceof Error ? activateError.message : "Activation impossible.");
+    } finally {
+      setWorking(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -157,7 +192,8 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
   }, [workingYearId]);
 
   function handleWorkingYearChange(nextId: string) {
-    setWorkingYearId(nextId);
+    setWorkingYearIdState(nextId);
+    onWorkingYearChange?.(nextId);
     if (typeof window !== "undefined") {
       writeAdminWorkingYearId(window.localStorage, nextId);
     }
@@ -196,7 +232,7 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
       if (typeof window !== "undefined") {
         writeAdminWorkingYearId(window.localStorage, result.draft.id);
       }
-      setWorkingYearId(result.draft.id);
+      handleWorkingYearChange(result.draft.id);
       onNotice(
         replaceDraft
           ? `Calendrier de ${formatSchoolYearLabelFr(result.draft.label)} mis à jour.`
@@ -248,7 +284,7 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
         <article className="school-year-card school-year-status-card">
           <div className="school-year-status-grid">
             <div>
-              <span className="eyebrow">ANNÉE ACTIVE</span>
+              <span className="eyebrow">ANNÉE ACTIVE POUR LES ENSEIGNANTS ET LES ÉLÈVES</span>
               <p>
                 <strong>{activeYear ? formatSchoolYearLabelFr(activeYear.label) : "Aucune"}</strong>
                 {activeYear && <span className="school-year-badge active">Active</span>}
@@ -260,7 +296,7 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
             </div>
             <div>
               <label className="eyebrow" htmlFor="admin-working-year">
-                ANNÉE DE TRAVAIL
+                ANNÉE DE TRAVAIL ADMINISTRATEUR
               </label>
               <select
                 id="admin-working-year"
@@ -286,6 +322,23 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
                 </p>
               )}
             </div>
+          </div>
+        </article>
+      )}
+
+      {workingYear && (
+        <article className="school-year-card">
+          <div className="year-transition-actions">
+            {onConsultYear ? (
+              <button type="button" className="workspace-action secondary" onClick={() => onConsultYear(workingYear.id)}>
+                Consulter les cours de cette année
+              </button>
+            ) : null}
+            {workingYear.status === "draft" ? (
+              <button type="button" className="workspace-action" onClick={() => setActivateOpen(true)}>
+                Activer {formatSchoolYearLabelFr(workingYear.label)}
+              </button>
+            ) : null}
           </div>
         </article>
       )}
@@ -423,6 +476,16 @@ export function SchoolYearAdminPanel({ onCalendarUpdated, onNotice }: SchoolYear
           </ul>
         </article>
       )}
+
+      <ConfirmDialog
+        open={activateOpen && Boolean(workingYear) && workingYear?.status === "draft"}
+        title={`Activer ${workingYear ? formatSchoolYearLabelFr(workingYear.label) : "cette année"} ?`}
+        body={`Année active actuelle : ${activeYear ? formatSchoolYearLabelFr(activeYear.label) : "aucune"}. Année à activer : ${workingYear ? formatSchoolYearLabelFr(workingYear.label) : ""}. Cette action est manuelle. Elle n’a lieu ni à la rentrée, ni à l’import, ni après la préparation ou le transfert. L’année actuellement active sera archivée.`}
+        confirmLabel={workingYear ? `Activer ${formatSchoolYearLabelFr(workingYear.label)}` : "Activer"}
+        cancelLabel="Annuler"
+        onConfirm={() => void confirmActivation()}
+        onCancel={() => setActivateOpen(false)}
+      />
     </section>
   );
 }

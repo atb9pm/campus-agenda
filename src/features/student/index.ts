@@ -12,6 +12,15 @@ export {
   type SubjectAgendaGroup,
 } from "./course-day-view.ts";
 export {
+  annualCourseIdsForSubject,
+  classScopedStudentScheduleSlots,
+  compareSubjectsByDaySchedule,
+  firstPeriodForSubjectOnDay,
+  orderByDaySchedule,
+  toStudentDayScheduleSlot,
+  type StudentDayScheduleSlot,
+} from "./course-day-order.ts";
+export {
   STUDENT_CONTROL_PREVIEW_LIMIT,
   buildStudentCourseDaySections,
   compactControlPresentation,

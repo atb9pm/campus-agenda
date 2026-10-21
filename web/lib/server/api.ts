@@ -30,6 +30,7 @@ import { isoDateForSchoolWeekDay } from "@campus/features/school-days/index.ts";
 import { evaluateAgendaBranchForClass, assertAgendaClassMutable } from "@campus/features/school-catalog/index.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import { ARCHIVED_YEAR_READONLY_REASON, getArchivedYearIds, isArchivedYearItem } from "@campus/features/school-year/archived-readonly.ts";
+import { classScopedStudentScheduleSlots } from "@campus/features/student/course-day-order.ts";
 import { revalidateStructuredStudentSession } from "@campus/features/student-access/index.ts";
 import type { AppSession } from "@campus/lib/persistence/types.ts";
 import { evaluateAdminMfaAccess } from "@campus/features/admin-mfa/index.ts";
@@ -486,25 +487,39 @@ export async function assertAgendaPublicationBranchAllowed(
   return null;
 }
 
-export async function listAttendanceDaysForLegacyClassroom(classroomId: string) {
+async function resolveSchoolClassForClassroomAgenda(classroomId: string) {
   const catalog = await getSchoolCatalogStore();
   await catalog.ensureSeeded();
   const classes = await catalog.listClasses();
   const adapters = await getRuntimeAgendaAdapterStore();
   const linkedClass = await resolveStructuredSchoolClassForClassroom(adapters, classroomId, classes);
-  if (linkedClass) {
-    const schedules = await getCourseScheduleStore();
-    return schedules.listAttendanceDaysByClass(linkedClass.id);
-  }
+  if (linkedClass) return linkedClass;
   // LEGACY ADAPTER — correspondance par code/libellé uniquement sans lien explicite.
   const names = await resolveClassroomSubjectNames(classroomId, "");
   const name = names.classroomName;
-  const schoolClass = name
+  return name
     ? classes.find((entry) => entry.label === name || entry.code === name) ?? null
     : null;
+}
+
+export async function listAttendanceDaysForLegacyClassroom(classroomId: string) {
+  const schoolClass = await resolveSchoolClassForClassroomAgenda(classroomId);
   if (!schoolClass) return [];
   const schedules = await getCourseScheduleStore();
   return schedules.listAttendanceDaysByClass(schoolClass.id);
+}
+
+export async function listPublicScheduleSlotsForClassroom(classroomId: string) {
+  const schoolClass = await resolveSchoolClassForClassroomAgenda(classroomId);
+  if (!schoolClass) return [];
+  const [courses, schedules] = await Promise.all([
+    getAnnualCourseStore().then((store) => store.listCourses()),
+    getCourseScheduleStore(),
+  ]);
+  const classCourseIds = new Set(
+    courses.filter((course) => course.classId === schoolClass.id).map((course) => course.id),
+  );
+  return classScopedStudentScheduleSlots(await schedules.listSlots(), classCourseIds);
 }
 
 export async function requireClassroomReadAccess(request: Request, classroomId: string) {

@@ -1902,6 +1902,30 @@ test("2.52.0 — E2E surlignage, couleur et listes persistés après enregistrem
   assert.match(afterSave.detail, /case un/);
 });
 
+test("PR3.4 — concurrent notebook writes return one conflict and preserve the winner", async () => {
+  const cookie = await loginTeacher("teacher-demo-current");
+  const headers = { cookie, "Content-Type": "application/json" };
+  const initial = await jsonRequest("/api/teacher/notes", { headers });
+  assert.equal(initial.response.status, 200);
+  assert.match(initial.payload.revision, /^[a-f0-9]{64}$/);
+  const writes = await Promise.all(["First", "Second"].map(text => jsonRequest("/api/teacher/notes", {
+    method: "PUT", headers,
+    body: JSON.stringify({ revision: initial.payload.revision, notes: {
+      version: 2, sessions: {}, pendingWeeks: { "unresolved:1": [{ id: "race", text }] },
+    } }),
+  })));
+  assert.deepEqual(writes.map(result => result.response.status).sort(), [200, 409]);
+  const winner = writes.find(result => result.response.status === 200).payload;
+  assert.equal(writes.find(result => result.response.status === 409).payload.code, "NOTES_CONFLICT");
+  const reloaded = await jsonRequest("/api/teacher/notes", { headers });
+  assert.deepEqual(reloaded.payload.notes, winner.notes);
+  assert.equal(reloaded.payload.revision, winner.revision);
+  const invalid = await jsonRequest("/api/teacher/notes", {
+    method: "PUT", headers, body: JSON.stringify({ notes: winner.notes, revision: "invalid" }),
+  });
+  assert.equal(invalid.response.status, 400);
+});
+
 test("audit — Origin externe refusée sur écriture authentifiée et backup cross-site", async () => {
   const teacherCookie = await loginTeacher("teacher-demo-current");
   const adminCookie = await loginAdmin();

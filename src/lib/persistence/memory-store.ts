@@ -110,9 +110,6 @@ export class MemoryAgendaStore implements AgendaStore {
     if (existing.authorTeacherId !== actorTeacherId) {
       return { ok: false, reason: "Seul l'auteur peut déplacer ce contrôle.", status: 403 };
     }
-    if (!existing.annualCourseId?.trim() || !existing.courseSessionKey?.trim()) {
-      return { ok: false, reason: "Ce contrôle n'est pas rattaché à une séance de cours réelle.", status: 400 };
-    }
     const item = {
       ...existing,
       classroomId: placement.classroomId,

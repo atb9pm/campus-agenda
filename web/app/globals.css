@@ -665,6 +665,30 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .student-course-day-app .prototype-label { margin-top: 18px; text-align: center; }
 
 .school-year-admin { padding: 0 38px 28px; display: grid; gap: 18px; }
+.year-transition-selection { margin: 0; color: #52627f; font-size: 12px; }
+.year-transition-steps { display: flex; flex-wrap: wrap; gap: 6px; }
+.year-transition-steps button { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: #fff; color: #516582; font-size: 10px; font-weight: 700; cursor: pointer; }
+.year-transition-steps button.active { color: #fff; background: var(--navy); border-color: var(--navy); }
+.year-transition-year-grid, .year-transition-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+.year-transition-year-grid label, .year-transition-mappings label { display: grid; gap: 6px; color: #64748b; font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.year-transition-year-grid select, .year-transition-mappings select { min-width: 240px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); background: #fff; font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 600; }
+.year-transition-mappings, .year-transition-capabilities, .year-transition-rows { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.year-transition-rows li, .year-transition-capabilities li { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfe; }
+.year-transition-rows strong, .year-transition-capabilities strong { color: var(--navy); font-size: 13px; }
+.year-transition-rows span, .year-transition-capabilities p, .year-transition-notes-option { color: #52627f; font-size: 11px; }
+.year-transition-rows em { color: #7b879c; font-size: 11px; font-style: normal; line-height: 1.45; }
+.year-transition-notes-option { display: flex; gap: 8px; align-items: center; font-weight: 700; color: var(--navy); }
+.year-transition-class-picks, .year-transition-class-summaries, .year-transition-summary {
+  margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 8px;
+}
+.year-transition-class-picks label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfe; }
+.year-transition-class-picks strong { display: block; color: var(--navy); font-size: 13px; }
+.year-transition-class-picks em { color: #6d7f9b; font-size: 11px; font-style: normal; }
+.year-transition-class-toggle {
+  width: 100%; display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; text-align: left; cursor: pointer;
+}
+.year-transition-summary li { color: #52627f; font-size: 13px; }
+.year-transition-consult-banner { margin: 0 38px 16px; padding: 12px 14px; border: 1px solid #d6bbfb; border-radius: 10px; background: #f9f5ff; color: #52627f; font-size: 12px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .school-year-card { padding: 22px 24px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: var(--shadow); }
 .school-year-card header h3 { margin: 6px 0 0; color: var(--navy); font-size: 18px; letter-spacing: -.02em; }
 .school-year-meta { margin: 10px 0 0; color: #52627f; font-size: 11px; }
@@ -1511,6 +1535,13 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .control-planning-card.is-draggable { cursor: grab; }
 .control-planning-card.is-dragging { opacity: .55; cursor: grabbing; }
 .control-planning-card.is-move-source { outline: 2px solid #30558f; }
+.control-planning-card-hint {
+  margin: 2px 0 0;
+  color: #6d7f9b;
+  font-size: 11px;
+  line-height: 1.35;
+  font-weight: 500;
+}
 .control-planning-move-action {
   margin-top: 4px;
   padding: 0;
@@ -2070,6 +2101,69 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   box-shadow: 0 8px 24px rgba(6, 24, 61, .06);
   overflow: visible;
 }
+@supports (grid-template-rows: subgrid) {
+  .class-notebook-grid {
+    align-items: stretch;
+    column-gap: 16px;
+    row-gap: 0;
+    grid-template-rows:
+      [session-header] auto
+      [control] auto
+      [publication-heading] auto
+      [publication-visibility] auto
+      [publication-body] auto
+      [publication-actions] auto
+      [notes-heading] auto
+      [notes-extra] auto
+      [notes-body] auto
+      [notes-actions] auto
+      [notebook-end];
+  }
+  .class-notebook-column {
+    grid-template-rows: subgrid;
+    grid-row: 1 / -1;
+    min-height: 0;
+  }
+  .class-notebook-column-header { grid-row: session-header; }
+  .class-notebook-zone-control {
+    grid-row: control;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+  .class-notebook-zone-publication {
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: publication-heading / notes-heading;
+    row-gap: 8px;
+    align-items: stretch;
+  }
+  .class-notebook-zone-notes {
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: notes-heading / notebook-end;
+    row-gap: 8px;
+    align-items: stretch;
+  }
+  .class-notebook-zone-publication,
+  .class-notebook-zone-notes {
+    padding: 0;
+    gap: 0;
+  }
+  .class-notebook-zone-publication > *,
+  .class-notebook-zone-notes > * {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+  .class-notebook-zone-heading,
+  .class-notebook-zone-notes > h3 { padding-top: 12px; }
+  .class-notebook-zone-actions { padding-bottom: 12px; }
+  .class-notebook-control-list { min-height: 0; align-self: stretch; }
+  .class-notebook-publication-body,
+  .class-notebook-notes-body {
+    min-height: 0;
+    overflow: visible;
+  }
+  .class-notebook-notes-extra:empty { min-height: 0; padding-top: 0; padding-bottom: 0; }
+}
 .class-notebook-column.active {
   border-color: #85a9e8;
   box-shadow: 0 0 0 1px #85a9e8, 0 10px 28px rgba(6, 24, 61, .08);
@@ -2156,7 +2250,18 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 }
 .class-notebook-visibility-badge.is-draft { background: #fff4d6; color: #8a6a12; }
 .class-notebook-visibility-badge.is-published { background: #e7f6ec; color: #1f7a3a; }
-.class-notebook-visibility-hint { margin: 0; color: #8a6a12; font-size: 10px; line-height: 1.4; }
+.class-notebook-visibility-badge.is-reserved {
+  visibility: hidden;
+  min-width: 4.5em;
+}
+.class-notebook-visibility-hint {
+  margin: 0;
+  min-height: calc(10px * 1.4);
+  color: #8a6a12;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.class-notebook-visibility-hint.is-reserved { visibility: hidden; }
 .class-notebook-zone-publication.is-draft .rich-doc-view { opacity: .78; }
 .class-notebook-zone-notes {
   background: #eef2f7;
@@ -2199,7 +2304,20 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .class-notebook-control-title { min-width: 0; }
 .class-notebook-control-day { flex: none; }
 .class-notebook-zone-control .class-notebook-control-delete { color: #8b2e2e; }
-.class-notebook-zone-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.class-notebook-zone-actions { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+.class-notebook-zone-actions .workspace-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 36px;
+  padding: 8px 14px;
+  line-height: 1.2;
+}
+.class-notebook-publish-action {
+  min-width: 11.5rem;
+  white-space: nowrap;
+}
 .class-notebook-zone-notes { color: #5b6b82; }
 .class-notebook-pending-notes {
   display: grid;

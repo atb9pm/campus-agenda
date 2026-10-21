@@ -1,5 +1,7 @@
 import {
   createAnnualCourseNote,
+  parseAnnualNoteBody,
+  serializeAnnualNoteBody,
   type AnnualCourseNote,
   type AnnualCourseNoteFilter,
   type AnnualCourseNoteInput,
@@ -9,7 +11,8 @@ import type {
   AnnualCourseNotesStore,
   PedagogicalPathStore,
 } from "../pedagogical-path-types.ts";
-import type { SqlDatabase } from "./types.ts";
+import { preserveNotebookMetadata, validateOwnedNotes } from "../notebook-state.ts";
+import type { SqlBatchStatement, SqlDatabase } from "./types.ts";
 
 function parsePath(raw: string): ReferencePedagogicalPath | null {
   try {
@@ -21,7 +24,7 @@ function parsePath(raw: string): ReferencePedagogicalPath | null {
   }
 }
 
-type AnnualNoteRow = {
+export type AnnualNoteRow = {
   id: string;
   school_year_id: string;
   class_id: string;
@@ -33,11 +36,16 @@ type AnnualNoteRow = {
   source_school_year_id: string | null;
   inherited_at: string | null;
   annual_course_id: string | null;
+  body_json: string | null;
+  course_session_key: string | null;
+  owner_teacher_id: string | null;
+  legacy_note_id: string | null;
+  notebook_position: number | null;
   created_at: string;
   updated_at: string;
 };
 
-function mapAnnualNote(row: AnnualNoteRow): AnnualCourseNote {
+export function mapAnnualNote(row: AnnualNoteRow): AnnualCourseNote {
   return {
     id: row.id,
     schoolYearId: row.school_year_id,
@@ -45,7 +53,12 @@ function mapAnnualNote(row: AnnualNoteRow): AnnualCourseNote {
     contextId: row.context_id,
     referenceSessionId: row.reference_session_id,
     authorTeacherId: row.author_teacher_id ?? "",
+    ownerTeacherId: row.owner_teacher_id ?? null,
     text: row.text,
+    body: parseAnnualNoteBody(row.body_json),
+    courseSessionKey: row.course_session_key ?? null,
+    legacyNoteId: row.legacy_note_id ?? null,
+    notebookPosition: row.notebook_position ?? null,
     sourceNoteId: row.source_note_id,
     sourceSchoolYearId: row.source_school_year_id,
     inheritedAt: row.inherited_at,
@@ -53,6 +66,29 @@ function mapAnnualNote(row: AnnualNoteRow): AnnualCourseNote {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+export function bindAnnualNoteValues(note: AnnualCourseNote): unknown[] {
+  return [
+    note.id,
+    note.schoolYearId,
+    note.classId,
+    note.contextId,
+    note.referenceSessionId,
+    note.authorTeacherId || null,
+    note.text,
+    note.sourceNoteId,
+    note.sourceSchoolYearId,
+    note.inheritedAt,
+    note.annualCourseId,
+    serializeAnnualNoteBody(note.body),
+    note.courseSessionKey,
+    note.ownerTeacherId,
+    note.legacyNoteId,
+    note.notebookPosition ?? null,
+    note.createdAt,
+    note.updatedAt,
+  ];
 }
 
 export class SqlPedagogicalPathStore implements PedagogicalPathStore {
@@ -161,24 +197,11 @@ export class SqlAnnualCourseNotesStore implements AnnualCourseNotesStore {
         `INSERT INTO annual_course_notes (
            id, school_year_id, class_id, context_id, reference_session_id,
            author_teacher_id, text, source_note_id, source_school_year_id,
-           inherited_at, annual_course_id, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           inherited_at, annual_course_id, body_json, course_session_key,
+           owner_teacher_id, legacy_note_id, notebook_position, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(
-        note.id,
-        note.schoolYearId,
-        note.classId,
-        note.contextId,
-        note.referenceSessionId,
-        note.authorTeacherId || null,
-        note.text,
-        note.sourceNoteId,
-        note.sourceSchoolYearId,
-        note.inheritedAt,
-        note.annualCourseId,
-        note.createdAt,
-        note.updatedAt,
-      )
+      .bind(...bindAnnualNoteValues(note))
       .run();
     return note;
   }
@@ -231,4 +254,53 @@ export class SqlAnnualCourseNotesStore implements AnnualCourseNotesStore {
       .run();
     return result.meta?.changes ?? 0;
   }
+
+  async listNotesByOwner(ownerTeacherId: string): Promise<AnnualCourseNote[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT * FROM annual_course_notes
+         WHERE owner_teacher_id = ?
+         ORDER BY created_at, id`,
+      )
+      .bind(ownerTeacherId)
+      .all<AnnualNoteRow>();
+    return results.map(mapAnnualNote);
+  }
+
+  async findByOwnerLegacyNote(ownerTeacherId: string, legacyNoteId: string): Promise<AnnualCourseNote | null> {
+    const row = await this.db
+      .prepare(
+        `SELECT * FROM annual_course_notes
+         WHERE owner_teacher_id = ? AND legacy_note_id = ?
+         LIMIT 1`,
+      )
+      .bind(ownerTeacherId, legacyNoteId)
+      .first<AnnualNoteRow>();
+    return row ? mapAnnualNote(row) : null;
+  }
+
+  async replaceOwnedNotebookNotes(ownerTeacherId: string, notes: readonly AnnualCourseNote[]): Promise<void> {
+    const existing = await this.listNotesByOwner(ownerTeacherId);
+    const next = notes.map(note => preserveNotebookMetadata(note,
+      existing.find(row => row.legacyNoteId !== null && row.legacyNoteId === note.legacyNoteId)));
+    await this.db.batch(buildNotebookStatements(ownerTeacherId, next));
+  }
+}
+
+export const NOTEBOOK_COLUMNS = [
+  "id", "school_year_id", "class_id", "context_id", "reference_session_id",
+  "author_teacher_id", "text", "source_note_id", "source_school_year_id", "inherited_at",
+  "annual_course_id", "body_json", "course_session_key", "owner_teacher_id", "legacy_note_id",
+  "notebook_position", "created_at", "updated_at",
+];
+
+export function buildNotebookStatements(owner: string, notes: readonly AnnualCourseNote[]): SqlBatchStatement[] {
+  validateOwnedNotes(owner, notes);
+  return [
+    { sql: "DELETE FROM annual_course_notes WHERE owner_teacher_id = ?", values: [owner] },
+    ...notes.map(note => ({
+      sql: "INSERT INTO annual_course_notes (" + NOTEBOOK_COLUMNS.join(", ") + ") VALUES (" + NOTEBOOK_COLUMNS.map(() => "?").join(", ") + ")",
+      values: bindAnnualNoteValues(note),
+    })),
+  ];
 }

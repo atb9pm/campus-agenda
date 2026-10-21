@@ -2,6 +2,10 @@ import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
 import type { CourseDaySlot } from "../calendar/types.ts";
 import type { Subject } from "../../types/classroom.ts";
 import { displayBranchLabel } from "../agenda-bridge/branch-label.ts";
+import {
+  orderByDaySchedule,
+  type StudentDayScheduleSlot,
+} from "./course-day-order.ts";
 
 export interface SubjectAgendaGroup {
   subject: Subject;
@@ -41,6 +45,10 @@ function subjectForPublicationGroup(
 export function groupItemsBySubject(
   items: PrototypeAgendaItem[],
   subjects: Subject[],
+  options: {
+    scheduleSlots?: readonly StudentDayScheduleSlot[];
+    courseDay?: CourseDaySlot;
+  } = {},
 ): SubjectAgendaGroup[] {
   const grouped = new Map<string, PrototypeAgendaItem[]>();
   const subjectByKey = new Map<string, Subject>();
@@ -65,7 +73,7 @@ export function groupItemsBySubject(
     if (!orderedKeys.includes(key)) orderedKeys.push(key);
   }
 
-  return orderedKeys
+  const groups = orderedKeys
     .map((key) => {
       const subject = subjectByKey.get(key)!;
       return {
@@ -77,4 +85,6 @@ export function groupItemsBySubject(
       };
     })
     .filter((group) => group.items.length > 0);
+
+  return orderByDaySchedule(groups, subjects, options.scheduleSlots, options.courseDay);
 }

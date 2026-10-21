@@ -246,7 +246,7 @@ test("1 — APP_VERSION toujours 2.62.0", () => {
 
 test("2 — dernière migration listée après 0031 (PR3 ajoute 0032)", () => {
   assert.ok(SQL_MIGRATION_FILES.includes("0031_year_transition_preview.sql"));
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0032_year_transition_apply.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0033_annual_private_notes_storage.sql");
 });
 
 test("3 — migration crée les deux tables", async () => {
@@ -286,12 +286,12 @@ test("4 — aucune table CourseSession persistée", async () => {
   }
 });
 
-test("5 — engineVersion = 1", () => {
-  assert.equal(YEAR_TRANSITION_PREVIEW_ENGINE_VERSION, 1);
+test("5 — engineVersion = 2", () => {
+  assert.equal(YEAR_TRANSITION_PREVIEW_ENGINE_VERSION, 2);
   const snapshot = JSON.parse(yearTransitionPreviewMaterialSnapshotJson(baseInput())) as {
     engineVersion: number;
   };
-  assert.equal(snapshot.engineVersion, 1);
+  assert.equal(snapshot.engineVersion, 2);
 });
 
 test("6 — snapshot canonique déterministe", () => {
@@ -353,7 +353,7 @@ test("11 — création memory", async () => {
   const store = new MemoryYearTransitionPreviewStore();
   const created = await persist(store, baseInput(), { id: "mem-1", now: "2027-01-01T00:00:00.000Z" });
   assert.equal(created.id, "mem-1");
-  assert.equal(created.engineVersion, 1);
+  assert.equal(created.engineVersion, 2);
   assert.equal(created.appVersion, "2.62.0");
   assert.equal(created.entries.length, 1);
 });

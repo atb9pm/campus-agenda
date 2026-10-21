@@ -1,4 +1,6 @@
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
+import type { AnnualCourseNote } from "../pedagogical-path/annual-notes.ts";
+import type { PrivateNotePreviewEntry } from "./private-notes.ts";
 import type { YearTransitionPreviewReason } from "./reasons.ts";
 
 export const YEAR_TRANSITION_APPLY_RESULTS = [
@@ -94,6 +96,9 @@ export interface YearTransitionApplyAgendaInsert {
 }
 
 export interface YearTransitionApplyPlan {
+  noteGuard?: { ownerTeacherId: string; sourceSchoolYearId: string; targetSchoolYearId: string;
+    expected: readonly AnnualCourseNote[] };
+  notes?: readonly AnnualCourseNote[];
   apply: PersistedYearTransitionApply;
   items: readonly YearTransitionApplyAgendaInsert[];
   entries: readonly PersistedYearTransitionApplyEntry[];
@@ -106,6 +111,8 @@ export interface YearTransitionApplyStore {
 }
 
 export interface YearTransitionApplySuccess {
+  privateNotes?: { createdCount: number; alreadyPresentCount: number; skippedCount: number;
+    entries: PrivateNotePreviewEntry[] };
   ok: true;
   code: YearTransitionApplySuccessCode;
   transitionId: string;
@@ -123,6 +130,7 @@ export interface YearTransitionApplyFailure {
   persistedFingerprint?: string;
   currentFingerprint?: string;
   blockers?: Array<{ sourceAgendaItemId: number; reason: YearTransitionPreviewReason | string }>;
+  noteBlockers?: Array<{ sourceNoteId: string; reason: string }>;
 }
 
 export type YearTransitionApplyOutcome = YearTransitionApplySuccess | YearTransitionApplyFailure;

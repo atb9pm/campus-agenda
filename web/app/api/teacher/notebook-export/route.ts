@@ -1,5 +1,10 @@
+import { loadTeacherNotebookDocument } from "@campus/features/class-notebook/annual-private-notes.ts";
 import { exportTeacherNotebookPdf } from "@campus/features/notebook-export/index.ts";
-import { getAgendaStore } from "@campus/lib/persistence/store-factory.ts";
+import {
+  getAgendaStore,
+  getAnnualCourseNotesStore,
+  getAnnualCourseStore,
+} from "@campus/lib/persistence/store-factory.ts";
 import {
   getCourseTimelineServiceDeps,
   getTeacherNotesStore,
@@ -26,11 +31,22 @@ async function handlePost(request: Request) {
     return jsonResponse({ ok: false, reason: "Le cours à exporter est obligatoire." }, { status: 400 });
   }
 
+  const [timelineDeps, agenda, teacherNotes, courseNotes, courses] = await Promise.all([
+    getCourseTimelineServiceDeps(),
+    getAgendaStore(),
+    getTeacherNotesStore(),
+    getAnnualCourseNotesStore(),
+    getAnnualCourseStore(),
+  ]);
+  const notebookDeps = { teacherNotes, courseNotes, courses };
+
   const result = await exportTeacherNotebookPdf(
     {
-      ...(await getCourseTimelineServiceDeps()),
-      agenda: await getAgendaStore(),
-      notes: await getTeacherNotesStore(),
+      ...timelineDeps,
+      agenda,
+      notes: {
+        getNotes: (teacherId) => loadTeacherNotebookDocument(teacherId, notebookDeps),
+      },
     },
     {
       teacherId: auth.session!.teacherId,
@@ -47,8 +63,8 @@ async function handlePost(request: Request) {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${result.filename}"`,
       "Cache-Control": "no-store",
+      "Content-Disposition": `inline; filename="${result.filename}"`,
     },
   });
 }

@@ -1,3 +1,4 @@
+import { NotebookAutosave } from "./notebook-autosave.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import type { TeacherDeletePreview } from "@campus/features/admin-teacher-delete/index.ts";
 import type { TeacherAccountRecord } from "@campus/features/teacher-accounts";
@@ -186,8 +187,15 @@ export async function changeTeacherPasswordApi(
   }
 }
 
-export async function fetchTeacherClassroomsApi(): Promise<NotebookRuntimeClassroom[]> {
-  const response = await fetch("/api/teacher/classrooms", { credentials: "include" });
+export async function fetchTeacherClassroomsApi(
+  schoolYearId?: string | null,
+  options?: { adminConsult?: boolean },
+): Promise<NotebookRuntimeClassroom[]> {
+  const params = new URLSearchParams();
+  if (schoolYearId?.trim()) params.set("schoolYearId", schoolYearId.trim());
+  if (options?.adminConsult) params.set("consult", "1");
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`/api/teacher/classrooms${query}`, { credentials: "include" });
   const payload = await parseJson<{
     ok: boolean;
     classrooms?: NotebookRuntimeClassroom[];
@@ -360,13 +368,19 @@ export async function deleteTeacherControlApi(agendaItemId: number): Promise<voi
   }
 }
 
-export async function fetchTeacherCoursesApi(schoolYearId?: string | null): Promise<{
+export async function fetchTeacherCoursesApi(
+  schoolYearId?: string | null,
+  options?: { adminConsult?: boolean },
+): Promise<{
   schoolYearId: string | null;
   courses: TeacherCourseWorkspaceEntry[];
   classAccesses: Record<string, TeacherClassAccessView>;
 }> {
-  const params = schoolYearId ? `?schoolYearId=${encodeURIComponent(schoolYearId)}` : "";
-  const response = await fetch(`/api/teacher/courses${params}`, { credentials: "include" });
+  const params = new URLSearchParams();
+  if (schoolYearId) params.set("schoolYearId", schoolYearId);
+  if (options?.adminConsult) params.set("consult", "1");
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`/api/teacher/courses${query}`, { credentials: "include" });
   const payload = await parseJson<{
     ok: boolean;
     reason?: string;
@@ -384,12 +398,18 @@ export async function fetchTeacherCoursesApi(schoolYearId?: string | null): Prom
   };
 }
 
-export async function fetchTeacherClassAccessesApi(schoolYearId?: string | null): Promise<{
+export async function fetchTeacherClassAccessesApi(
+  schoolYearId?: string | null,
+  options?: { adminConsult?: boolean },
+): Promise<{
   schoolYearId: string | null;
   classAccesses: Record<string, TeacherClassAccessView>;
 }> {
-  const params = schoolYearId ? `?schoolYearId=${encodeURIComponent(schoolYearId)}` : "";
-  const response = await fetch(`/api/teacher/class-accesses${params}`, { credentials: "include" });
+  const params = new URLSearchParams();
+  if (schoolYearId) params.set("schoolYearId", schoolYearId);
+  if (options?.adminConsult) params.set("consult", "1");
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`/api/teacher/class-accesses${query}`, { credentials: "include" });
   const payload = await parseJson<{
     ok: boolean;
     reason?: string;
@@ -526,30 +546,36 @@ export async function saveTeacherSetupApi(setup: TeacherSetupConfig): Promise<Te
   return payload.setup;
 }
 
+const notebookAutosave = new NotebookAutosave();
+
 /** Null si aucun document de notes n'a encore été enregistré côté serveur. */
 export async function fetchTeacherNotesApi(): Promise<ClassNotesDocument | null> {
+  notebookAutosave.reset();
   const response = await fetch("/api/teacher/notes", { credentials: "include" });
-  const payload = await parseJson<{ ok: boolean; reason?: string; notes?: ClassNotesDocument | null }>(
+  const payload = await parseJson<{ ok: boolean; reason?: string; notes?: ClassNotesDocument | null; revision?: string }>(
     response,
   );
   if (!response.ok || !payload.ok) {
     throw new Error(payload.reason ?? "Chargement des notes impossible.");
   }
+  notebookAutosave.reset(payload.revision);
   return payload.notes ?? null;
 }
 
 export async function saveTeacherNotesApi(notes: ClassNotesDocument): Promise<ClassNotesDocument> {
-  const response = await fetch("/api/teacher/notes", {
-    method: "PUT",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ notes }),
+  return notebookAutosave.save(notes, async (snapshot, revision) => {
+    const response = await fetch("/api/teacher/notes", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: snapshot, revision }),
+    });
+    const payload = await parseJson<{ ok: boolean; reason?: string; notes?: ClassNotesDocument; revision?: string }>(response);
+    if (!response.ok || !payload.ok || !payload.notes || !payload.revision) {
+      throw new Error(payload.reason ?? "Enregistrement des notes impossible.");
+    }
+    return { notes: payload.notes, revision: payload.revision };
   });
-  const payload = await parseJson<{ ok: boolean; reason?: string; notes?: ClassNotesDocument }>(response);
-  if (!response.ok || !payload.ok || !payload.notes) {
-    throw new Error(payload.reason ?? "Enregistrement des notes impossible.");
-  }
-  return payload.notes;
 }
 
 export async function fetchTeacherAccounts(): Promise<TeacherAccountRecord[]> {
@@ -682,10 +708,21 @@ export type AgendaSubjectLabel = {
   annualCourseId?: string | null;
 };
 
+export type StudentAgendaScheduleSlot = {
+  annualCourseId: string;
+  dayOfWeek: number;
+  periodStart: number;
+  periodEnd: number;
+  weekKind: "all" | "A" | "B";
+  validFrom: string | null;
+  validTo: string | null;
+};
+
 export async function fetchAgendaView(classroomId: string): Promise<{
   items: PrototypeAgendaItem[];
   subjects: AgendaSubjectLabel[];
   attendanceDays: Array<{ dayOfWeek: number; weekKind: "all" | "A" | "B"; role: string }>;
+  scheduleSlots: StudentAgendaScheduleSlot[];
 }> {
   const response = await fetch(`/api/agenda?classroomId=${encodeURIComponent(classroomId)}`, {
     credentials: "include",
@@ -695,6 +732,7 @@ export async function fetchAgendaView(classroomId: string): Promise<{
     items?: PrototypeAgendaItem[];
     subjects?: AgendaSubjectLabel[];
     attendanceDays?: Array<{ dayOfWeek: number; weekKind: "all" | "A" | "B"; role: string }>;
+    scheduleSlots?: StudentAgendaScheduleSlot[];
     reason?: string;
   }>(response);
   if (!response.ok || !payload.ok || !payload.items) {
@@ -704,6 +742,7 @@ export async function fetchAgendaView(classroomId: string): Promise<{
     items: payload.items,
     subjects: payload.subjects ?? [],
     attendanceDays: payload.attendanceDays ?? [],
+    scheduleSlots: payload.scheduleSlots ?? [],
   };
 }
 
@@ -1119,12 +1158,206 @@ export async function fetchOfficialSchoolCalendar(schoolYearId: string): Promise
   };
 }
 
-export async function activateSchoolYear(schoolYearId: string): Promise<SchoolCalendarPayload> {
+export type YearTransitionYearOption = {
+  id: string;
+  label: string;
+  displayLabel: string;
+  status: "draft" | "active" | "archived";
+  statusLabel: string;
+  startsOn: string;
+  endsOn: string;
+};
+
+export type YearTransitionClassOption = {
+  id: string;
+  schoolYearId: string;
+  code: string;
+  label: string;
+  displayName: string;
+  professionLabel: string | null;
+  trainingYear: number | null;
+  parallelCode: string | null;
+};
+
+export type YearTransitionPresentedRow = {
+  id: string;
+  kind: "publication" | "privateNote";
+  category: "projectable" | "alreadyPresent" | "excluded" | "blocking";
+  title: string;
+  reason: string;
+  reasonLabel: string;
+  explanation: string;
+  sourceCourseLabel: string | null;
+  targetCourseLabel: string | null;
+  sourceClassId: string | null;
+  sourceClassLabel: string | null;
+  targetClassLabel: string | null;
+  sessionLabel: string | null;
+  sourceSessionLabel: string | null;
+  targetDurationLabel: string | null;
+  targetAnnualCourseId: string | null;
+  targetClassId: string | null;
+};
+
+export type YearTransitionPresentedPreview = {
+  fingerprint: string;
+  sourceYear: YearTransitionYearOption | null;
+  targetYear: YearTransitionYearOption | null;
+  blocking: boolean;
+  mappingIssues: string[];
+  publications: {
+    projectable: YearTransitionPresentedRow[];
+    alreadyPresent: YearTransitionPresentedRow[];
+    excluded: YearTransitionPresentedRow[];
+    blocking: YearTransitionPresentedRow[];
+  };
+  notes: YearTransitionPresentedPreview["publications"] | null;
+  targetCourses: Array<{
+    annualCourseId: string;
+    classId: string;
+    schoolYearId: string;
+    courseLabel: string;
+    classLabel: string;
+  }>;
+  classSummaries: Array<{
+    sourceClassId: string;
+    identityLabel: string;
+    status: "reuse" | "create" | "skip" | "conflict" | "incomplete";
+    statusLabel: string;
+    message: string | null;
+    publicationCount: number;
+    privateNoteCount: number;
+    rows: YearTransitionPresentedRow[];
+  }>;
+  selectedClassCount: number;
+  includePrivateNotes: boolean;
+};
+
+export async function fetchYearTransitionPrepare(): Promise<{
+  years: YearTransitionYearOption[];
+  classesByYearId: Record<string, YearTransitionClassOption[]>;
+  capabilities: Array<{
+    id: string;
+    available: boolean;
+    defaultEnabled: boolean;
+    ownerBound: boolean;
+    title: string;
+    summary: string;
+  }>;
+  sessionTeacherId: string;
+}> {
+  const response = await fetch("/api/admin/year-transition/prepare", { credentials: "include" });
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    years?: YearTransitionYearOption[];
+    classesByYearId?: Record<string, YearTransitionClassOption[]>;
+    capabilities?: Array<{
+      id: string;
+      available: boolean;
+      defaultEnabled: boolean;
+      ownerBound: boolean;
+      title: string;
+      summary: string;
+    }>;
+    sessionTeacherId?: string;
+  }>(response);
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.reason ?? "Chargement de la préparation impossible.");
+  }
+  return {
+    years: payload.years ?? [],
+    classesByYearId: payload.classesByYearId ?? {},
+    capabilities: payload.capabilities ?? [],
+    sessionTeacherId: payload.sessionTeacherId ?? "",
+  };
+}
+
+export async function createYearTransitionPreviewApi(input: {
+  sourceSchoolYearId: string;
+  targetSchoolYearId: string;
+  selectedSourceClassIds: string[];
+  includePrivateNotes: boolean;
+}): Promise<{ transitionId: string; blocking: boolean; preview: YearTransitionPresentedPreview }> {
+  const response = await fetch("/api/admin/year-transition/preview", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    transitionId?: string;
+    blocking?: boolean;
+    preview?: YearTransitionPresentedPreview;
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.transitionId || !payload.preview) {
+    throw new Error(payload.reason ?? "Aperçu impossible.");
+  }
+  return {
+    transitionId: payload.transitionId,
+    blocking: Boolean(payload.blocking),
+    preview: payload.preview,
+  };
+}
+
+export async function applyYearTransitionApi(transitionId: string): Promise<{
+  ok: boolean;
+  code: string;
+  codeLabel: string;
+  reason?: string;
+  createdCount?: number;
+  alreadyPresentCount?: number;
+  skippedCount?: number;
+  notes?: { createdCount: number; alreadyPresentCount: number; skippedCount: number };
+  targetCourses: YearTransitionPresentedPreview["targetCourses"];
+  classSummaries: YearTransitionPresentedPreview["classSummaries"];
+}> {
+  const response = await fetch("/api/admin/year-transition/apply", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transitionId, confirm: true }),
+  });
+  const payload = await parseJson<{
+    ok?: boolean;
+    code?: string;
+    codeLabel?: string;
+    reason?: string;
+    createdCount?: number;
+    alreadyPresentCount?: number;
+    skippedCount?: number;
+    notes?: { createdCount: number; alreadyPresentCount: number; skippedCount: number };
+    targetCourses?: YearTransitionPresentedPreview["targetCourses"];
+    classSummaries?: YearTransitionPresentedPreview["classSummaries"];
+  }>(response);
+  if (!payload.code) {
+    throw new Error(payload.reason ?? "Application impossible.");
+  }
+  return {
+    ok: Boolean(payload.ok),
+    code: payload.code,
+    codeLabel: payload.codeLabel ?? payload.code,
+    reason: payload.reason,
+    createdCount: payload.createdCount,
+    alreadyPresentCount: payload.alreadyPresentCount,
+    skippedCount: payload.skippedCount,
+    notes: payload.notes,
+    targetCourses: payload.targetCourses ?? [],
+    classSummaries: payload.classSummaries ?? [],
+  };
+}
+
+export async function activateSchoolYear(
+  schoolYearId: string,
+  options?: { confirm?: boolean },
+): Promise<SchoolCalendarPayload> {
   const response = await fetch("/api/admin/school-year/activate", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ schoolYearId }),
+    body: JSON.stringify({ schoolYearId, confirm: options?.confirm === true }),
   });
   const payload = await parseJson<{
     ok: boolean;

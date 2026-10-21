@@ -30,6 +30,8 @@ export {
   yearTransitionPreviewMaterialSnapshotJson,
 } from "./fingerprint.ts";
 export { buildYearTransitionPreview, YEAR_TRANSITION_AGENDA_COMPAT_HOUR } from "./preview.ts";
+export { previewPrivateNotes } from "./private-notes.ts";
+export type { PrivateNotePreviewEntry } from "./private-notes.ts";
 export { YearTransitionPreviewJsonError, parsePersistedObjectJson } from "./persist-json.ts";
 export {
   createPersistedYearTransitionPreview,
@@ -48,6 +50,39 @@ export {
   extractClassMappingsFromSnapshotJson,
   YearTransitionSnapshotCorruptedError,
 } from "./snapshot-mappings.ts";
+export {
+  bindPrivateNotesOwner,
+  mappingIssueMessages,
+  parseYearTransitionClassMappings,
+  presentApplyOutcome,
+  presentSchoolYearOption,
+  presentTransitionClass,
+  presentYearTransitionPreview,
+  previewHasBlockingEntries,
+  YEAR_TRANSITION_APPLY_FAILURE_LABELS,
+  YEAR_TRANSITION_NOTE_REASON_EXPLANATIONS,
+  YEAR_TRANSITION_NOTE_REASON_LABELS,
+  YEAR_TRANSITION_TRANSFER_CAPABILITIES,
+} from "./presentation.ts";
+export type {
+  YearTransitionCatalogLookups,
+  YearTransitionClassOption,
+  YearTransitionClassSummary,
+  YearTransitionPresentedPreview,
+  YearTransitionPresentedRow,
+  YearTransitionYearOption,
+} from "./presentation.ts";
+export {
+  applyAuthorizedYearTransition,
+  createAuthorizedYearTransitionPreview,
+  loadYearTransitionPrepareState,
+  parseSelectedSourceClassIds,
+  parseYearTransitionPreviewRequest,
+} from "./prepare.ts";
+export {
+  classContinuationIdentity,
+  resolveClassContinuations,
+} from "./continuation-identity.ts";
 export { applyPersistedYearTransition, expectedApplyResultForPreviewReason } from "./apply.ts";
 export type { ApplyPersistedYearTransitionDeps } from "./apply.ts";
 export {

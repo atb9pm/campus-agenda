@@ -56,7 +56,7 @@ export const STRUCTURED_CONTROL_MOVE_NOT_FOUND_REASON = "Contrôle introuvable."
 export const STRUCTURED_CONTROL_MOVE_NOT_TEST_REASON =
   "Seul un contrôle peut être déplacé vers une autre séance.";
 export const STRUCTURED_CONTROL_MOVE_NOT_STRUCTURED_REASON =
-  "Ce contrôle n’est pas rattaché à une séance de cours réelle.";
+  "Choisissez explicitement une séance réelle (cours annuel + séance) pour rattacher ce contrôle.";
 export const STRUCTURED_CONTROL_MOVE_FORBIDDEN_REASON =
   "Vous ne pouvez déplacer que vos propres contrôles.";
 export const STRUCTURED_CONTROL_MOVE_FREE_PLACEMENT_REASON =
@@ -67,7 +67,7 @@ export const STRUCTURED_CONTROL_EDIT_NOT_FOUND_REASON = "Contrôle introuvable."
 export const STRUCTURED_CONTROL_EDIT_NOT_TEST_REASON =
   "Seul un contrôle peut être modifié ou supprimé ici.";
 export const STRUCTURED_CONTROL_EDIT_NOT_STRUCTURED_REASON =
-  "Ce contrôle n’est pas rattaché à une séance de cours réelle.";
+  "Ce contrôle n’est pas rattaché à une séance. Vous pouvez modifier ou supprimer son contenu, ou le rattacher explicitement à une séance.";
 export const STRUCTURED_CONTROL_EDIT_FORBIDDEN_REASON =
   "Vous ne pouvez modifier que vos propres contrôles.";
 export const STRUCTURED_CONTROL_DELETE_FORBIDDEN_REASON =
@@ -592,9 +592,6 @@ export async function moveStructuredControlToCourseSession(
   if (item.type !== "TEST") {
     return { ok: false, reason: STRUCTURED_CONTROL_MOVE_NOT_TEST_REASON, status: 400 };
   }
-  if (!isStructuredAgendaPublication(item)) {
-    return { ok: false, reason: STRUCTURED_CONTROL_MOVE_NOT_STRUCTURED_REASON, status: 400 };
-  }
   if (item.authorTeacherId !== input.teacherId) {
     return { ok: false, reason: STRUCTURED_CONTROL_MOVE_FORBIDDEN_REASON, status: 403 };
   }
@@ -608,7 +605,11 @@ export async function moveStructuredControlToCourseSession(
   const context = resolved.value;
 
   const sourceYearId = item.schoolYearId?.trim() || "";
-  if (!sourceYearId || sourceYearId !== context.courseSession.schoolYearId) {
+  const alreadyLinked = isStructuredAgendaPublication(item);
+  if (sourceYearId && sourceYearId !== context.courseSession.schoolYearId) {
+    return { ok: false, reason: STRUCTURED_CONTROL_MOVE_YEAR_MISMATCH_REASON, status: 409 };
+  }
+  if (!sourceYearId && alreadyLinked) {
     return { ok: false, reason: STRUCTURED_CONTROL_MOVE_YEAR_MISMATCH_REASON, status: 409 };
   }
 
@@ -650,19 +651,29 @@ async function loadOwnStructuredControl(
   if (item.type !== "TEST") {
     return { ok: false, reason: STRUCTURED_CONTROL_EDIT_NOT_TEST_REASON, status: 400 };
   }
-  if (!isStructuredAgendaPublication(item) || !item.schoolYearId?.trim()) {
-    return { ok: false, reason: STRUCTURED_CONTROL_EDIT_NOT_STRUCTURED_REASON, status: 400 };
-  }
   if (item.authorTeacherId !== input.teacherId) {
     return { ok: false, reason: forbiddenReason, status: 403 };
   }
 
-  const year = await deps.years.getSchoolYearById(item.schoolYearId);
-  if (!year) {
-    return { ok: false, reason: "Année scolaire introuvable.", status: 404 };
+  const yearId = item.schoolYearId?.trim() || "";
+  if (yearId) {
+    const year = await deps.years.getSchoolYearById(yearId);
+    if (!year) {
+      return { ok: false, reason: "Année scolaire introuvable.", status: 404 };
+    }
+    if (year.status === "archived") {
+      return { ok: false, reason: ARCHIVED_YEAR_READONLY_REASON, status: 403 };
+    }
   }
-  if (year.status === "archived") {
-    return { ok: false, reason: ARCHIVED_YEAR_READONLY_REASON, status: 403 };
+
+  const classroom = await deps.adapters.findClassroomById(item.classroomId);
+  const schoolClassId = classroom?.schoolClassId?.trim() || "";
+  if (schoolClassId) {
+    await deps.catalog.ensureSeeded();
+    const schoolClass = (await deps.catalog.listClasses()).find((entry) => entry.id === schoolClassId) ?? null;
+    if (schoolClass?.isArchived) {
+      return { ok: false, reason: STRUCTURED_PUBLISH_CLASS_ARCHIVED_REASON, status: 409 };
+    }
   }
 
   return { ok: true, item };

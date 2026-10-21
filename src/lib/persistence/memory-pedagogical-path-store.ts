@@ -1,3 +1,4 @@
+import { preserveNotebookMetadata, validateOwnedNotes } from "./notebook-state.ts";
 import {
   createAnnualCourseNote,
   type AnnualCourseNote,
@@ -41,7 +42,7 @@ export class MemoryPedagogicalPathStore implements PedagogicalPathStore {
 }
 
 export class MemoryAnnualCourseNotesStore implements AnnualCourseNotesStore {
-  private readonly notes = new Map<string, AnnualCourseNote>();
+  private notes = new Map<string, AnnualCourseNote>();
 
   async listNotes(filter: AnnualCourseNoteFilter): Promise<AnnualCourseNote[]> {
     return [...this.notes.values()]
@@ -109,8 +110,53 @@ export class MemoryAnnualCourseNotesStore implements AnnualCourseNotesStore {
     return updated;
   }
 
+  async listNotesByOwner(ownerTeacherId: string): Promise<AnnualCourseNote[]> {
+    return [...this.notes.values()]
+      .filter((note) => note.ownerTeacherId === ownerTeacherId)
+      .map((note) => structuredClone(note))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  }
+
+  async findByOwnerLegacyNote(ownerTeacherId: string, legacyNoteId: string): Promise<AnnualCourseNote | null> {
+    for (const note of this.notes.values()) {
+      if (note.ownerTeacherId === ownerTeacherId && note.legacyNoteId === legacyNoteId) {
+        return structuredClone(note);
+      }
+    }
+    return null;
+  }
+
+  /** Stage without writes; the commit is synchronous and cannot yield. */
+  stageOwnedNotebookNotes(owner: string, notes: readonly AnnualCourseNote[]): () => void {
+    validateOwnedNotes(owner, notes);
+    const next = new Map(this.notes);
+    for (const [id, note] of next) if (note.ownerTeacherId === owner) next.delete(id);
+    for (const note of notes) {
+      if (next.has(note.id)) throw new Error("Notebook id belongs to another owner");
+      next.set(note.id, structuredClone(note));
+    }
+    return () => { this.notes = next; };
+  }
+
+  async replaceOwnedNotebookNotes(owner: string, notes: readonly AnnualCourseNote[]): Promise<void> {
+    const current = [...this.notes.values()];
+    const next = notes.map(note => preserveNotebookMetadata(note,
+      current.find(row => row.ownerTeacherId === owner && row.legacyNoteId !== null && row.legacyNoteId === note.legacyNoteId)));
+    this.stageOwnedNotebookNotes(owner, next)();
+  }
+
   exportAllNotes(): AnnualCourseNote[] {
     return [...this.notes.values()].map((note) => structuredClone(note));
+  }
+
+  /** Stage inherited copies before publishing the transition's other tables. */
+  stageInsertedNotes(notes: readonly AnnualCourseNote[]): () => void {
+    const next = new Map(this.notes);
+    for (const note of notes) {
+      if (next.has(note.id)) throw new Error("UNIQUE constraint failed: annual_course_notes.id");
+      next.set(note.id, structuredClone(note));
+    }
+    return () => { this.notes = next; };
   }
 
   replaceAllNotes(notes: AnnualCourseNote[]): void {

@@ -91,7 +91,7 @@ export interface AgendaStore {
       >
     >,
   ): Promise<AgendaMutationResult>;
-  /** Mutation métier de déplacement structuré. Ne pas utiliser pour un PATCH libre. */
+  /** Mutation métier de déplacement ou de rattachement explicite à une séance. Ne pas utiliser pour un PATCH libre. */
   moveStructuredControlPlacement(
     itemId: number,
     actorTeacherId: string,

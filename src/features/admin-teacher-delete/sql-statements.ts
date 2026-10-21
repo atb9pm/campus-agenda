@@ -2,7 +2,7 @@ import type { SqlBatchStatement } from "../../lib/persistence/sql/types.ts";
 
 /**
  * Ordre de la transaction :
- * 1. détacher les publications / notes (conserver les lignes) ;
+ * 1. supprimer les notes privées du propriétaire, détacher l'auteur des autres notes et publications ;
  * 2. supprimer les données personnelles et les accès ;
  * 3. supprimer le compte.
  *
@@ -25,6 +25,10 @@ export function buildTeacherDeleteStatements(teacherId: string): SqlBatchStateme
     },
     {
       sql: "UPDATE agenda_items SET author_teacher_id = NULL WHERE author_teacher_id = ?",
+      values: [teacherId],
+    },
+    {
+      sql: "DELETE FROM annual_course_notes WHERE owner_teacher_id = ?",
       values: [teacherId],
     },
     {

@@ -24,6 +24,7 @@ export function previewFromTeacherPlan(plan: TeacherDeletePlan): TeacherDeletePr
       `Affectations : ${counts.assignments}`,
       `Classes concernées : ${counts.classes}`,
       `Publications conservées : ${counts.publications}`,
+      `Notes privées annuelles supprimées : ${counts.annualCourseNotes}`,
     ],
   };
 }

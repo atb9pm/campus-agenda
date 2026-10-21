@@ -93,6 +93,8 @@ type AttendanceDraft = AttendanceEditorDraft;
 interface ClassScheduleAdminPanelProps {
   onNotice: (message: string) => void;
   onOpenAssignments: () => void;
+  workingYearId?: string | null;
+  onWorkingYearChange?: (schoolYearId: string) => void;
 }
 
 function branchForCourse(
@@ -105,7 +107,12 @@ function branchForCourse(
 }
 
 
-export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassScheduleAdminPanelProps) {
+export function ClassScheduleAdminPanel({
+  onNotice,
+  onOpenAssignments,
+  workingYearId,
+  onWorkingYearChange,
+}: ClassScheduleAdminPanelProps) {
   const [data, setData] = useState<OverviewPayload | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -140,18 +147,28 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
   }, []);
 
   useEffect(() => {
+    if (!workingYearId) return;
+    queueMicrotask(() => setSelectedYearId(workingYearId));
+  }, [workingYearId]);
+
+  useEffect(() => {
     queueMicrotask(() => {
     void refresh()
       .then((payload) => {
-        const active = payload.schoolYears.find((year) => year.status === "active") ?? payload.schoolYears[0];
-        if (active) setSelectedYearId((current) => current || active.id);
+        const preferred =
+          (workingYearId && payload.schoolYears.some((year) => year.id === workingYearId)
+            ? workingYearId
+            : null) ??
+          payload.schoolYears.find((year) => year.status === "active")?.id ??
+          payload.schoolYears[0]?.id;
+        if (preferred) setSelectedYearId((current) => current || preferred);
       })
       .catch((loadError: unknown) => {
         setError(loadError instanceof Error ? loadError.message : "Chargement impossible.");
       })
       .finally(() => setLoading(false));
     });
-  }, [refresh]);
+  }, [refresh, workingYearId]);
 
   const yearClasses = useMemo(() => {
     if (!data) return [];
@@ -243,6 +260,7 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
   function handleYearChange(nextYearId: string) {
     const next = scheduleEditorStateAfterYearChange(nextYearId);
     setSelectedYearId(next.selectedYearId);
+    onWorkingYearChange?.(next.selectedYearId);
     setSelectedClassId(next.selectedClassId);
     setEditingDays(next.editingDays);
     setAttendanceDraft(next.attendanceDraft);
@@ -526,7 +544,7 @@ export function ClassScheduleAdminPanel({ onNotice, onOpenAssignments }: ClassSc
 
       <div className="class-schedule-filters admin-inline-form">
         <label>
-          Année scolaire
+          Année de travail administrateur
           <select value={selectedYearId} onChange={(event) => handleYearChange(event.target.value)}>
             {data.schoolYears.map((year) => (
               <option key={year.id} value={year.id}>

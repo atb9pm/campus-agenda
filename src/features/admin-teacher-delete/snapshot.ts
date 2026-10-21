@@ -62,10 +62,12 @@ export async function buildTeacherDeletePlan(
   let annualCourseNoteIds: string[] = [];
   if (deps.sqlDb) {
     const { results } = await deps.sqlDb
-      .prepare("SELECT id FROM annual_course_notes WHERE author_teacher_id = ?")
+      .prepare("SELECT id FROM annual_course_notes WHERE owner_teacher_id = ?")
       .bind(teacherId)
       .all<{ id: string }>();
     annualCourseNoteIds = results.map((row) => row.id);
+  } else if (deps.notes) {
+    annualCourseNoteIds = (await deps.notes.listNotesByOwner(teacherId)).map(note => note.id);
   }
 
   const initialsUnique =

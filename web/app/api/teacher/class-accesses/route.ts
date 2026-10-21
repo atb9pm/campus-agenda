@@ -32,10 +32,12 @@ async function handleGet(request: Request) {
   const url = new URL(request.url);
   const teacherId = sessionTeacherIdForCoursesApi(auth.session!.teacherId);
   const schoolYearId = schoolYearIdFromSearchParams(url.searchParams);
+  const adminConsult = url.searchParams.get("consult") === "1";
+  const isAdmin = await auth.store!.teacherIsAdmin(teacherId);
 
   try {
     const deps = await getAnnualCourseServiceDeps();
-    const result = await listTeacherCourses(deps, { teacherId, schoolYearId });
+    const result = await listTeacherCourses(deps, { teacherId, schoolYearId, isAdmin, adminConsult });
     const assigned = result.courses.map((course) => ({
       schoolClassId: course.classId,
       classCode: course.classCode,

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { persistTeacherNotebookDocument, loadTeacherNotebookDocument } from "../src/features/class-notebook/annual-private-notes.ts";
 import test from "node:test";
 
 process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
@@ -266,6 +267,19 @@ async function populateStructured(deps: CampusBackupDeps, teacherId: string) {
     weekKind: "all",
   });
   assert.equal(slot.ok, true);
+  const key = `${year.id}|${created.value.id}|${year.weeks[0]!.monday}`;
+  await persistTeacherNotebookDocument(teacherId, {
+    version: 2,
+    sessions: { [key]: [
+      { id: "backup-note-1", text: "Rich", body: { format: "campus-rich-v1", blocks: [
+        { type: "paragraph", inlines: [{ text: "Preserved", marks: { bold: true, color: "blue", highlight: true } }] },
+        { type: "orderedList", items: [[{ text: "First" }], [{ text: "Second" }]] },
+      ] } },
+      { id: "backup-note-2", text: "Second note" },
+    ] },
+    pendingWeeks: { "ambiguous:4": [{ id: "pending", text: "Keep legacy" }] },
+    orphanedSessions: { "missing": [{ id: "orphan", text: "Keep orphan" }] },
+  }, { teacherNotes: deps.teacherNotes, courseNotes: deps.courseNotes!, courses: deps.courses });
   return { yearId: year.id, classId: schoolClass.id, courseId: created.value.id };
 }
 
@@ -372,6 +386,47 @@ test("backup v4 — roundtrip SQLite", async () => {
   assert.equal(restored.ok, true, restored.ok ? "" : restored.reason);
   const dump = await dumpCampusTables(db2);
   assert.deepEqual(canonicalizeCampusDump(dump), canonicalizeCampusDump(snapshot.tables));
+  resetMemoryWorld();
+  const target = memoryDeps();
+  const cross = await restoreCampusSnapshot(target, snapshot);
+  assert.equal(cross.ok, true, cross.ok ? "" : cross.reason);
+  // Cross-backend coverage concerns the notebook; agenda audit timestamps are SQL-only.
+  const memoryDump = (await exportCampusSnapshot(target)).tables;
+  assert.deepEqual(memoryDump.annual_course_notes, snapshot.tables.annual_course_notes);
+  assert.deepEqual(await loadTeacherNotebookDocument(DEMO_CURRENT_TEACHER_ID, {
+    teacherNotes: target.teacherNotes, courseNotes: target.courseNotes!, courses: target.courses,
+  }), await loadTeacherNotebookDocument(DEMO_CURRENT_TEACHER_ID, {
+    teacherNotes: deps2.teacherNotes, courseNotes: deps2.courseNotes!, courses: deps2.courses,
+  }));
+  db.close(); db2.close();
+});
+
+test("PR3.4 backup — invalid rich body / identities / order fail before writes in both stores", async () => {
+  const db = createNodeSqliteDatabase(":memory:");
+  await applyMigrations(db); await seedDemoDatabase(db);
+  const sql = sqlDeps(db);
+  await populateStructured(sql, DEMO_CURRENT_TEACHER_ID);
+  const snapshot = await exportCampusSnapshot(sql);
+  resetMemoryWorld();
+  const memory = memoryDeps();
+  assert.equal((await restoreCampusSnapshot(memory, snapshot)).ok, true);
+  const mutations = [
+    (rows: Array<Record<string, unknown>>) => { rows[0]!.body_json = "invalid JSON"; },
+    (rows: Array<Record<string, unknown>>) => { rows[0]!.body_json = '{"format":"campus-rich-v1","blocks":[{"type":"unknown"}]}'; },
+    (rows: Array<Record<string, unknown>>) => { rows.push({ ...rows[0], id: "duplicate-legacy" }); },
+    (rows: Array<Record<string, unknown>>) => { rows[0]!.notebook_position = -1; },
+  ];
+  for (const deps of [sql, memory]) {
+    const before = canonicalizeCampusDump((await exportCampusSnapshot(deps)).tables);
+    for (const mutate of mutations) {
+      const bad = structuredClone(snapshot);
+      mutate(bad.tables.annual_course_notes!);
+      const result = await restoreCampusSnapshot(deps, bad);
+      assert.equal(result.ok, false);
+      assert.deepEqual(canonicalizeCampusDump((await exportCampusSnapshot(deps)).tables), before);
+    }
+  }
+  db.close();
 });
 
 test("backup v4 — snapshot sans admin actif refusé", async () => {
