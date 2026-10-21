@@ -356,8 +356,9 @@ function formatNoteSessionLabel(courseSessionKey: string | null): string | null 
 
 function sessionLabel(placement: YearTransitionProposedPlacement | null, fallbackDate: string | null): string | null {
   if (placement) {
-    const weekday = COURSE_WEEKDAY_LABELS[placement.day as keyof typeof COURSE_WEEKDAY_LABELS]
-      ?? `jour ${placement.day}`;
+    const weekday =
+      COURSE_WEEKDAY_LABELS[(placement.day + 1) as keyof typeof COURSE_WEEKDAY_LABELS] ??
+      `jour ${placement.day}`;
     return `Séance cible n° ${placement.sequenceNumber} · ${weekday.toLocaleLowerCase("fr-CH")} ${formatSwissDate(placement.courseSessionDate)}`;
   }
   if (fallbackDate) return `Séance cible · ${formatSwissDate(fallbackDate)}`;
