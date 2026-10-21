@@ -1,4 +1,5 @@
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
+import { isVisibleToStudent } from "../agenda/visibility.ts";
 import { displayBranchLabel } from "../agenda-bridge/branch-label.ts";
 import type { ClassroomCatalog } from "../classes/queries.ts";
 import { getSubjectById, getTeacherById } from "../classes/queries.ts";
@@ -312,7 +313,7 @@ export function listFutureTestsForClass(
 ): UpcomingTestEntry[] {
   const fromKey = calendarDateKey(fromDate);
   return collectClassTestEntries(items, catalog, classroomId, weeks)
-    .filter((entry) => calendarDateKey(entry.slot.date) >= fromKey)
+    .filter((entry) => isVisibleToStudent(entry.item) && calendarDateKey(entry.slot.date) >= fromKey)
     .sort(compareFutureTests);
 }
 
@@ -326,7 +327,7 @@ export function listUpcomingTestsForClass(
 ): UpcomingTestEntry[] {
   const fromTime = slotTimestamp(fromSlot);
   return collectClassTestEntries(items, catalog, classroomId, weeks)
-    .filter((entry) => slotTimestamp(entry.slot) >= fromTime)
+    .filter((entry) => isVisibleToStudent(entry.item) && slotTimestamp(entry.slot) >= fromTime)
     .sort((left, right) => slotTimestamp(left.slot) - slotTimestamp(right.slot) || left.item.id - right.item.id)
     .slice(0, limit);
 }

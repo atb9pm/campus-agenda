@@ -1,4 +1,6 @@
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
+import { isAssignmentActiveAt } from "../annual-courses/assignments.ts";
+import type { TeacherCourseAssignment } from "../annual-courses/types.ts";
 import { isoDateForSchoolWeekDay, SCHOOL_WEEKDAY_COUNT, SCHOOL_WEEKDAY_LABELS } from "../school-days/index.ts";
 import type { SchoolWeekEntry, SchoolYearRecord } from "../school-year/types.ts";
 import type {
@@ -198,8 +200,11 @@ export function projectControlCard(
     teachers: Array<{ id: string; displayName: string; initials: string }>;
     date: string | null;
     branchId?: string | null;
+    assignedAnnualCourseIds?: ReadonlySet<string>;
   },
 ): ControlPlanningCard {
+  const annualCourseId = item.annualCourseId?.trim() || null;
+  const isOwn = item.authorTeacherId === options.teacherId;
   return {
     agendaItemId: item.id,
     classroomId: item.classroomId,
@@ -210,15 +215,30 @@ export function projectControlCard(
     detail: item.detail?.trim() || "",
     teacherId: item.authorTeacherId,
     teacherName: lookupName(options.teachers, item.authorTeacherId, "Enseignant"),
-    isOwn: item.authorTeacherId === options.teacherId,
+    isOwn,
+    canManage: isOwn || Boolean(annualCourseId && options.assignedAnnualCourseIds?.has(annualCourseId)),
     schoolWeekNumber: item.schoolWeekNumber,
     dayIndex: item.day,
     date: options.date,
-    annualCourseId: item.annualCourseId?.trim() || null,
+    annualCourseId,
     courseSessionKey: item.courseSessionKey?.trim() || null,
     courseSessionDate: item.courseSessionDate?.trim() || options.date,
     branchId: options.branchId ?? null,
   };
+}
+
+function activeAssignedCourseIds(
+  assignments: readonly TeacherCourseAssignment[] | undefined,
+  teacherId: string,
+  at: string,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const assignment of assignments ?? []) {
+    if (assignment.teacherId === teacherId && isAssignmentActiveAt(assignment, at)) {
+      ids.add(assignment.annualCourseId);
+    }
+  }
+  return ids;
 }
 
 function sortCards(left: ControlPlanningCard, right: ControlPlanningCard): number {
@@ -302,6 +322,11 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
   const classroomId = selection.classroomId;
   const selectedIds = selection.selectedIds;
   const mode = resolveControlPlanningMode(classroomId, input.requestedMode, selectedIds.length);
+  const assignedAnnualCourseIds = activeAssignedCourseIds(
+    input.assignments,
+    input.teacherId,
+    `${input.todayIso}T12:00:00.000Z`,
+  );
   const selectedItems = selectControlItems({
     items: input.items,
     teacherId: input.teacherId,
@@ -352,6 +377,7 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
       branchId: item.annualCourseId
         ? input.branchIdByAnnualCourseId?.get(item.annualCourseId) ?? null
         : null,
+      assignedAnnualCourseIds,
     });
   });
 
@@ -410,6 +436,7 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
         subjects: input.catalog.subjects,
         teachers: input.catalog.teachers,
         date,
+        assignedAnnualCourseIds,
       });
     })
     .sort((left, right) => left.dayIndex - right.dayIndex || sortCards(left, right));
@@ -437,6 +464,7 @@ export function buildControlPlanningView(input: BuildControlPlanningInput): Cont
         item.schoolWeekNumber,
         item.day,
       ),
+      assignedAnnualCourseIds,
     }),
   );
 

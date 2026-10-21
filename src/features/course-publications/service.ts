@@ -58,7 +58,7 @@ export const STRUCTURED_CONTROL_MOVE_NOT_TEST_REASON =
 export const STRUCTURED_CONTROL_MOVE_NOT_STRUCTURED_REASON =
   "Choisissez explicitement une séance réelle (cours annuel + séance) pour rattacher ce contrôle.";
 export const STRUCTURED_CONTROL_MOVE_FORBIDDEN_REASON =
-  "Vous ne pouvez déplacer que vos propres contrôles.";
+  "Vous n’êtes pas autorisé à déplacer ce contrôle.";
 export const STRUCTURED_CONTROL_MOVE_FREE_PLACEMENT_REASON =
   "La destination doit être une séance réelle (annualCourseId + courseSessionKey).";
 export const STRUCTURED_CONTROL_MOVE_YEAR_MISMATCH_REASON =
@@ -69,9 +69,9 @@ export const STRUCTURED_CONTROL_EDIT_NOT_TEST_REASON =
 export const STRUCTURED_CONTROL_EDIT_NOT_STRUCTURED_REASON =
   "Ce contrôle n’est pas rattaché à une séance. Vous pouvez modifier ou supprimer son contenu, ou le rattacher explicitement à une séance.";
 export const STRUCTURED_CONTROL_EDIT_FORBIDDEN_REASON =
-  "Vous ne pouvez modifier que vos propres contrôles.";
+  "Vous n’êtes pas autorisé à modifier ce contrôle.";
 export const STRUCTURED_CONTROL_DELETE_FORBIDDEN_REASON =
-  "Vous ne pouvez supprimer que vos propres contrôles.";
+  "Vous n’êtes pas autorisé à supprimer ce contrôle.";
 export const STRUCTURED_CONTROL_EDIT_CONTENT_ONLY_REASON =
   "Seuls le titre et le détail d’un contrôle peuvent être modifiés.";
 export const STRUCTURED_CONTROL_EDIT_TITLE_REQUIRED_REASON = "Le titre du contrôle est obligatoire.";
@@ -592,7 +592,8 @@ export async function moveStructuredControlToCourseSession(
   if (item.type !== "TEST") {
     return { ok: false, reason: STRUCTURED_CONTROL_MOVE_NOT_TEST_REASON, status: 400 };
   }
-  if (item.authorTeacherId !== input.teacherId) {
+  const sourceAccess = await actorCanAccessStructuredControl(deps, input.teacherId, item);
+  if (!sourceAccess) {
     return { ok: false, reason: STRUCTURED_CONTROL_MOVE_FORBIDDEN_REASON, status: 403 };
   }
 
@@ -626,6 +627,7 @@ export async function moveStructuredControlToCourseSession(
     item.id,
     input.teacherId,
     placementFromResolved(context),
+    item.annualCourseId?.trim() ? { canAccessAnnualCourse: true } : undefined,
   );
   if (!mutated.ok) {
     return { ok: false, reason: mutated.reason, status: mutated.status === 401 ? 403 : mutated.status };
@@ -633,6 +635,25 @@ export async function moveStructuredControlToCourseSession(
 
   const nextCoordination = await coordinationForResolved(deps, context, "TEST");
   return { ok: true, item: mutated.item, coordination: nextCoordination, moved: true };
+}
+
+async function actorCanAccessStructuredControl(
+  deps: StructuredPublishDeps,
+  teacherId: string,
+  item: PrototypeAgendaItem,
+): Promise<boolean> {
+  const annualCourseId = item.annualCourseId?.trim() || "";
+  if (!annualCourseId) return item.authorTeacherId === teacherId;
+  const assignments = await deps.courses.listAssignments(annualCourseId);
+  const at = item.courseSessionDate?.trim()
+    ? assignmentInstantForSessionDate(item.courseSessionDate)
+    : new Date().toISOString();
+  return teacherHasStructuredPublishAccess({
+    teacherId,
+    annualCourseId,
+    assignments,
+    at,
+  });
 }
 
 async function loadOwnStructuredControl(
@@ -651,7 +672,7 @@ async function loadOwnStructuredControl(
   if (item.type !== "TEST") {
     return { ok: false, reason: STRUCTURED_CONTROL_EDIT_NOT_TEST_REASON, status: 400 };
   }
-  if (item.authorTeacherId !== input.teacherId) {
+  if (!(await actorCanAccessStructuredControl(deps, input.teacherId, item))) {
     return { ok: false, reason: forbiddenReason, status: 403 };
   }
 
@@ -701,7 +722,12 @@ export async function updateStructuredControlContent(
     return { ok: false, reason: STRUCTURED_CONTROL_EDIT_CONTENT_ONLY_REASON, status: 400 };
   }
 
-  const mutated = await deps.agenda.updateAgendaItem(loaded.item.id, input.teacherId, patch);
+  const mutated = await deps.agenda.updateAgendaItem(
+    loaded.item.id,
+    input.teacherId,
+    patch,
+    loaded.item.annualCourseId?.trim() ? { canAccessAnnualCourse: true } : undefined,
+  );
   if (!mutated.ok) {
     return { ok: false, reason: mutated.reason, status: mutated.status === 401 ? 403 : mutated.status };
   }
@@ -715,7 +741,11 @@ export async function deleteStructuredControl(
   const loaded = await loadOwnStructuredControl(deps, input, STRUCTURED_CONTROL_DELETE_FORBIDDEN_REASON);
   if (!loaded.ok) return loaded;
 
-  const mutated = await deps.agenda.deleteAgendaItem(loaded.item.id, input.teacherId);
+  const mutated = await deps.agenda.deleteAgendaItem(
+    loaded.item.id,
+    input.teacherId,
+    loaded.item.annualCourseId?.trim() ? { canAccessAnnualCourse: true } : undefined,
+  );
   if (!mutated.ok) {
     return { ok: false, reason: mutated.reason, status: mutated.status === 401 ? 403 : mutated.status };
   }

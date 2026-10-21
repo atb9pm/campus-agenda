@@ -73,21 +73,23 @@ test("visibilité — lignes existantes visibles, Carnet nouveau en brouillon", 
   assert.equal(defaultStudentVisibleForCreate({ type: "HOMEWORK", studentVisible: true }), true);
 });
 
-test("visibilité — l’élève ne voit pas un brouillon, voit un contrôle", () => {
+test("visibilité — l’élève ne voit pas un brouillon, y compris un contrôle", () => {
   const homework = item({ id: 1, type: "HOMEWORK", title: "Réviser", studentVisible: false });
   const published = item({ id: 2, type: "HOMEWORK", title: "Poly", studentVisible: true });
   const legacy = item({ id: 3, type: "INFORMATION", title: "Ancien" });
   const testItem = item({ id: 4, type: "TEST", title: "Contrôle 1", studentVisible: false });
+  const publishedTest = item({ id: 5, type: "TEST", title: "Contrôle publié", studentVisible: true });
 
   assert.equal(isVisibleToStudent(homework), false);
   assert.equal(isVisibleToStudent(published), true);
   assert.equal(isVisibleToStudent(legacy), true);
-  assert.equal(isVisibleToStudent(testItem), true);
+  assert.equal(isVisibleToStudent(testItem), false);
+  assert.equal(isVisibleToStudent(publishedTest), true);
 
-  const visible = getStudentAgendaItems([homework, published, legacy, testItem], "classe-a");
+  const visible = getStudentAgendaItems([homework, published, legacy, testItem, publishedTest], "classe-a");
   assert.deepEqual(
     visible.map((entry) => entry.id),
-    [2, 3, 4],
+    [2, 3, 5],
   );
 });
 

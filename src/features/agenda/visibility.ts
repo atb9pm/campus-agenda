@@ -23,10 +23,12 @@ export function defaultStudentVisibleForCreate(input: {
   return false;
 }
 
-/** Filtre agenda élève : les contrôles restent toujours visibles ; le reste suit le brouillon. */
+/**
+ * Filtre agenda élève, uniforme HOMEWORK / TEST / INFORMATION.
+ * `undefined` = publié (données existantes). `false` = brouillon, jamais visible.
+ */
 export function isVisibleToStudent(
   item: Pick<PrototypeAgendaItem, "type" | "studentVisible">,
 ): boolean {
-  if (item.type === "TEST") return true;
   return isStudentVisible(item);
 }

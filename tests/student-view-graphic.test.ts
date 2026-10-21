@@ -213,7 +213,9 @@ test("brouillons non visibles élève, published visible", () => {
   assert.equal(isVisibleToStudent({ type: "HOMEWORK", studentVisible: false }), false);
   assert.equal(isVisibleToStudent({ type: "HOMEWORK", studentVisible: true }), true);
   assert.equal(isVisibleToStudent({ type: "HOMEWORK" }), true);
-  assert.equal(isVisibleToStudent({ type: "TEST", studentVisible: false }), true);
+  assert.equal(isVisibleToStudent({ type: "TEST", studentVisible: false }), false);
+  assert.equal(isVisibleToStudent({ type: "TEST", studentVisible: true }), true);
+  assert.equal(isVisibleToStudent({ type: "INFORMATION", studentVisible: false }), false);
 });
 
 test("sources — Cours du jour, Contrôles à venir, RichDoc unique, aucun À venir", async () => {

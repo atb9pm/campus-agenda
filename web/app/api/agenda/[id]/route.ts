@@ -6,10 +6,14 @@ import {
   notebookOwnedPublicationPatch,
   structuredAgendaPatchGuard,
   type AgendaPlacementContext,
+  type PublicationMutationAccess,
   type PublicationPatch,
 } from "@campus/features/agenda/index.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
-import { authorizeNotebookOwnedItemMutation } from "@campus/features/class-notebook";
+import {
+  authorizeAssignedCoursePublication,
+  authorizeNotebookOwnedItemMutation,
+} from "@campus/features/class-notebook";
 import { listComputedCourseSessions } from "@campus/features/course-sessions/index.ts";
 import {
   assertAgendaItemMutable,
@@ -83,15 +87,16 @@ async function updateAgendaItemWithPlacement(
   teacherId: string,
   item: PrototypeAgendaItem,
   patch: PublicationPatch,
+  access?: PublicationMutationAccess,
 ) {
   if (!isAgendaPlacementChange(item, patch)) {
-    return store.updateAgendaItem(item.id, teacherId, patch);
+    return store.updateAgendaItem(item.id, teacherId, patch, access);
   }
   const loaded = await placementContextForItem(item);
   if (!loaded.ok) return loaded;
   const built = buildAgendaItemUpdatePatch(item, patch, loaded.context);
   if (!built.ok) return { ok: false as const, reason: built.reason, status: 400 as const };
-  return store.updateAgendaItem(item.id, teacherId, built.patch);
+  return store.updateAgendaItem(item.id, teacherId, built.patch, access);
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
@@ -139,6 +144,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         auth.session!.teacherId,
         existing,
         notebookOwnedPublicationPatch(body),
+        { canAccessAnnualCourse: true },
       );
       if (!result.ok) {
         return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
@@ -152,17 +158,33 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (!guard.ok) {
       return jsonResponse({ ok: false, reason: guard.reason }, { status: 400 });
     }
+  }
+
+  if (existing?.annualCourseId?.trim()) {
+    const courseAuth = await authorizeAssignedCoursePublication(await getNotebookPublicationDeps(), {
+      teacherId: auth.session!.teacherId,
+      item: existing,
+    });
+    if (!courseAuth || !courseAuth.ok) {
+      return jsonResponse(
+        { ok: false, reason: courseAuth?.reason ?? "Vous n’êtes pas autorisé à modifier cette publication." },
+        { status: courseAuth?.status ?? 403 },
+      );
+    }
     const result = await updateAgendaItemWithPlacement(
       auth.store!,
       auth.session!.teacherId,
       existing,
-      {
-        title: body.title,
-        detail: body.detail,
-        day: body.day,
-        schoolWeekNumber: body.schoolWeekNumber,
-        studentVisible: body.studentVisible,
-      },
+      isStructuredAgendaPublication(existing)
+        ? {
+            title: body.title,
+            detail: body.detail,
+            day: body.day,
+            schoolWeekNumber: body.schoolWeekNumber,
+            studentVisible: body.studentVisible,
+          }
+        : contentPatchFromBody(body),
+      { canAccessAnnualCourse: true },
     );
     if (!result.ok) {
       return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
@@ -246,6 +268,22 @@ export async function DELETE(request: Request, context: RouteContext) {
     });
     if (notebookOwned && !notebookOwned.ok) {
       return jsonResponse({ ok: false, reason: notebookOwned.reason }, { status: notebookOwned.status });
+    }
+    const courseAuth = await authorizeAssignedCoursePublication(await getNotebookPublicationDeps(), {
+      teacherId: auth.session!.teacherId,
+      item: existing,
+    });
+    if (courseAuth && !courseAuth.ok) {
+      return jsonResponse({ ok: false, reason: courseAuth.reason }, { status: courseAuth.status });
+    }
+    if (notebookOwned?.ok || courseAuth?.ok) {
+      const result = await auth.store!.deleteAgendaItem(itemId, auth.session!.teacherId, {
+        canAccessAnnualCourse: true,
+      });
+      if (!result.ok) {
+        return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
+      }
+      return jsonResponse({ ok: true, item: result.item });
     }
   }
 

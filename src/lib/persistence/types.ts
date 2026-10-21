@@ -1,6 +1,7 @@
 import type { PublicationTemplate, TemplateDeploymentInput, DuplicatePreviousYearOptions } from "../../features/library/types.ts";
 import type { AgendaItemType } from "../../types/agenda.ts";
 import type { PrototypeAgendaItem } from "../../features/agenda/demo-items.ts";
+import type { PublicationMutationAccess } from "../../features/agenda/publications.ts";
 
 export type SessionKind = "teacher" | "student";
 
@@ -90,14 +91,20 @@ export interface AgendaStore {
         | "courseSessionKey"
       >
     >,
+    access?: PublicationMutationAccess,
   ): Promise<AgendaMutationResult>;
   /** Mutation métier de déplacement ou de rattachement explicite à une séance. Ne pas utiliser pour un PATCH libre. */
   moveStructuredControlPlacement(
     itemId: number,
     actorTeacherId: string,
     placement: StructuredControlPlacement,
+    access?: PublicationMutationAccess,
   ): Promise<AgendaMutationResult>;
-  deleteAgendaItem(itemId: number, actorTeacherId: string): Promise<AgendaMutationResult>;
+  deleteAgendaItem(
+    itemId: number,
+    actorTeacherId: string,
+    access?: PublicationMutationAccess,
+  ): Promise<AgendaMutationResult>;
   teacherCanAccessClassroom(teacherId: string, classroomId: string): Promise<boolean>;
   teacherCanPublish(teacherId: string, classroomId: string, subjectId: string): Promise<boolean>;
   teacherIsAdmin(teacherId: string): Promise<boolean>;
