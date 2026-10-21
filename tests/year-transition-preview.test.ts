@@ -9,10 +9,12 @@ import type { AnnualCourse } from "../src/features/annual-courses/types.ts";
 import { STRUCTURED_AGENDA_COMPAT_HOUR } from "../src/features/course-publications/index.ts";
 import type { CourseSession } from "../src/features/course-sessions/types.ts";
 import type { ReferencePedagogicalPath, ReferenceSession } from "../src/features/pedagogical-path/types.ts";
+import type { AnnualCourseNote } from "../src/features/pedagogical-path/annual-notes.ts";
 import {
   YEAR_TRANSITION_AGENDA_COMPAT_HOUR,
   YEAR_TRANSITION_PREVIEW_REASONS,
   buildYearTransitionPreview,
+  previewPrivateNotes,
   type YearTransitionPreviewInput,
 } from "../src/features/year-transition/index.ts";
 import { APP_VERSION } from "../src/lib/app-version.ts";
@@ -664,16 +666,34 @@ test("aucun fallback heuristique si la référence structurée échoue", () => {
         sourceItem({
           referenceItemId: null,
           referenceSessionId: null,
+          courseSessionKey: "",
+          courseSessionDate: "",
           title: "Travail",
           detail: "Contenu",
           type: "HOMEWORK",
-          schoolWeekNumber: 6,
+          schoolWeekNumber: 99,
+          day: 4,
         }),
       ],
     }),
   );
   assert.equal(orphanSameTitle.entries[0]?.reason, "ORPHAN_NO_REFERENCE_ITEM");
   assert.equal(orphanSameTitle.entries[0]?.proposedPlacement, null);
+
+  const staleKey = buildYearTransitionPreview(
+    baseInput({
+      sourceItems: [
+        sourceItem({
+          referenceItemId: null,
+          referenceSessionId: null,
+          courseSessionKey: `${SOURCE_YEAR}|${SOURCE_COURSE}|2026-10-12`,
+          title: "Travail",
+        }),
+      ],
+    }),
+  );
+  assert.equal(staleKey.entries[0]?.reason, "SOURCE_SESSION_UNRESOLVED");
+  assert.equal(staleKey.entries[0]?.proposedPlacement, null);
 
   const deadRefSameWeek = buildYearTransitionPreview(
     baseInput({
@@ -703,6 +723,9 @@ test("taxonomie — codes fail-closed", () => {
   assert.ok(YEAR_TRANSITION_PREVIEW_REASONS.includes("SOURCE_COURSE_MISSING"));
   assert.ok(YEAR_TRANSITION_PREVIEW_REASONS.includes("TARGET_COURSE_ARCHIVED"));
   assert.ok(YEAR_TRANSITION_PREVIEW_REASONS.includes("CLASS_MAPPING_CONFLICT"));
+  assert.ok(YEAR_TRANSITION_PREVIEW_REASONS.includes("SOURCE_SESSION_UNRESOLVED"));
+  assert.ok(YEAR_TRANSITION_PREVIEW_REASONS.includes("PATH_ABSENT"));
+  assert.ok(YEAR_TRANSITION_PREVIEW_REASONS.includes("PATH_POSITION_UNRESOLVED"));
 });
 
 test("A — déjà présent sur la CourseSession attendue → ALREADY_PRESENT", () => {
@@ -900,3 +923,333 @@ test("publication Carnet : séance annuelle source → position CTX → séance 
   assert.equal(preview.entries[0]?.pedagogicalPosition, 2);
   assert.equal(preview.entries[0]?.proposedPlacement?.courseSessionDate, "2027-09-27");
 });
+
+function isoOnWeek(weekNumber: number, start: string): string {
+  const [year, month, day] = start.split("-").map(Number);
+  const date = new Date(Date.UTC(year!, month! - 1, day! + (weekNumber - 1) * 7));
+  return date.toISOString().slice(0, 10);
+}
+
+function annualSessions(
+  schoolYearId: string,
+  annualCourseId: string,
+  classId: string,
+  count: number,
+  start: string,
+): CourseSession[] {
+  return Array.from({ length: count }, (_, index) => {
+    const week = index + 1;
+    const date = isoOnWeek(week, start);
+    return session({
+      schoolYearId,
+      annualCourseId,
+      classId,
+      sequenceNumber: week,
+      date,
+      schoolWeekNumber: week,
+      key: `${schoolYearId}|${annualCourseId}|${date}`,
+    });
+  });
+}
+
+function carnetItem(id: number, week: number, date: string): PrototypeAgendaItem {
+  return sourceItem({
+    id,
+    referenceItemId: null,
+    referenceSessionId: null,
+    courseSessionKey: `${SOURCE_YEAR}|${SOURCE_COURSE}|${date}`,
+    courseSessionDate: date,
+    schoolWeekNumber: week,
+  });
+}
+
+function privateNote(id: string, date: string, extras: Partial<AnnualCourseNote> = {}): AnnualCourseNote {
+  return {
+    id,
+    schoolYearId: SOURCE_YEAR,
+    classId: SOURCE_CLASS,
+    contextId: CTX,
+    referenceSessionId: null,
+    authorTeacherId: "teacher-1",
+    ownerTeacherId: "teacher-1",
+    text: `Note ${id}`,
+    body: null,
+    courseSessionKey: `${SOURCE_YEAR}|${SOURCE_COURSE}|${date}`,
+    legacyNoteId: null,
+    notebookPosition: 0,
+    sourceNoteId: null,
+    sourceSchoolYearId: null,
+    inheritedAt: null,
+    annualCourseId: SOURCE_COURSE,
+    createdAt: "2026-09-01T00:00:00.000Z",
+    updatedAt: "2026-09-01T00:00:00.000Z",
+    ...extras,
+  };
+}
+
+function partialYearInput(pathSessions: ReferenceSession[]) {
+  const sourceSessions = annualSessions(SOURCE_YEAR, SOURCE_COURSE, SOURCE_CLASS, 36, "2026-08-17");
+  const targetSessions = annualSessions(TARGET_YEAR, TARGET_COURSE, TARGET_CLASS, 36, "2027-08-23");
+  const prepared = sourceSessions.slice(0, 10);
+  return {
+    sourceSessions,
+    targetSessions,
+    prepared,
+    input: baseInput({
+      sourceItems: prepared.map((entry, index) => carnetItem(index + 1, entry.sequenceNumber, entry.date)),
+      sourceCourseSessions: sourceSessions,
+      targetCourseSessions: targetSessions,
+      pathSnapshots: pathSessions.length ? [pathFor(pathSessions)] : [],
+    }),
+  };
+}
+
+test("année partielle : 10 semaines préparées, parcours CTX partiel → éléments résolubles transférés", () => {
+  const ctx = Array.from({ length: 8 }, (_, index) =>
+    refSession(`sess-${index + 1}`, index + 1, [{ id: `item-${index + 1}` }]),
+  );
+  const { input, prepared, targetSessions } = partialYearInput(ctx);
+  const preview = buildYearTransitionPreview(input);
+  assert.equal(preview.entries.length, 10);
+  assert.equal(preview.entries.every((entry) => entry.reason === "PROJECTABLE"), true);
+  assert.equal(preview.entries.filter((entry) => entry.resolvedReferenceSessionId).length, 8);
+  assert.equal(preview.entries[8]?.resolvedReferenceSessionId, null);
+  assert.equal(preview.entries[9]?.resolvedReferenceSessionId, null);
+  assert.equal(preview.entries[0]?.pedagogicalPosition, 1);
+  assert.equal(preview.entries[9]?.pedagogicalPosition, 10);
+  assert.equal(preview.entries[0]?.proposedPlacement?.courseSessionDate, targetSessions[0]?.date);
+  assert.notEqual(preview.entries[0]?.proposedPlacement?.courseSessionDate, prepared[0]?.date);
+  assert.equal(preview.entries[9]?.proposedPlacement?.sequenceNumber, 10);
+});
+
+test("parcours CTX totalement absent : les publications Carnet restent transférables", () => {
+  const { input } = partialYearInput([]);
+  const preview = buildYearTransitionPreview(input);
+  assert.equal(preview.entries.every((entry) => entry.reason === "PROJECTABLE"), true);
+  assert.equal(preview.entries.every((entry) => entry.resolvedReferenceSessionId == null), true);
+  assert.equal(preview.entries[3]?.pedagogicalPosition, 4);
+});
+
+test("un élément dont la référence manque n’exclut pas les autres", () => {
+  const ctx = Array.from({ length: 8 }, (_, index) =>
+    refSession(`sess-${index + 1}`, index + 1, [{ id: `item-${index + 1}` }]),
+  );
+  const { input, sourceSessions, targetSessions } = partialYearInput(ctx);
+  const preview = buildYearTransitionPreview(
+    baseInput({
+      ...input,
+      sourceItems: [
+        ...input.sourceItems,
+        sourceItem({
+          id: 50,
+          referenceItemId: "item-disparu",
+          referenceSessionId: "sess-disparu",
+        }),
+        carnetItem(51, 11, sourceSessions[10]!.date),
+        sourceItem({
+          id: 52,
+          referenceItemId: null,
+          referenceSessionId: null,
+          courseSessionKey: `${SOURCE_YEAR}|${SOURCE_COURSE}|1999-01-01`,
+          courseSessionDate: "1999-01-01",
+          schoolWeekNumber: 99,
+          day: 4,
+        }),
+        sourceItem({
+          id: 53,
+          referenceItemId: null,
+          referenceSessionId: null,
+          courseSessionKey: "",
+          courseSessionDate: "",
+          schoolWeekNumber: 99,
+          day: 4,
+        }),
+      ],
+      sourceCourseSessions: sourceSessions,
+      targetCourseSessions: targetSessions,
+    }),
+  );
+  const byId = new Map(preview.entries.map((entry) => [entry.sourceAgendaItemId, entry.reason]));
+  assert.equal(byId.get(1), "PROJECTABLE");
+  assert.equal(byId.get(10), "PROJECTABLE");
+  assert.equal(byId.get(50), "ORPHAN_DEAD_REFERENCE_ITEM");
+  assert.equal(byId.get(51), "PROJECTABLE");
+  assert.equal(byId.get(52), "SOURCE_SESSION_UNRESOLVED");
+  assert.equal(byId.get(53), "ORPHAN_NO_REFERENCE_ITEM");
+});
+
+test("publication structurée : parcours CTX absent ≠ position manquante", () => {
+  const absent = buildYearTransitionPreview(
+    baseInput({
+      pathSnapshots: [],
+      sourceItems: [sourceItem({ referenceItemId: ITEM_X })],
+    }),
+  );
+  assert.equal(absent.entries[0]?.reason, "PATH_ABSENT");
+
+  const missingPosition = buildYearTransitionPreview(
+    baseInput({
+      pathSnapshots: [pathFor([refSession("session-other", 1, [{ id: "item-other" }])])],
+      sourceItems: [sourceItem({ referenceItemId: null, referenceSessionId: "sess-unknown" })],
+    }),
+  );
+  assert.equal(missingPosition.entries[0]?.reason, "PATH_POSITION_UNRESOLVED");
+});
+
+test("publication Carnet : clé obsolète mais date encore valide → séance source", () => {
+  const date = "2026-10-12";
+  const preview = buildYearTransitionPreview(
+    baseInput({
+      sourceItems: [
+        sourceItem({
+          referenceItemId: null,
+          referenceSessionId: null,
+          courseSessionKey: "cle-obsolete",
+          courseSessionDate: date,
+        }),
+      ],
+      sourceCourseSessions: [
+        session({
+          schoolYearId: SOURCE_YEAR,
+          annualCourseId: SOURCE_COURSE,
+          classId: SOURCE_CLASS,
+          sequenceNumber: 2,
+          date,
+          schoolWeekNumber: 8,
+          key: `${SOURCE_YEAR}|${SOURCE_COURSE}|${date}`,
+        }),
+      ],
+      pathSnapshots: [],
+    }),
+  );
+  assert.equal(preview.entries[0]?.reason, "PROJECTABLE");
+  assert.equal(preview.entries[0]?.resolvedReferenceSessionId, null);
+  assert.equal(preview.entries[0]?.pedagogicalPosition, 2);
+  assert.equal(preview.entries[0]?.proposedPlacement?.courseSessionDate, "2027-09-27");
+});
+
+test("notes privées : année partielle et parcours CTX partiel", () => {
+  const { input, sourceSessions, targetSessions } = partialYearInput(
+    Array.from({ length: 8 }, (_, index) => refSession(`sess-${index + 1}`, index + 1, [{ id: `item-${index + 1}` }])),
+  );
+  const notes = sourceSessions.slice(0, 10).map((entry, index) => privateNote(`note-${index + 1}`, entry.date));
+  const preview = previewPrivateNotes({
+    ...input,
+    includePrivateNotes: true,
+    privateNotesOwnerTeacherId: "teacher-1",
+    sourceNotes: [
+      ...notes,
+      privateNote("note-stale", "1999-01-01"),
+      privateNote("note-orphan", "", { courseSessionKey: null }),
+      privateNote("note-dead-ctx", sourceSessions[0]!.date, {
+        id: "note-dead-ctx",
+        courseSessionKey: null,
+        referenceSessionId: "sess-inconnu",
+      }),
+    ],
+    targetNotes: [],
+  });
+  const byId = new Map(preview.map((entry) => [entry.sourceNoteId, entry]));
+  for (let index = 1; index <= 10; index += 1) {
+    assert.equal(byId.get(`note-${index}`)?.reason, "PROJECTABLE");
+    assert.equal(byId.get(`note-${index}`)?.courseSessionKey, targetSessions[index - 1]?.key);
+  }
+  assert.equal(byId.get("note-1")?.referenceSessionId, "sess-1");
+  assert.equal(byId.get("note-9")?.referenceSessionId, null);
+  assert.equal(byId.get("note-stale")?.reason, "SOURCE_SESSION_UNRESOLVED");
+  assert.equal(byId.get("note-orphan")?.reason, "NO_REFERENCE");
+  assert.equal(byId.get("note-dead-ctx")?.reason, "PATH_POSITION_UNRESOLVED");
+});
+
+test("notes privées : parcours CTX totalement absent, clé de séance suffisante", () => {
+  const { input, sourceSessions, targetSessions } = partialYearInput([]);
+  const preview = previewPrivateNotes({
+    ...input,
+    includePrivateNotes: true,
+    privateNotesOwnerTeacherId: "teacher-1",
+    sourceNotes: [
+      ...sourceSessions.slice(0, 10).map((entry, index) => privateNote(`note-${index + 1}`, entry.date)),
+      privateNote("note-ctx-only", "", {
+        courseSessionKey: null,
+        referenceSessionId: SESS_P,
+      }),
+    ],
+    targetNotes: [],
+  });
+  const byId = new Map(preview.map((entry) => [entry.sourceNoteId, entry.reason]));
+  assert.equal(preview.filter((entry) => entry.sourceNoteId.startsWith("note-") && entry.sourceNoteId !== "note-ctx-only")
+    .every((entry) => entry.reason === "PROJECTABLE"), true);
+  assert.equal(byId.get("note-1"), "PROJECTABLE");
+  assert.equal(byId.get("note-ctx-only"), "PATH_ABSENT");
+  assert.equal(preview.find((entry) => entry.sourceNoteId === "note-1")?.referenceSessionId, null);
+  assert.equal(preview.find((entry) => entry.sourceNoteId === "note-1")?.courseSessionKey, targetSessions[0]?.key);
+});
+
+test("notes privées : déjà présente et source conservée conceptuellement", () => {
+  const { input, sourceSessions, targetSessions } = partialYearInput([]);
+  const source = privateNote("note-1", sourceSessions[0]!.date);
+  const copy: AnnualCourseNote = {
+    ...source,
+    id: "copy-1",
+    schoolYearId: TARGET_YEAR,
+    classId: TARGET_CLASS,
+    annualCourseId: TARGET_COURSE,
+    courseSessionKey: targetSessions[0]!.key,
+    sourceNoteId: "note-1",
+    sourceSchoolYearId: SOURCE_YEAR,
+    inheritedAt: "2027-03-01T00:00:00.000Z",
+  };
+  const preview = previewPrivateNotes({
+    ...input,
+    includePrivateNotes: true,
+    privateNotesOwnerTeacherId: "teacher-1",
+    sourceNotes: [source],
+    targetNotes: [copy],
+  });
+  assert.equal(preview[0]?.reason, "ALREADY_PRESENT");
+});
+
+test("publication Carnet déjà présente sur la séance cible → ALREADY_PRESENT", () => {
+  const sourceKey = `${SOURCE_YEAR}|${SOURCE_COURSE}|2026-10-12`;
+  const preview = buildYearTransitionPreview(
+    baseInput({
+      sourceItems: [
+        sourceItem({
+          id: 10,
+          referenceItemId: null,
+          referenceSessionId: null,
+          courseSessionKey: sourceKey,
+        }),
+      ],
+      sourceCourseSessions: [
+        session({
+          schoolYearId: SOURCE_YEAR,
+          annualCourseId: SOURCE_COURSE,
+          classId: SOURCE_CLASS,
+          sequenceNumber: 2,
+          date: "2026-10-12",
+          schoolWeekNumber: 8,
+          key: sourceKey,
+        }),
+      ],
+      pathSnapshots: [],
+      targetItems: [
+        {
+          ...sourceItem({
+            id: 99,
+            schoolYearId: TARGET_YEAR,
+            annualCourseId: TARGET_COURSE,
+            referenceItemId: null,
+            referenceSessionId: null,
+            courseSessionKey: `${TARGET_YEAR}|${TARGET_COURSE}|2027-09-27`,
+            courseSessionDate: "2027-09-27",
+          }),
+          sourceAgendaItemId: 10,
+        },
+      ],
+    }),
+  );
+  assert.equal(preview.entries[0]?.reason, "ALREADY_PRESENT");
+  assert.equal(preview.entries[0]?.proposedPlacement, null);
+});
+

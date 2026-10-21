@@ -3,6 +3,9 @@ export const YEAR_TRANSITION_PREVIEW_REASONS = [
   "ALREADY_PRESENT",
   "TARGET_EXISTING_DIVERGED",
   "ORPHAN_NO_REFERENCE_ITEM",
+  "SOURCE_SESSION_UNRESOLVED",
+  "PATH_ABSENT",
+  "PATH_POSITION_UNRESOLVED",
   "ORPHAN_DEAD_REFERENCE_ITEM",
   "SNAPSHOT_REFERENCE_CONFLICT",
   "INVALID_REFERENCE_SESSION_POSITION",
@@ -37,7 +40,10 @@ export const YEAR_TRANSITION_PREVIEW_REASON_LABELS: Record<YearTransitionPreview
   PROJECTABLE: "Projection automatique possible",
   ALREADY_PRESENT: "Déjà présent en cible et structurellement conforme",
   TARGET_EXISTING_DIVERGED: "Déjà présent en cible mais non conforme à la projection",
-  ORPHAN_NO_REFERENCE_ITEM: "Sans référence pédagogique",
+  ORPHAN_NO_REFERENCE_ITEM: "Sans séance annuelle ni référence pédagogique",
+  SOURCE_SESSION_UNRESOLVED: "Séance annuelle source introuvable",
+  PATH_ABSENT: "Aucun parcours CTX pour ce cours",
+  PATH_POSITION_UNRESOLVED: "Position absente du parcours CTX",
   ORPHAN_DEAD_REFERENCE_ITEM: "Référence pédagogique absente du snapshot",
   SNAPSHOT_REFERENCE_CONFLICT: "La même référence apparaît plusieurs fois dans le snapshot",
   INVALID_REFERENCE_SESSION_POSITION: "Position de séance de référence invalide",
@@ -60,12 +66,18 @@ export const YEAR_TRANSITION_PREVIEW_REASON_EXPLANATIONS: Record<YearTransitionP
   ALREADY_PRESENT: "Une copie conforme existe déjà dans l’année cible.",
   TARGET_EXISTING_DIVERGED: "Une copie existe déjà mais n’est pas à la séance attendue. Le transfert est bloqué.",
   ORPHAN_NO_REFERENCE_ITEM:
-    "Cette publication n’a ni élément de parcours CTX, ni séance annuelle unique retrouvée dans l’horaire source. Elle reste dans l’année source. Pour la transférer, rattachez-la à une séance réelle du Carnet.",
+    "Cette publication n’a ni élément de parcours CTX, ni clé de séance annuelle exploitable. Elle reste dans l’année source.",
+  SOURCE_SESSION_UNRESOLVED:
+    "La clé de séance enregistrée ne correspond à aucune séance unique de l’horaire source recalculé. Le contenu reste dans l’année source.",
+  PATH_ABSENT:
+    "Ce cours n’a aucun parcours CTX. Les publications du Carnet rattachées à une séance annuelle réelle restent transférables ; cet élément exigeait une référence de parcours.",
+  PATH_POSITION_UNRESOLVED:
+    "Le parcours CTX existe, mais la séance de référence de cet élément n’y figure pas. Les autres éléments déjà rattachés ne sont pas bloqués.",
   ORPHAN_DEAD_REFERENCE_ITEM: "La référence indiquée n’existe plus dans le snapshot du parcours CTX.",
   SNAPSHOT_REFERENCE_CONFLICT: "La même référence apparaît plusieurs fois dans le parcours CTX. Impossible de choisir une position unique.",
   INVALID_REFERENCE_SESSION_POSITION: "La séance de référence n’a pas de position 1-based valide.",
   UNSCHEDULED_REFERENCE_SESSION:
-    "Le parcours CTX indique une position, mais l’horaire cible n’a aucune séance réelle correspondante. Vérifiez l’horaire de la classe cible.",
+    "La position pédagogique est connue, mais l’horaire cible n’a aucune séance réelle correspondante. Cet élément est omis ; les autres restent transférables.",
   TARGET_SESSION_AMBIGUOUS: "Plusieurs séances réelles de l’année cible correspondent à la même position du parcours CTX.",
   SOURCE_COURSE_MISSING: "La publication n’est rattachée à aucun cours annuel de l’année source.",
   CLASS_MAPPING_MISSING: "Aucune correspondance de classe n’a été fournie pour ce cours.",

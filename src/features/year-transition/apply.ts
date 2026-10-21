@@ -2,7 +2,13 @@ import { APP_VERSION } from "../../lib/app-version.ts";
 import type { AnnualCourseStore } from "../../lib/persistence/annual-course-types.ts";
 import type { CourseScheduleStore } from "../../lib/persistence/course-schedule-types.ts";
 import type { AnnualCourseNotesStore, PedagogicalPathStore } from "../../lib/persistence/pedagogical-path-types.ts";
-import { planPrivateNoteCopies, privateNoteCopyId, previewPrivateNotes, type PrivateNotePreviewEntry } from "./private-notes.ts";
+import {
+  isPrivateNoteApplySkipReason,
+  planPrivateNoteCopies,
+  privateNoteCopyId,
+  previewPrivateNotes,
+  type PrivateNotePreviewEntry,
+} from "./private-notes.ts";
 import type { RuntimeAgendaAdapterStore } from "../../lib/persistence/runtime-agenda-types.ts";
 import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-types.ts";
 import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
@@ -78,8 +84,17 @@ function isConstraintError(error: unknown): boolean {
 
 function skipResult(reason: YearTransitionPreviewReason | string): YearTransitionApplyResult | null {
   if (reason === "CLASS_CONTINUATION_ABSENT") return "SKIPPED_NO_CONTINUATION";
-  if (reason === "ORPHAN_NO_REFERENCE_ITEM") return "SKIPPED_NO_REFERENCE";
-  if (reason === "ORPHAN_DEAD_REFERENCE_ITEM") return "SKIPPED_DEAD_REFERENCE";
+  if (reason === "ORPHAN_NO_REFERENCE_ITEM" || reason === "SOURCE_SESSION_UNRESOLVED") {
+    return "SKIPPED_NO_REFERENCE";
+  }
+  if (
+    reason === "ORPHAN_DEAD_REFERENCE_ITEM" ||
+    reason === "PATH_ABSENT" ||
+    reason === "PATH_POSITION_UNRESOLVED"
+  ) {
+    return "SKIPPED_DEAD_REFERENCE";
+  }
+  if (reason === "UNSCHEDULED_REFERENCE_SESSION") return "SKIPPED_UNSCHEDULED";
   return null;
 }
 
@@ -421,7 +436,12 @@ export async function applyPersistedYearTransition(
   }
 
   const livePreview = buildYearTransitionPreview(liveInput);
-  const noteBlockers = (livePreview.privateNotes ?? []).filter(e => !["PROJECTABLE", "ALREADY_PRESENT", "NO_CONTINUATION", "NO_REFERENCE"].includes(e.reason));
+  const noteBlockers = (livePreview.privateNotes ?? []).filter(
+    (entry) =>
+      entry.reason !== "PROJECTABLE" &&
+      entry.reason !== "ALREADY_PRESENT" &&
+      !isPrivateNoteApplySkipReason(entry.reason),
+  );
   if (noteBlockers.length) return fail("APPLY_BLOCKED", { noteBlockers });
   const blockers = livePreview.entries
     .filter((entry) => BLOCKING.has(entry.reason) || (entry.reason !== "PROJECTABLE" && entry.reason !== "ALREADY_PRESENT" && !skipResult(entry.reason)))
