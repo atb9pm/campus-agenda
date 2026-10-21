@@ -1,4 +1,7 @@
-import { createAuthorizedYearTransitionPreview } from "@campus/features/year-transition/index.ts";
+import {
+  YearTransitionPreviewContractError,
+  createAuthorizedYearTransitionPreview,
+} from "@campus/features/year-transition/index.ts";
 import { getYearTransitionPrepareDeps } from "@campus/lib/persistence/store-factory.ts";
 import { jsonResponse, requireAdminSession } from "../../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../../lib/server/observability.ts";
@@ -28,6 +31,12 @@ async function handlePost(request: Request) {
       preview: result.preview,
     });
   } catch (error) {
+    if (error instanceof YearTransitionPreviewContractError) {
+      return jsonResponse(
+        { ok: false, reason: error.message, code: error.code },
+        { status: 400 },
+      );
+    }
     return jsonResponse(
       { ok: false, reason: error instanceof Error ? error.message : "Aperçu impossible." },
       { status: 400 },

@@ -57,6 +57,23 @@ export interface ApplyPersistedYearTransitionDeps {
 const BLOCKING = new Set<string>(YEAR_TRANSITION_APPLY_BLOCKING_REASONS);
 const APPLY_RESULTS = new Set<string>(YEAR_TRANSITION_APPLY_RESULTS);
 
+/**
+ * APPLY copie encore les notes du propriétaire de session.
+ * Le PREVIEW charge déjà toutes les notes du cours ; la copie multi-enseignants
+ * n’entre pas dans cette PR.
+ */
+function notesOwnedBySessionTeacher(input: YearTransitionPreviewInput): YearTransitionPreviewInput {
+  const owner = input.privateNotesOwnerTeacherId?.trim();
+  if (!input.includePrivateNotes || !owner) return input;
+  const owned = (notes: YearTransitionPreviewInput["sourceNotes"]) =>
+    (notes ?? []).filter((note) => note.ownerTeacherId === owner);
+  return {
+    ...input,
+    sourceNotes: owned(input.sourceNotes),
+    targetNotes: owned(input.targetNotes),
+  };
+}
+
 function isKnownApplyResult(value: string): value is YearTransitionApplyResult {
   return APPLY_RESULTS.has(value);
 }
@@ -166,7 +183,7 @@ async function verifyExistingApply(
   if (snapshot.includePrivateNotes) {
     if (!deps.notes || !snapshot.privateNotesOwnerTeacherId) return fail("APPLY_LEDGER_DIVERGED");
     const owned = await deps.notes.listNotesByOwner(snapshot.privateNotesOwnerTeacherId);
-    for (const entry of previewPrivateNotes(snapshot)) {
+    for (const entry of previewPrivateNotes(notesOwnedBySessionTeacher(snapshot))) {
       if (entry.reason !== "PROJECTABLE" && entry.reason !== "ALREADY_PRESENT") continue;
       const candidates = owned.filter(n =>
         n.schoolYearId === persisted.targetSchoolYearId && n.sourceNoteId === entry.sourceNoteId);
@@ -249,7 +266,7 @@ async function verifyExistingApply(
     const unexpected = itemsWithApplyProvenance(items, apply.transitionId, entry.sourceAgendaItemId);
     if (unexpected.length !== 0) return fail("APPLY_LEDGER_DIVERGED");
   }
-  return success("ALREADY_APPLIED", apply, applyEntries, snapshot.includePrivateNotes ? previewPrivateNotes(snapshot) : undefined);
+  return success("ALREADY_APPLIED", apply, applyEntries, snapshot.includePrivateNotes ? previewPrivateNotes(notesOwnedBySessionTeacher(snapshot)) : undefined);
 }
 
 async function resolveClassroom(
@@ -417,6 +434,7 @@ export async function applyPersistedYearTransition(
       targetSchoolYearId: persisted.targetSchoolYearId,
       classMappings: liveMappings,
       selectedSourceClassIds,
+      targetMeetingDayPlans: snapshotOptions.targetMeetingDayPlans,
     },
     deps,
   );
@@ -436,7 +454,9 @@ export async function applyPersistedYearTransition(
   }
 
   const livePreview = buildYearTransitionPreview(liveInput);
-  const noteBlockers = (livePreview.privateNotes ?? []).filter(
+  const applyNotesInput = notesOwnedBySessionTeacher(liveInput);
+  const applyNotePreview = previewPrivateNotes(applyNotesInput);
+  const noteBlockers = applyNotePreview.filter(
     (entry) =>
       entry.reason !== "PROJECTABLE" &&
       entry.reason !== "ALREADY_PRESENT" &&
@@ -505,10 +525,10 @@ export async function applyPersistedYearTransition(
   }
 
   const plan: YearTransitionApplyPlan = { apply, items: inserts, entries,
-    ...(liveInput.includePrivateNotes ? { noteGuard: { ownerTeacherId: liveInput.privateNotesOwnerTeacherId!,
-      sourceSchoolYearId: liveInput.sourceSchoolYearId, targetSchoolYearId: liveInput.targetSchoolYearId,
-      expected: [...(liveInput.sourceNotes ?? []), ...(liveInput.targetNotes ?? [])] } } : {}),
-    notes: planPrivateNoteCopies(liveInput, livePreview.privateNotes ?? [], transitionId, appliedAt) };
+    ...(applyNotesInput.includePrivateNotes ? { noteGuard: { ownerTeacherId: applyNotesInput.privateNotesOwnerTeacherId!,
+      sourceSchoolYearId: applyNotesInput.sourceSchoolYearId, targetSchoolYearId: applyNotesInput.targetSchoolYearId,
+      expected: [...(applyNotesInput.sourceNotes ?? []), ...(applyNotesInput.targetNotes ?? [])] } } : {}),
+    notes: planPrivateNoteCopies(applyNotesInput, applyNotePreview, transitionId, appliedAt) };
   try {
     await deps.applyStore.applyAtomically(plan);
   } catch (error) {
@@ -523,5 +543,5 @@ export async function applyPersistedYearTransition(
     return fail("APPLY_CONCURRENT_CONFLICT");
   }
 
-  return success("APPLIED", apply, entries, livePreview.privateNotes);
+  return success("APPLIED", apply, entries, applyNotePreview);
 }

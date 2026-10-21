@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { normalizeMappingClassId } from "./class-mapping.ts";
+import { canonicalizeTargetMeetingDayPlans } from "./target-meeting-days.ts";
 import type { YearTransitionPreviewInput } from "./types.ts";
 
 /** Version des règles métier de projection. Fait partie de l’état matériel et du fingerprint. */
@@ -12,6 +13,7 @@ export const YEAR_TRANSITION_PREVIEW_ENGINE_VERSION = 4;
  * Inclus (tout ce qui change le résultat métier ou un APPLY futur) :
  * version du moteur, années, mappings de classes, identités de cours, snapshot de parcours
  * (ids, positions, type/title/detail des items), CourseSession cibles,
+ * plan de jours N+1 (`targetMeetingDayPlans` : cours source, dayOfWeek, weekKind, role),
  * publications source (id, cours, refs, courseSessionKey, type/title/detail),
  * CourseSession source (clé, position, cours),
  * publications cibles (refs, courseSessionKey/Date, semaine/jour/heure cibles).
@@ -188,6 +190,9 @@ function materialState(input: YearTransitionPreviewInput) {
         detail: item.detail,
       }))
       .sort((left, right) => left.id - right.id),
+    ...(input.targetMeetingDayPlans
+      ? { targetMeetingDayPlans: canonicalizeTargetMeetingDayPlans(input.targetMeetingDayPlans) }
+      : {}),
   };
 }
 
@@ -210,7 +215,11 @@ export function yearTransitionPreviewFingerprint(input: YearTransitionPreviewInp
   return yearTransitionPreviewFingerprintFromSnapshotJson(yearTransitionPreviewMaterialSnapshotJson(input));
 }
 
-/** Empreinte hors structure cible, pour un APPLY qui crée encore des classes. */
+/**
+ * Empreinte hors identités cibles encore virtuelles, pour un APPLY qui crée des classes.
+ * Le plan de jours N+1 reste matériel (indexé par cours source) : le changer
+ * invalide l’aperçu. Les CourseSession cibles restent dans l’empreinte complète.
+ */
 export function yearTransitionSourceMaterialFingerprint(input: YearTransitionPreviewInput): string {
   const material = materialState(input) as Record<string, unknown>;
   delete material.targetCourses;

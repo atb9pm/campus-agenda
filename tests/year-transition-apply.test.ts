@@ -2048,7 +2048,11 @@ for (const sql of [false, true]) {
       if (w.db) await w.db.prepare("UPDATE annual_course_notes SET body_json = ? WHERE id = 'private-0'")
         .bind(JSON.stringify(w.body, null, 2)).run();
       const p = await w.preview();
-      assert.deepEqual(p.preview.privateNotes?.map(e => e.reason), ["PROJECTABLE", "PROJECTABLE"]);
+      assert.deepEqual(
+        p.preview.privateNotes?.map(e => e.reason),
+        ["PROJECTABLE", "PROJECTABLE", "PROJECTABLE"],
+        "PREVIEW projette les notes du cours, tous propriétaires",
+      );
       assert.equal((await w.notes.listNotesByOwner("teacher-1")).length, 2, "PREVIEW is read-only");
       const first = await applyPersistedYearTransition(p.id, w.deps);
       assert.equal(first.ok, true, JSON.stringify(first));
@@ -2078,7 +2082,11 @@ for (const sql of [false, true]) {
       const retry = await applyPersistedYearTransition(p.id, w.deps);
       assert.ok(retry.ok && retry.code === "ALREADY_APPLIED", JSON.stringify(retry));
       const second = await w.preview("private-transition-2");
-      assert.ok(second.preview.privateNotes?.every(e => e.reason === "ALREADY_PRESENT"));
+      assert.deepEqual(
+        second.preview.privateNotes?.map(e => e.reason),
+        ["ALREADY_PRESENT", "ALREADY_PRESENT", "PROJECTABLE"],
+        "APPLY n’a copié que les notes du propriétaire de session",
+      );
       assert.equal((await applyPersistedYearTransition(second.id, w.deps)).ok, true);
       assert.equal((await w.notes.listNotesByOwner("teacher-1")).filter(n => n.schoolYearId === TARGET_YEAR).length, 2);
     } finally { w.close(); }
