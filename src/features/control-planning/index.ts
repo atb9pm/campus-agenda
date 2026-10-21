@@ -73,7 +73,15 @@ export {
   classDayControlsForPlacementOption,
   confirmationRequiredForPlacementOption,
 } from "./target-coordination.ts";
-export { canManageOwnStructuredControlCard, isMovableStructuredControlCard } from "./move.ts";
+export {
+  CONTROL_SESSION_ATTACH_ACTION,
+  CONTROL_UNLINKED_READONLY_HINT,
+  CONTROL_UNLINKED_SESSION_HINT,
+  canManageOwnStructuredControlCard,
+  hasControlSessionLink,
+  isMovableStructuredControlCard,
+  needsControlSessionAttachment,
+} from "./move.ts";
 export {
   evaluateLiveControlCoordination,
   type LiveCoordinationDeps,

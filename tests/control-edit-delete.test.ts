@@ -8,8 +8,12 @@ import {
   type AnnualCourseServiceDeps,
 } from "../src/features/annual-courses/index.ts";
 import {
+  CONTROL_SESSION_ATTACH_ACTION,
+  CONTROL_UNLINKED_READONLY_HINT,
+  CONTROL_UNLINKED_SESSION_HINT,
   canManageOwnStructuredControlCard,
   isMovableStructuredControlCard,
+  needsControlSessionAttachment,
 } from "../src/features/control-planning/index.ts";
 import { TEST_ALERT_THRESHOLD } from "../src/features/evaluations/index.ts";
 import {
@@ -17,9 +21,9 @@ import {
   STRUCTURED_CONTROL_DELETE_FORBIDDEN_REASON,
   STRUCTURED_CONTROL_EDIT_CONTENT_ONLY_REASON,
   STRUCTURED_CONTROL_EDIT_FORBIDDEN_REASON,
-  STRUCTURED_CONTROL_EDIT_NOT_STRUCTURED_REASON,
   STRUCTURED_CONTROL_EDIT_NOT_TEST_REASON,
   deleteStructuredControl,
+  moveStructuredControlToCourseSession,
   publishManualControlToAgenda,
   structuredControlContentFromBody,
   updateStructuredControlContent,
@@ -539,15 +543,17 @@ test("rejet — collègue, non TEST, champs structurés forgés", async () => {
       detail: "",
       schoolYearId: created.schoolYearId,
     });
-    const notStructured = await updateStructuredControlContent(world.publishDeps, {
+    const legacyEdited = await updateStructuredControlContent(world.publishDeps, {
       teacherId: seeded.teacher.id,
       agendaItemId: unstructured.id,
       title: "Legacy",
     });
-    assert.equal(notStructured.ok, false);
-    if (!notStructured.ok) {
-      assert.equal(notStructured.status, 400);
-      assert.equal(notStructured.reason, STRUCTURED_CONTROL_EDIT_NOT_STRUCTURED_REASON);
+    assert.equal(legacyEdited.ok, true, legacyEdited.ok ? "" : legacyEdited.reason);
+    if (legacyEdited.ok) {
+      assert.equal(legacyEdited.item.id, unstructured.id);
+      assert.equal(legacyEdited.item.title, "Legacy");
+      assert.equal(legacyEdited.item.annualCourseId ?? null, null);
+      assert.equal(legacyEdited.item.courseSessionKey ?? null, null);
     }
 
     const after = await world.agenda.findAgendaItem(created.id);
@@ -648,6 +654,170 @@ test("rejet — suppression collègue, année archivée pour edit et delete", as
   });
 });
 
+test("anciens contrôles incomplets — gérer sans séance, récents complets, collègue refusé", async () => {
+  const incompleteOwn = { isOwn: true, annualCourseId: null, courseSessionKey: null };
+  const recentOwn = { isOwn: true, annualCourseId: "ac", courseSessionKey: "key" };
+  const peer = { isOwn: false, annualCourseId: "ac", courseSessionKey: "key" };
+  const peerIncomplete = { isOwn: false, annualCourseId: null, courseSessionKey: null };
+
+  assert.equal(canManageOwnStructuredControlCard(incompleteOwn, true), true);
+  assert.equal(isMovableStructuredControlCard(incompleteOwn, true), false);
+  assert.equal(needsControlSessionAttachment(incompleteOwn), true);
+  assert.equal(canManageOwnStructuredControlCard(recentOwn, true), true);
+  assert.equal(isMovableStructuredControlCard(recentOwn, true), true);
+  assert.equal(needsControlSessionAttachment(recentOwn), false);
+  assert.equal(canManageOwnStructuredControlCard(peer, true), false);
+  assert.equal(isMovableStructuredControlCard(peer, true), false);
+  assert.equal(needsControlSessionAttachment(peerIncomplete), false);
+  assert.equal(canManageOwnStructuredControlCard(incompleteOwn, false), false);
+  assert.match(CONTROL_UNLINKED_SESSION_HINT, /rattacher explicitement/);
+  assert.match(CONTROL_UNLINKED_READONLY_HINT, /lecture seule/);
+  assert.equal(CONTROL_SESSION_ATTACH_ACTION, "Rattacher à une séance");
+
+  await withWorlds(async (world) => {
+    const seeded = await seedCourse(world);
+    const [source, dest] = await sessionsFor(world, seeded.course.id);
+    const recent = await publishTest(world, seeded.teacher.id, seeded.course.id, source!.key, "test");
+    const legacy = await world.agenda.createAgendaItem({
+      classroomId: recent.classroomId,
+      subjectId: recent.subjectId,
+      authorTeacherId: seeded.teacher.id,
+      day: recent.day,
+      hour: recent.hour,
+      weekOffset: 0,
+      schoolWeekNumber: recent.schoolWeekNumber,
+      type: "TEST",
+      title: "Contrôle 2",
+      detail: "Ancien contrôle",
+      schoolYearId: recent.schoolYearId,
+    });
+    const otherLegacy = await world.agenda.createAgendaItem({
+      classroomId: recent.classroomId,
+      subjectId: recent.subjectId,
+      authorTeacherId: seeded.teacher.id,
+      day: recent.day,
+      hour: recent.hour,
+      weekOffset: 0,
+      schoolWeekNumber: recent.schoolWeekNumber,
+      type: "TEST",
+      title: "Contrôle à supprimer",
+      detail: "",
+      schoolYearId: recent.schoolYearId,
+    });
+    const colleague = await world.teachers.createAccount({
+      displayName: "Collègue",
+      initials: `C${randomLetters(3)}`,
+      teachingType: "TECHNICAL",
+    });
+    assert.equal(colleague.ok, true);
+    if (!colleague.ok) throw new Error(colleague.reason);
+    const peerLegacy = await world.agenda.createAgendaItem({
+      classroomId: recent.classroomId,
+      subjectId: recent.subjectId,
+      authorTeacherId: colleague.account.id,
+      day: recent.day,
+      hour: recent.hour,
+      weekOffset: 0,
+      schoolWeekNumber: recent.schoolWeekNumber,
+      type: "TEST",
+      title: "Contrôle collègue",
+      detail: "",
+      schoolYearId: recent.schoolYearId,
+    });
+
+    const edited = await updateStructuredControlContent(world.publishDeps, {
+      teacherId: seeded.teacher.id,
+      agendaItemId: legacy.id,
+      title: "Contrôle 2 mis à jour",
+    });
+    assert.equal(edited.ok, true, edited.ok ? "" : edited.reason);
+    if (edited.ok) {
+      assert.equal(edited.item.id, legacy.id);
+      assert.equal(edited.item.title, "Contrôle 2 mis à jour");
+      assert.equal(edited.item.annualCourseId ?? null, null);
+      assert.equal(edited.item.courseSessionKey ?? null, null);
+    }
+
+    const stolenEdit = await updateStructuredControlContent(world.publishDeps, {
+      teacherId: colleague.account.id,
+      agendaItemId: legacy.id,
+      title: "Volé",
+    });
+    assert.equal(stolenEdit.ok, false);
+    if (!stolenEdit.ok) {
+      assert.equal(stolenEdit.status, 403);
+      assert.equal(stolenEdit.reason, STRUCTURED_CONTROL_EDIT_FORBIDDEN_REASON);
+    }
+
+    const stolenPeer = await updateStructuredControlContent(world.publishDeps, {
+      teacherId: seeded.teacher.id,
+      agendaItemId: peerLegacy.id,
+      title: "Intrusion",
+    });
+    assert.equal(stolenPeer.ok, false);
+    if (!stolenPeer.ok) {
+      assert.equal(stolenPeer.status, 403);
+      assert.equal(stolenPeer.reason, STRUCTURED_CONTROL_EDIT_FORBIDDEN_REASON);
+    }
+
+    const attached = await moveStructuredControlToCourseSession(world.publishDeps, {
+      teacherId: seeded.teacher.id,
+      agendaItemId: legacy.id,
+      annualCourseId: seeded.course.id,
+      courseSessionKey: dest!.key,
+    });
+    assert.equal(attached.ok, true, attached.ok ? "" : attached.reason);
+    if (attached.ok) {
+      assert.equal(attached.moved, true);
+      assert.equal(attached.item.id, legacy.id);
+      assert.equal(attached.item.title, "Contrôle 2 mis à jour");
+      assert.equal(attached.item.annualCourseId, seeded.course.id);
+      assert.equal(attached.item.courseSessionKey, dest!.key);
+    }
+
+    const stolenMove = await moveStructuredControlToCourseSession(world.publishDeps, {
+      teacherId: colleague.account.id,
+      agendaItemId: recent.id,
+      annualCourseId: seeded.course.id,
+      courseSessionKey: dest!.key,
+    });
+    assert.equal(stolenMove.ok, false);
+    if (!stolenMove.ok) assert.equal(stolenMove.status, 403);
+
+    const recentMoved = await moveStructuredControlToCourseSession(world.publishDeps, {
+      teacherId: seeded.teacher.id,
+      agendaItemId: recent.id,
+      annualCourseId: seeded.course.id,
+      courseSessionKey: dest!.key,
+    });
+    assert.equal(recentMoved.ok, true, recentMoved.ok ? "" : recentMoved.reason);
+    if (recentMoved.ok) {
+      assert.equal(recentMoved.item.id, recent.id);
+      assert.equal(recentMoved.item.title, "test");
+    }
+
+    const deleted = await deleteStructuredControl(world.publishDeps, {
+      teacherId: seeded.teacher.id,
+      agendaItemId: otherLegacy.id,
+    });
+    assert.equal(deleted.ok, true, deleted.ok ? "" : deleted.reason);
+    assert.equal(await world.agenda.findAgendaItem(otherLegacy.id), undefined);
+    assert.ok(await world.agenda.findAgendaItem(legacy.id));
+    assert.ok(await world.agenda.findAgendaItem(recent.id));
+    assert.ok(await world.agenda.findAgendaItem(peerLegacy.id));
+
+    const stolenDelete = await deleteStructuredControl(world.publishDeps, {
+      teacherId: seeded.teacher.id,
+      agendaItemId: peerLegacy.id,
+    });
+    assert.equal(stolenDelete.ok, false);
+    if (!stolenDelete.ok) {
+      assert.equal(stolenDelete.status, 403);
+      assert.equal(stolenDelete.reason, STRUCTURED_CONTROL_DELETE_FORBIDDEN_REASON);
+    }
+  });
+});
+
 test("UI et non-régression — actions propres, déplacement PR64, création, semestre", async () => {
   const [panel, client, route, moveRoute, createRoute, patchRoute, service] = await Promise.all([
     readFile(new URL("../web/app/components/control-planning-panel.tsx", import.meta.url), "utf8"),
@@ -667,6 +837,9 @@ test("UI et non-régression — actions propres, déplacement PR64, création, s
   assert.match(panel, /onDeleteClick/);
   assert.match(panel, /cardIsManageable\(card\)/);
   assert.match(panel, /canManageOwnStructuredControlCard/);
+  assert.match(panel, /needsControlSessionAttachment/);
+  assert.match(panel, /data-control-attach/);
+  assert.match(panel, /Rattacher à une séance/);
   assert.match(panel, /updateTeacherControlApi/);
   assert.match(panel, /deleteTeacherControlApi/);
   assert.match(panel, /moveTeacherControlApi/);
@@ -706,11 +879,19 @@ test("UI et non-régression — actions propres, déplacement PR64, création, s
     true,
   );
   assert.equal(
+    canManageOwnStructuredControlCard({ isOwn: true, annualCourseId: null, courseSessionKey: null }, true),
+    true,
+  );
+  assert.equal(
     canManageOwnStructuredControlCard({ isOwn: false, annualCourseId: "ac", courseSessionKey: "key" }, true),
     false,
   );
   assert.equal(
     isMovableStructuredControlCard({ isOwn: true, annualCourseId: "ac", courseSessionKey: "key" }, false),
+    false,
+  );
+  assert.equal(
+    isMovableStructuredControlCard({ isOwn: true, annualCourseId: null, courseSessionKey: null }, true),
     false,
   );
 

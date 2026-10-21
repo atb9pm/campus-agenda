@@ -1525,6 +1525,13 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .control-planning-card.is-draggable { cursor: grab; }
 .control-planning-card.is-dragging { opacity: .55; cursor: grabbing; }
 .control-planning-card.is-move-source { outline: 2px solid #30558f; }
+.control-planning-card-hint {
+  margin: 2px 0 0;
+  color: #6d7f9b;
+  font-size: 11px;
+  line-height: 1.35;
+  font-weight: 500;
+}
 .control-planning-move-action {
   margin-top: 4px;
   padding: 0;

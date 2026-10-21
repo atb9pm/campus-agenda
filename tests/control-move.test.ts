@@ -9,7 +9,9 @@ import {
   type AnnualCourseServiceDeps,
 } from "../src/features/annual-courses/index.ts";
 import {
+  canManageOwnStructuredControlCard,
   isMovableStructuredControlCard,
+  needsControlSessionAttachment,
 } from "../src/features/control-planning/index.ts";
 import {
   CONTROL_COORDINATION_CONFIRM_CODE,
@@ -19,7 +21,6 @@ import {
   STRUCTURED_AGENDA_COMPAT_HOUR,
   STRUCTURED_CONTROL_MOVE_FORBIDDEN_REASON,
   STRUCTURED_CONTROL_MOVE_FREE_PLACEMENT_REASON,
-  STRUCTURED_CONTROL_MOVE_NOT_STRUCTURED_REASON,
   STRUCTURED_CONTROL_MOVE_NOT_TEST_REASON,
   STRUCTURED_CONTROL_MOVE_YEAR_MISMATCH_REASON,
   STRUCTURED_PUBLISH_FORBIDDEN_REASON,
@@ -640,17 +641,21 @@ test("rejets — fausse séance, faux cours, date libre, TCA, année, auteur, ty
       type: "TEST",
       title: "Contrôle libre",
       detail: "",
+      schoolYearId: created.schoolYearId,
     });
-    const invalidStructured = await moveStructuredControlToCourseSession(world.publishDeps, {
+    const attached = await moveStructuredControlToCourseSession(world.publishDeps, {
       teacherId: seeded.teacher.id,
       agendaItemId: unstructured.id,
       annualCourseId: seeded.course.id,
       courseSessionKey: dest!.key,
     });
-    assert.equal(invalidStructured.ok, false);
-    if (!invalidStructured.ok) {
-      assert.equal(invalidStructured.status, 400);
-      assert.equal(invalidStructured.reason, STRUCTURED_CONTROL_MOVE_NOT_STRUCTURED_REASON);
+    assert.equal(attached.ok, true, attached.ok ? "" : attached.reason);
+    if (attached.ok) {
+      assert.equal(attached.moved, true);
+      assert.equal(attached.item.id, unstructured.id);
+      assert.equal(attached.item.annualCourseId, seeded.course.id);
+      assert.equal(attached.item.courseSessionKey, dest!.key);
+      assert.equal(attached.item.title, "Contrôle libre");
     }
   });
 });
@@ -896,6 +901,17 @@ test("cartes déplaçables — seulement tes contrôles structurés", () => {
     false,
   );
   assert.equal(
+    canManageOwnStructuredControlCard(
+      { isOwn: true, annualCourseId: null, courseSessionKey: null },
+      true,
+    ),
+    true,
+  );
+  assert.equal(
+    needsControlSessionAttachment({ isOwn: true, annualCourseId: null, courseSessionKey: null }),
+    true,
+  );
+  assert.equal(
     isMovableStructuredControlCard(
       { isOwn: true, annualCourseId: "ac", courseSessionKey: "key" },
       false,
@@ -921,6 +937,8 @@ test("PATCH générique inchangé — déplacement via API dédiée seulement", 
   assert.match(panel, /data-control-move/);
   assert.match(panel, /application\/x-campus-control/);
   assert.match(panel, /Déplacer/);
+  assert.match(panel, /needsControlSessionAttachment/);
+  assert.match(panel, /Rattacher à une séance/);
   assert.match(service, /moveStructuredControlPlacement/);
   assert.match(service, /excludeItemId/);
   assert.match(service, /STRUCTURED_CONTROL_MOVE_YEAR_MISMATCH_REASON/);
