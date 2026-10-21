@@ -39,6 +39,8 @@ export interface YearTransitionPreviewInput {
   targetItems: readonly PrototypeAgendaItem[];
   /** Snapshots de parcours CTX utilisés pour ce PREVIEW (un par contextId attendu). */
   pathSnapshots: readonly ReferencePedagogicalPath[];
+  /** CourseSession source, pour rattacher une publication Carnet à une position CTX. */
+  sourceCourseSessions?: readonly CourseSession[];
   /** CourseSession déjà calculées pour l’année cible — jamais recalculées ici. */
   targetCourseSessions: readonly CourseSession[];
 }

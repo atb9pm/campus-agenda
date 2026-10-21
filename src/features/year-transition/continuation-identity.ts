@@ -36,6 +36,25 @@ export function classContinuationIdentity(
   };
 }
 
+export const PENDING_TARGET_CLASS_PREFIX = "pending-class:";
+export const PENDING_TARGET_COURSE_PREFIX = "pending-course:";
+
+export function pendingTargetClassId(sourceClassId: string): string {
+  return `${PENDING_TARGET_CLASS_PREFIX}${sourceClassId}`;
+}
+
+export function pendingTargetCourseId(sourceCourseId: string): string {
+  return `${PENDING_TARGET_COURSE_PREFIX}${sourceCourseId}`;
+}
+
+export function isPendingTargetClassId(id: string | null | undefined): boolean {
+  return Boolean(id?.startsWith(PENDING_TARGET_CLASS_PREFIX));
+}
+
+export function isPendingTargetCourseId(id: string | null | undefined): boolean {
+  return Boolean(id?.startsWith(PENDING_TARGET_COURSE_PREFIX));
+}
+
 export function continuationIdentityKey(identity: ContinuationIdentity): string {
   return `${identity.professionId}|${identity.trainingYear}|${identity.parallelCode}`;
 }
@@ -140,11 +159,12 @@ export function resolveClassContinuations(options: {
       continue;
     }
 
-    mappings.push({ sourceClassId: source.id, targetClassId: null });
+    const pendingClassId = pendingTargetClassId(source.id);
+    mappings.push({ sourceClassId: source.id, targetClassId: pendingClassId });
     planned.push({
       sourceClassId: source.id,
       action: "create",
-      targetClassId: null,
+      targetClassId: pendingClassId,
       identity,
       message:
         "Cette classe sera créée dans l’année cible à la confirmation du transfert, avec la même profession, année de formation et groupe.",

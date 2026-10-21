@@ -88,8 +88,8 @@ export interface YearTransitionApplyAgendaInsert {
   annualCourseId: string;
   courseSessionKey: string;
   courseSessionDate: string;
-  referenceSessionId: string;
-  referenceItemId: string;
+  referenceSessionId: string | null;
+  referenceItemId: string | null;
   studentVisible: false;
   sourceTransitionId: string;
   sourceAgendaItemId: number;

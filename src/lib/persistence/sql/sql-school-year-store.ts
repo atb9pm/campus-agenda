@@ -14,6 +14,11 @@ import {
   assertGeneratedWeeksMatchOfficialTotal,
   generateOfficialCourseWeeks,
 } from "../../../features/school-year/official-course-weeks.ts";
+import {
+  previousActiveStatusAfterSwitch,
+  schoolYearActivationWeekIssue,
+  SCHOOL_YEAR_ALREADY_ACTIVE,
+} from "../../../features/school-year/activate-year.ts";
 import { preserveExistingPedagogicalWeekKinds } from "../../../features/school-year/pedagogical-week-kinds.ts";
 import { parseSchoolWeekKind } from "../../../features/calendar/types.ts";
 import type {
@@ -228,12 +233,20 @@ export class SqlSchoolYearStore implements SchoolYearStore {
     if (!target) {
       throw new Error("Année scolaire introuvable.");
     }
-    if (target.weeks.length !== 38) {
-      throw new Error("Impossible d'activer une année incomplète (38 semaines requises).");
+    if (target.status === "active") {
+      throw new Error(SCHOOL_YEAR_ALREADY_ACTIVE);
     }
+    const weekIssue = schoolYearActivationWeekIssue(target.weeks.length);
+    if (weekIssue) throw new Error(weekIssue);
 
+    const demoteTo = previousActiveStatusAfterSwitch(target.status);
     const now = new Date().toISOString();
-    await this.db.prepare("UPDATE school_years SET status = 'archived' WHERE status = 'active'").bind().run();
+    if (demoteTo) {
+      await this.db
+        .prepare("UPDATE school_years SET status = ? WHERE status = 'active'")
+        .bind(demoteTo)
+        .run();
+    }
     await this.db
       .prepare("UPDATE school_years SET status = 'active', activated_at = ? WHERE id = ?")
       .bind(now, id)
