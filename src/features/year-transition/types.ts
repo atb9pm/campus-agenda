@@ -1,5 +1,6 @@
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
 import type { AnnualCourseNote } from "../pedagogical-path/annual-notes.ts";
+import type { YearTransitionContentDisposition } from "./disposition.ts";
 import type { PrivateNotePreviewEntry } from "./private-notes.ts";
 import type { AnnualCourse } from "../annual-courses/types.ts";
 import type { CourseSession } from "../course-sessions/types.ts";
@@ -76,6 +77,12 @@ export interface YearTransitionSourceTemporal {
 
 export interface YearTransitionPreviewEntry {
   reason: YearTransitionPreviewReason;
+  /**
+   * Catégorie fonctionnelle, distincte de `reason`.
+   * Exemple : TO_RECLASSIFY alors que `reason` reste SOURCE_SESSION_UNRESOLVED.
+   * Toujours posé par le moteur PREVIEW ; optionnel pour les fixtures persistées.
+   */
+  disposition?: YearTransitionContentDisposition;
   warnings: YearTransitionPreviewWarning[];
   sourceAgendaItemId: number;
   sourceAnnualCourseId: string | null;

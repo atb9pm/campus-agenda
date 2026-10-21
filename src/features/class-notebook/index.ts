@@ -259,6 +259,14 @@ export {
   type CourseControlDayOption,
 } from "./course-week-window.ts";
 export {
+  bindNoteToCourseSession,
+  bindPublicationToCourseSession,
+  countNotesToReclassify,
+  countPublicationsToReclassify,
+  noteNeedsReclassification,
+  publicationNeedsReclassification,
+} from "./reclassify.ts";
+export {
   formatCourseSessionCardSubtitle,
   formatCourseSessionCardWeekLabel,
   itemsForCourseSession,

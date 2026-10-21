@@ -34,6 +34,16 @@ export { buildYearTransitionPreview, YEAR_TRANSITION_AGENDA_COMPAT_HOUR } from "
 export { isPrivateNoteApplySkipReason, previewPrivateNotes } from "./private-notes.ts";
 export type { PrivateNotePreviewEntry } from "./private-notes.ts";
 export {
+  YEAR_TRANSITION_CONTENT_DISPOSITIONS,
+  YEAR_TRANSITION_NOTE_RECLASSIFY_REASONS,
+  YEAR_TRANSITION_PUBLICATION_RECLASSIFY_REASONS,
+  isNoteReclassifyReason,
+  isPublicationReclassifyReason,
+  noteContentDisposition,
+  publicationContentDisposition,
+  type YearTransitionContentDisposition,
+} from "./disposition.ts";
+export {
   resolveUniqueSourceCourseSession,
   resolveUniqueSourceCourseSessionFromKey,
 } from "./session-anchor.ts";

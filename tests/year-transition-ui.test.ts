@@ -189,6 +189,7 @@ test("l’aperçu présenté n’expose pas le contenu des notes et classe les m
     privateNotes: [
       {
         sourceNoteId: "note-secret",
+        sourceClassId: "class-a",
         reason: "NO_REFERENCE",
         targetAnnualCourseId: null,
         targetClassId: null,

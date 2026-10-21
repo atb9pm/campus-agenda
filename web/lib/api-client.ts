@@ -1182,7 +1182,7 @@ export type YearTransitionClassOption = {
 export type YearTransitionPresentedRow = {
   id: string;
   kind: "publication" | "privateNote";
-  category: "projectable" | "alreadyPresent" | "excluded" | "blocking";
+  category: "projectable" | "alreadyPresent" | "toReclassify" | "excluded" | "blocking";
   title: string;
   reason: string;
   reasonLabel: string;
@@ -1208,6 +1208,7 @@ export type YearTransitionPresentedPreview = {
   publications: {
     projectable: YearTransitionPresentedRow[];
     alreadyPresent: YearTransitionPresentedRow[];
+    toReclassify: YearTransitionPresentedRow[];
     excluded: YearTransitionPresentedRow[];
     blocking: YearTransitionPresentedRow[];
   };
@@ -1308,9 +1309,10 @@ export async function applyYearTransitionApi(transitionId: string): Promise<{
   codeLabel: string;
   reason?: string;
   createdCount?: number;
+  toReclassifyCount?: number;
   alreadyPresentCount?: number;
   skippedCount?: number;
-  notes?: { createdCount: number; alreadyPresentCount: number; skippedCount: number };
+  notes?: { createdCount: number; toReclassifyCount: number; alreadyPresentCount: number; skippedCount: number };
   targetCourses: YearTransitionPresentedPreview["targetCourses"];
   classSummaries: YearTransitionPresentedPreview["classSummaries"];
 }> {
@@ -1326,9 +1328,10 @@ export async function applyYearTransitionApi(transitionId: string): Promise<{
     codeLabel?: string;
     reason?: string;
     createdCount?: number;
+    toReclassifyCount?: number;
     alreadyPresentCount?: number;
     skippedCount?: number;
-    notes?: { createdCount: number; alreadyPresentCount: number; skippedCount: number };
+    notes?: { createdCount: number; toReclassifyCount: number; alreadyPresentCount: number; skippedCount: number };
     targetCourses?: YearTransitionPresentedPreview["targetCourses"];
     classSummaries?: YearTransitionPresentedPreview["classSummaries"];
   }>(response);
@@ -1341,6 +1344,7 @@ export async function applyYearTransitionApi(transitionId: string): Promise<{
     codeLabel: payload.codeLabel ?? payload.code,
     reason: payload.reason,
     createdCount: payload.createdCount,
+    toReclassifyCount: payload.toReclassifyCount,
     alreadyPresentCount: payload.alreadyPresentCount,
     skippedCount: payload.skippedCount,
     notes: payload.notes,

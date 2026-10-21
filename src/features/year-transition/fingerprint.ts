@@ -5,7 +5,7 @@ import { canonicalizeTargetMeetingDayPlans } from "./target-meeting-days.ts";
 import type { YearTransitionPreviewInput } from "./types.ts";
 
 /** Version des règles métier de projection. Fait partie de l’état matériel et du fingerprint. */
-export const YEAR_TRANSITION_PREVIEW_ENGINE_VERSION = 4;
+export const YEAR_TRANSITION_PREVIEW_ENGINE_VERSION = 5; // 5 : zéro perte MeetingDays (TO_RECLASSIFY)
 
 /**
  * Empreinte matérielle du PREVIEW.

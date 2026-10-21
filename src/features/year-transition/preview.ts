@@ -3,8 +3,13 @@ import type { AnnualCourse } from "../annual-courses/types.ts";
 import type { CourseSession } from "../course-sessions/types.ts";
 import type { ReferencePedagogicalItem, ReferencePedagogicalPath, ReferenceSession } from "../pedagogical-path/types.ts";
 import { indexClassMappings, resolveClassMapping } from "./class-mapping.ts";
+import {
+  isPublicationReclassifyReason,
+  publicationContentDisposition,
+} from "./disposition.ts";
 import { yearTransitionPreviewFingerprint } from "./fingerprint.ts";
 import { previewPrivateNotes } from "./private-notes.ts";
+import { usesExplicitTargetMeetingDayPlans } from "./target-meeting-days.ts";
 import {
   contextPathPresent,
   pathSessionsForContext,
@@ -62,6 +67,7 @@ function sourceTemporal(item: PrototypeAgendaItem): YearTransitionSourceTemporal
 function emptyEntry(item: PrototypeAgendaItem, reason: YearTransitionPreviewReason): YearTransitionPreviewEntry {
   return {
     reason,
+    disposition: publicationContentDisposition(reason, { zeroLoss: false, targetAnnualCourseId: null }),
     warnings: [],
     sourceAgendaItemId: item.id,
     sourceAnnualCourseId: trimId(item.annualCourseId),
@@ -556,12 +562,38 @@ export function buildYearTransitionPreview(input: YearTransitionPreviewInput): Y
 
   entries.sort(compareEntries);
 
+  const zeroLoss = usesExplicitTargetMeetingDayPlans(input.targetMeetingDayPlans);
+  const reconciled = entries.map((entry) => {
+    let reason = entry.reason;
+    if (zeroLoss && isPublicationReclassifyReason(reason) && entry.targetAnnualCourseId) {
+      const copies = input.targetItems
+        .filter(
+          (candidate) =>
+            (candidate.schoolYearId ?? null) === input.targetSchoolYearId &&
+            trimId(candidate.annualCourseId) === entry.targetAnnualCourseId &&
+            candidate.sourceAgendaItemId === entry.sourceAgendaItemId,
+        )
+        .sort((left, right) => left.id - right.id);
+      if (copies.length > 1) reason = "TARGET_REFERENCE_CONFLICT";
+      else if (copies.length === 1) reason = "ALREADY_PRESENT";
+    }
+    return {
+      ...entry,
+      reason,
+      disposition: publicationContentDisposition(reason, {
+        zeroLoss,
+        targetAnnualCourseId: entry.targetAnnualCourseId,
+      }),
+    };
+  });
+  reconciled.sort(compareEntries);
+
   return {
     sourceSchoolYearId: input.sourceSchoolYearId,
     targetSchoolYearId: input.targetSchoolYearId,
     fingerprint: yearTransitionPreviewFingerprint(input),
     mappingSummary: mappingIndex.summary,
     ...(input.includePrivateNotes ? { privateNotes: previewPrivateNotes(input) } : {}),
-    entries,
+    entries: reconciled,
   };
 }
