@@ -277,10 +277,10 @@ async function seedMemory(options: {
   );
 
   const previews = new MemoryYearTransitionPreviewStore();
-  const applyStore = new MemoryYearTransitionApplyStore(agenda);
+  const notes = new MemoryAnnualCourseNotesStore();
+  const applyStore = new MemoryYearTransitionApplyStore(agenda, notes);
   const spy = spyAdapters();
   const years = new MemorySchoolYearStore();
-  const notes = new MemoryAnnualCourseNotesStore();
   const teacherNotes = new MemoryTeacherNotesStore();
   const deps: ApplyPersistedYearTransitionDeps = {
     previews,
@@ -677,8 +677,33 @@ test("60 — UNSUPPORTED cardinality bloque", async () => {
   }
 });
 
-test("61 — UNSCHEDULED bloque", async () => {
-  await expectBlocked("UNSCHEDULED_REFERENCE_SESSION", { weekCount: 1 });
+test("61 — UNSCHEDULED est un skip individuel, pas un blocage global", async () => {
+  const world = await seedMemory({
+    weekCount: 1,
+    extraItems: [
+      sourceItem({
+        id: 10,
+        referenceItemId: "item-other",
+        referenceSessionId: "session-other",
+        schoolWeekNumber: 1,
+      }),
+      sourceItem({ id: 11 }),
+    ],
+  });
+  await persistLive(world);
+  const before = await sourceDump(world.agenda);
+  const result = await applyPersistedYearTransition("transition-1", world.deps);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  if (!result.ok) return;
+  assert.equal(result.createdCount, 1);
+  assert.equal(result.skippedCount, 1);
+  const ledger = await world.applyStore.listEntries("transition-1");
+  const skipped = ledger.find((entry) => entry.sourceAgendaItemId === 11);
+  assert.equal(skipped?.applyResult, "SKIPPED_UNSCHEDULED");
+  assert.deepEqual(
+    (await world.agenda.exportAllItems()).filter((item) => item.schoolYearId === SOURCE_YEAR),
+    before,
+  );
 });
 
 test("62 — TARGET_SESSION_AMBIGUOUS bloqué par unique session compute — skip si non reproductible via slots identiques", async () => {
@@ -766,6 +791,116 @@ test("70 — CLASS_CONTINUATION_ABSENT skip", async () => {
   if (!result.ok) return;
   const ledger = await world.applyStore.listEntries("transition-1");
   assert.equal(ledger[0]?.applyResult, "SKIPPED_NO_CONTINUATION");
+});
+
+test("Carnet sans parcours CTX : séance annuelle unique → copie, source intacte", async () => {
+  const sourceKey = `${SOURCE_YEAR}|${SOURCE_COURSE}|2027-08-23`;
+  const world = await seedMemory({
+    extraSlots: [slot(SOURCE_COURSE, "slot-source")],
+    path: pathFor([]),
+    extraItems: [
+      sourceItem({
+        id: 10,
+        referenceItemId: null,
+        referenceSessionId: null,
+        courseSessionKey: sourceKey,
+        courseSessionDate: "2027-08-23",
+        schoolWeekNumber: 1,
+        day: 0,
+      }),
+    ],
+  });
+  const before = await sourceDump(world.agenda);
+  await persistLive(world);
+  const result = await applyPersistedYearTransition("transition-1", world.deps);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  if (!result.ok) return;
+  assert.equal(result.createdCount, 1);
+  assert.equal(result.skippedCount, 0);
+  const created = (await world.agenda.exportAllItems()).filter((item) => item.schoolYearId === TARGET_YEAR);
+  assert.equal(created.length, 1);
+  assert.equal(created[0]?.courseSessionKey, `${TARGET_YEAR}|${TARGET_COURSE}|2027-08-23`);
+  assert.equal(created[0]?.referenceItemId ?? null, null);
+  assert.equal(created[0]?.referenceSessionId ?? null, null);
+  assert.deepEqual(
+    (await world.agenda.exportAllItems()).filter((item) => item.schoolYearId === SOURCE_YEAR),
+    before,
+  );
+});
+
+test("Carnet + parcours CTX partiel : séance 1 transférée malgré l’absence de la position 2", async () => {
+  const sourceKey = `${SOURCE_YEAR}|${SOURCE_COURSE}|2027-08-23`;
+  const world = await seedMemory({
+    extraSlots: [slot(SOURCE_COURSE, "slot-source")],
+    path: pathFor([refSession("only-later", 2, [{ id: "item-later" }])]),
+    extraItems: [
+      sourceItem({
+        id: 10,
+        referenceItemId: null,
+        referenceSessionId: null,
+        courseSessionKey: sourceKey,
+        courseSessionDate: "2027-08-23",
+        schoolWeekNumber: 1,
+        day: 0,
+      }),
+    ],
+  });
+  await persistLive(world);
+  const result = await applyPersistedYearTransition("transition-1", world.deps);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  if (!result.ok) return;
+  assert.equal(result.createdCount, 1);
+});
+
+test("note privée Carnet : clé de séance sans CTX → copie, pas de doublon au retry", async () => {
+  const sourceKey = `${SOURCE_YEAR}|${SOURCE_COURSE}|2027-08-23`;
+  const world = await seedMemory({
+    extraSlots: [slot(SOURCE_COURSE, "slot-source")],
+    path: pathFor([]),
+    extraItems: [],
+  });
+  world.deps.notes = world.notes;
+  await world.notes.createNote("note-carnet", {
+    schoolYearId: SOURCE_YEAR,
+    classId: SOURCE_CLASS,
+    contextId: CTX,
+    annualCourseId: SOURCE_COURSE,
+    ownerTeacherId: "teacher-1",
+    authorTeacherId: "teacher-1",
+    referenceSessionId: null,
+    courseSessionKey: sourceKey,
+    text: "Préparé en semaine 1",
+  });
+  const input = await assembleLiveYearTransitionPreviewInput(
+    {
+      sourceSchoolYearId: SOURCE_YEAR,
+      targetSchoolYearId: TARGET_YEAR,
+      classMappings: mappings(),
+      includePrivateNotes: true,
+      privateNotesOwnerTeacherId: "teacher-1",
+    },
+    world.deps,
+  );
+  const persisted = await createPersistedYearTransitionPreview(input, {
+    store: world.previews,
+    idGenerator: () => "transition-notes",
+    now: () => "2027-02-01T00:00:00.000Z",
+  });
+  assert.deepEqual(persisted.preview.privateNotes?.map((entry) => entry.reason), ["PROJECTABLE"]);
+  const before = await world.notes.listNotesByOwner("teacher-1");
+  const result = await applyPersistedYearTransition("transition-notes", world.deps);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  if (!result.ok) return;
+  assert.equal(result.privateNotes?.createdCount, 1);
+  const after = await world.notes.listNotesByOwner("teacher-1");
+  assert.deepEqual(after.filter((note) => note.schoolYearId === SOURCE_YEAR), before);
+  const copies = after.filter((note) => note.schoolYearId === TARGET_YEAR);
+  assert.equal(copies.length, 1);
+  assert.equal(copies[0]?.courseSessionKey, `${TARGET_YEAR}|${TARGET_COURSE}|2027-08-23`);
+  assert.equal(copies[0]?.referenceSessionId, null);
+  const retry = await applyPersistedYearTransition("transition-notes", world.deps);
+  assert.ok(retry.ok && retry.code === "ALREADY_APPLIED", JSON.stringify(retry));
+  assert.equal((await world.notes.listNotesByOwner("teacher-1")).filter((note) => note.schoolYearId === TARGET_YEAR).length, 1);
 });
 
 test("71 — PROJECTABLE + orphan", async () => {

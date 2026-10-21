@@ -4,7 +4,7 @@ import { normalizeMappingClassId } from "./class-mapping.ts";
 import type { YearTransitionPreviewInput } from "./types.ts";
 
 /** Version des règles métier de projection. Fait partie de l’état matériel et du fingerprint. */
-export const YEAR_TRANSITION_PREVIEW_ENGINE_VERSION = 3;
+export const YEAR_TRANSITION_PREVIEW_ENGINE_VERSION = 4;
 
 /**
  * Empreinte matérielle du PREVIEW.

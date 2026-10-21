@@ -6,6 +6,13 @@ import { indexClassMappings, resolveClassMapping } from "./class-mapping.ts";
 import { yearTransitionPreviewFingerprint } from "./fingerprint.ts";
 import { previewPrivateNotes } from "./private-notes.ts";
 import {
+  contextPathPresent,
+  pathSessionsForContext,
+  resolveUniqueSourceCourseSession,
+  trimAnchorId,
+  uniquePathSessionAtPosition,
+} from "./session-anchor.ts";
+import {
   YEAR_TRANSITION_PREVIEW_REASON_ORDER,
   type YearTransitionPreviewReason,
   type YearTransitionPreviewWarning,
@@ -38,8 +45,7 @@ function cloneCourseSession(session: CourseSession): CourseSession {
 }
 
 function trimId(value: string | null | undefined): string | null {
-  const trimmed = value?.trim() ?? "";
-  return trimmed ? trimmed : null;
+  return trimAnchorId(value);
 }
 
 function sourceTemporal(item: PrototypeAgendaItem): YearTransitionSourceTemporal {
@@ -205,9 +211,7 @@ function resolvePedagogicalAnchor(
   pathSnapshots: readonly ReferencePedagogicalPath[],
   sourceSessions: readonly CourseSession[],
 ): Pick<PartialResolution, "referenceItemId" | "resolvedReferenceSessionId" | "pedagogicalPosition" | "structuralReason"> {
-  const sessions = pathSnapshots
-    .filter((path) => path.contextId === sourceCourse.contextId)
-    .flatMap((path) => path.sessions);
+  const sessions = pathSessionsForContext(pathSnapshots, sourceCourse.contextId);
   const itemRef = trimId(item.referenceItemId);
   if (itemRef) {
     return {
@@ -220,6 +224,14 @@ function resolvePedagogicalAnchor(
 
   const sessionRef = trimId(item.referenceSessionId);
   if (sessionRef) {
+    if (sessions.length === 0) {
+      return {
+        referenceItemId: null,
+        resolvedReferenceSessionId: sessionRef,
+        pedagogicalPosition: null,
+        structuralReason: "PATH_ABSENT",
+      };
+    }
     const hits = sessions.filter((session) => session.id === sessionRef);
     const position = hits[0]?.position ?? null;
     if (hits.length !== 1 || position == null || !Number.isInteger(position) || position < 1) {
@@ -227,7 +239,7 @@ function resolvePedagogicalAnchor(
         referenceItemId: null,
         resolvedReferenceSessionId: sessionRef,
         pedagogicalPosition: null,
-        structuralReason: "ORPHAN_DEAD_REFERENCE_ITEM",
+        structuralReason: hits.length === 0 ? "PATH_POSITION_UNRESOLVED" : "ORPHAN_DEAD_REFERENCE_ITEM",
       };
     }
     if (sessions.filter((session) => session.position === position).length !== 1) {
@@ -247,44 +259,22 @@ function resolvePedagogicalAnchor(
     };
   }
 
-  const sessionKey = trimId(item.courseSessionKey);
-  if (!sessionKey) {
+  const sourceSession = resolveUniqueSourceCourseSession(item, sourceCourse, sourceSessions);
+  if (sourceSession) {
+    const position = sourceSession.sequenceNumber;
+    const atPosition = uniquePathSessionAtPosition(sessions, position);
     return {
       referenceItemId: null,
-      resolvedReferenceSessionId: null,
-      pedagogicalPosition: null,
-      structuralReason: "ORPHAN_NO_REFERENCE_ITEM",
-    };
-  }
-  const matches = sourceSessions.filter(
-    (session) =>
-      session.key === sessionKey &&
-      session.annualCourseId === sourceCourse.id &&
-      session.schoolYearId === sourceCourse.schoolYearId,
-  );
-  if (matches.length !== 1) {
-    return {
-      referenceItemId: null,
-      resolvedReferenceSessionId: null,
-      pedagogicalPosition: null,
-      structuralReason: "ORPHAN_NO_REFERENCE_ITEM",
-    };
-  }
-  const position = matches[0]!.sequenceNumber;
-  const atPosition = sessions.filter((session) => session.position === position);
-  if (atPosition.length !== 1) {
-    return {
-      referenceItemId: null,
-      resolvedReferenceSessionId: null,
+      resolvedReferenceSessionId: atPosition?.id ?? null,
       pedagogicalPosition: position,
-      structuralReason: "ORPHAN_NO_REFERENCE_ITEM",
+      structuralReason: null,
     };
   }
   return {
     referenceItemId: null,
-    resolvedReferenceSessionId: atPosition[0]!.id,
-    pedagogicalPosition: position,
-    structuralReason: null,
+    resolvedReferenceSessionId: null,
+    pedagogicalPosition: null,
+    structuralReason: trimId(item.courseSessionKey) ? "SOURCE_SESSION_UNRESOLVED" : "ORPHAN_NO_REFERENCE_ITEM",
   };
 }
 
@@ -437,7 +427,14 @@ export function buildYearTransitionPreview(input: YearTransitionPreviewInput): Y
       const hits = pathHits.get(referenceItemId) ?? [];
       const scoped = hits.filter((hit) => hit.path.contextId === targetCourse.contextId);
       if (scoped.length === 0) {
-        entries.push(applyEntry(partial, "ORPHAN_DEAD_REFERENCE_ITEM"));
+        entries.push(
+          applyEntry(
+            partial,
+            contextPathPresent(input.pathSnapshots, targetCourse.contextId)
+              ? "ORPHAN_DEAD_REFERENCE_ITEM"
+              : "PATH_ABSENT",
+          ),
+        );
         continue;
       }
       if (scoped.length > 1) {
@@ -457,8 +454,16 @@ export function buildYearTransitionPreview(input: YearTransitionPreviewInput): Y
       );
       continue;
     }
-    if (!resolvedSessionId) {
-      entries.push(applyEntry(partial, "ORPHAN_NO_REFERENCE_ITEM", { pedagogicalPosition: position }));
+    if (!resolvedSessionId && !partial.carnetOwned) {
+      entries.push(
+        applyEntry(
+          partial,
+          contextPathPresent(input.pathSnapshots, targetCourse.contextId)
+            ? "PATH_POSITION_UNRESOLVED"
+            : "PATH_ABSENT",
+          { pedagogicalPosition: position },
+        ),
+      );
       continue;
     }
 
@@ -524,7 +529,7 @@ export function buildYearTransitionPreview(input: YearTransitionPreviewInput): Y
             course: targetCourse,
             session: courseSession,
             referenceItemId: referenceItemId ?? "",
-            referenceSessionId: resolvedSessionId,
+            referenceSessionId: resolvedSessionId ?? "",
           });
       entries.push(
         applyEntry(partial, matches ? "ALREADY_PRESENT" : "TARGET_EXISTING_DIVERGED", {

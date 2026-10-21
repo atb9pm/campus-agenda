@@ -35,7 +35,8 @@ export const YEAR_TRANSITION_TRANSFER_CAPABILITIES = [
     defaultEnabled: true,
     ownerBound: false,
     title: "Publications du Carnet",
-    summary: "Devoirs, contrôles et informations déjà rattachés à une séance, avec leur référence pédagogique.",
+    summary:
+      "Devoirs, contrôles et informations déjà rattachés à une séance annuelle réelle. Le parcours CTX n’a pas besoin d’être complet.",
   },
   {
     id: "privateNotes" as const,
@@ -52,7 +53,10 @@ export const YEAR_TRANSITION_NOTE_REASON_LABELS: Record<PrivateNotePreviewEntry[
   PROJECTABLE: "Transférable",
   ALREADY_PRESENT: "Déjà présente en cible",
   NO_CONTINUATION: "Classe sans continuation",
-  NO_REFERENCE: "Sans référence pédagogique",
+  NO_REFERENCE: "Sans séance annuelle ni référence pédagogique",
+  SOURCE_SESSION_UNRESOLVED: "Séance annuelle source introuvable",
+  PATH_ABSENT: "Aucun parcours CTX pour ce cours",
+  PATH_POSITION_UNRESOLVED: "Position absente du parcours CTX",
   MAPPING_UNRESOLVED: "Correspondance de classe incomplète ou contradictoire",
   TARGET_COURSE_UNRESOLVED: "Cours cible introuvable ou ambigu",
   REFERENCE_UNRESOLVED: "Référence pédagogique absente ou ambiguë",
@@ -65,11 +69,18 @@ export const YEAR_TRANSITION_NOTE_REASON_EXPLANATIONS: Record<PrivateNotePreview
   ALREADY_PRESENT: "Une copie indépendante existe déjà pour ce propriétaire, cette année et cette note source.",
   NO_CONTINUATION: "La classe source n’a pas de continuation. La note reste dans l’année source.",
   NO_REFERENCE:
-    "Une note privée n’est copiée que si une référence pédagogique unique permet de la placer dans le parcours CTX. La semaine ou la date de l’année source ne sont jamais recopiées.",
+    "Cette note n’a ni clé de séance annuelle, ni référence pédagogique. La semaine ou la date de l’année source ne sont jamais recopiées.",
+  SOURCE_SESSION_UNRESOLVED:
+    "La clé de séance enregistrée ne correspond à aucune séance unique de l’horaire source recalculé.",
+  PATH_ABSENT:
+    "Ce cours n’a aucun parcours CTX. Une note rattachée à une séance annuelle réelle reste transférable ; celle-ci exigeait une référence de parcours.",
+  PATH_POSITION_UNRESOLVED:
+    "Le parcours CTX existe, mais la séance de référence de cette note n’y figure pas. Les autres notes déjà rattachées ne sont pas bloquées.",
   MAPPING_UNRESOLVED: "La correspondance de classes ne permet pas de choisir une classe cible unique.",
   TARGET_COURSE_UNRESOLVED: "Le cours annuel cible (même parcours CTX, classe correspondante) n’est pas unique.",
   REFERENCE_UNRESOLVED: "Plusieurs références possibles, ou une référence absente du parcours CTX.",
-  TARGET_SESSION_UNRESOLVED: "Le parcours CTX indique une position, mais l’horaire cible n’a pas exactement une séance correspondante.",
+  TARGET_SESSION_UNRESOLVED:
+    "La position pédagogique est connue, mais l’horaire cible n’a pas exactement une séance correspondante. Cette note est omise ; les autres restent transférables.",
   TARGET_NOTE_DIVERGED: "Une copie existe déjà à un autre emplacement. Recalculez l’aperçu après correction, ou le transfert est bloqué.",
 };
 
