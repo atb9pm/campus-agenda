@@ -690,10 +690,21 @@ export type AgendaSubjectLabel = {
   annualCourseId?: string | null;
 };
 
+export type StudentAgendaScheduleSlot = {
+  annualCourseId: string;
+  dayOfWeek: number;
+  periodStart: number;
+  periodEnd: number;
+  weekKind: "all" | "A" | "B";
+  validFrom: string | null;
+  validTo: string | null;
+};
+
 export async function fetchAgendaView(classroomId: string): Promise<{
   items: PrototypeAgendaItem[];
   subjects: AgendaSubjectLabel[];
   attendanceDays: Array<{ dayOfWeek: number; weekKind: "all" | "A" | "B"; role: string }>;
+  scheduleSlots: StudentAgendaScheduleSlot[];
 }> {
   const response = await fetch(`/api/agenda?classroomId=${encodeURIComponent(classroomId)}`, {
     credentials: "include",
@@ -703,6 +714,7 @@ export async function fetchAgendaView(classroomId: string): Promise<{
     items?: PrototypeAgendaItem[];
     subjects?: AgendaSubjectLabel[];
     attendanceDays?: Array<{ dayOfWeek: number; weekKind: "all" | "A" | "B"; role: string }>;
+    scheduleSlots?: StudentAgendaScheduleSlot[];
     reason?: string;
   }>(response);
   if (!response.ok || !payload.ok || !payload.items) {
@@ -712,6 +724,7 @@ export async function fetchAgendaView(classroomId: string): Promise<{
     items: payload.items,
     subjects: payload.subjects ?? [],
     attendanceDays: payload.attendanceDays ?? [],
+    scheduleSlots: payload.scheduleSlots ?? [],
   };
 }
 

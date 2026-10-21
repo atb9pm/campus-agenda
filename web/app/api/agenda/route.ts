@@ -15,6 +15,7 @@ import {
   getArchivedSchoolYearIds,
   jsonResponse,
   listAttendanceDaysForLegacyClassroom,
+  listPublicScheduleSlotsForClassroom,
   requireClassroomReadAccess,
   requireTeacherSession,
   getActiveSchoolYear,
@@ -59,7 +60,10 @@ export async function GET(request: Request) {
 
   const archivedIds = await getArchivedSchoolYearIds();
   const readOnly = Boolean(schoolYearId && archivedIds.has(schoolYearId));
-  const attendanceDays = await listAttendanceDaysForLegacyClassroom(classroomId);
+  const [attendanceDays, scheduleSlots] = await Promise.all([
+    listAttendanceDaysForLegacyClassroom(classroomId),
+    listPublicScheduleSlotsForClassroom(classroomId),
+  ]);
 
   const catalog = await getSchoolCatalogStore();
   await catalog.ensureSeeded();
@@ -79,7 +83,7 @@ export async function GET(request: Request) {
     branches,
   });
 
-  return jsonResponse({ ok: true, items, subjects, readOnly, schoolYearId, attendanceDays });
+  return jsonResponse({ ok: true, items, subjects, readOnly, schoolYearId, attendanceDays, scheduleSlots });
 }
 
 export async function POST(request: Request) {

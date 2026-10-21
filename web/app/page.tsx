@@ -18,6 +18,7 @@ import {
   msUntilNextLocalMidnight,
   studentAccessFromApiSession,
   studentCalendarDateNeedsRefresh,
+  type StudentDayScheduleSlot,
 } from "@campus/features/student";
 import type { StudentAccess, TeacherClassAccessView } from "@campus/types/student-access";
 import {
@@ -164,6 +165,36 @@ function upsertAgendaItem(previous: PrototypeAgendaItem[], item: PrototypeAgenda
   return [...previous, item];
 }
 
+function attendanceDaysFromAgendaView(
+  days: Array<{ dayOfWeek: number; weekKind: "all" | "A" | "B"; role: string }>,
+) {
+  return days.map((day) => ({
+    dayOfWeek: day.dayOfWeek as 1 | 2 | 3 | 4 | 5,
+    weekKind: day.weekKind,
+    role: day.role === "PRIMARY" ? "PRIMARY" as const : "ADDITIONAL" as const,
+  }));
+}
+
+function scheduleSlotsFromAgendaView(
+  slots: Array<{
+    annualCourseId: string;
+    dayOfWeek: number;
+    periodStart: number;
+    periodEnd: number;
+    weekKind: "all" | "A" | "B";
+    validFrom: string | null;
+    validTo: string | null;
+  }>,
+): StudentDayScheduleSlot[] {
+  return slots.flatMap((slot) => {
+    if (slot.dayOfWeek < 1 || slot.dayOfWeek > 5) return [];
+    return [{
+      ...slot,
+      dayOfWeek: slot.dayOfWeek as 1 | 2 | 3 | 4 | 5,
+    }];
+  });
+}
+
 async function loadTeacherAgendaItems(classroomIds: string[]): Promise<PrototypeAgendaItem[]> {
   const batches = await Promise.all(classroomIds.map((classroomId) => fetchAgendaItems(classroomId)));
   const merged = new Map<number, PrototypeAgendaItem>();
@@ -250,6 +281,7 @@ export default function Home() {
   const [selectedSchoolWeekNumber, setSelectedSchoolWeekNumber] = useState(1);
   const [items, setItems] = useState<PrototypeAgendaItem[]>([]);
   const [agendaSubjects, setAgendaSubjects] = useState<AgendaSubjectLabel[]>([]);
+  const [studentScheduleSlots, setStudentScheduleSlots] = useState<StudentDayScheduleSlot[]>([]);
   const [notice, setNotice] = useState("");
   const [teacherAuthenticated, setTeacherAuthenticated] = useState(false);
   const [teacherIsAdmin, setTeacherIsAdmin] = useState(false);
@@ -640,11 +672,8 @@ export default function Home() {
               if (!cancelled) {
                 setItems(view.items);
                 setAgendaSubjects(view.subjects);
-                setAttendanceDays(view.attendanceDays.map((day) => ({
-                  dayOfWeek: day.dayOfWeek as 1 | 2 | 3 | 4 | 5,
-                  weekKind: day.weekKind,
-                  role: day.role === "PRIMARY" ? "PRIMARY" : "ADDITIONAL",
-                })));
+                setAttendanceDays(attendanceDaysFromAgendaView(view.attendanceDays));
+                setStudentScheduleSlots(scheduleSlotsFromAgendaView(view.scheduleSlots));
               }
             })
             .catch((error) => {
@@ -915,7 +944,11 @@ export default function Home() {
       dayItems,
       studentClassroomSubjects,
       studentFutureTests,
-      { includeNextControls: studentFollowingCourseDay },
+      {
+        includeNextControls: studentFollowingCourseDay,
+        scheduleSlots: studentScheduleSlots,
+        courseDay: studentDisplayCourseDay,
+      },
     );
   }, [
     studentSession,
@@ -924,6 +957,7 @@ export default function Home() {
     studentClassroomSubjects,
     studentFutureTests,
     studentFollowingCourseDay,
+    studentScheduleSlots,
   ]);
 
   const studentControlPlanning = useMemo(
@@ -969,6 +1003,8 @@ export default function Home() {
       .then((view) => {
         setItems(view.items);
         setAgendaSubjects(view.subjects);
+        setAttendanceDays(attendanceDaysFromAgendaView(view.attendanceDays));
+        setStudentScheduleSlots(scheduleSlotsFromAgendaView(view.scheduleSlots));
       })
       .catch(() => undefined);
   }
@@ -992,11 +1028,8 @@ export default function Home() {
         const view = await fetchAgendaView(session.classroomId);
         setItems(view.items);
         setAgendaSubjects(view.subjects);
-        setAttendanceDays(view.attendanceDays.map((day) => ({
-          dayOfWeek: day.dayOfWeek as 1 | 2 | 3 | 4 | 5,
-          weekKind: day.weekKind,
-          role: day.role === "PRIMARY" ? "PRIMARY" : "ADDITIONAL",
-        })));
+        setAttendanceDays(attendanceDaysFromAgendaView(view.attendanceDays));
+        setStudentScheduleSlots(scheduleSlotsFromAgendaView(view.scheduleSlots));
       } catch (error) {
         const message = error instanceof Error ? error.message : "Connexion élève impossible.";
         setStudentLoginError(message);
