@@ -181,7 +181,7 @@ function subjectFor(course: TeacherCourseWorkspaceEntry): string {
 
 test("PR80 — version 2.44.1 sans nouvelle migration SQL", () => {
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0033_annual_private_notes_storage.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0034_annual_course_meeting_days.sql");
 });
 
 test("A/B — Mes cours n’affiche plus Voir le déroulement, mais Ouvrir dans Ma semaine", async () => {

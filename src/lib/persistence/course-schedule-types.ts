@@ -1,3 +1,4 @@
+import type { AnnualCourseMeetingDay } from "../../features/annual-courses/meeting-days.ts";
 import type { ClassAttendanceDay, CourseScheduleSlot } from "../../features/course-schedule/types.ts";
 
 export interface CourseScheduleStore {
@@ -11,4 +12,11 @@ export interface CourseScheduleStore {
   listAttendanceDays(): Promise<ClassAttendanceDay[]>;
   listAttendanceDaysByClass(classId: string): Promise<ClassAttendanceDay[]>;
   replaceAttendanceDaysForClass(classId: string, days: ClassAttendanceDay[]): Promise<ClassAttendanceDay[]>;
+
+  listMeetingDays(): Promise<AnnualCourseMeetingDay[]>;
+  listMeetingDaysByAnnualCourse(annualCourseId: string): Promise<AnnualCourseMeetingDay[]>;
+  replaceMeetingDaysForAnnualCourse(
+    annualCourseId: string,
+    days: AnnualCourseMeetingDay[],
+  ): Promise<AnnualCourseMeetingDay[]>;
 }

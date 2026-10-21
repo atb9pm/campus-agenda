@@ -53,6 +53,7 @@ const BUSINESS_ZERO_TABLES = [
   "teacher_course_assignment_events",
   "course_schedule_slots",
   "class_attendance_days",
+  "annual_course_meeting_days",
   "classrooms",
   "subjects",
   "memberships",
@@ -118,7 +119,7 @@ async function bootstrapEmptyProduction(db: SqlDatabase) {
 
 test("version 2.48.0 — bootstrap production sans migration destructive", async () => {
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0033_annual_private_notes_storage.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0034_annual_course_meeting_days.sql");
   assert.equal(SQL_MIGRATION_FILES.includes("0027_delete_demo_data.sql" as (typeof SQL_MIGRATION_FILES)[number]), false);
 
   const storeFactory = await readFile(new URL("../src/lib/persistence/store-factory.ts", import.meta.url), "utf8");

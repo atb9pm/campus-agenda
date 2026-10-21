@@ -1,3 +1,4 @@
+import type { AnnualCourseMeetingDay } from "../../../features/annual-courses/meeting-days.ts";
 import type { ClassAttendanceDay, CourseScheduleSlot } from "../../../features/course-schedule/types.ts";
 import type { AttendanceRole, CourseWeekKind, CourseWeekday } from "../../../features/course-schedule/types.ts";
 import type { CourseScheduleStore } from "../course-schedule-types.ts";
@@ -45,6 +46,28 @@ function mapAttendance(row: AttendanceRow): ClassAttendanceDay {
   return {
     id: row.id,
     classId: row.class_id,
+    dayOfWeek: row.day_of_week as CourseWeekday,
+    weekKind: row.week_kind as CourseWeekKind,
+    role: row.role as AttendanceRole,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+interface MeetingDayRow {
+  id: string;
+  annual_course_id: string;
+  day_of_week: number;
+  week_kind: string;
+  role: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function mapMeetingDay(row: MeetingDayRow): AnnualCourseMeetingDay {
+  return {
+    id: row.id,
+    annualCourseId: row.annual_course_id,
     dayOfWeek: row.day_of_week as CourseWeekday,
     weekKind: row.week_kind as CourseWeekKind,
     role: row.role as AttendanceRole,
@@ -166,5 +189,46 @@ export class SqlCourseScheduleStore implements CourseScheduleStore {
     ];
     await this.db.batch(statements);
     return this.listAttendanceDaysByClass(classId);
+  }
+
+  async listMeetingDays(): Promise<AnnualCourseMeetingDay[]> {
+    const result = await this.db
+      .prepare("SELECT * FROM annual_course_meeting_days ORDER BY created_at")
+      .bind()
+      .all<MeetingDayRow>();
+    return (result.results ?? []).map(mapMeetingDay);
+  }
+
+  async listMeetingDaysByAnnualCourse(annualCourseId: string): Promise<AnnualCourseMeetingDay[]> {
+    const result = await this.db
+      .prepare("SELECT * FROM annual_course_meeting_days WHERE annual_course_id = ? ORDER BY created_at")
+      .bind(annualCourseId)
+      .all<MeetingDayRow>();
+    return (result.results ?? []).map(mapMeetingDay);
+  }
+
+  async replaceMeetingDaysForAnnualCourse(
+    annualCourseId: string,
+    days: AnnualCourseMeetingDay[],
+  ): Promise<AnnualCourseMeetingDay[]> {
+    const statements = [
+      { sql: "DELETE FROM annual_course_meeting_days WHERE annual_course_id = ?", values: [annualCourseId] },
+      ...days.map((day) => ({
+        sql: `INSERT INTO annual_course_meeting_days (
+          id, annual_course_id, day_of_week, week_kind, role, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        values: [
+          day.id,
+          day.annualCourseId,
+          day.dayOfWeek,
+          day.weekKind,
+          day.role,
+          day.createdAt,
+          day.updatedAt,
+        ],
+      })),
+    ];
+    await this.db.batch(statements);
+    return this.listMeetingDaysByAnnualCourse(annualCourseId);
   }
 }

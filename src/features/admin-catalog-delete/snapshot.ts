@@ -1,5 +1,6 @@
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
 import type { AnnualCourse, TeacherCourseAssignment, TeacherCourseAssignmentEvent } from "../annual-courses/types.ts";
+import type { AnnualCourseMeetingDay } from "../annual-courses/meeting-days.ts";
 import type { ClassAttendanceDay, CourseScheduleSlot } from "../course-schedule/types.ts";
 import { parseAnnualNoteBody, type AnnualCourseNote, type ReferencePedagogicalPath } from "../pedagogical-path/index.ts";
 import type { PublicationTemplate } from "../library/types.ts";
@@ -41,6 +42,7 @@ export interface CatalogDeleteSnapshot {
   paths: ReferencePedagogicalPath[];
   scheduleSlots: CourseScheduleSlot[];
   attendanceDays: ClassAttendanceDay[];
+  meetingDays: AnnualCourseMeetingDay[];
   agendaItems: PrototypeAgendaItem[];
   classrooms: RuntimeClassroom[];
   subjects: RuntimeSubject[];
@@ -83,6 +85,7 @@ export async function loadCatalogDeleteSnapshot(
     paths,
     scheduleSlots,
     attendanceDays,
+    meetingDays,
     agendaItems,
     classrooms,
     subjects,
@@ -101,6 +104,7 @@ export async function loadCatalogDeleteSnapshot(
     deps.paths.listPaths(),
     deps.schedules.listSlots(),
     deps.schedules.listAttendanceDays(),
+    deps.schedules.listMeetingDays(),
     deps.agenda.exportAllItems(),
     deps.adapters.listClassrooms(),
     deps.adapters.listSubjects(),
@@ -125,6 +129,7 @@ export async function loadCatalogDeleteSnapshot(
     paths,
     scheduleSlots,
     attendanceDays,
+    meetingDays,
     agendaItems,
     classrooms,
     subjects,

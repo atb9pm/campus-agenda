@@ -22,6 +22,7 @@ export function formatCatalogDeleteLines(counts: CatalogDeleteCounts): string[] 
     countLine(counts.assignments, "attribution", "attributions"),
     countLine(counts.courseScheduleSlots, "horaire", "horaires"),
     countLine(counts.attendanceDays, "jour de cours", "jours de cours"),
+    countLine(counts.meetingDays, "jour de séance annuel", "jours de séance annuels"),
     countLine(counts.publications, "publication", "publications"),
     countLine(counts.memberships, "accès enseignant", "accès enseignants"),
     countLine(counts.studentAccesses, "accès apprenti", "accès apprentis"),

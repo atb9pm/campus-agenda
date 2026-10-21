@@ -170,7 +170,7 @@ async function loginDepsFrom(admin: Awaited<ReturnType<typeof adminDeps>>) {
 
 test("PR79 — version 2.44.0 et migrations 0025–0026", async () => {
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0033_annual_private_notes_storage.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0034_annual_course_meeting_days.sql");
   assert.ok(SQL_MIGRATION_FILES.includes("0025_structured_student_access.sql"));
   assert.ok(SQL_MIGRATION_FILES.includes("0024_structured_agenda_bridge.sql"));
   const columns = CAMPUS_BACKUP_COLUMNS.student_accesses.map((column) => column.name);

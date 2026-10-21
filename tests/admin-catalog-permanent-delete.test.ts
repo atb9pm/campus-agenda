@@ -245,7 +245,7 @@ async function seedTeacher(db: SqlDatabase, id = "teacher-admin") {
 
 test("version 2.48.0 — aucune migration destructive catalogue", () => {
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0033_annual_private_notes_storage.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0034_annual_course_meeting_days.sql");
   assert.equal(confirmationMatches("MA2", "MA2"), true);
   assert.equal(confirmationMatches("MA2", "ma2"), false);
 });
@@ -1180,6 +1180,7 @@ test("ordre DELETE — FK membership_subjects / templates / subjects", () => {
     annualCourseNoteIds: [],
     courseScheduleSlotIds: [],
     attendanceDayIds: [],
+    meetingDayIds: ["md-1"],
     agendaItemIds: [9],
     classroomIds: [],
     subjectIds: ["sub"],
@@ -1201,6 +1202,7 @@ test("ordre DELETE — FK membership_subjects / templates / subjects", () => {
     paths: [],
     scheduleSlots: [],
     attendanceDays: [],
+    meetingDays: [],
     agendaItems: [],
     classrooms: [],
     subjects: [],
@@ -1221,6 +1223,7 @@ test("ordre DELETE — FK membership_subjects / templates / subjects", () => {
   assert.ok(indexOf("publication_templates") < indexOf("subjects"));
   assert.ok(indexOf("agenda_items") < indexOf("subjects"));
   assert.ok(indexOf("subjects") < indexOf("annual_courses"));
+  assert.ok(indexOf("annual_course_meeting_days") < indexOf("annual_courses"));
   assert.ok(indexOf("annual_courses") < indexOf("pedagogical_contexts"));
   const ms = buildMembershipSubjectDeletes(plan);
   assert.match(ms[0]!.sql, /membership_id IN/);
@@ -1261,6 +1264,7 @@ test("E/UI — modal danger et pas de fallback silencieux", async () => {
       paths: [],
       scheduleSlots: [],
       attendanceDays: [],
+    meetingDays: [],
       agendaItems: [],
       classrooms: [],
       subjects: [],
@@ -1287,6 +1291,7 @@ test("E/UI — modal danger et pas de fallback silencieux", async () => {
         annualCourseNotes: 0,
         courseScheduleSlots: 0,
         attendanceDays: 0,
+        meetingDays: 0,
         publications: 0,
         memberships: 0,
         studentAccesses: 0,
@@ -1308,6 +1313,7 @@ test("E/UI — modal danger et pas de fallback silencieux", async () => {
       annualCourseNoteIds: [],
       courseScheduleSlotIds: [],
       attendanceDayIds: [],
+    meetingDayIds: [],
       agendaItemIds: [],
       classroomIds: [],
       subjectIds: [],
@@ -1329,6 +1335,7 @@ test("E/UI — modal danger et pas de fallback silencieux", async () => {
       paths: [],
       scheduleSlots: [],
       attendanceDays: [],
+    meetingDays: [],
       agendaItems: [],
       classrooms: [],
       subjects: [],
@@ -1394,6 +1401,7 @@ test("notes V2 — suppression catalogue SQL + memory retire les séances du cou
     annualCourseNoteIds: [],
     courseScheduleSlotIds: [],
     attendanceDayIds: [],
+    meetingDayIds: [],
     agendaItemIds: [],
     classroomIds: ["class-drop"],
     subjectIds: [],
@@ -1415,6 +1423,7 @@ test("notes V2 — suppression catalogue SQL + memory retire les séances du cou
     paths: [],
     scheduleSlots: [],
     attendanceDays: [],
+    meetingDays: [],
     agendaItems: [],
     classrooms: [],
     subjects: [],

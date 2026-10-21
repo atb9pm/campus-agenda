@@ -37,6 +37,7 @@ import type { SchoolYearWithWeeks } from "../../features/school-year/types.ts";
 import { parseSchoolWeekKind } from "../../features/calendar/types.ts";
 import { isoDateForSchoolWeekDay } from "../../features/school-days/index.ts";
 import type { SchoolDayException } from "../../features/school-days/types.ts";
+import type { AnnualCourseMeetingDay } from "../../features/annual-courses/meeting-days.ts";
 import type { CourseScheduleSlot, ClassAttendanceDay, CourseWeekKind, CourseWeekday, AttendanceRole } from "../../features/course-schedule/types.ts";
 import type { AnnualCourse, TeacherCourseAssignment, TeacherCourseAssignmentEvent, AssignmentRole, AssignmentEventKind } from "../../features/annual-courses/types.ts";
 import type { PrototypeAgendaItem } from "../../features/agenda/demo-items.ts";
@@ -121,7 +122,7 @@ function flag01(value: boolean): number {
 
 async function buildMemoryTables(deps: CampusBackupDeps): Promise<CampusTableDump> {
   const dump = emptyDump();
-  const [accounts, records, items, setups, notes, classes, branches, professions, contexts, years, courses, assignments, events, slots, attendance, memberships] =
+  const [accounts, records, items, setups, notes, classes, branches, professions, contexts, years, courses, assignments, events, slots, attendance, meetingDays, memberships] =
     await Promise.all([
       deps.teacherAccounts.exportAllAccounts(),
       deps.teacherAccounts.listAccounts(),
@@ -138,6 +139,7 @@ async function buildMemoryTables(deps: CampusBackupDeps): Promise<CampusTableDum
       deps.courses.listEvents(),
       deps.schedules.listSlots(),
       deps.schedules.listAttendanceDays(),
+      deps.schedules.listMeetingDays(),
       deps.memberships.listMemberships(),
     ]);
   const recordById = new Map(records.map((entry) => [entry.id, entry]));
@@ -344,6 +346,15 @@ async function buildMemoryTables(deps: CampusBackupDeps): Promise<CampusTableDum
   dump.class_attendance_days = attendance.map((entry) => ({
     id: entry.id,
     class_id: entry.classId,
+    day_of_week: entry.dayOfWeek,
+    week_kind: entry.weekKind,
+    role: entry.role,
+    created_at: entry.createdAt,
+    updated_at: entry.updatedAt,
+  }));
+  dump.annual_course_meeting_days = meetingDays.map((entry) => ({
+    id: entry.id,
+    annual_course_id: entry.annualCourseId,
     day_of_week: entry.dayOfWeek,
     week_kind: entry.weekKind,
     role: entry.role,
@@ -783,6 +794,15 @@ async function restoreMemoryTables(deps: CampusBackupDeps, dump: CampusTableDump
         createdAt: asString(row.created_at ?? row.createdAt),
         updatedAt: asString(row.updated_at ?? row.updatedAt),
       })) as ClassAttendanceDay[],
+      (dump.annual_course_meeting_days ?? []).map((row) => ({
+        id: asString(row.id),
+        annualCourseId: asString(row.annual_course_id ?? row.annualCourseId),
+        dayOfWeek: asNumber(row.day_of_week ?? row.dayOfWeek) as CourseWeekday,
+        weekKind: asString(row.week_kind ?? row.weekKind) as CourseWeekKind,
+        role: asString(row.role) as AttendanceRole,
+        createdAt: asString(row.created_at ?? row.createdAt),
+        updatedAt: asString(row.updated_at ?? row.updatedAt),
+      })) as AnnualCourseMeetingDay[],
     );
   }
 
