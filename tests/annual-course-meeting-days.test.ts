@@ -312,7 +312,7 @@ test("ClassAttendanceDay refuse toujours PRIMARY jeudi B — règles distinctes"
   assert.equal(coursePlan.ok, true);
 });
 
-test("CourseSession ignore les meeting days dans cette PR", () => {
+test("CourseSession sans meetingDays fournis reste calculé depuis les slots", () => {
   const sessions = computeCourseSessions({
     schoolYearId: "year-2026",
     courses: [{ id: "ac-1", classId: "cl-1", contextId: "ctx-1" }],

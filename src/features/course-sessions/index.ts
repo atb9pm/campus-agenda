@@ -5,6 +5,7 @@ export {
   parseCourseSessionKey,
   type ComputeCourseSessionsCourse,
   type ComputeCourseSessionsInput,
+  type ComputeCourseSessionsMeetingDay,
 } from "./compute.ts";
 export {
   formatCourseSessionHeading,

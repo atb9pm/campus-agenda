@@ -59,7 +59,7 @@ export function usedWeekdays(slots: CourseScheduleSlot[]): CourseWeekday[] {
 }
 
 export function slotAppliesToWeekView(
-  slot: CourseScheduleSlot,
+  slot: Pick<CourseScheduleSlot, "weekKind">,
   view: CourseWeekKind | "all" | null,
 ): boolean {
   if (view == null) return false;

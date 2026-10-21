@@ -1,5 +1,5 @@
 import { slotAppliesToWeekView } from "../course-schedule/preview.ts";
-import type { CourseScheduleSlot, CourseWeekday } from "../course-schedule/types.ts";
+import type { CourseScheduleSlot, CourseWeekKind, CourseWeekday } from "../course-schedule/types.ts";
 import { buildSchoolDayPlan } from "../school-days/day-plan.ts";
 import type { PublicHoliday, SchoolDayException } from "../school-days/types.ts";
 import type { SchoolWeekEntry } from "../school-year/types.ts";
@@ -11,6 +11,13 @@ export interface ComputeCourseSessionsCourse {
   contextId: string;
 }
 
+/** Champs utilisés pour l’existence calendaire. Le rôle n’entre pas dans le calcul. */
+export interface ComputeCourseSessionsMeetingDay {
+  annualCourseId: string;
+  dayOfWeek: CourseWeekday;
+  weekKind: CourseWeekKind;
+}
+
 export interface ComputeCourseSessionsInput {
   schoolYearId: string;
   courses: ComputeCourseSessionsCourse[];
@@ -18,6 +25,11 @@ export interface ComputeCourseSessionsInput {
   weeks: SchoolWeekEntry[];
   holidays?: PublicHoliday[];
   exceptions?: SchoolDayException[];
+  /**
+   * Plan de jours par cours. Absent, vide, ou cours sans ligne → calcul legacy
+   * depuis les `CourseScheduleSlot`. Un plan non vide est autoritaire pour les dates.
+   */
+  meetingDays?: ComputeCourseSessionsMeetingDay[];
 }
 
 export function courseSessionKey(schoolYearId: string, annualCourseId: string, date: string): string {
@@ -53,6 +65,28 @@ function compareSegments(left: CourseSessionSegment, right: CourseSessionSegment
   );
 }
 
+function groupMeetingDaysByCourse(
+  days: ComputeCourseSessionsMeetingDay[] | undefined,
+): Map<string, ComputeCourseSessionsMeetingDay[]> {
+  const grouped = new Map<string, ComputeCourseSessionsMeetingDay[]>();
+  for (const day of days ?? []) {
+    const list = grouped.get(day.annualCourseId);
+    if (list) list.push(day);
+    else grouped.set(day.annualCourseId, [day]);
+  }
+  return grouped;
+}
+
+function meetingDayAppliesToDate(
+  days: ComputeCourseSessionsMeetingDay[],
+  dayOfWeek: CourseWeekday,
+  weekKind: CourseSession["weekKind"],
+): boolean {
+  return days.some(
+    (day) => day.dayOfWeek === dayOfWeek && slotAppliesToWeekView(day, weekKind),
+  );
+}
+
 interface SessionAccumulator {
   course: ComputeCourseSessionsCourse;
   date: string;
@@ -63,21 +97,64 @@ interface SessionAccumulator {
 }
 
 /**
- * Projette les créneaux des AnnualCourse sur le calendrier scolaire.
+ * Projette un AnnualCourse sur le calendrier scolaire.
+ *
+ * Si le cours a un plan de meeting days (au moins une ligne fournie) :
+ * les dates viennent exclusivement de ce plan ; les slots n’ajoutent que des segments.
+ * Sinon : comportement legacy — les CourseScheduleSlot créent les dates.
+ *
  * Vacances = semaines absentes du plan. Fériés / exceptions = état du jour.
  * Groupement : une séance par couple (annualCourseId, date).
  * La date réelle vient de SchoolWeekEntry, jamais de schoolYear.endsOn.
  */
 export function computeCourseSessions(input: ComputeCourseSessionsInput): CourseSession[] {
   const courseById = new Map(input.courses.map((course) => [course.id, course]));
+  const meetingDaysByCourse = groupMeetingDaysByCourse(input.meetingDays);
+  const coursesWithMeetingPlan = new Set(
+    [...meetingDaysByCourse.entries()]
+      .filter(([courseId, days]) => courseById.has(courseId) && days.length > 0)
+      .map(([courseId]) => courseId),
+  );
   const plan = buildSchoolDayPlan(input.weeks, input.holidays ?? [], input.exceptions ?? []);
   const groups = new Map<string, SessionAccumulator>();
+
+  function ensureGroup(
+    course: ComputeCourseSessionsCourse,
+    date: string,
+    dayOfWeek: CourseWeekday,
+    schoolWeekNumber: number,
+    weekKind: CourseSession["weekKind"],
+  ): SessionAccumulator {
+    const key = courseSessionKey(input.schoolYearId, course.id, date);
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        course,
+        date,
+        dayOfWeek,
+        schoolWeekNumber,
+        weekKind,
+        segments: [],
+      };
+      groups.set(key, group);
+    }
+    return group;
+  }
 
   for (const row of plan) {
     if (row.kind !== "week") continue;
     for (const day of row.days) {
       if (day.state !== "class") continue;
       const dayOfWeek = day.weekdayIndex as CourseWeekday;
+
+      for (const courseId of coursesWithMeetingPlan) {
+        const course = courseById.get(courseId);
+        const days = meetingDaysByCourse.get(courseId);
+        if (!course || !days) continue;
+        if (!meetingDayAppliesToDate(days, dayOfWeek, row.weekKind)) continue;
+        ensureGroup(course, day.date, dayOfWeek, row.number, row.weekKind);
+      }
+
       for (const slot of input.slots) {
         const course = courseById.get(slot.annualCourseId);
         if (!course) continue;
@@ -85,20 +162,18 @@ export function computeCourseSessions(input: ComputeCourseSessionsInput): Course
         if (!slotAppliesToWeekView(slot, row.weekKind)) continue;
         if (!slotActiveOnDate(slot, day.date)) continue;
 
-        const key = courseSessionKey(input.schoolYearId, course.id, day.date);
-        let group = groups.get(key);
-        if (!group) {
-          group = {
-            course,
-            date: day.date,
-            dayOfWeek,
-            schoolWeekNumber: row.number,
-            weekKind: row.weekKind,
-            segments: [],
-          };
-          groups.set(key, group);
+        if (coursesWithMeetingPlan.has(course.id)) {
+          const existing = groups.get(courseSessionKey(input.schoolYearId, course.id, day.date));
+          if (!existing) continue;
+          existing.segments.push({
+            scheduleSlotId: slot.id,
+            periodStart: slot.periodStart,
+            periodEnd: slot.periodEnd,
+          });
+          continue;
         }
-        group.segments.push({
+
+        ensureGroup(course, day.date, dayOfWeek, row.number, row.weekKind).segments.push({
           scheduleSlotId: slot.id,
           periodStart: slot.periodStart,
           periodEnd: slot.periodEnd,
