@@ -49,6 +49,8 @@ export {
   type ResolvedNotebookPublishContext,
 } from "./notebook-publication-service.ts";
 export {
+  accessibleAnnualCourseIdsForTeacher,
+  annualCourseIdsTouchedByNotebookDocument,
   annualNotesToSessionMap,
   composeTeacherNotebookDocument,
   loadTeacherNotebookDocument,

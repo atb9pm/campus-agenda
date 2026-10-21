@@ -307,8 +307,12 @@ test("notes — multi-classes même CTX + auteur ≠ exclusivité", async () => 
   assert.equal(listB[0]?.text, "Terminer la distribution");
 
   assert.equal(
-    teacherMayConsultCourseNotes({ isTeacher: true, isStudent: false }),
+    teacherMayConsultCourseNotes({ isTeacher: true, isStudent: false, canAccessAnnualCourse: true }),
     true,
+  );
+  assert.equal(
+    teacherMayConsultCourseNotes({ isTeacher: true, isStudent: false, canAccessAnnualCourse: false }),
+    false,
   );
   assert.equal(studentMayAccessCourseNotes(), false);
   assert.equal(NOTES_ARE_NOT_AGENDA_TYPE, true);

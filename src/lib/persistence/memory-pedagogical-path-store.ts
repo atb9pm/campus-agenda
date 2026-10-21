@@ -1,4 +1,9 @@
-import { preserveNotebookMetadata, validateOwnedNotes } from "./notebook-state.ts";
+import {
+  isCarnetManagedNote,
+  preserveNotebookMetadata,
+  validateCourseNotebookNotes,
+  validateOwnedNotes,
+} from "./notebook-state.ts";
 import {
   createAnnualCourseNote,
   type AnnualCourseNote,
@@ -117,6 +122,13 @@ export class MemoryAnnualCourseNotesStore implements AnnualCourseNotesStore {
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   }
 
+  async listNotesByAnnualCourse(annualCourseId: string): Promise<AnnualCourseNote[]> {
+    return [...this.notes.values()]
+      .filter((note) => note.annualCourseId === annualCourseId)
+      .map((note) => structuredClone(note))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  }
+
   async findByOwnerLegacyNote(ownerTeacherId: string, legacyNoteId: string): Promise<AnnualCourseNote | null> {
     for (const note of this.notes.values()) {
       if (note.ownerTeacherId === ownerTeacherId && note.legacyNoteId === legacyNoteId) {
@@ -138,11 +150,54 @@ export class MemoryAnnualCourseNotesStore implements AnnualCourseNotesStore {
     return () => { this.notes = next; };
   }
 
+  /** Stage Carnet notes for the given courses; other courses and structural notes stay. */
+  stageCourseNotebookNotes(annualCourseIds: readonly string[], notes: readonly AnnualCourseNote[]): () => void {
+    const allowed = new Set(annualCourseIds);
+    const byCourse = new Map<string, AnnualCourseNote[]>();
+    for (const courseId of annualCourseIds) byCourse.set(courseId, []);
+    for (const note of notes) {
+      if (!note.annualCourseId || !allowed.has(note.annualCourseId)) {
+        throw new Error("Invalid notebook course identity");
+      }
+      byCourse.get(note.annualCourseId)!.push(note);
+    }
+    const next = new Map(this.notes);
+    for (const courseId of annualCourseIds) {
+      const courseNotes = byCourse.get(courseId) ?? [];
+      validateCourseNotebookNotes(courseId, courseNotes);
+      for (const [id, note] of next) {
+        if (note.annualCourseId === courseId && isCarnetManagedNote(note)) next.delete(id);
+      }
+      for (const note of courseNotes) {
+        if (!isCarnetManagedNote(note)) throw new Error("Invalid notebook course identity");
+        if (next.has(note.id)) throw new Error("Notebook id belongs to another course");
+        next.set(note.id, structuredClone(note));
+      }
+    }
+    return () => {
+      this.notes = next;
+    };
+  }
+
   async replaceOwnedNotebookNotes(owner: string, notes: readonly AnnualCourseNote[]): Promise<void> {
     const current = [...this.notes.values()];
     const next = notes.map(note => preserveNotebookMetadata(note,
       current.find(row => row.ownerTeacherId === owner && row.legacyNoteId !== null && row.legacyNoteId === note.legacyNoteId)));
     this.stageOwnedNotebookNotes(owner, next)();
+  }
+
+  async replaceNotebookNotesForAnnualCourse(
+    annualCourseId: string,
+    notes: readonly AnnualCourseNote[],
+  ): Promise<void> {
+    const current = await this.listNotesByAnnualCourse(annualCourseId);
+    const next = notes.map((note) =>
+      preserveNotebookMetadata(
+        note,
+        current.find((row) => row.legacyNoteId !== null && row.legacyNoteId === note.legacyNoteId),
+      ),
+    );
+    this.stageCourseNotebookNotes([annualCourseId], next)();
   }
 
   exportAllNotes(): AnnualCourseNote[] {

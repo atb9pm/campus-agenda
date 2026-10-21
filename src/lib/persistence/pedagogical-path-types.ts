@@ -23,12 +23,20 @@ export interface AnnualCourseNotesStore {
   countByClassId(classId: string): Promise<number>;
   /** Lie les notes déjà présentes (même année + classe + CTX) à un AnnualCourse. */
   attachAnnualCourseId(filter: AnnualCourseNoteFilter, annualCourseId: string): Promise<number>;
-  /** Notes du document Carnet d'un enseignant (ownerTeacherId). */
+  /** Notes du document Carnet d'un enseignant (ownerTeacherId, legacy / transition N→N+1). */
   listNotesByOwner(ownerTeacherId: string): Promise<AnnualCourseNote[]>;
+  /** Notes rattachées à un AnnualCourse, tous enseignants confondus. */
+  listNotesByAnnualCourse(annualCourseId: string): Promise<AnnualCourseNote[]>;
   findByOwnerLegacyNote(ownerTeacherId: string, legacyNoteId: string): Promise<AnnualCourseNote | null>;
   /**
    * Remplace les notes Carnet d'un propriétaire.
    * Ne touche pas les notes d'un autre enseignant ni les notes sans owner.
+   * Conservé pour la transition annuelle ; le Carnet utilise `replaceNotebookNotesForAnnualCourse`.
    */
   replaceOwnedNotebookNotes(ownerTeacherId: string, notes: readonly AnnualCourseNote[]): Promise<void>;
+  /**
+   * Remplace atomiquement les notes Carnet d’un AnnualCourse.
+   * Ne touche pas les autres cours ni les notes structurelles (sans session / legacy / owner).
+   */
+  replaceNotebookNotesForAnnualCourse(annualCourseId: string, notes: readonly AnnualCourseNote[]): Promise<void>;
 }

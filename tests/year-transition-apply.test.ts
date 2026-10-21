@@ -9,7 +9,7 @@ import {
   type PublicationInput,
 } from "../src/features/agenda/publications.ts";
 import type { PrototypeAgendaItem } from "../src/features/agenda/demo-items.ts";
-import type { AnnualCourse } from "../src/features/annual-courses/types.ts";
+import type { AnnualCourse, TeacherCourseAssignment } from "../src/features/annual-courses/types.ts";
 import type { CourseScheduleSlot } from "../src/features/course-schedule/types.ts";
 import type { ReferencePedagogicalPath, ReferenceSession } from "../src/features/pedagogical-path/types.ts";
 import type { SchoolYearWithWeeks } from "../src/features/school-year/types.ts";
@@ -2022,6 +2022,22 @@ for (const sql of [false, true]) {
         privateNotesOwnerTeacherId: "teacher-1" }, deps);
       return createPersistedYearTransitionPreview(input, { store: previews, idGenerator: () => id });
     };
+    const assign = async (id: string, annualCourseId: string): Promise<TeacherCourseAssignment> =>
+      world.courses.createAssignment({
+        id,
+        annualCourseId,
+        teacherId: "teacher-1",
+        role: "PRIMARY",
+        validFrom: "2020-01-01T00:00:00.000Z",
+        validTo: null,
+        createdByAdminId: "admin-1",
+        createdAt: "2020-01-01T00:00:00.000Z",
+        endedAt: null,
+        overrideReason: null,
+        overrideByAdminId: null,
+      });
+    await assign("asg-t1-source", SOURCE_COURSE);
+    await assign("asg-t1-target", TARGET_COURSE);
     return { ...world, deps, notes, teacherNotes, preview, db, body, close: () => db?.close() };
   }
 
