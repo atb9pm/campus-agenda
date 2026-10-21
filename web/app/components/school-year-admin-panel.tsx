@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 
+import { schoolYearActivationWeekIssue } from "@campus/features/school-year/activate-year.ts";
 import {
   formatAdminWorkingYearOption,
   readAdminWorkingYearId,
@@ -120,7 +121,8 @@ export function SchoolYearAdminPanel({
   const workingYear = years.find((year) => year.id === workingYearId) ?? null;
   const orderedYears = useMemo(() => sortSchoolYearsChronologically(years), [years]);
   const workingWeekCount = workingWeeks.length;
-  const workingYearComplete = workingWeekCount === 38;
+  const weekLimitIssue = schoolYearActivationWeekIssue(workingWeekCount);
+  const workingYearActivatable = weekLimitIssue === null;
   const switchKind =
     workingYear?.status === "draft" ? "activate" : workingYear?.status === "archived" ? "reactivate" : null;
 
@@ -338,7 +340,7 @@ export function SchoolYearAdminPanel({
                 <button
                   type="button"
                   className="workspace-action"
-                  disabled={working || !workingYearComplete}
+                  disabled={working || !workingYearActivatable}
                   onClick={() => setActivateOpen(true)}
                 >
                   Activer {formatSchoolYearLabelFr(workingYear.label)}
@@ -348,7 +350,7 @@ export function SchoolYearAdminPanel({
                 <button
                   type="button"
                   className="workspace-action"
-                  disabled={working || !workingYearComplete}
+                  disabled={working || !workingYearActivatable}
                   onClick={() => setActivateOpen(true)}
                 >
                   Réactiver {formatSchoolYearLabelFr(workingYear.label)}
@@ -359,10 +361,11 @@ export function SchoolYearAdminPanel({
           {workingYear?.status === "active" ? (
             <p className="school-year-hint">Cette année est déjà l’année active des enseignants et des élèves.</p>
           ) : null}
-          {workingYear && switchKind && !workingYearComplete ? (
+          {workingYear && switchKind && weekLimitIssue ? (
             <p className="school-year-hint" role="status">
-              Impossible d’{switchKind === "reactivate" ? "réactiver" : "activer"} {formatSchoolYearLabelFr(workingYear.label)} :
-              le calendrier officiel doit contenir 38 semaines ({workingWeekCount} actuellement).
+              Impossible d’{switchKind === "reactivate" ? "réactiver" : "activer"}{" "}
+              {formatSchoolYearLabelFr(workingYear.label)} : {weekLimitIssue} ({workingWeekCount} semaine
+              {workingWeekCount > 1 ? "s" : ""} actuellement).
             </p>
           ) : null}
         </article>
@@ -503,7 +506,7 @@ export function SchoolYearAdminPanel({
       )}
 
       <ConfirmDialog
-        open={activateOpen && Boolean(workingYear) && Boolean(switchKind) && workingYearComplete}
+        open={activateOpen && Boolean(workingYear) && Boolean(switchKind) && workingYearActivatable}
         title={
           switchKind === "reactivate"
             ? `Réactiver ${workingYear ? formatSchoolYearLabelFr(workingYear.label) : "cette année"} ?`

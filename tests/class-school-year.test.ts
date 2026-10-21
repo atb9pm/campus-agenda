@@ -297,6 +297,32 @@ test("backfill mémoire — label unique renseigné, ambigu laissé null", async
   assert.equal(ambiguous?.schoolYearId, null);
 });
 
+test("une année de moins de 38 semaines de cours peut être activée", async () => {
+  const yearsStore = freshMemoryYears();
+  await yearsStore.seedDefaultActiveYearIfEmpty();
+  const plan = buildPlan("2027-2028");
+  plan.weeks = plan.weeks.slice(0, 37);
+  const draft = await yearsStore.importDraftFromPlan(plan, "plan-test.pdf");
+  const active = await yearsStore.activateSchoolYear(draft.id);
+  assert.equal(active.id, draft.id);
+  assert.equal(active.weeks.length, 37);
+});
+
+test("une année de plus de 38 semaines de cours ne peut pas être activée", async () => {
+  const yearsStore = freshMemoryYears();
+  await yearsStore.seedDefaultActiveYearIfEmpty();
+  const plan = buildPlan("2027-2028");
+  plan.weeks = [
+    ...plan.weeks,
+    { number: 39, kind: "A", monday: "2028-06-26" },
+  ];
+  const draft = await yearsStore.importDraftFromPlan(plan, "plan-test.pdf");
+  await assert.rejects(
+    () => yearsStore.activateSchoolYear(draft.id),
+    /plus de 38 semaines/,
+  );
+});
+
 test("réactiver une année archivée conserve l’année quittée en préparation", async () => {
   const yearsStore = freshMemoryYears();
   await yearsStore.seedDefaultActiveYearIfEmpty();

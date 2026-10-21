@@ -16,7 +16,7 @@ import {
 } from "../../../features/school-year/official-course-weeks.ts";
 import {
   previousActiveStatusAfterSwitch,
-  SCHOOL_YEAR_ACTIVATE_INCOMPLETE,
+  schoolYearActivationWeekIssue,
   SCHOOL_YEAR_ALREADY_ACTIVE,
 } from "../../../features/school-year/activate-year.ts";
 import { preserveExistingPedagogicalWeekKinds } from "../../../features/school-year/pedagogical-week-kinds.ts";
@@ -236,9 +236,8 @@ export class SqlSchoolYearStore implements SchoolYearStore {
     if (target.status === "active") {
       throw new Error(SCHOOL_YEAR_ALREADY_ACTIVE);
     }
-    if (target.weeks.length !== 38) {
-      throw new Error(SCHOOL_YEAR_ACTIVATE_INCOMPLETE);
-    }
+    const weekIssue = schoolYearActivationWeekIssue(target.weeks.length);
+    if (weekIssue) throw new Error(weekIssue);
 
     const demoteTo = previousActiveStatusAfterSwitch(target.status);
     const now = new Date().toISOString();
