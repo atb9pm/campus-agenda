@@ -35,6 +35,7 @@ export {
   NOTEBOOK_PUBLICATION_INVALID_REASON,
   NOTEBOOK_PUBLICATION_TITLE_REQUIRED,
   NOTEBOOK_PUBLICATION_TYPES,
+  authorizeAssignedCoursePublication,
   authorizeNotebookOwnedItemMutation,
   createNotebookPublication,
   isNotebookPublicationType,

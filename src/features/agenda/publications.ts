@@ -96,12 +96,29 @@ export function structuredAgendaPatchGuard(
   return { ok: true };
 }
 
+export interface PublicationMutationAccess {
+  /** Attribution active sur l’AnnualCourse de la publication. */
+  canAccessAnnualCourse?: boolean;
+}
+
+/**
+ * Mutation d’une publication pédagogique.
+ * - Avec `annualCourseId` : l’accès cours gouverne (pas l’auteur).
+ * - Sans cours : provenance `authorTeacherId` (Agenda legacy).
+ * `authorTeacherId` reste une provenance, jamais un droit d’exclusivité sur le cours.
+ */
 export function canModifyPublication(
   item: PrototypeAgendaItem,
   actorTeacherId: string,
   actorIsAdmin = false,
+  access?: PublicationMutationAccess,
 ): boolean {
   if (actorIsAdmin) return true;
+  if (item.annualCourseId?.trim()) {
+    if (access?.canAccessAnnualCourse === true) return true;
+    if (access?.canAccessAnnualCourse === false) return false;
+    return item.authorTeacherId === actorTeacherId;
+  }
   return item.authorTeacherId === actorTeacherId;
 }
 
@@ -158,13 +175,14 @@ export function updatePublication(
   actorTeacherId: string,
   patch: PublicationPatch,
   actorIsAdmin = false,
+  access?: PublicationMutationAccess,
 ): { ok: true; items: PrototypeAgendaItem[] } | { ok: false; reason: string } {
   const existing = findPublicationById(items, itemId);
   if (!existing) {
     return { ok: false, reason: "Publication introuvable." };
   }
-  if (!canModifyPublication(existing, actorTeacherId, actorIsAdmin)) {
-    return { ok: false, reason: "Seul l'auteur peut modifier cette publication." };
+  if (!canModifyPublication(existing, actorTeacherId, actorIsAdmin, access)) {
+    return { ok: false, reason: "Vous n’êtes pas autorisé à modifier cette publication." };
   }
 
   const title = patch.title !== undefined ? patch.title.trim() : existing.title;
@@ -200,13 +218,14 @@ export function deletePublication(
   itemId: number,
   actorTeacherId: string,
   actorIsAdmin = false,
+  access?: PublicationMutationAccess,
 ): { ok: true; items: PrototypeAgendaItem[] } | { ok: false; reason: string } {
   const existing = findPublicationById(items, itemId);
   if (!existing) {
     return { ok: false, reason: "Publication introuvable." };
   }
-  if (!canModifyPublication(existing, actorTeacherId, actorIsAdmin)) {
-    return { ok: false, reason: "Seul l'auteur peut supprimer cette publication." };
+  if (!canModifyPublication(existing, actorTeacherId, actorIsAdmin, access)) {
+    return { ok: false, reason: "Vous n’êtes pas autorisé à supprimer cette publication." };
   }
 
   return {

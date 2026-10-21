@@ -36,6 +36,8 @@ export interface ControlPlanningCard {
   teacherId: string;
   teacherName: string;
   isOwn: boolean;
+  /** Auteur historique ou enseignant attribué au même AnnualCourse. */
+  canManage: boolean;
   schoolWeekNumber: number;
   dayIndex: number;
   date: string | null;

@@ -1,8 +1,10 @@
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
 import { isCarnetOwnedPublication } from "./rich-agenda.ts";
 import {
+  assignmentInstantForSessionDate,
   contextBranchForCourse,
   ensureRuntimeSubjectForAnnualCourse,
+  teacherHasStructuredPublishAccess,
 } from "../agenda-bridge/index.ts";
 import type { AnnualCourse } from "../annual-courses/types.ts";
 import type { AnnualCourseStore } from "../../lib/persistence/annual-course-types.ts";
@@ -326,5 +328,61 @@ export async function authorizeNotebookOwnedItemMutation(
     at: options.at,
   });
   if (!resolved.ok) return resolved;
+  return { ok: true, value: true };
+}
+
+/**
+ * Accès mutation d’une publication rattachée à un AnnualCourse (devoir, info, contrôle).
+ * Null = publication legacy sans cours : le filtre auteur reste applicable.
+ */
+export async function authorizeAssignedCoursePublication(
+  deps: Pick<NotebookPublicationDeps, "courses" | "catalog" | "years">,
+  options: {
+    teacherId: string;
+    item: PrototypeAgendaItem;
+    at?: string;
+  },
+): Promise<NotebookPublishResult<true> | null> {
+  const annualCourseId = options.item.annualCourseId?.trim() || "";
+  if (!annualCourseId) return null;
+
+  if (isCarnetOwnedPublication(options.item)) {
+    const [course, classes, assignments, activeYear] = await Promise.all([
+      deps.courses.getCourse(annualCourseId),
+      deps.catalog.listClasses(),
+      deps.courses.listAssignments(annualCourseId),
+      deps.years.getActiveSchoolYear(),
+    ]);
+    const schoolClass = course ? classes.find((entry) => entry.id === course.classId) ?? null : null;
+    const access = evaluateNotebookPublishAccess({
+      teacherId: options.teacherId,
+      annualCourse: course,
+      schoolClass,
+      activeYear,
+      assignments,
+      at: options.at,
+    });
+    if (!access.canPublish) {
+      return { ok: false, reason: access.reason, status: statusForPublishReason(access.reason) };
+    }
+    return { ok: true, value: true };
+  }
+
+  const assignments = await deps.courses.listAssignments(annualCourseId);
+  const at =
+    options.at ??
+    (options.item.courseSessionDate?.trim()
+      ? assignmentInstantForSessionDate(options.item.courseSessionDate)
+      : new Date().toISOString());
+  if (
+    !teacherHasStructuredPublishAccess({
+      teacherId: options.teacherId,
+      annualCourseId,
+      assignments,
+      at,
+    })
+  ) {
+    return { ok: false, reason: NOTEBOOK_PUBLISH_NOT_ASSIGNED, status: 403 };
+  }
   return { ok: true, value: true };
 }

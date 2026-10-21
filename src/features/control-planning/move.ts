@@ -6,17 +6,17 @@ export function hasControlSessionLink(
   return Boolean(card.annualCourseId?.trim() && card.courseSessionKey?.trim());
 }
 
-/** Modifier / supprimer : auteur + année/classe opérable (`canCreate`). Le lien de séance n’est pas requis. */
+/** Modifier / supprimer : accès cours (ou auteur legacy) + année/classe opérable (`canCreate`). */
 export function canManageOwnStructuredControlCard(
-  card: Pick<ControlPlanningCard, "isOwn">,
+  card: Pick<ControlPlanningCard, "isOwn" | "canManage">,
   canCreate: boolean,
 ): boolean {
-  return Boolean(canCreate && card.isOwn);
+  return Boolean(canCreate && (card.canManage ?? card.isOwn));
 }
 
 /** Déplacer vers une autre séance : uniquement un contrôle déjà rattaché à un cours et une séance. */
 export function isMovableStructuredControlCard(
-  card: Pick<ControlPlanningCard, "isOwn" | "annualCourseId" | "courseSessionKey">,
+  card: Pick<ControlPlanningCard, "isOwn" | "canManage" | "annualCourseId" | "courseSessionKey">,
   canCreate: boolean,
 ): boolean {
   return canManageOwnStructuredControlCard(card, canCreate) && hasControlSessionLink(card);

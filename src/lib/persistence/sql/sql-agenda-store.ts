@@ -1,4 +1,9 @@
-import { deletePublication, updatePublication } from "../../../features/agenda/publications.ts";
+import {
+  canModifyPublication,
+  deletePublication,
+  updatePublication,
+  type PublicationMutationAccess,
+} from "../../../features/agenda/publications.ts";
 import { defaultStudentVisibleForCreate } from "../../../features/agenda/visibility.ts";
 import { verifyPassword } from "../../auth/password.ts";
 import type { AgendaMutationResult, AgendaStore, CreateAgendaInput, StructuredControlPlacement } from "../types.ts";
@@ -147,10 +152,11 @@ export class SqlAgendaStore implements AgendaStore {
         | "courseSessionKey"
       >
     >,
+    access?: PublicationMutationAccess,
   ): Promise<AgendaMutationResult> {
     const items = await this.exportAllItems();
     const actorIsAdmin = await this.teacherIsAdmin(actorTeacherId);
-    const result = updatePublication(items, itemId, actorTeacherId, patch, actorIsAdmin);
+    const result = updatePublication(items, itemId, actorTeacherId, patch, actorIsAdmin, access);
     if (!result.ok) {
       return { ok: false, reason: result.reason, status: result.reason.includes("introuvable") ? 404 : 403 };
     }
@@ -183,14 +189,16 @@ export class SqlAgendaStore implements AgendaStore {
     itemId: number,
     actorTeacherId: string,
     placement: StructuredControlPlacement,
+    access?: PublicationMutationAccess,
   ): Promise<AgendaMutationResult> {
     const existing = await this.findAgendaItem(itemId);
     if (!existing) return { ok: false, reason: "Publication introuvable.", status: 404 };
     if (existing.type !== "TEST") {
       return { ok: false, reason: "Seul un contrôle peut être déplacé vers une autre séance.", status: 400 };
     }
-    if (existing.authorTeacherId !== actorTeacherId) {
-      return { ok: false, reason: "Seul l'auteur peut déplacer ce contrôle.", status: 403 };
+    const actorIsAdmin = await this.teacherIsAdmin(actorTeacherId);
+    if (!canModifyPublication(existing, actorTeacherId, actorIsAdmin, access)) {
+      return { ok: false, reason: "Vous n’êtes pas autorisé à déplacer ce contrôle.", status: 403 };
     }
 
     const item = {
@@ -238,10 +246,14 @@ export class SqlAgendaStore implements AgendaStore {
     return { ok: true, item };
   }
 
-  async deleteAgendaItem(itemId: number, actorTeacherId: string): Promise<AgendaMutationResult> {
+  async deleteAgendaItem(
+    itemId: number,
+    actorTeacherId: string,
+    access?: PublicationMutationAccess,
+  ): Promise<AgendaMutationResult> {
     const items = await this.exportAllItems();
     const actorIsAdmin = await this.teacherIsAdmin(actorTeacherId);
-    const result = deletePublication(items, itemId, actorTeacherId, actorIsAdmin);
+    const result = deletePublication(items, itemId, actorTeacherId, actorIsAdmin, access);
     if (!result.ok) {
       return { ok: false, reason: result.reason, status: result.reason.includes("introuvable") ? 404 : 403 };
     }

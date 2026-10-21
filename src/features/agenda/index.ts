@@ -16,6 +16,7 @@ export {
   STRUCTURED_AGENDA_PATCH_FORBIDDEN_REASON,
   updatePublication,
   type PublicationInput,
+  type PublicationMutationAccess,
   type PublicationPatch,
 } from "./publications.ts";
 export {
