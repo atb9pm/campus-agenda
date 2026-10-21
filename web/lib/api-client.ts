@@ -187,9 +187,15 @@ export async function changeTeacherPasswordApi(
   }
 }
 
-export async function fetchTeacherClassroomsApi(schoolYearId?: string | null): Promise<NotebookRuntimeClassroom[]> {
-  const params = schoolYearId?.trim() ? `?schoolYearId=${encodeURIComponent(schoolYearId.trim())}` : "";
-  const response = await fetch(`/api/teacher/classrooms${params}`, { credentials: "include" });
+export async function fetchTeacherClassroomsApi(
+  schoolYearId?: string | null,
+  options?: { adminConsult?: boolean },
+): Promise<NotebookRuntimeClassroom[]> {
+  const params = new URLSearchParams();
+  if (schoolYearId?.trim()) params.set("schoolYearId", schoolYearId.trim());
+  if (options?.adminConsult) params.set("consult", "1");
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`/api/teacher/classrooms${query}`, { credentials: "include" });
   const payload = await parseJson<{
     ok: boolean;
     classrooms?: NotebookRuntimeClassroom[];
@@ -362,13 +368,19 @@ export async function deleteTeacherControlApi(agendaItemId: number): Promise<voi
   }
 }
 
-export async function fetchTeacherCoursesApi(schoolYearId?: string | null): Promise<{
+export async function fetchTeacherCoursesApi(
+  schoolYearId?: string | null,
+  options?: { adminConsult?: boolean },
+): Promise<{
   schoolYearId: string | null;
   courses: TeacherCourseWorkspaceEntry[];
   classAccesses: Record<string, TeacherClassAccessView>;
 }> {
-  const params = schoolYearId ? `?schoolYearId=${encodeURIComponent(schoolYearId)}` : "";
-  const response = await fetch(`/api/teacher/courses${params}`, { credentials: "include" });
+  const params = new URLSearchParams();
+  if (schoolYearId) params.set("schoolYearId", schoolYearId);
+  if (options?.adminConsult) params.set("consult", "1");
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`/api/teacher/courses${query}`, { credentials: "include" });
   const payload = await parseJson<{
     ok: boolean;
     reason?: string;
@@ -386,12 +398,18 @@ export async function fetchTeacherCoursesApi(schoolYearId?: string | null): Prom
   };
 }
 
-export async function fetchTeacherClassAccessesApi(schoolYearId?: string | null): Promise<{
+export async function fetchTeacherClassAccessesApi(
+  schoolYearId?: string | null,
+  options?: { adminConsult?: boolean },
+): Promise<{
   schoolYearId: string | null;
   classAccesses: Record<string, TeacherClassAccessView>;
 }> {
-  const params = schoolYearId ? `?schoolYearId=${encodeURIComponent(schoolYearId)}` : "";
-  const response = await fetch(`/api/teacher/class-accesses${params}`, { credentials: "include" });
+  const params = new URLSearchParams();
+  if (schoolYearId) params.set("schoolYearId", schoolYearId);
+  if (options?.adminConsult) params.set("consult", "1");
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(`/api/teacher/class-accesses${query}`, { credentials: "include" });
   const payload = await parseJson<{
     ok: boolean;
     reason?: string;
@@ -1156,6 +1174,9 @@ export type YearTransitionClassOption = {
   code: string;
   label: string;
   displayName: string;
+  professionLabel: string | null;
+  trainingYear: number | null;
+  parallelCode: string | null;
 };
 
 export type YearTransitionPresentedRow = {
@@ -1168,9 +1189,12 @@ export type YearTransitionPresentedRow = {
   explanation: string;
   sourceCourseLabel: string | null;
   targetCourseLabel: string | null;
+  sourceClassId: string | null;
   sourceClassLabel: string | null;
   targetClassLabel: string | null;
   sessionLabel: string | null;
+  sourceSessionLabel: string | null;
+  targetDurationLabel: string | null;
   targetAnnualCourseId: string | null;
   targetClassId: string | null;
 };
@@ -1195,6 +1219,18 @@ export type YearTransitionPresentedPreview = {
     courseLabel: string;
     classLabel: string;
   }>;
+  classSummaries: Array<{
+    sourceClassId: string;
+    identityLabel: string;
+    status: "reuse" | "create" | "skip" | "conflict" | "incomplete";
+    statusLabel: string;
+    message: string | null;
+    publicationCount: number;
+    privateNoteCount: number;
+    rows: YearTransitionPresentedRow[];
+  }>;
+  selectedClassCount: number;
+  includePrivateNotes: boolean;
 };
 
 export async function fetchYearTransitionPrepare(): Promise<{
@@ -1240,7 +1276,7 @@ export async function fetchYearTransitionPrepare(): Promise<{
 export async function createYearTransitionPreviewApi(input: {
   sourceSchoolYearId: string;
   targetSchoolYearId: string;
-  classMappings: Array<{ sourceClassId: string | null; targetClassId: string | null }>;
+  selectedSourceClassIds: string[];
   includePrivateNotes: boolean;
 }): Promise<{ transitionId: string; blocking: boolean; preview: YearTransitionPresentedPreview }> {
   const response = await fetch("/api/admin/year-transition/preview", {
@@ -1276,6 +1312,7 @@ export async function applyYearTransitionApi(transitionId: string): Promise<{
   skippedCount?: number;
   notes?: { createdCount: number; alreadyPresentCount: number; skippedCount: number };
   targetCourses: YearTransitionPresentedPreview["targetCourses"];
+  classSummaries: YearTransitionPresentedPreview["classSummaries"];
 }> {
   const response = await fetch("/api/admin/year-transition/apply", {
     method: "POST",
@@ -1293,6 +1330,7 @@ export async function applyYearTransitionApi(transitionId: string): Promise<{
     skippedCount?: number;
     notes?: { createdCount: number; alreadyPresentCount: number; skippedCount: number };
     targetCourses?: YearTransitionPresentedPreview["targetCourses"];
+    classSummaries?: YearTransitionPresentedPreview["classSummaries"];
   }>(response);
   if (!payload.code) {
     throw new Error(payload.reason ?? "Application impossible.");
@@ -1307,15 +1345,19 @@ export async function applyYearTransitionApi(transitionId: string): Promise<{
     skippedCount: payload.skippedCount,
     notes: payload.notes,
     targetCourses: payload.targetCourses ?? [],
+    classSummaries: payload.classSummaries ?? [],
   };
 }
 
-export async function activateSchoolYear(schoolYearId: string): Promise<SchoolCalendarPayload> {
+export async function activateSchoolYear(
+  schoolYearId: string,
+  options?: { confirm?: boolean },
+): Promise<SchoolCalendarPayload> {
   const response = await fetch("/api/admin/school-year/activate", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ schoolYearId }),
+    body: JSON.stringify({ schoolYearId, confirm: options?.confirm === true }),
   });
   const payload = await parseJson<{
     ok: boolean;

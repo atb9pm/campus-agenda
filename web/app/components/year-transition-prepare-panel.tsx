@@ -15,6 +15,7 @@ import { ConfirmDialog } from "./confirm-dialog.tsx";
 
 interface YearTransitionPreparePanelProps {
   onNotice: (message: string) => void;
+  onConsultPreparedYear?: (schoolYearId: string) => void;
   onOpenTargetCourse?: (target: {
     schoolYearId: string;
     annualCourseId: string;
@@ -24,53 +25,50 @@ interface YearTransitionPreparePanelProps {
   }) => void;
 }
 
-type Step = "years" | "mappings" | "options" | "preview" | "result";
-
-const NO_CONTINUATION = "__none__";
-const UNSET = "";
+type Step = "years" | "classes" | "options" | "preview" | "result";
 
 function yearCaption(year: YearTransitionYearOption | null): string {
   if (!year) return "Non choisie";
   return `${year.displayLabel} (${year.statusLabel})`;
 }
 
-function RowList({
-  title,
-  rows,
-  empty,
-}: {
-  title: string;
-  rows: YearTransitionPresentedRow[];
-  empty: string;
-}) {
+function classIdentityLabel(entry: YearTransitionClassOption): string {
+  const profession = entry.professionLabel?.trim() || entry.label || entry.code;
+  const training =
+    entry.trainingYear === 1
+      ? "Première année"
+      : entry.trainingYear != null
+        ? `${entry.trainingYear}e année`
+        : "Année de formation non renseignée";
+  const group = entry.parallelCode?.trim() || "sans groupe";
+  return `${profession} — ${training} — ${group}`;
+}
+
+function PreviewRows({ rows }: { rows: YearTransitionPresentedRow[] }) {
+  if (rows.length === 0) {
+    return <p className="school-year-hint">Aucun élément dans ce détail.</p>;
+  }
   return (
-    <article className="school-year-card">
-      <header>
-        <span className="eyebrow">{title}</span>
-        <h3>{rows.length}</h3>
-      </header>
-      {rows.length === 0 ? (
-        <p className="school-year-hint">{empty}</p>
-      ) : (
-        <ul className="year-transition-rows">
-          {rows.map((row) => (
-            <li key={row.id}>
-              <strong>{row.title}</strong>
-              <span>{row.reasonLabel}</span>
-              {row.sourceCourseLabel ? <span>{row.sourceCourseLabel}</span> : null}
-              {row.targetCourseLabel ? <span>Cible : {row.targetCourseLabel}</span> : null}
-              {row.sessionLabel ? <span>{row.sessionLabel}</span> : null}
-              <em>{row.explanation}</em>
-            </li>
-          ))}
-        </ul>
-      )}
-    </article>
+    <ul className="year-transition-rows">
+      {rows.map((row) => (
+        <li key={row.id}>
+          <strong>{row.title}</strong>
+          <span>{row.reasonLabel}</span>
+          {row.sourceCourseLabel ? <span>Cours : {row.sourceCourseLabel}</span> : null}
+          {row.targetCourseLabel ? <span>Cible : {row.targetCourseLabel}</span> : null}
+          {row.sourceSessionLabel ? <span>{row.sourceSessionLabel}</span> : null}
+          {row.sessionLabel ? <span>{row.sessionLabel}</span> : null}
+          {row.targetDurationLabel ? <span>{row.targetDurationLabel}</span> : null}
+          <em>{row.explanation}</em>
+        </li>
+      ))}
+    </ul>
   );
 }
 
 export function YearTransitionPreparePanel({
   onNotice,
+  onConsultPreparedYear,
   onOpenTargetCourse,
 }: YearTransitionPreparePanelProps) {
   const [step, setStep] = useState<Step>("years");
@@ -81,13 +79,17 @@ export function YearTransitionPreparePanel({
   const [classesByYearId, setClassesByYearId] = useState<Record<string, YearTransitionClassOption[]>>({});
   const [sourceYearId, setSourceYearId] = useState("");
   const [targetYearId, setTargetYearId] = useState("");
-  const [targetsBySource, setTargetsBySource] = useState<Record<string, string>>({});
+  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [includePrivateNotes, setIncludePrivateNotes] = useState(false);
   const [transitionId, setTransitionId] = useState<string | null>(null);
   const [preview, setPreview] = useState<YearTransitionPresentedPreview | null>(null);
   const [blocking, setBlocking] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [exclusionsAcknowledged, setExclusionsAcknowledged] = useState(false);
+  const [expandedClassId, setExpandedClassId] = useState<string | null>(null);
+  const [appliedPreview, setAppliedPreview] = useState<YearTransitionPresentedPreview | null>(null);
   const [result, setResult] = useState<{
+    ok: boolean;
     code: string;
     codeLabel: string;
     createdCount?: number;
@@ -95,13 +97,14 @@ export function YearTransitionPreparePanel({
     skippedCount?: number;
     notes?: { createdCount: number; alreadyPresentCount: number; skippedCount: number };
     targetCourses: YearTransitionPresentedPreview["targetCourses"];
+    classSummaries: YearTransitionPresentedPreview["classSummaries"];
   } | null>(null);
 
   const sourceYear = years.find((year) => year.id === sourceYearId) ?? null;
   const targetYear = years.find((year) => year.id === targetYearId) ?? null;
   const sourceClasses = useMemo(() => classesByYearId[sourceYearId] ?? [], [classesByYearId, sourceYearId]);
-  const targetClasses = useMemo(() => classesByYearId[targetYearId] ?? [], [classesByYearId, targetYearId]);
   const draftYears = years.filter((year) => year.status === "draft");
+  const stalePreview = Boolean(result) && step !== "result";
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -131,19 +134,15 @@ export function YearTransitionPreparePanel({
     setTransitionId(null);
     setPreview(null);
     setBlocking(false);
-    setResult(null);
-    if (step === "preview" || step === "result") setStep("options");
+    setExclusionsAcknowledged(false);
+    setExpandedClassId(null);
+    if (step === "preview") setStep("options");
+    if (step === "result") setStep("options");
   }
 
-  const classMappings = sourceClasses.map((source) => {
-    const chosen = targetsBySource[source.id] ?? UNSET;
-    return {
-      sourceClassId: source.id,
-      targetClassId: chosen === NO_CONTINUATION ? null : chosen || null,
-    };
-  });
-
-  const missingMappings = sourceClasses.filter((source) => !targetsBySource[source.id]);
+  const excludedCount = preview
+    ? preview.publications.excluded.length + (preview.notes?.excluded.length ?? 0)
+    : 0;
 
   async function handlePreview() {
     if (!sourceYearId || !targetYearId) return;
@@ -153,13 +152,13 @@ export function YearTransitionPreparePanel({
       const created = await createYearTransitionPreviewApi({
         sourceSchoolYearId: sourceYearId,
         targetSchoolYearId: targetYearId,
-        classMappings,
+        selectedSourceClassIds: selectedClassIds,
         includePrivateNotes,
       });
       setTransitionId(created.transitionId);
       setPreview(created.preview);
       setBlocking(created.blocking);
-      setResult(null);
+      setExclusionsAcknowledged(false);
       setStep("preview");
       onNotice("Aperçu calculé. Aucune copie n’a encore été faite.");
     } catch (previewError) {
@@ -171,12 +170,21 @@ export function YearTransitionPreparePanel({
 
   async function handleApply() {
     if (!transitionId || blocking) return;
+    if (excludedCount > 0 && !exclusionsAcknowledged) return;
     setWorking(true);
     setError("");
     setConfirmOpen(false);
     try {
       const outcome = await applyYearTransitionApi(transitionId);
       setResult(outcome);
+      setAppliedPreview(
+        preview
+          ? {
+              ...preview,
+              classSummaries: outcome.classSummaries.length ? outcome.classSummaries : preview.classSummaries,
+            }
+          : preview,
+      );
       setStep("result");
       onNotice(outcome.codeLabel);
       if (!outcome.ok) setError(outcome.reason ?? outcome.codeLabel);
@@ -193,8 +201,8 @@ export function YearTransitionPreparePanel({
         <p className="eyebrow">ANNÉE SCOLAIRE</p>
         <h2 id="year-transition-title">Préparer l’année suivante</h2>
         <p>
-          Choisissez les années, les correspondances de classes et les éléments à reprendre, puis
-          vérifiez un aperçu avant toute copie. L’année cible reste en brouillon.
+          Cinq étapes : années, classes à reprendre, éléments, aperçu, résultat. L’année cible reste
+          en préparation. L’année active des enseignants et des élèves n’est pas modifiée.
         </p>
       </div>
 
@@ -206,11 +214,17 @@ export function YearTransitionPreparePanel({
 
       {loading ? <p className="school-year-status">Chargement…</p> : null}
       {error ? <p className="school-year-error" role="alert">{error}</p> : null}
+      {stalePreview ? (
+        <p className="school-year-hint" role="status">
+          Les paramètres ont changé. L’ancien résultat reste affiché à l’étape 5 s’il a déjà été
+          appliqué, mais un nouvel aperçu est nécessaire pour un nouveau transfert.
+        </p>
+      ) : null}
 
       <nav className="year-transition-steps" aria-label="Étapes de préparation">
         {([
           ["years", "1. Années"],
-          ["mappings", "2. Classes"],
+          ["classes", "2. Classes"],
           ["options", "3. Éléments"],
           ["preview", "4. Aperçu"],
           ["result", "5. Résultat"],
@@ -220,7 +234,7 @@ export function YearTransitionPreparePanel({
             type="button"
             className={step === id ? "active" : undefined}
             onClick={() => setStep(id)}
-            disabled={id === "preview" && !preview}
+            disabled={(id === "preview" && !preview) || (id === "result" && !result)}
           >
             {label}
           </button>
@@ -233,6 +247,9 @@ export function YearTransitionPreparePanel({
             <span className="eyebrow">Étape 1</span>
             <h3>Choisir les années</h3>
           </header>
+          <p className="school-year-hint">
+            La préparation ne change pas l’année utilisée par les enseignants et les élèves.
+          </p>
           <div className="year-transition-year-grid">
             <label>
               Année source
@@ -240,7 +257,7 @@ export function YearTransitionPreparePanel({
                 value={sourceYearId}
                 onChange={(event) => {
                   setSourceYearId(event.target.value);
-                  setTargetsBySource({});
+                  setSelectedClassIds([]);
                   invalidatePreview();
                 }}
               >
@@ -253,12 +270,11 @@ export function YearTransitionPreparePanel({
               </select>
             </label>
             <label>
-              Année cible (brouillon)
+              Année cible à préparer
               <select
                 value={targetYearId}
                 onChange={(event) => {
                   setTargetYearId(event.target.value);
-                  setTargetsBySource({});
                   invalidatePreview();
                 }}
               >
@@ -271,8 +287,11 @@ export function YearTransitionPreparePanel({
               </select>
             </label>
           </div>
+          {targetYear ? (
+            <p className="school-year-hint">Statut de la cible : {targetYear.statusLabel}.</p>
+          ) : null}
           {targetYear && targetYear.status !== "draft" ? (
-            <p className="school-year-error">L’année cible doit rester en brouillon.</p>
+            <p className="school-year-error">L’année cible doit rester en préparation.</p>
           ) : null}
           {draftYears.length === 0 ? (
             <p className="school-year-hint">Créez d’abord une année future en brouillon (onglet Année scolaire).</p>
@@ -281,65 +300,64 @@ export function YearTransitionPreparePanel({
             type="button"
             className="workspace-action"
             disabled={!sourceYearId || !targetYearId || sourceYearId === targetYearId}
-            onClick={() => setStep("mappings")}
+            onClick={() => setStep("classes")}
           >
             Continuer
           </button>
         </article>
       ) : null}
 
-      {step === "mappings" ? (
+      {step === "classes" ? (
         <article className="school-year-card">
           <header>
             <span className="eyebrow">Étape 2</span>
-            <h3>Correspondances de classes</h3>
+            <h3>Reprendre les classes pour l’année suivante</h3>
           </header>
           <p className="school-year-hint">
-            Chaque classe source doit avoir une cible explicite ou « Pas de continuation ».
-            Campus Agenda n’invente aucune correspondance.
+            Cochez chaque classe à reprendre telle quelle : même profession, même année de formation
+            et même groupe. Les parallèles A, B et C restent distincts. Une classe décochée n’est
+            simplement pas reprise — ce n’est pas une erreur. Une nouvelle classe (par exemple D) se
+            crée ensuite dans l’année cible, sans contenu source. Les élèves ne passent pas
+            automatiquement d’une année de formation à la suivante.
           </p>
           {sourceClasses.length === 0 ? (
             <p className="school-year-hint">Aucune classe dans l’année source.</p>
           ) : (
-            <ul className="year-transition-mappings">
-              {sourceClasses.map((source) => (
-                <li key={source.id}>
-                  <label>
-                    {source.displayName}
-                    <select
-                      value={targetsBySource[source.id] ?? UNSET}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setTargetsBySource((current) => ({ ...current, [source.id]: value }));
-                        invalidatePreview();
-                      }}
-                    >
-                      <option value={UNSET}>Choisir…</option>
-                      <option value={NO_CONTINUATION}>Pas de continuation</option>
-                      {targetClasses.map((target) => (
-                        <option key={target.id} value={target.id}>{target.displayName}</option>
-                      ))}
-                    </select>
-                  </label>
-                </li>
-              ))}
+            <ul className="year-transition-class-picks">
+              {sourceClasses.map((source) => {
+                const checked = selectedClassIds.includes(source.id);
+                return (
+                  <li key={source.id}>
+                    <label htmlFor={`year-transition-class-${source.id}`}>
+                      <input
+                        id={`year-transition-class-${source.id}`}
+                        type="checkbox"
+                        checked={checked}
+                        aria-label={`${classIdentityLabel(source)} : reprendre`}
+                        onChange={(event) => {
+                          const enabled = event.target.checked;
+                          setSelectedClassIds((current) =>
+                            enabled ? [...current, source.id] : current.filter((id) => id !== source.id),
+                          );
+                          invalidatePreview();
+                        }}
+                      />
+                      <span>
+                        <strong>{classIdentityLabel(source)}</strong>
+                        <em>reprendre</em>
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
             </ul>
           )}
-          {missingMappings.length > 0 ? (
-            <p className="school-year-error">
-              Correspondances manquantes : {missingMappings.map((entry) => entry.displayName).join(", ")}.
-            </p>
-          ) : null}
+          <p className="school-year-hint">{selectedClassIds.length} classe(s) sélectionnée(s).</p>
           <div className="year-transition-actions">
             <button type="button" className="workspace-action secondary" onClick={() => setStep("years")}>
               Retour
             </button>
-            <button
-              type="button"
-              className="workspace-action"
-              disabled={missingMappings.length > 0}
-              onClick={() => setStep("options")}
-            >
+            <button type="button" className="workspace-action" onClick={() => setStep("options")}>
               Continuer
             </button>
           </div>
@@ -352,6 +370,7 @@ export function YearTransitionPreparePanel({
             <span className="eyebrow">Étape 3</span>
             <h3>Éléments à reprendre</h3>
           </header>
+          <p className="school-year-hint">Ces choix s’appliquent uniquement aux classes cochées à l’étape 2.</p>
           <ul className="year-transition-capabilities">
             <li>
               <strong>Publications du Carnet</strong>
@@ -370,13 +389,13 @@ export function YearTransitionPreparePanel({
                 Inclure mes notes privées
               </label>
               <p>
-                Désactivé par défaut. Seules vos notes sont concernées. Le contenu n’est pas affiché ici.
-                Les notes sans référence pédagogique restent dans l’année source.
+                Désactivé par défaut. Uniquement vos notes. Leur texte n’apparaît pas ici. Les notes
+                sans référence pédagogique restent dans l’année source.
               </p>
             </li>
           </ul>
           <div className="year-transition-actions">
-            <button type="button" className="workspace-action secondary" onClick={() => setStep("mappings")}>
+            <button type="button" className="workspace-action secondary" onClick={() => setStep("classes")}>
               Retour
             </button>
             <button type="button" className="workspace-action" disabled={working} onClick={() => void handlePreview()}>
@@ -388,11 +407,27 @@ export function YearTransitionPreparePanel({
 
       {step === "preview" && preview ? (
         <>
+          <article className="school-year-card">
+            <header>
+              <span className="eyebrow">Étape 4</span>
+              <h3>Vérifier avant le transfert</h3>
+            </header>
+            <ul className="year-transition-summary">
+              <li>Année source : {yearCaption(preview.sourceYear)}</li>
+              <li>Année cible : {yearCaption(preview.targetYear)}</li>
+              <li>Classes sélectionnées : {preview.selectedClassCount}</li>
+              <li>Publications du Carnet : toujours incluses</li>
+              <li>Notes privées : {preview.includePrivateNotes ? "incluses (les vôtres uniquement)" : "non incluses"}</li>
+            </ul>
+            <p className="school-year-hint">
+              L’année cible reste en préparation. L’année active et les données sources sont conservées.
+            </p>
+          </article>
           {preview.mappingIssues.length > 0 ? (
             <article className="school-year-card">
               <header>
-                <span className="eyebrow">Correspondances</span>
-                <h3>À corriger</h3>
+                <span className="eyebrow">À clarifier</span>
+                <h3>Ambiguïtés ou identités incomplètes</h3>
               </header>
               <ul className="year-transition-rows">
                 {preview.mappingIssues.map((issue) => (
@@ -401,28 +436,65 @@ export function YearTransitionPreparePanel({
               </ul>
             </article>
           ) : null}
-          <RowList title="Publications transférables" rows={preview.publications.projectable} empty="Aucune publication transférable." />
-          <RowList title="Déjà présentes" rows={preview.publications.alreadyPresent} empty="Aucune publication déjà présente." />
-          <RowList title="Non transférées" rows={preview.publications.excluded} empty="Aucune publication exclue." />
-          <RowList title="Bloquantes" rows={preview.publications.blocking} empty="Aucun problème bloquant sur les publications." />
-          {preview.notes ? (
-            <>
-              <RowList title="Notes transférables" rows={preview.notes.projectable} empty="Aucune note transférable." />
-              <RowList title="Notes déjà présentes" rows={preview.notes.alreadyPresent} empty="Aucune note déjà copiée." />
-              <RowList title="Notes non transférées" rows={preview.notes.excluded} empty="Aucune note exclue." />
-              <RowList title="Notes bloquantes" rows={preview.notes.blocking} empty="Aucun conflit de notes." />
-            </>
+          <article className="school-year-card">
+            <header>
+              <span className="eyebrow">Classes</span>
+              <h3>Détail dépliable</h3>
+            </header>
+            {preview.classSummaries.length === 0 ? (
+              <p className="school-year-hint">Aucune classe cochée. Rien ne sera transféré.</p>
+            ) : (
+              <ul className="year-transition-class-summaries">
+                {preview.classSummaries.map((summary) => (
+                  <li key={summary.sourceClassId}>
+                    <button
+                      type="button"
+                      className="year-transition-class-toggle"
+                      aria-expanded={expandedClassId === summary.sourceClassId}
+                      onClick={() =>
+                        setExpandedClassId((current) =>
+                          current === summary.sourceClassId ? null : summary.sourceClassId,
+                        )
+                      }
+                    >
+                      <strong>{summary.identityLabel}</strong>
+                      <span>{summary.statusLabel}</span>
+                      <span>
+                        {summary.publicationCount} publication(s)
+                        {preview.includePrivateNotes ? ` · ${summary.privateNoteCount} note(s) privée(s)` : ""}
+                      </span>
+                    </button>
+                    {expandedClassId === summary.sourceClassId ? (
+                      <div>
+                        {summary.message ? <p className="school-year-hint">{summary.message}</p> : null}
+                        <PreviewRows rows={summary.rows} />
+                      </div>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </article>
+          {excludedCount > 0 && !blocking ? (
+            <label className="year-transition-notes-option">
+              <input
+                type="checkbox"
+                checked={exclusionsAcknowledged}
+                onChange={(event) => setExclusionsAcknowledged(event.target.checked)}
+              />
+              J’ai pris connaissance des {excludedCount} élément(s) non transféré(s), qui restent dans l’année source.
+            </label>
           ) : null}
           {blocking ? (
             <p className="school-year-error">
               Des problèmes bloquants empêchent l’application. Corrigez la préparation puis recalculez l’aperçu.
             </p>
           ) : (
-            <p className="school-year-hint">Aucune copie n’a encore été faite. Vérifiez l’aperçu puis confirmez.</p>
+            <p className="school-year-hint">L’aperçu ne transfère rien. Vérifiez puis confirmez.</p>
           )}
           <div className="year-transition-actions">
             <button type="button" className="workspace-action secondary" onClick={() => setStep("options")}>
-              Corriger
+              Retour
             </button>
             <button type="button" className="workspace-action secondary" disabled={working} onClick={() => void handlePreview()}>
               Recalculer l’aperçu
@@ -430,10 +502,10 @@ export function YearTransitionPreparePanel({
             <button
               type="button"
               className="workspace-action"
-              disabled={working || blocking || !transitionId}
+              disabled={working || blocking || !transitionId || (excludedCount > 0 && !exclusionsAcknowledged)}
               onClick={() => setConfirmOpen(true)}
             >
-              Appliquer le transfert
+              Confirmer le transfert
             </button>
           </div>
         </>
@@ -442,22 +514,46 @@ export function YearTransitionPreparePanel({
       {step === "result" && result ? (
         <article className="school-year-card">
           <header>
-            <span className="eyebrow">Bilan</span>
-            <h3>{result.codeLabel}</h3>
+            <span className="eyebrow">Étape 5</span>
+            <h3>{result.ok && result.code === "APPLIED" ? "Transfert terminé" : result.codeLabel}</h3>
           </header>
-          <p>
-            Publications copiées : {result.createdCount ?? 0} · déjà présentes : {result.alreadyPresentCount ?? 0}
-            {" · "}non transférées : {result.skippedCount ?? 0}
-          </p>
-          {result.notes ? (
-            <p>
-              Notes copiées : {result.notes.createdCount} · déjà présentes : {result.notes.alreadyPresentCount}
-              {" · "}non transférées : {result.notes.skippedCount}
-            </p>
-          ) : null}
+          <p>{result.codeLabel}</p>
+          <ul className="year-transition-summary">
+            <li>
+              Classes créées :{" "}
+              {(appliedPreview?.classSummaries ?? result.classSummaries).filter((entry) => entry.status === "create").length}
+              {" · "}
+              réutilisées :{" "}
+              {(appliedPreview?.classSummaries ?? result.classSummaries).filter((entry) => entry.status === "reuse").length}
+            </li>
+            <li>Publications copiées : {result.createdCount ?? 0}</li>
+            <li>Déjà présentes : {result.alreadyPresentCount ?? 0}</li>
+            <li>Non transférées : {result.skippedCount ?? 0}</li>
+            {result.notes ? (
+              <li>
+                Notes privées copiées : {result.notes.createdCount} · déjà présentes : {result.notes.alreadyPresentCount}
+                {" · "}non transférées : {result.notes.skippedCount}
+              </li>
+            ) : (
+              <li>Notes privées : non demandées</li>
+            )}
+          </ul>
           <p className="school-year-hint">
-            L’année {yearCaption(targetYear)} reste en brouillon. Elle n’a pas été activée.
+            Les copies sont indépendantes : une modification ultérieure de la source n’est pas
+            synchronisée automatiquement. Un transfert répété ne crée pas de doublons.
           </p>
+          {appliedPreview?.classSummaries.length ? (
+            <ul className="year-transition-class-summaries">
+              {appliedPreview.classSummaries.map((summary) => (
+                <li key={summary.sourceClassId}>
+                  <strong>{summary.identityLabel}</strong>
+                  <span>
+                    {result.ok && summary.status === "create" ? "Classe créée" : summary.statusLabel}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {result.targetCourses.length > 0 ? (
             <ul className="year-transition-rows">
               {result.targetCourses.map((course) => (
@@ -477,14 +573,23 @@ export function YearTransitionPreparePanel({
               ))}
             </ul>
           ) : null}
+          {onConsultPreparedYear && targetYearId ? (
+            <button
+              type="button"
+              className="workspace-action"
+              onClick={() => onConsultPreparedYear(targetYearId)}
+            >
+              Consulter l’année préparée
+            </button>
+          ) : null}
         </article>
       ) : null}
 
       <ConfirmDialog
         open={confirmOpen}
-        title="Appliquer le transfert ?"
-        body={`Les publications${includePrivateNotes ? " et vos notes privées" : ""} projetables de ${yearCaption(sourceYear)} seront copiées vers ${yearCaption(targetYear)}. L’opération est atomique : tout est validé ou rien n’est écrit. L’année cible restera en brouillon.`}
-        confirmLabel="Confirmer l’application"
+        title="Confirmer le transfert ?"
+        body={`Les publications${includePrivateNotes ? " et vos notes privées" : ""} projetables de ${yearCaption(sourceYear)} seront copiées vers ${yearCaption(targetYear)}. L’année cible restera en préparation. L’année active et les données sources sont conservées.`}
+        confirmLabel="Confirmer le transfert"
         cancelLabel="Annuler"
         onConfirm={() => void handleApply()}
         onCancel={() => setConfirmOpen(false)}

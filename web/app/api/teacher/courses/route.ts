@@ -50,9 +50,16 @@ async function handleGet(request: Request) {
   // teacherId fourni par le client est ignoré — seule la session fait foi.
   const teacherId = sessionTeacherIdForCoursesApi(auth.session!.teacherId);
   const schoolYearId = schoolYearIdFromSearchParams(url.searchParams);
+  const adminConsult = url.searchParams.get("consult") === "1";
+  const isAdmin = await auth.store!.teacherIsAdmin(teacherId);
 
   const deps = await getAnnualCourseServiceDeps();
-  const result = await listTeacherCourses(deps, { teacherId, schoolYearId });
+  const result = await listTeacherCourses(deps, {
+    teacherId,
+    schoolYearId,
+    isAdmin,
+    adminConsult,
+  });
   const classAccesses = await classAccessesForTeacherCourses(result.courses);
 
   const body = {

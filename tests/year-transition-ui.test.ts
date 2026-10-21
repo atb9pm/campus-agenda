@@ -286,7 +286,25 @@ test("apply refuse l’absence de confirmation et les routes exigent une session
   const panel = await readFile(new URL("../web/app/components/year-transition-prepare-panel.tsx", import.meta.url), "utf8");
   assert.match(panel, /ConfirmDialog/);
   assert.match(panel, /includePrivateNotes/);
-  assert.match(panel, /Pas de continuation/);
+  assert.match(panel, /selectedSourceClassIds/);
+  assert.match(panel, /reprendre/);
+  assert.match(panel, /Consulter l’année préparée/);
+  assert.doesNotMatch(panel, /Pas de continuation/);
   const admin = await readFile(new URL("../web/app/components/administration-panel.tsx", import.meta.url), "utf8");
   assert.match(admin, /Préparer l’année suivante/);
+  const schoolYearAdmin = await readFile(
+    new URL("../web/app/components/school-year-admin-panel.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(schoolYearAdmin, /Consulter les cours de cette année/);
+  assert.match(schoolYearAdmin, /Activer /);
+  assert.match(schoolYearAdmin, /Année active actuelle/);
+  const activateRoute = await readFile(
+    new URL("../web/app/api/admin/school-year/activate/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(activateRoute, /confirm !== true/);
+  const coursesRoute = await readFile(new URL("../web/app/api/teacher/courses/route.ts", import.meta.url), "utf8");
+  assert.match(coursesRoute, /consult/);
+  assert.match(coursesRoute, /adminConsult/);
 });

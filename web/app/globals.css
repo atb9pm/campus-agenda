@@ -678,6 +678,16 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .year-transition-rows span, .year-transition-capabilities p, .year-transition-notes-option { color: #52627f; font-size: 11px; }
 .year-transition-rows em { color: #7b879c; font-size: 11px; font-style: normal; line-height: 1.45; }
 .year-transition-notes-option { display: flex; gap: 8px; align-items: center; font-weight: 700; color: var(--navy); }
+.year-transition-class-picks, .year-transition-class-summaries, .year-transition-summary {
+  margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 8px;
+}
+.year-transition-class-picks label { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfe; }
+.year-transition-class-picks strong { display: block; color: var(--navy); font-size: 13px; }
+.year-transition-class-picks em { color: #6d7f9b; font-size: 11px; font-style: normal; }
+.year-transition-class-toggle {
+  width: 100%; display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff; text-align: left; cursor: pointer;
+}
+.year-transition-summary li { color: #52627f; font-size: 13px; }
 .year-transition-consult-banner { margin: 0 38px 16px; padding: 12px 14px; border: 1px solid #d6bbfb; border-radius: 10px; background: #f9f5ff; color: #52627f; font-size: 12px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .school-year-card { padding: 22px 24px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: var(--shadow); }
 .school-year-card header h3 { margin: 6px 0 0; color: var(--navy); font-size: 18px; letter-spacing: -.02em; }

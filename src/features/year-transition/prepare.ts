@@ -18,6 +18,7 @@ import {
   type YearTransitionCatalogLookups,
   type YearTransitionPresentedPreview,
 } from "./presentation.ts";
+import { loadContinuationResolution, materializeSelectedContinuations } from "./materialize-continuations.ts";
 import type { YearTransitionClassMapping, YearTransitionPreviewResult } from "./types.ts";
 
 export interface YearTransitionPrepareDeps extends ApplyPersistedYearTransitionDeps {
@@ -65,6 +66,20 @@ export async function loadYearTransitionPrepareState(
   };
 }
 
+export function parseSelectedSourceClassIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) {
+    throw new Error("Sélection de classes invalide.");
+  }
+  const ids: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "string" || !entry.trim()) {
+      throw new Error("Sélection de classes invalide.");
+    }
+    ids.push(entry.trim());
+  }
+  return [...new Set(ids)];
+}
+
 export function parseYearTransitionPreviewRequest(
   body: unknown,
   sessionTeacherId: string,
@@ -72,6 +87,8 @@ export function parseYearTransitionPreviewRequest(
   sourceSchoolYearId: string;
   targetSchoolYearId: string;
   classMappings: YearTransitionClassMapping[];
+  selectedSourceClassIds: string[];
+  resolveContinuations: boolean;
   includePrivateNotes: boolean;
   privateNotesOwnerTeacherId?: string;
 } {
@@ -89,10 +106,24 @@ export function parseYearTransitionPreviewRequest(
     includePrivateNotes: record.includePrivateNotes === true,
     requestedOwnerTeacherId: record.privateNotesOwnerTeacherId,
   });
+  const resolveContinuations = record.selectedSourceClassIds !== undefined;
+  const selectedSourceClassIds = resolveContinuations
+    ? parseSelectedSourceClassIds(record.selectedSourceClassIds)
+    : [];
+  const classMappings = resolveContinuations
+    ? []
+    : parseYearTransitionClassMappings(record.classMappings);
+  if (!resolveContinuations) {
+    for (const mapping of classMappings) {
+      if (mapping.sourceClassId && mapping.targetClassId) selectedSourceClassIds.push(mapping.sourceClassId);
+    }
+  }
   return {
     sourceSchoolYearId,
     targetSchoolYearId,
-    classMappings: parseYearTransitionClassMappings(record.classMappings),
+    classMappings,
+    selectedSourceClassIds: [...new Set(selectedSourceClassIds)],
+    resolveContinuations,
     ...notes,
   };
 }
@@ -109,14 +140,38 @@ export async function createAuthorizedYearTransitionPreview(
   const source = await deps.years.getSchoolYearById(parsed.sourceSchoolYearId);
   if (!source) throw new Error("Année source introuvable.");
 
-  const input = await assembleLiveYearTransitionPreviewInput(parsed, deps);
+  let classMappings = parsed.classMappings;
+  let continuationIssues: string[] = [];
+  let continuationBlocking = false;
+  if (parsed.resolveContinuations) {
+    const continuation = await loadContinuationResolution(deps, {
+      selectedSourceClassIds: parsed.selectedSourceClassIds,
+      sourceSchoolYearId: parsed.sourceSchoolYearId,
+      targetSchoolYearId: parsed.targetSchoolYearId,
+    });
+    classMappings = continuation.mappings;
+    continuationIssues = continuation.issues;
+    continuationBlocking = continuation.blocking;
+  }
+
+  const input = await assembleLiveYearTransitionPreviewInput(
+    {
+      ...parsed,
+      classMappings,
+      selectedSourceClassIds: parsed.selectedSourceClassIds,
+    },
+    deps,
+  );
   const persisted = await createPersistedYearTransitionPreview(input, { store: deps.previews });
   const lookups = await loadYearTransitionCatalogLookups(deps);
-  const preview = presentYearTransitionPreview(persisted.preview, lookups, parsed.classMappings);
+  const preview = presentYearTransitionPreview(persisted.preview, lookups, classMappings, {
+    selectedSourceClassIds: parsed.selectedSourceClassIds,
+    extraIssues: continuationIssues,
+  });
   return {
     transitionId: persisted.id,
     preview,
-    blocking: preview.blocking || previewHasBlockingEntries(persisted.preview),
+    blocking: continuationBlocking || preview.blocking || previewHasBlockingEntries(persisted.preview),
   };
 }
 
@@ -155,9 +210,14 @@ export async function applyAuthorizedYearTransition(
   let presented: YearTransitionPresentedPreview | null = null;
   try {
     const previewJson = JSON.parse(persisted.previewJson) as YearTransitionPreviewResult;
-    const snapshot = JSON.parse(persisted.snapshotJson) as { classMappings?: YearTransitionClassMapping[] };
+    const snapshot = JSON.parse(persisted.snapshotJson) as {
+      classMappings?: YearTransitionClassMapping[];
+      selectedSourceClassIds?: string[];
+    };
     const lookups = await loadYearTransitionCatalogLookups(deps);
-    presented = presentYearTransitionPreview(previewJson, lookups, snapshot.classMappings ?? []);
+    presented = presentYearTransitionPreview(previewJson, lookups, snapshot.classMappings ?? [], {
+      selectedSourceClassIds: snapshot.selectedSourceClassIds ?? [],
+    });
   } catch {
     presented = null;
   }

@@ -1,4 +1,4 @@
-import { formatSwissDate } from "../course-sessions/format.ts";
+import { formatCourseSessionPeriods, formatSwissDate } from "../course-sessions/format.ts";
 import { COURSE_WEEKDAY_LABELS } from "../course-schedule/types.ts";
 import { classDisplayProfessionLabel } from "../school-catalog/class-display.ts";
 import type { PedagogicalContextRecord, SchoolProfessionRecord } from "../school-catalog/profession-types.ts";
@@ -10,11 +10,13 @@ import type { SchoolYearRecord } from "../school-year/types.ts";
 import { YEAR_TRANSITION_APPLY_BLOCKING_REASONS, type YearTransitionApplyFailureCode, type YearTransitionApplyOutcome } from "./apply-types.ts";
 import { YEAR_TRANSITION_PREVIEW_REASON_LABELS, type YearTransitionPreviewReason } from "./reasons.ts";
 import { indexClassMappings } from "./class-mapping.ts";
+import { resolveClassContinuations } from "./continuation-identity.ts";
 import type { PrivateNotePreviewEntry } from "./private-notes.ts";
 import type {
   YearTransitionClassMapping,
   YearTransitionPreviewResult,
   YearTransitionProposedPlacement,
+  YearTransitionSourceTemporal,
 } from "./types.ts";
 
 export const YEAR_TRANSITION_TRANSFER_CAPABILITIES = [
@@ -129,9 +131,12 @@ export interface YearTransitionPresentedRow {
   explanation: string;
   sourceCourseLabel: string | null;
   targetCourseLabel: string | null;
+  sourceClassId: string | null;
   sourceClassLabel: string | null;
   targetClassLabel: string | null;
   sessionLabel: string | null;
+  sourceSessionLabel: string | null;
+  targetDurationLabel: string | null;
   targetAnnualCourseId: string | null;
   targetClassId: string | null;
 }
@@ -161,6 +166,20 @@ export interface YearTransitionPresentedPreview {
     courseLabel: string;
     classLabel: string;
   }>;
+  classSummaries: YearTransitionClassSummary[];
+  selectedClassCount: number;
+  includePrivateNotes: boolean;
+}
+
+export interface YearTransitionClassSummary {
+  sourceClassId: string;
+  identityLabel: string;
+  status: "reuse" | "create" | "skip" | "conflict" | "incomplete";
+  statusLabel: string;
+  message: string | null;
+  publicationCount: number;
+  privateNoteCount: number;
+  rows: YearTransitionPresentedRow[];
 }
 
 export function yearStatusLabel(status: SchoolYearRecord["status"]): string {
@@ -248,12 +267,15 @@ export function mappingIssueMessages(
   mappings: readonly YearTransitionClassMapping[],
   sourceClassIds: readonly string[],
   className: (id: string) => string,
+  options?: { requireAllSources?: boolean },
 ): string[] {
   const index = indexClassMappings(mappings);
   const issues: string[] = [];
-  for (const sourceId of sourceClassIds) {
-    if (!index.sourcesToTargets.has(sourceId)) {
-      issues.push(`Correspondance manquante pour ${className(sourceId)}.`);
+  if (options?.requireAllSources !== false) {
+    for (const sourceId of sourceClassIds) {
+      if (!index.sourcesToTargets.has(sourceId)) {
+        issues.push(`Correspondance manquante pour ${className(sourceId)}.`);
+      }
     }
   }
   for (const conflict of index.summary.conflicts) {
@@ -311,31 +333,64 @@ function sessionLabel(placement: YearTransitionProposedPlacement | null, fallbac
   if (placement) {
     const weekday = COURSE_WEEKDAY_LABELS[placement.day as keyof typeof COURSE_WEEKDAY_LABELS]
       ?? `jour ${placement.day}`;
-    return `Séance n° ${placement.sequenceNumber} · ${weekday.toLocaleLowerCase("fr-CH")} ${formatSwissDate(placement.courseSessionDate)} · semaine ${String(placement.schoolWeekNumber).padStart(2, "0")}`;
+    return `Séance cible n° ${placement.sequenceNumber} · ${weekday.toLocaleLowerCase("fr-CH")} ${formatSwissDate(placement.courseSessionDate)}`;
   }
-  if (fallbackDate) return formatSwissDate(fallbackDate);
+  if (fallbackDate) return `Séance cible · ${formatSwissDate(fallbackDate)}`;
   return null;
+}
+
+function sourceSessionLabel(temporal: YearTransitionSourceTemporal | null | undefined): string | null {
+  if (!temporal) return null;
+  if (temporal.courseSessionDate) return `Séance source · ${formatSwissDate(temporal.courseSessionDate)}`;
+  if (temporal.schoolWeekNumber) {
+    return `Séance source · semaine ${String(temporal.schoolWeekNumber).padStart(2, "0")}`;
+  }
+  return null;
+}
+
+function targetDurationLabel(
+  session: { segments?: ReadonlyArray<{ periodStart: number; periodEnd: number }> } | null,
+): string | null {
+  const periods = formatCourseSessionPeriods(session?.segments ?? []);
+  return periods ? `Durée cible : ${periods}` : null;
 }
 
 function emptyGroups(): YearTransitionPresentedPreview["publications"] {
   return { projectable: [], alreadyPresent: [], excluded: [], blocking: [] };
 }
 
+const CLASS_STATUS_LABELS: Record<YearTransitionClassSummary["status"], string> = {
+  reuse: "Classe cible réutilisée",
+  create: "Classe à créer à la confirmation",
+  skip: "Non reprise",
+  conflict: "Ambiguïté — aucune fusion automatique",
+  incomplete: "Identité incomplète",
+};
+
 export function presentYearTransitionPreview(
   preview: YearTransitionPreviewResult,
   lookups: YearTransitionCatalogLookups,
   classMappings: readonly YearTransitionClassMapping[] = [],
+  options?: { selectedSourceClassIds?: readonly string[]; extraIssues?: readonly string[] },
 ): YearTransitionPresentedPreview {
   const sourceYear = lookups.years.find((year) => year.id === preview.sourceSchoolYearId);
   const targetYear = lookups.years.find((year) => year.id === preview.targetSchoolYearId);
-  const sourceClassIds = lookups.classes
-    .filter((entry) => entry.schoolYearId === preview.sourceSchoolYearId && !entry.isArchived)
-    .map((entry) => entry.id);
-  const mappingIssues = mappingIssueMessages(
-    classMappings,
-    sourceClassIds,
-    (id) => classLabel(lookups, id) ?? id,
-  );
+  const selectedSourceClassIds = options?.selectedSourceClassIds ?? [];
+  const requireAllSources = selectedSourceClassIds.length === 0;
+  const sourceClassIds = requireAllSources
+    ? lookups.classes
+        .filter((entry) => entry.schoolYearId === preview.sourceSchoolYearId && !entry.isArchived)
+        .map((entry) => entry.id)
+    : [...selectedSourceClassIds];
+  const mappingIssues = [
+    ...mappingIssueMessages(
+      classMappings,
+      sourceClassIds,
+      (id) => classLabel(lookups, id) ?? id,
+      { requireAllSources },
+    ),
+    ...(options?.extraIssues ?? []),
+  ];
 
   const publications = emptyGroups();
   for (const entry of preview.entries) {
@@ -353,9 +408,12 @@ export function presentYearTransitionPreview(
       explanation: YEAR_TRANSITION_PREVIEW_REASON_LABELS[entry.reason] ?? entry.reason,
       sourceCourseLabel: courseLabel(lookups, entry.sourceAnnualCourseId),
       targetCourseLabel: courseLabel(lookups, entry.targetAnnualCourseId),
+      sourceClassId: entry.sourceClassId,
       sourceClassLabel: classLabel(lookups, entry.sourceClassId),
       targetClassLabel: classLabel(lookups, entry.targetClassId),
       sessionLabel: sessionLabel(entry.proposedPlacement, entry.targetCourseSession?.date ?? null),
+      sourceSessionLabel: sourceSessionLabel(entry.sourceTemporal),
+      targetDurationLabel: targetDurationLabel(entry.targetCourseSession),
       targetAnnualCourseId: entry.targetAnnualCourseId,
       targetClassId: entry.targetClassId,
     };
@@ -377,9 +435,12 @@ export function presentYearTransitionPreview(
         explanation: YEAR_TRANSITION_NOTE_REASON_EXPLANATIONS[entry.reason],
         sourceCourseLabel: null,
         targetCourseLabel: courseLabel(lookups, entry.targetAnnualCourseId),
+        sourceClassId: null,
         sourceClassLabel: null,
         targetClassLabel: classLabel(lookups, entry.targetClassId),
         sessionLabel: formatNoteSessionLabel(entry.courseSessionKey),
+        sourceSessionLabel: null,
+        targetDurationLabel: null,
         targetAnnualCourseId: entry.targetAnnualCourseId,
         targetClassId: entry.targetClassId,
       };
@@ -402,7 +463,51 @@ export function presentYearTransitionPreview(
     });
   }
 
-  const blocking = publications.blocking.length > 0 || Boolean(notes?.blocking.length);
+  const continuation = resolveClassContinuations({
+    selectedSourceClassIds,
+    sourceClasses: lookups.classes,
+    targetClasses: lookups.classes,
+    sourceSchoolYearId: preview.sourceSchoolYearId,
+    targetSchoolYearId: preview.targetSchoolYearId,
+  });
+  const allRows = [
+    ...publications.projectable,
+    ...publications.alreadyPresent,
+    ...publications.excluded,
+    ...publications.blocking,
+    ...(notes?.projectable ?? []),
+    ...(notes?.alreadyPresent ?? []),
+    ...(notes?.excluded ?? []),
+    ...(notes?.blocking ?? []),
+  ];
+  const classSummaries: YearTransitionClassSummary[] = continuation.planned
+    .filter((row) => row.action !== "skip")
+    .map((row) => {
+      const source = lookups.classes.find((entry) => entry.id === row.sourceClassId);
+      const presentedClass = source ? presentTransitionClass(source, lookups.professions) : null;
+      const identityLabel = presentedClass
+        ? [presentedClass.professionLabel, presentedClass.trainingYear != null ? `année ${presentedClass.trainingYear}` : null, presentedClass.parallelCode]
+            .filter(Boolean)
+            .join(" — ") || presentedClass.displayName
+        : row.sourceClassId;
+      const rows = allRows.filter((entry) => entry.sourceClassId === row.sourceClassId || entry.targetClassId === row.targetClassId);
+      return {
+        sourceClassId: row.sourceClassId,
+        identityLabel,
+        status: row.action,
+        statusLabel: CLASS_STATUS_LABELS[row.action],
+        message: row.message,
+        publicationCount: rows.filter((entry) => entry.kind === "publication").length,
+        privateNoteCount: rows.filter((entry) => entry.kind === "privateNote").length,
+        rows,
+      };
+    });
+
+  const blocking =
+    publications.blocking.length > 0 ||
+    Boolean(notes?.blocking.length) ||
+    continuation.blocking ||
+    mappingIssues.length > 0;
   return {
     fingerprint: preview.fingerprint,
     sourceYear: sourceYear ? presentSchoolYearOption(sourceYear) : null,
@@ -412,6 +517,9 @@ export function presentYearTransitionPreview(
     publications,
     notes,
     targetCourses,
+    classSummaries,
+    selectedClassCount: selectedSourceClassIds.length,
+    includePrivateNotes: Boolean(preview.privateNotes),
   };
 }
 
@@ -428,6 +536,7 @@ export function presentApplyOutcome(
   skippedCount?: number;
   notes?: { createdCount: number; alreadyPresentCount: number; skippedCount: number };
   targetCourses: YearTransitionPresentedPreview["targetCourses"];
+  classSummaries: YearTransitionClassSummary[];
   blocking?: boolean;
 } {
   if (!outcome.ok) {
@@ -437,6 +546,7 @@ export function presentApplyOutcome(
       codeLabel: YEAR_TRANSITION_APPLY_FAILURE_LABELS[outcome.code] ?? outcome.code,
       reason: outcome.reason,
       targetCourses: presented?.targetCourses ?? [],
+      classSummaries: presented?.classSummaries ?? [],
       blocking: outcome.code === "APPLY_BLOCKED" || outcome.code === "PREVIEW_STALE",
     };
   }
@@ -458,6 +568,7 @@ export function presentApplyOutcome(
         }
       : undefined,
     targetCourses: presented?.targetCourses ?? [],
+    classSummaries: presented?.classSummaries ?? [],
   };
 }
 

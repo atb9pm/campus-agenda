@@ -67,6 +67,7 @@ export {
 export type {
   YearTransitionCatalogLookups,
   YearTransitionClassOption,
+  YearTransitionClassSummary,
   YearTransitionPresentedPreview,
   YearTransitionPresentedRow,
   YearTransitionYearOption,
@@ -75,8 +76,13 @@ export {
   applyAuthorizedYearTransition,
   createAuthorizedYearTransitionPreview,
   loadYearTransitionPrepareState,
+  parseSelectedSourceClassIds,
   parseYearTransitionPreviewRequest,
 } from "./prepare.ts";
+export {
+  classContinuationIdentity,
+  resolveClassContinuations,
+} from "./continuation-identity.ts";
 export { applyPersistedYearTransition, expectedApplyResultForPreviewReason } from "./apply.ts";
 export type { ApplyPersistedYearTransitionDeps } from "./apply.ts";
 export {

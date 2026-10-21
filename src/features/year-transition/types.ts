@@ -31,6 +31,8 @@ export interface YearTransitionPreviewInput {
   sourceSchoolYearId: string;
   targetSchoolYearId: string;
   classMappings: readonly YearTransitionClassMapping[];
+  /** Classes cochées à l’étape 2. Les autres sont des non-reprises volontaires. */
+  selectedSourceClassIds?: readonly string[];
   sourceCourses: readonly AnnualCourse[];
   targetCourses: readonly AnnualCourse[];
   sourceItems: readonly PrototypeAgendaItem[];
