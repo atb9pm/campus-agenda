@@ -61,6 +61,7 @@ export {
   canonicalizeTargetMeetingDayPlans,
   parseTargetMeetingDayPlans,
   requireTargetMeetingDayPlans,
+  usesExplicitTargetMeetingDayPlans,
   type YearTransitionTargetMeetingDayPlan,
 } from "./target-meeting-days.ts";
 export {
@@ -104,6 +105,10 @@ export {
   pendingTargetCourseId,
   resolveClassContinuations,
 } from "./continuation-identity.ts";
+export {
+  materializeSelectedContinuations,
+  persistTargetMeetingDayPlans,
+} from "./materialize-continuations.ts";
 export { applyPersistedYearTransition, expectedApplyResultForPreviewReason } from "./apply.ts";
 export type { ApplyPersistedYearTransitionDeps } from "./apply.ts";
 export {

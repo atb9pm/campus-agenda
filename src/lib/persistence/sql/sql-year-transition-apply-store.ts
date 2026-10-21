@@ -1,6 +1,7 @@
 import type {
   PersistedYearTransitionApply,
   PersistedYearTransitionApplyEntry,
+  YearTransitionApplyNoteGuard,
   YearTransitionApplyPlan,
   YearTransitionApplyStore,
 } from "../../../features/year-transition/apply-types.ts";
@@ -12,6 +13,33 @@ export function transitionNoteToken(notes: readonly AnnualCourseNote[]): string 
   return JSON.stringify([...notes].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
     .map(n => Object.fromEntries(NOTEBOOK_COLUMNS.map((column, i) => [column,
       column === "body_json" ? n.body ?? null : bindAnnualNoteValues(n)[i]]))));
+}
+
+function noteGuardStatement(guard: YearTransitionApplyNoteGuard, transitionId: string) {
+  const courseIds = (guard.annualCourseIds ?? []).map((id) => id.trim()).filter(Boolean);
+  const notebookJson = NOTEBOOK_COLUMNS.map(
+    (c) => `'${c}', ${c === "body_json" ? "json(body_json)" : c}`,
+  ).join(", ");
+  const where = courseIds.length > 0
+    ? `annual_course_id IN (${courseIds.map(() => "?").join(", ")}) AND school_year_id IN (?, ?)`
+    : "owner_teacher_id = ? AND school_year_id IN (?, ?)";
+  const identityValues = courseIds.length > 0
+    ? [...courseIds, guard.sourceSchoolYearId, guard.targetSchoolYearId]
+    : [guard.ownerTeacherId, guard.sourceSchoolYearId, guard.targetSchoolYearId];
+  const token = transitionNoteToken(guard.expected);
+  return {
+    // Compare in the same transaction as all copies and ledger writes.
+    sql: `WITH current(token) AS (
+      SELECT json_group_array(json_object(${notebookJson}))
+      FROM (SELECT * FROM annual_course_notes WHERE ${where} ORDER BY id))
+      UPDATE year_transition_previews SET fingerprint = CASE WHEN
+      NOT EXISTS (SELECT fullkey, type, atom FROM json_tree((SELECT token FROM current))
+        EXCEPT SELECT fullkey, type, atom FROM json_tree(?))
+      AND NOT EXISTS (SELECT fullkey, type, atom FROM json_tree(?)
+        EXCEPT SELECT fullkey, type, atom FROM json_tree((SELECT token FROM current)))
+      THEN fingerprint ELSE NULL END WHERE id = ?`,
+    values: [...identityValues, token, token, transitionId],
+  };
 }
 
 interface ApplyRow {
@@ -83,20 +111,7 @@ export class SqlYearTransitionApplyStore implements YearTransitionApplyStore {
 
   async applyAtomically(plan: YearTransitionApplyPlan): Promise<void> {
     const statements = [
-      ...(plan.noteGuard ? [{
-        // Compare in the same transaction as all copies and ledger writes.
-        sql: `WITH current(token) AS (
-          SELECT json_group_array(json_object(${NOTEBOOK_COLUMNS.map(c => `'${c}', ${c === "body_json" ? "json(body_json)" : c}`).join(", ")}))
-          FROM (SELECT * FROM annual_course_notes WHERE owner_teacher_id = ? AND school_year_id IN (?, ?) ORDER BY id))
-          UPDATE year_transition_previews SET fingerprint = CASE WHEN
-          NOT EXISTS (SELECT fullkey, type, atom FROM json_tree((SELECT token FROM current))
-            EXCEPT SELECT fullkey, type, atom FROM json_tree(?))
-          AND NOT EXISTS (SELECT fullkey, type, atom FROM json_tree(?)
-            EXCEPT SELECT fullkey, type, atom FROM json_tree((SELECT token FROM current)))
-          THEN fingerprint ELSE NULL END WHERE id = ?`,
-        values: [plan.noteGuard.ownerTeacherId, plan.noteGuard.sourceSchoolYearId, plan.noteGuard.targetSchoolYearId,
-          transitionNoteToken(plan.noteGuard.expected), transitionNoteToken(plan.noteGuard.expected), plan.apply.transitionId],
-      }] : []),
+      ...(plan.noteGuard ? [noteGuardStatement(plan.noteGuard, plan.apply.transitionId)] : []),
       ...(plan.notes ?? []).map(note => ({
         sql: `INSERT INTO annual_course_notes (${NOTEBOOK_COLUMNS.join(", ")}) VALUES (${NOTEBOOK_COLUMNS.map(() => "?").join(", ")})`,
         values: bindAnnualNoteValues(note),

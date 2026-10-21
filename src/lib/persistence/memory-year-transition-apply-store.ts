@@ -1,8 +1,9 @@
-import type {
-  PersistedYearTransitionApply,
-  PersistedYearTransitionApplyEntry,
-  YearTransitionApplyPlan,
-  YearTransitionApplyStore,
+import {
+  notesMatchingApplyGuard,
+  type PersistedYearTransitionApply,
+  type PersistedYearTransitionApplyEntry,
+  type YearTransitionApplyPlan,
+  type YearTransitionApplyStore,
 } from "../../features/year-transition/apply-types.ts";
 import type { PrototypeAgendaItem } from "../../features/agenda/demo-items.ts";
 import { getMemoryAgendaStore, MemoryAgendaStore } from "./memory-store.ts";
@@ -57,8 +58,7 @@ export class MemoryYearTransitionApplyStore implements YearTransitionApplyStore 
       if (plan.noteGuard) {
         const guard = plan.noteGuard;
         if (!this.notes) throw new Error("Private note store unavailable");
-        const current = this.notes.exportAllNotes().filter(n => n.ownerTeacherId === guard.ownerTeacherId
-          && [guard.sourceSchoolYearId, guard.targetSchoolYearId].includes(n.schoolYearId));
+        const current = notesMatchingApplyGuard(this.notes.exportAllNotes(), guard);
         if (transitionNoteToken(current) !== transitionNoteToken(guard.expected)) {
           throw new Error("Private notes changed during transition");
         }

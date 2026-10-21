@@ -14,6 +14,12 @@ import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-ty
 import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
 import type { AgendaStore } from "../../lib/persistence/types.ts";
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
+import type { AnnualCourse } from "../annual-courses/types.ts";
+import { parseCourseSessionKey } from "../course-sessions/compute.ts";
+import {
+  isPendingTargetCourseId,
+  PENDING_TARGET_COURSE_PREFIX,
+} from "./continuation-identity.ts";
 import { assembleLiveYearTransitionPreviewInput } from "./assemble.ts";
 import {
   YEAR_TRANSITION_APPLY_BLOCKING_REASONS,
@@ -33,7 +39,11 @@ import {
   yearTransitionPreviewMaterialSnapshotJson,
   yearTransitionSourceMaterialFingerprint,
 } from "./fingerprint.ts";
-import { materializeSelectedContinuations } from "./materialize-continuations.ts";
+import {
+  materializeSelectedContinuations,
+  persistTargetMeetingDayPlans,
+} from "./materialize-continuations.ts";
+import { usesExplicitTargetMeetingDayPlans } from "./target-meeting-days.ts";
 import { YEAR_TRANSITION_AGENDA_COMPAT_HOUR, buildYearTransitionPreview } from "./preview.ts";
 import { extractClassMappingsFromSnapshotJson, YearTransitionSnapshotCorruptedError } from "./snapshot-mappings.ts";
 import type { PersistedYearTransitionPreview, YearTransitionPreviewStore } from "./store.ts";
@@ -58,11 +68,10 @@ const BLOCKING = new Set<string>(YEAR_TRANSITION_APPLY_BLOCKING_REASONS);
 const APPLY_RESULTS = new Set<string>(YEAR_TRANSITION_APPLY_RESULTS);
 
 /**
- * APPLY copie encore les notes du propriétaire de session.
- * Le PREVIEW charge déjà toutes les notes du cours ; la copie multi-enseignants
- * n’entre pas dans cette PR.
+ * Legacy uniquement (`targetMeetingDayPlans` absent) : APPLY copiait les notes
+ * du propriétaire de session. Le nouveau flux copie toutes les notes du cours.
  */
-function notesOwnedBySessionTeacher(input: YearTransitionPreviewInput): YearTransitionPreviewInput {
+function legacyOwnedNotesForApply(input: YearTransitionPreviewInput): YearTransitionPreviewInput {
   const owner = input.privateNotesOwnerTeacherId?.trim();
   if (!input.includePrivateNotes || !owner) return input;
   const owned = (notes: YearTransitionPreviewInput["sourceNotes"]) =>
@@ -72,6 +81,12 @@ function notesOwnedBySessionTeacher(input: YearTransitionPreviewInput): YearTran
     sourceNotes: owned(input.sourceNotes),
     targetNotes: owned(input.targetNotes),
   };
+}
+
+function notesInputForApply(input: YearTransitionPreviewInput): YearTransitionPreviewInput {
+  return usesExplicitTargetMeetingDayPlans(input.targetMeetingDayPlans)
+    ? input
+    : legacyOwnedNotesForApply(input);
 }
 
 function isKnownApplyResult(value: string): value is YearTransitionApplyResult {
@@ -129,6 +144,29 @@ function sameNullableId(left: string | null | undefined, right: string | null | 
   return normalizedLeft === normalizedRight;
 }
 
+function liveTargetMatchesPreviewTarget(
+  previewTargetId: string | null | undefined,
+  liveTargetId: string | null | undefined,
+  snapshot: YearTransitionPreviewInput,
+  liveCourses: readonly AnnualCourse[],
+  targetSchoolYearId: string,
+): boolean {
+  if (sameNullableId(previewTargetId, liveTargetId)) return true;
+  const previewId = previewTargetId?.trim() || "";
+  const liveId = liveTargetId?.trim() || "";
+  if (!isPendingTargetCourseId(previewId) || !liveId) return false;
+  const sourceId = previewId.slice(PENDING_TARGET_COURSE_PREFIX.length);
+  const source = snapshot.sourceCourses.find((course) => course.id === sourceId);
+  const live = liveCourses.find((course) => course.id === liveId);
+  return Boolean(
+    source &&
+      live &&
+      live.schoolYearId === targetSchoolYearId &&
+      live.contextId === source.contextId &&
+      !live.isArchived,
+  );
+}
+
 function mapBySourceAgendaItemId<T extends { sourceAgendaItemId: number }>(
   entries: readonly T[],
 ): Map<number, T> | null {
@@ -180,18 +218,47 @@ async function verifyExistingApply(
   persisted: PersistedYearTransitionPreview,
 ): Promise<YearTransitionApplyOutcome> {
   const snapshot = JSON.parse(persisted.snapshotJson) as YearTransitionPreviewInput;
+  const liveTargetCoursesForVerify = (await deps.courses.listCourses()).filter(
+    (course) => course.schoolYearId === persisted.targetSchoolYearId && !course.isArchived,
+  );
   if (snapshot.includePrivateNotes) {
-    if (!deps.notes || !snapshot.privateNotesOwnerTeacherId) return fail("APPLY_LEDGER_DIVERGED");
-    const owned = await deps.notes.listNotesByOwner(snapshot.privateNotesOwnerTeacherId);
-    for (const entry of previewPrivateNotes(notesOwnedBySessionTeacher(snapshot))) {
+    if (!deps.notes) return fail("APPLY_LEDGER_DIVERGED");
+    const newFlow = usesExplicitTargetMeetingDayPlans(snapshot.targetMeetingDayPlans);
+    if (!newFlow && !snapshot.privateNotesOwnerTeacherId) return fail("APPLY_LEDGER_DIVERGED");
+    const notePreview = previewPrivateNotes(notesInputForApply(snapshot));
+    const liveTargetCourses = liveTargetCoursesForVerify;
+    const listed = newFlow
+      ? (
+          await Promise.all(liveTargetCourses.map((course) => deps.notes!.listNotesByAnnualCourse(course.id)))
+        ).flat()
+      : await deps.notes.listNotesByOwner(snapshot.privateNotesOwnerTeacherId!);
+    for (const entry of notePreview) {
       if (entry.reason !== "PROJECTABLE" && entry.reason !== "ALREADY_PRESENT") continue;
-      const candidates = owned.filter(n =>
+      const candidates = listed.filter(n =>
         n.schoolYearId === persisted.targetSchoolYearId && n.sourceNoteId === entry.sourceNoteId);
       if (candidates.length !== 1) return fail("APPLY_LEDGER_DIVERGED");
       const note = candidates[0]!;
-      if (note.annualCourseId !== entry.targetAnnualCourseId || note.courseSessionKey !== entry.courseSessionKey
-        || note.referenceSessionId !== entry.referenceSessionId || note.classId !== entry.targetClassId
-        || note.contextId !== snapshot.sourceNotes?.find(n => n.id === entry.sourceNoteId)?.contextId
+      const source = snapshot.sourceNotes?.find(n => n.id === entry.sourceNoteId);
+      const pendingTarget = Boolean(
+        entry.targetAnnualCourseId && isPendingTargetCourseId(entry.targetAnnualCourseId),
+      );
+      const liveTarget = liveTargetCourses.find((course) => course.id === note.annualCourseId);
+      const sessionDate = parseCourseSessionKey(entry.courseSessionKey ?? "")?.date;
+      const copiedDate = parseCourseSessionKey(note.courseSessionKey ?? "")?.date;
+      const idsMatch = pendingTarget
+        ? Boolean(
+            liveTarget &&
+              liveTarget.contextId === source?.contextId &&
+              note.classId === liveTarget.classId &&
+              sessionDate &&
+              sessionDate === copiedDate,
+          )
+        : note.annualCourseId === entry.targetAnnualCourseId &&
+          note.courseSessionKey === entry.courseSessionKey &&
+          note.classId === entry.targetClassId;
+      if (!idsMatch
+        || note.referenceSessionId !== entry.referenceSessionId
+        || note.contextId !== source?.contextId
         || note.sourceSchoolYearId !== persisted.sourceSchoolYearId
         || (entry.reason === "PROJECTABLE" && note.id !== privateNoteCopyId(persisted.id, entry.sourceNoteId))) {
         return fail("APPLY_LEDGER_DIVERGED");
@@ -221,7 +288,15 @@ async function verifyExistingApply(
     if (!entry) return fail("APPLY_LEDGER_DIVERGED");
     if (entry.transitionId !== apply.transitionId) return fail("APPLY_LEDGER_DIVERGED");
     if (entry.previewReason !== previewEntry.reason) return fail("APPLY_LEDGER_DIVERGED");
-    if (!sameNullableId(entry.targetAnnualCourseId, previewEntry.targetAnnualCourseId)) {
+    if (
+      !liveTargetMatchesPreviewTarget(
+        previewEntry.targetAnnualCourseId,
+        entry.targetAnnualCourseId,
+        snapshot,
+        liveTargetCoursesForVerify,
+        persisted.targetSchoolYearId,
+      )
+    ) {
       return fail("APPLY_LEDGER_DIVERGED");
     }
     if (!sameNullableId(entry.referenceItemId, previewEntry.referenceItemId)) {
@@ -266,7 +341,7 @@ async function verifyExistingApply(
     const unexpected = itemsWithApplyProvenance(items, apply.transitionId, entry.sourceAgendaItemId);
     if (unexpected.length !== 0) return fail("APPLY_LEDGER_DIVERGED");
   }
-  return success("ALREADY_APPLIED", apply, applyEntries, snapshot.includePrivateNotes ? previewPrivateNotes(notesOwnedBySessionTeacher(snapshot)) : undefined);
+  return success("ALREADY_APPLIED", apply, applyEntries, snapshot.includePrivateNotes ? previewPrivateNotes(notesInputForApply(snapshot)) : undefined);
 }
 
 async function resolveClassroom(
@@ -419,12 +494,24 @@ export async function applyPersistedYearTransition(
         selectedSourceClassIds,
         sourceSchoolYearId: persisted.sourceSchoolYearId,
         targetSchoolYearId: persisted.targetSchoolYearId,
+        targetMeetingDayPlans: snapshotOptions.targetMeetingDayPlans,
       },
     );
     if (!materialized.ok) {
       return fail("APPLY_BLOCKED", { reason: materialized.reason });
     }
     liveMappings = materialized.mappings;
+  } else if (usesExplicitTargetMeetingDayPlans(snapshotOptions.targetMeetingDayPlans)) {
+    const persistedDays = await persistTargetMeetingDayPlans(deps, {
+      mappings: liveMappings,
+      plans: snapshotOptions.targetMeetingDayPlans,
+      sourceSchoolYearId: persisted.sourceSchoolYearId,
+      targetSchoolYearId: persisted.targetSchoolYearId,
+      selectedSourceClassIds,
+    });
+    if (!persistedDays.ok) {
+      return fail("APPLY_BLOCKED", { reason: persistedDays.reason });
+    }
   }
   const liveInput = await assembleLiveYearTransitionPreviewInput(
     {
@@ -454,7 +541,7 @@ export async function applyPersistedYearTransition(
   }
 
   const livePreview = buildYearTransitionPreview(liveInput);
-  const applyNotesInput = notesOwnedBySessionTeacher(liveInput);
+  const applyNotesInput = notesInputForApply(liveInput);
   const applyNotePreview = previewPrivateNotes(applyNotesInput);
   const noteBlockers = applyNotePreview.filter(
     (entry) =>
@@ -524,8 +611,18 @@ export async function applyPersistedYearTransition(
     if (item.schoolYearId !== persisted.targetSchoolYearId) return fail("APPLY_BLOCKED");
   }
 
+  const courseNoteIds = usesExplicitTargetMeetingDayPlans(applyNotesInput.targetMeetingDayPlans)
+    ? [...new Set(
+        [...(applyNotesInput.sourceNotes ?? []), ...(applyNotesInput.targetNotes ?? [])]
+          .map((note) => note.annualCourseId)
+          .filter((id): id is string => Boolean(id)),
+      )]
+    : undefined;
   const plan: YearTransitionApplyPlan = { apply, items: inserts, entries,
-    ...(applyNotesInput.includePrivateNotes ? { noteGuard: { ownerTeacherId: applyNotesInput.privateNotesOwnerTeacherId!,
+    ...(applyNotesInput.includePrivateNotes ? { noteGuard: {
+      ...(courseNoteIds
+        ? { annualCourseIds: courseNoteIds }
+        : { ownerTeacherId: applyNotesInput.privateNotesOwnerTeacherId! }),
       sourceSchoolYearId: applyNotesInput.sourceSchoolYearId, targetSchoolYearId: applyNotesInput.targetSchoolYearId,
       expected: [...(applyNotesInput.sourceNotes ?? []), ...(applyNotesInput.targetNotes ?? [])] } } : {}),
     notes: planPrivateNoteCopies(applyNotesInput, applyNotePreview, transitionId, appliedAt) };
