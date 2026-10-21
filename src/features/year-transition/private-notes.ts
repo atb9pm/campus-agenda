@@ -41,7 +41,7 @@ export function previewPrivateNotes(input: YearTransitionPreviewInput): PrivateN
   const owner = input.privateNotesOwnerTeacherId?.trim();
   if (!owner) throw new Error("Le propriétaire des notes privées est obligatoire.");
   const mapping = indexClassMappings(input.classMappings);
-  return [...(input.sourceNotes ?? [])].filter(n => n.ownerTeacherId === owner && n.schoolYearId === input.sourceSchoolYearId)
+  return [...(input.sourceNotes ?? [])].filter(n => n.schoolYearId === input.sourceSchoolYearId)
     .sort((a, b) => a.id.localeCompare(b.id)).map(note => {
       const entry: PrivateNotePreviewEntry = { sourceNoteId: note.id, sourceClassId: note.classId, reason: "PROJECTABLE",
         targetAnnualCourseId: null, targetClassId: null, referenceSessionId: null, courseSessionKey: null };
@@ -79,7 +79,7 @@ export function previewPrivateNotes(input: YearTransitionPreviewInput): PrivateN
         );
         if (!target) return result("TARGET_SESSION_UNRESOLVED");
         entry.courseSessionKey = target.key;
-        return notePresence(input, note, owner, entry, source.contextId);
+        return notePresence(input, note, entry, source.contextId);
       }
 
       const refs = new Set(input.sourceItems.filter(item => note.courseSessionKey && item.courseSessionKey === note.courseSessionKey
@@ -111,18 +111,17 @@ export function previewPrivateNotes(input: YearTransitionPreviewInput): PrivateN
       );
       if (!target) return result("TARGET_SESSION_UNRESOLVED");
       entry.courseSessionKey = target.key;
-      return notePresence(input, note, owner, entry, source.contextId);
+      return notePresence(input, note, entry, source.contextId);
     });
 }
 
 function notePresence(
   input: YearTransitionPreviewInput,
   note: AnnualCourseNote,
-  owner: string,
   entry: PrivateNotePreviewEntry,
   contextId: string,
 ): PrivateNotePreviewEntry {
-  const existing = (input.targetNotes ?? []).filter(n => n.sourceNoteId === note.id && n.ownerTeacherId === owner
+  const existing = (input.targetNotes ?? []).filter(n => n.sourceNoteId === note.id
     && n.schoolYearId === input.targetSchoolYearId);
   if (!existing.length) return entry;
   const match = existing.length === 1 && existing[0]!.annualCourseId === entry.targetAnnualCourseId

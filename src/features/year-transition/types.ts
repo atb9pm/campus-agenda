@@ -8,6 +8,7 @@ import type {
   YearTransitionPreviewReason,
   YearTransitionPreviewWarning,
 } from "./reasons.ts";
+import type { YearTransitionTargetMeetingDayPlan } from "./target-meeting-days.ts";
 
 /**
  * Mapping explicite de classes. Jamais déduit du code, du label ou de l’année de formation.
@@ -43,6 +44,12 @@ export interface YearTransitionPreviewInput {
   sourceCourseSessions?: readonly CourseSession[];
   /** CourseSession déjà calculées pour l’année cible — jamais recalculées ici. */
   targetCourseSessions: readonly CourseSession[];
+  /**
+   * Plan de jours N+1 explicite, indexé par cours source.
+   * Présent = nouveau flux (interdit de cloner les slots de N).
+   * Absent = assembleur legacy uniquement.
+   */
+  targetMeetingDayPlans?: readonly YearTransitionTargetMeetingDayPlan[];
 }
 
 /** Placement proposé : uniquement des champs de la CourseSession N+1. */

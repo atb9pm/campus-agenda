@@ -19,6 +19,10 @@ import {
   type YearTransitionPresentedPreview,
 } from "./presentation.ts";
 import { loadContinuationResolution, materializeSelectedContinuations } from "./materialize-continuations.ts";
+import {
+  parseTargetMeetingDayPlans,
+  type YearTransitionTargetMeetingDayPlan,
+} from "./target-meeting-days.ts";
 import type { YearTransitionClassMapping, YearTransitionPreviewResult } from "./types.ts";
 
 export interface YearTransitionPrepareDeps extends ApplyPersistedYearTransitionDeps {
@@ -91,6 +95,7 @@ export function parseYearTransitionPreviewRequest(
   resolveContinuations: boolean;
   includePrivateNotes: boolean;
   privateNotesOwnerTeacherId?: string;
+  targetMeetingDayPlans?: YearTransitionTargetMeetingDayPlan[];
 } {
   if (!body || typeof body !== "object") throw new Error("Requête invalide.");
   const record = body as Record<string, unknown>;
@@ -124,6 +129,7 @@ export function parseYearTransitionPreviewRequest(
     classMappings,
     selectedSourceClassIds: [...new Set(selectedSourceClassIds)],
     resolveContinuations,
+    targetMeetingDayPlans: parseTargetMeetingDayPlans(record.targetMeetingDayPlans),
     ...notes,
   };
 }

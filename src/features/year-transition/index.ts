@@ -52,6 +52,18 @@ export type {
 export { assembleLiveYearTransitionPreviewInput } from "./assemble.ts";
 export type { AssembleLiveYearTransitionPreviewInputDeps } from "./assemble.ts";
 export {
+  TARGET_MEETING_DAY_PLAN_DUPLICATE,
+  TARGET_MEETING_DAY_PLAN_DUPLICATE_REASON,
+  TARGET_MEETING_DAY_PLAN_INVALID,
+  TARGET_MEETING_DAY_PLAN_REQUIRED,
+  TARGET_MEETING_DAY_PLAN_REQUIRED_REASON,
+  YearTransitionPreviewContractError,
+  canonicalizeTargetMeetingDayPlans,
+  parseTargetMeetingDayPlans,
+  requireTargetMeetingDayPlans,
+  type YearTransitionTargetMeetingDayPlan,
+} from "./target-meeting-days.ts";
+export {
   extractClassMappingsFromSnapshotJson,
   YearTransitionSnapshotCorruptedError,
 } from "./snapshot-mappings.ts";
