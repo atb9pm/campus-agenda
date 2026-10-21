@@ -37,18 +37,21 @@ export const YEAR_TRANSITION_TRANSFER_CAPABILITIES = [
     ownerBound: false,
     title: "Publications du Carnet",
     summary:
-      "Devoirs, contrôles et informations déjà rattachés à une séance annuelle réelle. Le parcours CTX n’a pas besoin d’être complet.",
+      "Devoirs, contrôles et informations du cours. Ils sont transférés automatiquement avec le cours repris.",
   },
   {
     id: "privateNotes" as const,
     available: true,
-    defaultEnabled: false,
-    ownerBound: true,
-    title: "Notes privées du Carnet",
+    defaultEnabled: true,
+    ownerBound: false,
+    title: "Notes du Carnet",
     summary:
-      "Uniquement vos notes privées. Un administrateur ne peut ni les lire ni les copier pour un autre enseignant. Le contenu n’apparaît pas dans l’aperçu.",
+      "Toutes les notes du cours sont transférées automatiquement avec le cours. L’administrateur n’a pas à choisir un propriétaire.",
   },
 ] as const;
+
+export const YEAR_TRANSITION_RECLASSIFY_HUMAN_EXPLANATION =
+  "Cet élément sera bien transféré dans le cours N+1 mais devra être repositionné manuellement sur une séance.";
 
 export const YEAR_TRANSITION_NOTE_REASON_LABELS: Record<PrivateNotePreviewEntry["reason"], string> = {
   PROJECTABLE: "Transférable",
@@ -130,6 +133,22 @@ export interface YearTransitionClassOption {
   professionLabel: string | null;
   trainingYear: number | null;
   parallelCode: string | null;
+}
+
+export interface YearTransitionCourseOption {
+  id: string;
+  classId: string;
+  contextId: string;
+  label: string;
+  branchCode: string;
+  branchLabel: string;
+}
+
+export interface YearTransitionContentSummary {
+  plannedCount: number;
+  toReclassifyCount: number;
+  alreadyPresentCount: number;
+  lostCount: number;
 }
 
 export interface YearTransitionCatalogLookups {
@@ -220,6 +239,25 @@ export function presentSchoolYearOption(year: Pick<SchoolYearRecord, "id" | "lab
     statusLabel: yearStatusLabel(year.status),
     startsOn: year.startsOn,
     endsOn: year.endsOn,
+  };
+}
+
+export function presentTransitionCourse(
+  course: AnnualCourse,
+  lookups: Pick<YearTransitionCatalogLookups, "contexts" | "branches">,
+): YearTransitionCourseOption {
+  const context = lookups.contexts.find((entry) => entry.id === course.contextId);
+  const branch = context ? lookups.branches.find((entry) => entry.id === context.branchId) : null;
+  const branchCode = branch?.code.trim() ?? "";
+  const branchLabel = branch?.label.trim() || "Cours";
+  const label = [branchCode, branchLabel].filter(Boolean).join(" ");
+  return {
+    id: course.id,
+    classId: course.classId,
+    contextId: course.contextId,
+    label,
+    branchCode,
+    branchLabel,
   };
 }
 
@@ -462,10 +500,10 @@ export function presentYearTransitionPreview(
         ? `${PUBLICATION_TYPE_LABELS[item.type] ?? item.type} — ${item.title.trim() || "Sans titre"}`
         : `Publication n° ${entry.sourceAgendaItemId}`,
       reason: entry.reason,
-      reasonLabel: category === "toReclassify" ? `À reclasser — ${diagnosticLabel}` : diagnosticLabel,
+      reasonLabel: category === "toReclassify" ? "À reclasser" : diagnosticLabel,
       explanation:
         category === "toReclassify"
-          ? `${diagnosticExplanation} L’élément sera repris dans le cours cible sans séance (À reclasser).`
+          ? YEAR_TRANSITION_RECLASSIFY_HUMAN_EXPLANATION
           : diagnosticExplanation,
       sourceCourseLabel: courseLabel(lookups, entry.sourceAnnualCourseId),
       targetCourseLabel: courseLabel(lookups, entry.targetAnnualCourseId),
@@ -494,10 +532,10 @@ export function presentYearTransitionPreview(
         category,
         title: "Note privée",
         reason: entry.reason,
-        reasonLabel: category === "toReclassify" ? `À reclasser — ${diagnosticLabel}` : diagnosticLabel,
+        reasonLabel: category === "toReclassify" ? "À reclasser" : diagnosticLabel,
         explanation:
           category === "toReclassify"
-            ? `${diagnosticExplanation} La note sera reprise dans le cours cible sans séance (À reclasser).`
+            ? YEAR_TRANSITION_RECLASSIFY_HUMAN_EXPLANATION
             : diagnosticExplanation,
         sourceCourseLabel: null,
         targetCourseLabel: courseLabel(lookups, entry.targetAnnualCourseId),
@@ -603,6 +641,18 @@ export function presentYearTransitionPreview(
     classSummaries,
     selectedClassCount: selectedSourceClassIds.length,
     includePrivateNotes: Boolean(preview.privateNotes),
+  };
+}
+
+export function yearTransitionContentSummary(
+  preview: YearTransitionPresentedPreview,
+): YearTransitionContentSummary {
+  const notes = preview.notes;
+  return {
+    plannedCount: preview.publications.projectable.length + (notes?.projectable.length ?? 0),
+    toReclassifyCount: preview.publications.toReclassify.length + (notes?.toReclassify.length ?? 0),
+    alreadyPresentCount: preview.publications.alreadyPresent.length + (notes?.alreadyPresent.length ?? 0),
+    lostCount: preview.publications.excluded.length + (notes?.excluded.length ?? 0),
   };
 }
 

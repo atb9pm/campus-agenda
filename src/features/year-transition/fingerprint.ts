@@ -64,6 +64,14 @@ function materialState(input: YearTransitionPreviewInput) {
       .map((id) => id.trim())
       .filter(Boolean)
       .sort((left, right) => left.localeCompare(right)),
+    ...(input.selectedSourceAnnualCourseIds
+      ? {
+          selectedSourceAnnualCourseIds: [...input.selectedSourceAnnualCourseIds]
+            .map((id) => id.trim())
+            .filter(Boolean)
+            .sort((left, right) => left.localeCompare(right)),
+        }
+      : {}),
     classMappings: [...input.classMappings]
       .map((mapping) => ({
         sourceClassId: normalizeMappingClassId(mapping.sourceClassId),

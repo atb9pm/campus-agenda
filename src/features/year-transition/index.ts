@@ -85,21 +85,40 @@ export {
   presentApplyOutcome,
   presentSchoolYearOption,
   presentTransitionClass,
+  presentTransitionCourse,
   presentYearTransitionPreview,
   previewHasBlockingEntries,
+  yearTransitionContentSummary,
   YEAR_TRANSITION_APPLY_FAILURE_LABELS,
   YEAR_TRANSITION_NOTE_REASON_EXPLANATIONS,
   YEAR_TRANSITION_NOTE_REASON_LABELS,
+  YEAR_TRANSITION_RECLASSIFY_HUMAN_EXPLANATION,
   YEAR_TRANSITION_TRANSFER_CAPABILITIES,
 } from "./presentation.ts";
 export type {
   YearTransitionCatalogLookups,
   YearTransitionClassOption,
   YearTransitionClassSummary,
+  YearTransitionContentSummary,
+  YearTransitionCourseOption,
   YearTransitionPresentedPreview,
   YearTransitionPresentedRow,
   YearTransitionYearOption,
 } from "./presentation.ts";
+export {
+  buildTargetMeetingDayPlans,
+  emptyMeetingDayDraft,
+  meetingDayDraftToPlanDays,
+  validateMeetingDayDraft,
+  yearTransitionConfigSignature,
+  YEAR_TRANSITION_ADDITIONAL_SAME_DAY,
+  YEAR_TRANSITION_PRIMARY_DAY_REQUIRED,
+  YEAR_TRANSITION_WEEK_KIND_UI_LABELS,
+  YEAR_TRANSITION_WEEK_KIND_OPTIONS,
+  YEAR_TRANSITION_WEEKDAY_OPTIONS,
+  YEAR_TRANSITION_WEEKDAYS,
+} from "./meeting-day-draft.ts";
+export type { MeetingDayDraft, MeetingDayPlanPayload } from "./meeting-day-draft.ts";
 export {
   applyAuthorizedYearTransition,
   createAuthorizedYearTransitionPreview,

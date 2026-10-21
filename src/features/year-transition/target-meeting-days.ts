@@ -136,6 +136,7 @@ export function continuationSourceCourses(
   mappings: readonly YearTransitionClassMapping[],
   sourceCourses: readonly AnnualCourse[],
   selectedSourceClassIds?: readonly string[],
+  selectedSourceAnnualCourseIds?: readonly string[],
 ): AnnualCourse[] {
   const selected = new Set(
     (selectedSourceClassIds ?? []).map((id) => id.trim()).filter(Boolean),
@@ -148,8 +149,12 @@ export function continuationSourceCourses(
     if (selected.size > 0 && !selected.has(sourceClassId)) continue;
     continuedClassIds.add(sourceClassId);
   }
+  const selectedCourses = selectedSourceAnnualCourseIds === undefined
+    ? null
+    : new Set(selectedSourceAnnualCourseIds.map((id) => id.trim()).filter(Boolean));
   return sourceCourses
     .filter((course) => !course.isArchived && continuedClassIds.has(course.classId))
+    .filter((course) => !selectedCourses || selectedCourses.has(course.id))
     .slice()
     .sort((left, right) => left.id.localeCompare(right.id));
 }

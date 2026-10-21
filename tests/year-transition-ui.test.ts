@@ -4,13 +4,22 @@ import test from "node:test";
 
 import {
   bindPrivateNotesOwner,
+  buildTargetMeetingDayPlans,
+  emptyMeetingDayDraft,
   mappingIssueMessages,
   parseYearTransitionClassMappings,
   parseYearTransitionPreviewRequest,
   presentYearTransitionPreview,
   previewHasBlockingEntries,
+  validateMeetingDayDraft,
+  yearTransitionConfigSignature,
+  YEAR_TRANSITION_ADDITIONAL_SAME_DAY,
+  YEAR_TRANSITION_PRIMARY_DAY_REQUIRED,
+  YEAR_TRANSITION_RECLASSIFY_HUMAN_EXPLANATION,
   YEAR_TRANSITION_TRANSFER_CAPABILITIES,
+  YEAR_TRANSITION_WEEK_KIND_UI_LABELS,
 } from "../src/features/year-transition/index.ts";
+import type { MeetingDayDraft } from "../src/features/year-transition/meeting-day-draft.ts";
 import type { YearTransitionPreviewResult } from "../src/features/year-transition/types.ts";
 import type { YearTransitionCatalogLookups } from "../src/features/year-transition/presentation.ts";
 
@@ -36,8 +45,10 @@ const TARGET_YEAR = {
 test("les capacités affichées correspondent au moteur réel", () => {
   assert.equal(YEAR_TRANSITION_TRANSFER_CAPABILITIES.every((entry) => entry.available), true);
   const notes = YEAR_TRANSITION_TRANSFER_CAPABILITIES.find((entry) => entry.id === "privateNotes");
-  assert.equal(notes?.defaultEnabled, false);
-  assert.equal(notes?.ownerBound, true);
+  assert.equal(notes?.defaultEnabled, true);
+  assert.equal(notes?.ownerBound, false);
+  assert.match(notes?.summary ?? "", /automatiquement/);
+  assert.equal(YEAR_TRANSITION_WEEK_KIND_UI_LABELS.all, "Chaque semaine");
 });
 
 test("le propriétaire des notes privées vient de la session, jamais du corps", () => {
@@ -357,13 +368,45 @@ test("apply refuse l’absence de confirmation et les routes exigent une session
   assert.match(applyRoute, /applyAuthorizedYearTransition/);
   const panel = await readFile(new URL("../web/app/components/year-transition-prepare-panel.tsx", import.meta.url), "utf8");
   assert.match(panel, /ConfirmDialog/);
-  assert.match(panel, /includePrivateNotes/);
   assert.match(panel, /selectedSourceClassIds/);
+  assert.match(panel, /selectedSourceAnnualCourseIds/);
+  assert.match(panel, /targetMeetingDayPlans/);
   assert.match(panel, /reprendre/);
+  assert.match(panel, /Jour principal/);
+  assert.match(panel, /Deuxième jour/);
+  assert.match(panel, /YEAR_TRANSITION_WEEK_KIND_OPTIONS/);
+  assert.match(panel, /Choisissez le jour principal/);
+  const meetingDayDraft = await readFile(
+    new URL("../src/features/year-transition/meeting-day-draft.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(meetingDayDraft, /Chaque semaine/);
+  assert.match(meetingDayDraft, /Semaine A/);
+  assert.match(meetingDayDraft, /Semaine B/);
+  assert.doesNotMatch(meetingDayDraft, /Toutes les semaines/);
+  assert.match(panel, /La configuration a changé/);
+  assert.match(panel, /Actualisez l’aperçu/);
+  assert.match(panel, /0 élément perdu|élément perdu/);
+  assert.match(panel, /À reclasser/);
+  assert.match(panel, /Attributions des cours/);
+  assert.match(panel, /Horaire des classes/);
   assert.match(panel, /Consulter l’année préparée/);
+  assert.match(panel, /includePrivateNotes: true/);
+  assert.doesNotMatch(panel, /Inclure mes notes privées/);
+  assert.doesNotMatch(panel, /notes privées du professeur/);
+  assert.doesNotMatch(panel, /Copier mes notes/);
   assert.doesNotMatch(panel, /Pas de continuation/);
+  assert.doesNotMatch(panel, /ClassAttendanceDay/);
+  assert.doesNotMatch(panel, /\bP1\b/);
+  assert.doesNotMatch(panel, /\bP2\b/);
+  assert.doesNotMatch(panel, /identique à l’année précédente|reprendre l’horaire|conserver les jours/);
+  assert.doesNotMatch(panel, /<option[^>]*>all<\/option>/);
+  assert.doesNotMatch(panel, /SOURCE_SESSION_UNRESOLVED|PATH_ABSENT|TO_RECLASSIFY/);
+  assert.doesNotMatch(panel, /"options"/);
+  assert.match(panel, /"days"/);
   const admin = await readFile(new URL("../web/app/components/administration-panel.tsx", import.meta.url), "utf8");
   assert.match(admin, /Préparer l’année suivante/);
+  assert.match(admin, /onOpenAdminTab/);
   const schoolYearAdmin = await readFile(
     new URL("../web/app/components/school-year-admin-panel.tsx", import.meta.url),
     "utf8",
@@ -382,3 +425,315 @@ test("apply refuse l’absence de confirmation et les routes exigent une session
   assert.match(coursesRoute, /consult/);
   assert.match(coursesRoute, /adminConsult/);
 });
+
+function draft(patch: Partial<MeetingDayDraft>): MeetingDayDraft {
+  return { ...emptyMeetingDayDraft(), ...patch };
+}
+
+test("la saisie MeetingDays n’est jamais préremplie depuis N", () => {
+  const blank = emptyMeetingDayDraft();
+  assert.equal(blank.primaryDay, null);
+  assert.equal(blank.additionalDay, null);
+  assert.equal(blank.primaryWeekKind, "all");
+  assert.deepEqual(validateMeetingDayDraft(blank), {
+    ok: false,
+    reason: YEAR_TRANSITION_PRIMARY_DAY_REQUIRED,
+  });
+});
+
+test("jour principal obligatoire et rythmes all / A / B autorisés sur PRIMARY", () => {
+  assert.equal(validateMeetingDayDraft(draft({ primaryDay: 1, primaryWeekKind: "all" })).ok, true);
+  assert.equal(validateMeetingDayDraft(draft({ primaryDay: 4, primaryWeekKind: "B" })).ok, true);
+  assert.equal(validateMeetingDayDraft(draft({ primaryDay: 2, primaryWeekKind: "A" })).ok, true);
+});
+
+test("deuxième jour facultatif, distinct, avec rythme propre", () => {
+  const withSecond = draft({
+    primaryDay: 1,
+    primaryWeekKind: "all",
+    additionalDay: 4,
+    additionalWeekKind: "B",
+  });
+  assert.equal(validateMeetingDayDraft(withSecond).ok, true);
+  assert.deepEqual(validateMeetingDayDraft(draft({ primaryDay: 1, additionalDay: 1 })), {
+    ok: false,
+    reason: YEAR_TRANSITION_ADDITIONAL_SAME_DAY,
+  });
+});
+
+test("un cours non sélectionné n’envoie aucun plan ; deux cours d’une classe ont des plans indépendants", () => {
+  const electro = "ac-cp1-electro";
+  const transmission = "ac-cp2-trans";
+  const chassis = "ac-cp3-chassis";
+  const injection = "ac-cp-injection";
+  const drafts: Record<string, MeetingDayDraft> = {
+    [electro]: draft({ primaryDay: 1, primaryWeekKind: "all" }),
+    [transmission]: draft({ primaryDay: 2, primaryWeekKind: "all" }),
+    [chassis]: draft({ primaryDay: 4, primaryWeekKind: "B" }),
+    [injection]: draft({
+      primaryDay: 1,
+      primaryWeekKind: "all",
+      additionalDay: 4,
+      additionalWeekKind: "B",
+    }),
+  };
+  const omitted = buildTargetMeetingDayPlans([electro, chassis, injection], drafts);
+  assert.equal(omitted.ok, true);
+  if (!omitted.ok) return;
+  assert.equal(omitted.plans.some((plan) => plan.sourceAnnualCourseId === transmission), false);
+  assert.deepEqual(
+    omitted.plans.map((plan) => plan.sourceAnnualCourseId).sort(),
+    [electro, chassis, injection].sort(),
+  );
+
+  const four = buildTargetMeetingDayPlans([electro, transmission, chassis, injection], drafts);
+  assert.equal(four.ok, true);
+  if (!four.ok) return;
+  assert.deepEqual(four.plans.find((plan) => plan.sourceAnnualCourseId === electro)?.days, [
+    { dayOfWeek: 1, weekKind: "all", role: "PRIMARY" },
+  ]);
+  assert.deepEqual(four.plans.find((plan) => plan.sourceAnnualCourseId === transmission)?.days, [
+    { dayOfWeek: 2, weekKind: "all", role: "PRIMARY" },
+  ]);
+  assert.deepEqual(four.plans.find((plan) => plan.sourceAnnualCourseId === chassis)?.days, [
+    { dayOfWeek: 4, weekKind: "B", role: "PRIMARY" },
+  ]);
+  assert.deepEqual(four.plans.find((plan) => plan.sourceAnnualCourseId === injection)?.days, [
+    { dayOfWeek: 1, weekKind: "all", role: "PRIMARY" },
+    { dayOfWeek: 4, weekKind: "B", role: "ADDITIONAL" },
+  ]);
+});
+
+test("PREVIEW est refusé côté UI si un plan manque, et le payload porte les sourceAnnualCourseId", () => {
+  const missing = buildTargetMeetingDayPlans(
+    ["ac-1", "ac-2"],
+    { "ac-1": draft({ primaryDay: 1 }) },
+  );
+  assert.equal(missing.ok, false);
+  if (missing.ok) return;
+  assert.equal(missing.errors["ac-2"], YEAR_TRANSITION_PRIMARY_DAY_REQUIRED);
+
+  const parsed = parseYearTransitionPreviewRequest({
+    sourceSchoolYearId: "year-n",
+    targetSchoolYearId: "year-n1",
+    selectedSourceClassIds: ["class-a"],
+    selectedSourceAnnualCourseIds: ["ac-cp1-electro"],
+    includePrivateNotes: false,
+    targetMeetingDayPlans: [
+      {
+        sourceAnnualCourseId: "ac-cp1-electro",
+        days: [{ dayOfWeek: 1, weekKind: "all", role: "PRIMARY" }],
+      },
+    ],
+  }, "teacher-a");
+  assert.equal(parsed.includePrivateNotes, true);
+  assert.equal(parsed.privateNotesOwnerTeacherId, "teacher-a");
+  assert.deepEqual(parsed.selectedSourceAnnualCourseIds, ["ac-cp1-electro"]);
+  assert.deepEqual(parsed.targetMeetingDayPlans, [
+    {
+      sourceAnnualCourseId: "ac-cp1-electro",
+      days: [{ dayOfWeek: 1, weekKind: "all", role: "PRIMARY" }],
+    },
+  ]);
+});
+
+test("une modification de jour invalide l’empreinte d’aperçu jusqu’au prochain calcul", () => {
+  const first = yearTransitionConfigSignature({
+    sourceSchoolYearId: "year-n",
+    targetSchoolYearId: "year-n1",
+    selectedSourceClassIds: ["class-a"],
+    selectedSourceAnnualCourseIds: ["ac-1"],
+    drafts: { "ac-1": draft({ primaryDay: 1, primaryWeekKind: "all" }) },
+  });
+  const changedDay = yearTransitionConfigSignature({
+    sourceSchoolYearId: "year-n",
+    targetSchoolYearId: "year-n1",
+    selectedSourceClassIds: ["class-a"],
+    selectedSourceAnnualCourseIds: ["ac-1"],
+    drafts: { "ac-1": draft({ primaryDay: 4, primaryWeekKind: "B" }) },
+  });
+  const changedSelection = yearTransitionConfigSignature({
+    sourceSchoolYearId: "year-n",
+    targetSchoolYearId: "year-n1",
+    selectedSourceClassIds: ["class-a"],
+    selectedSourceAnnualCourseIds: [],
+    drafts: { "ac-1": draft({ primaryDay: 1, primaryWeekKind: "all" }) },
+  });
+  assert.notEqual(first, changedDay);
+  assert.notEqual(first, changedSelection);
+  assert.equal(
+    first,
+    yearTransitionConfigSignature({
+      sourceSchoolYearId: "year-n",
+      targetSchoolYearId: "year-n1",
+      selectedSourceClassIds: ["class-a"],
+      selectedSourceAnnualCourseIds: ["ac-1"],
+      drafts: { "ac-1": draft({ primaryDay: 1, primaryWeekKind: "all" }) },
+    }),
+  );
+});
+
+test("l’aperçu présente À reclasser comme avertissement humain, sans code technique ni texte de note", () => {
+  const preview: YearTransitionPreviewResult = {
+    sourceSchoolYearId: SOURCE_YEAR.id,
+    targetSchoolYearId: TARGET_YEAR.id,
+    fingerprint: "reclass",
+    mappingSummary: {
+      oneToOne: [{ sourceClassId: "class-a", targetClassId: "class-b" }],
+      noContinuation: [],
+      targetOnly: [],
+      conflicts: [],
+      unsupported: [],
+    },
+    entries: [
+      {
+        reason: "SOURCE_SESSION_UNRESOLVED",
+        disposition: "TO_RECLASSIFY",
+        warnings: [],
+        sourceAgendaItemId: 1,
+        sourceAnnualCourseId: "ac-n",
+        sourceClassId: "class-a",
+        targetClassId: "class-b",
+        targetAnnualCourseId: "ac-n1",
+        referenceItemId: null,
+        sourceReferenceSessionId: null,
+        resolvedReferenceSessionId: null,
+        pedagogicalPosition: null,
+        targetCourseSession: null,
+        proposedPlacement: null,
+        sourceTemporal: {
+          schoolWeekNumber: 1,
+          day: 1,
+          hour: 8,
+          weekOffset: 0,
+          courseSessionDate: "2026-08-24",
+          courseSessionKey: "old",
+        },
+      },
+      {
+        reason: "PROJECTABLE",
+        warnings: [],
+        sourceAgendaItemId: 2,
+        sourceAnnualCourseId: "ac-n",
+        sourceClassId: "class-a",
+        targetClassId: "class-b",
+        targetAnnualCourseId: "ac-n1",
+        referenceItemId: "ref-1",
+        sourceReferenceSessionId: "sess",
+        resolvedReferenceSessionId: "sess",
+        pedagogicalPosition: 1,
+        targetCourseSession: null,
+        proposedPlacement: {
+          schoolYearId: TARGET_YEAR.id,
+          annualCourseId: "ac-n1",
+          courseSessionKey: "k",
+          courseSessionDate: "2027-08-23",
+          schoolWeekNumber: 1,
+          day: 1,
+          hour: 8,
+          sequenceNumber: 1,
+        },
+        sourceTemporal: {
+          schoolWeekNumber: 1,
+          day: 1,
+          hour: 8,
+          weekOffset: 0,
+          courseSessionDate: "2026-08-24",
+          courseSessionKey: "old",
+        },
+      },
+    ],
+    privateNotes: [
+      {
+        sourceNoteId: "note-secret",
+        sourceClassId: "class-a",
+        reason: "TARGET_SESSION_UNRESOLVED",
+        disposition: "TO_RECLASSIFY",
+        targetAnnualCourseId: "ac-n1",
+        targetClassId: "class-b",
+        referenceSessionId: null,
+        courseSessionKey: null,
+      },
+    ],
+  };
+  const presented = presentYearTransitionPreview(
+    preview,
+    {
+      years: [SOURCE_YEAR, TARGET_YEAR],
+      classes: [
+        {
+          id: "class-a",
+          code: "MECAUTO3A",
+          label: "Mécanicien 3A",
+          schoolYearId: SOURCE_YEAR.id,
+          schoolYearLabel: SOURCE_YEAR.label,
+          professionId: "prof-meca",
+          trainingYear: 3,
+          parallelCode: "A",
+          sortOrder: 1,
+          isActive: true,
+          isArchived: false,
+          archivedAt: null,
+        },
+        {
+          id: "class-b",
+          code: "MECAUTO3A",
+          label: "Mécanicien 3A",
+          schoolYearId: TARGET_YEAR.id,
+          schoolYearLabel: TARGET_YEAR.label,
+          professionId: "prof-meca",
+          trainingYear: 3,
+          parallelCode: "A",
+          sortOrder: 1,
+          isActive: true,
+          isArchived: false,
+          archivedAt: null,
+        },
+      ],
+      professions: [],
+      contexts: [],
+      branches: [],
+      courses: [],
+      items: [
+        {
+          id: 1,
+          classroomId: "c",
+          subjectId: "s",
+          authorTeacherId: "t",
+          day: 1,
+          hour: 8,
+          weekOffset: 0,
+          schoolWeekNumber: 1,
+          type: "TEST",
+          title: "Contrôle châssis",
+          detail: "Ne doit pas fuiter",
+        },
+        {
+          id: 2,
+          classroomId: "c",
+          subjectId: "s",
+          authorTeacherId: "t",
+          day: 1,
+          hour: 8,
+          weekOffset: 0,
+          schoolWeekNumber: 1,
+          type: "HOMEWORK",
+          title: "Série 1",
+          detail: "ok",
+        },
+      ],
+    },
+    [{ sourceClassId: "class-a", targetClassId: "class-b" }],
+    { selectedSourceClassIds: ["class-a"] },
+  );
+  assert.equal(presented.publications.projectable.length, 1);
+  assert.equal(presented.publications.toReclassify.length, 1);
+  assert.equal(presented.publications.toReclassify[0]?.reasonLabel, "À reclasser");
+  assert.equal(presented.publications.toReclassify[0]?.explanation, YEAR_TRANSITION_RECLASSIFY_HUMAN_EXPLANATION);
+  assert.doesNotMatch(presented.publications.toReclassify[0]?.reasonLabel ?? "", /SOURCE_SESSION_UNRESOLVED/);
+  assert.equal(presented.notes?.toReclassify[0]?.title, "Note privée");
+  assert.doesNotMatch(JSON.stringify(presented), /note-secret-body|Ne doit pas fuiter/);
+  assert.equal(presented.blocking, false);
+  assert.equal(previewHasBlockingEntries(preview), false);
+});
+

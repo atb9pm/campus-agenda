@@ -12,10 +12,12 @@ import {
   presentApplyOutcome,
   presentSchoolYearOption,
   presentTransitionClass,
+  presentTransitionCourse,
   presentYearTransitionPreview,
   previewHasBlockingEntries,
   YEAR_TRANSITION_TRANSFER_CAPABILITIES,
   type YearTransitionCatalogLookups,
+  type YearTransitionCourseOption,
   type YearTransitionPresentedPreview,
 } from "./presentation.ts";
 import { loadContinuationResolution, materializeSelectedContinuations } from "./materialize-continuations.ts";
@@ -56,15 +58,27 @@ export async function loadYearTransitionPrepareState(
   const lookups = await loadYearTransitionCatalogLookups(deps);
   const years = sortSchoolYearsChronologically(lookups.years).map(presentSchoolYearOption);
   const classesByYearId: Record<string, ReturnType<typeof presentTransitionClass>[]> = {};
+  const coursesByClassId: Record<string, YearTransitionCourseOption[]> = {};
   for (const year of lookups.years) {
     classesByYearId[year.id] = lookups.classes
       .filter((entry) => entry.schoolYearId === year.id && !entry.isArchived)
       .map((entry) => presentTransitionClass(entry, lookups.professions))
       .sort((left, right) => left.displayName.localeCompare(right.displayName, "fr"));
   }
+  for (const course of lookups.courses) {
+    if (course.isArchived) continue;
+    const presented = presentTransitionCourse(course, lookups);
+    const list = coursesByClassId[course.classId] ?? [];
+    list.push(presented);
+    coursesByClassId[course.classId] = list;
+  }
+  for (const list of Object.values(coursesByClassId)) {
+    list.sort((left, right) => left.label.localeCompare(right.label, "fr"));
+  }
   return {
     years,
     classesByYearId,
+    coursesByClassId,
     capabilities: YEAR_TRANSITION_TRANSFER_CAPABILITIES,
     sessionTeacherId,
   };
@@ -96,6 +110,7 @@ export function parseYearTransitionPreviewRequest(
   includePrivateNotes: boolean;
   privateNotesOwnerTeacherId?: string;
   targetMeetingDayPlans?: YearTransitionTargetMeetingDayPlan[];
+  selectedSourceAnnualCourseIds?: string[];
 } {
   if (!body || typeof body !== "object") throw new Error("Requête invalide.");
   const record = body as Record<string, unknown>;
@@ -106,9 +121,10 @@ export function parseYearTransitionPreviewRequest(
   if (record.includePrivateNotes !== undefined && typeof record.includePrivateNotes !== "boolean") {
     throw new Error("includePrivateNotes doit être un booléen.");
   }
+  const targetMeetingDayPlans = parseTargetMeetingDayPlans(record.targetMeetingDayPlans);
   const notes = bindPrivateNotesOwner({
     sessionTeacherId,
-    includePrivateNotes: record.includePrivateNotes === true,
+    includePrivateNotes: targetMeetingDayPlans !== undefined || record.includePrivateNotes === true,
     requestedOwnerTeacherId: record.privateNotesOwnerTeacherId,
   });
   const resolveContinuations = record.selectedSourceClassIds !== undefined;
@@ -123,13 +139,17 @@ export function parseYearTransitionPreviewRequest(
       if (mapping.sourceClassId && mapping.targetClassId) selectedSourceClassIds.push(mapping.sourceClassId);
     }
   }
+  const selectedSourceAnnualCourseIds = record.selectedSourceAnnualCourseIds === undefined
+    ? undefined
+    : parseSelectedSourceClassIds(record.selectedSourceAnnualCourseIds);
   return {
     sourceSchoolYearId,
     targetSchoolYearId,
     classMappings,
     selectedSourceClassIds: [...new Set(selectedSourceClassIds)],
     resolveContinuations,
-    targetMeetingDayPlans: parseTargetMeetingDayPlans(record.targetMeetingDayPlans),
+    targetMeetingDayPlans,
+    ...(selectedSourceAnnualCourseIds !== undefined ? { selectedSourceAnnualCourseIds } : {}),
     ...notes,
   };
 }
@@ -165,6 +185,7 @@ export async function createAuthorizedYearTransitionPreview(
       ...parsed,
       classMappings,
       selectedSourceClassIds: parsed.selectedSourceClassIds,
+      selectedSourceAnnualCourseIds: parsed.selectedSourceAnnualCourseIds,
     },
     deps,
   );

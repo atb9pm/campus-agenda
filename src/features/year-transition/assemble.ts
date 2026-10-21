@@ -65,6 +65,7 @@ export async function assembleLiveYearTransitionPreviewInput(
     targetSchoolYearId: string;
     classMappings: readonly YearTransitionClassMapping[];
     selectedSourceClassIds?: readonly string[];
+    selectedSourceAnnualCourseIds?: readonly string[];
     /**
      * Présent = nouveau PREVIEW : plans N+1 obligatoires, pas de clone des slots source.
      * Absent = repli legacy (tests / APPLY déjà persistés sans plan).
@@ -107,7 +108,12 @@ export async function assembleLiveYearTransitionPreviewInput(
   const explicitPlans = usesExplicitTargetMeetingDayPlans(options.targetMeetingDayPlans)
     ? requireTargetMeetingDayPlans(
         options.targetMeetingDayPlans,
-        continuationSourceCourses(options.classMappings, sourceCourses, options.selectedSourceClassIds),
+        continuationSourceCourses(
+          options.classMappings,
+          sourceCourses,
+          options.selectedSourceClassIds,
+          options.selectedSourceAnnualCourseIds,
+        ),
       )
     : undefined;
   const projected = projectPendingTargetStructure({
@@ -117,6 +123,7 @@ export async function assembleLiveYearTransitionPreviewInput(
     slots: allSlots,
     targetSchoolYearId: options.targetSchoolYearId,
     cloneSourceSlots: explicitPlans === undefined,
+    selectedSourceAnnualCourseIds: options.selectedSourceAnnualCourseIds,
   });
   const sourceSlots = allSlots.filter((slot) =>
     sourceCourses.some((course) => course.id === slot.annualCourseId),
@@ -185,6 +192,13 @@ export async function assembleLiveYearTransitionPreviewInput(
     targetSchoolYearId: options.targetSchoolYearId,
     classMappings: options.classMappings.map((mapping) => ({ ...mapping })),
     selectedSourceClassIds: options.selectedSourceClassIds?.map((id) => id.trim()).filter(Boolean),
+    ...(options.selectedSourceAnnualCourseIds
+      ? {
+          selectedSourceAnnualCourseIds: options.selectedSourceAnnualCourseIds
+            .map((id) => id.trim())
+            .filter(Boolean),
+        }
+      : {}),
     sourceCourses,
     targetCourses: projected.targetCourses,
     sourceItems: sourceItems.map((item) => ({ ...item })),
@@ -229,6 +243,7 @@ function projectPendingTargetStructure(options: {
   slots: readonly CourseScheduleSlot[];
   targetSchoolYearId: string;
   cloneSourceSlots: boolean;
+  selectedSourceAnnualCourseIds?: readonly string[];
 }): {
   targetCourses: AnnualCourse[];
   slots: CourseScheduleSlot[];
@@ -239,13 +254,19 @@ function projectPendingTargetStructure(options: {
     targetCourses.some((course) => course.id === slot.annualCourseId),
   );
   const sourceToTargetCourseId = new Map<string, string>();
+  const selectedCourses = options.selectedSourceAnnualCourseIds === undefined
+    ? null
+    : new Set(options.selectedSourceAnnualCourseIds.map((id) => id.trim()).filter(Boolean));
 
   for (const mapping of options.mappings) {
     const sourceClassId = mapping.sourceClassId?.trim() || "";
     const targetClassId = mapping.targetClassId?.trim() || "";
     if (!sourceClassId || !targetClassId) continue;
     const sourceOfClass = options.sourceCourses.filter(
-      (course) => course.classId === sourceClassId && !course.isArchived,
+      (course) =>
+        course.classId === sourceClassId &&
+        !course.isArchived &&
+        (!selectedCourses || selectedCourses.has(course.id)),
     );
     for (const sourceCourse of sourceOfClass) {
       const existing = targetCourses.find(

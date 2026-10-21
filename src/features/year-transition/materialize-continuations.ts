@@ -77,6 +77,7 @@ export async function persistTargetMeetingDayPlans(
     sourceSchoolYearId: string;
     targetSchoolYearId: string;
     selectedSourceClassIds?: readonly string[];
+    selectedSourceAnnualCourseIds?: readonly string[];
   },
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   const courses = await deps.courses.listCourses();
@@ -85,6 +86,7 @@ export async function persistTargetMeetingDayPlans(
     options.mappings,
     sourceCourses,
     options.selectedSourceClassIds,
+    options.selectedSourceAnnualCourseIds,
   );
   let canonical;
   try {
@@ -130,6 +132,7 @@ export async function materializeSelectedContinuations(
      * Absent = legacy : copie encore l’organisation de N.
      */
     targetMeetingDayPlans?: readonly YearTransitionTargetMeetingDayPlan[];
+    selectedSourceAnnualCourseIds?: readonly string[];
   },
 ): Promise<{ ok: true; mappings: YearTransitionClassMapping[]; createdClassIds: string[] } | { ok: false; reason: string }> {
   const targetYear = await deps.years.getSchoolYearById(options.targetSchoolYearId);
@@ -243,8 +246,15 @@ export async function materializeSelectedContinuations(
       }
     }
 
+    const selectedCourses = options.selectedSourceAnnualCourseIds === undefined
+      ? null
+      : new Set(options.selectedSourceAnnualCourseIds.map((id) => id.trim()).filter(Boolean));
     const sourceCourses = courses.filter(
-      (course) => course.classId === sourceClassId && course.schoolYearId === options.sourceSchoolYearId && !course.isArchived,
+      (course) =>
+        course.classId === sourceClassId &&
+        course.schoolYearId === options.sourceSchoolYearId &&
+        !course.isArchived &&
+        (!selectedCourses || selectedCourses.has(course.id)),
     );
     for (const sourceCourse of sourceCourses) {
       let targetCourse = courses.find(
@@ -328,6 +338,7 @@ export async function materializeSelectedContinuations(
       sourceSchoolYearId: options.sourceSchoolYearId,
       targetSchoolYearId: options.targetSchoolYearId,
       selectedSourceClassIds: options.selectedSourceClassIds,
+      selectedSourceAnnualCourseIds: options.selectedSourceAnnualCourseIds,
     });
     if (!persistedDays.ok) return persistedDays;
   }

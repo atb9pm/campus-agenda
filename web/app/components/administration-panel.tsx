@@ -649,6 +649,7 @@ export function AdministrationPanel({
           onNotice={onNotice}
           onOpenTargetCourse={onOpenTargetCourse}
           onConsultPreparedYear={onConsultPreparedYear}
+          onOpenAdminTab={(next) => setTab(next)}
         />
       ) : null}
     </section>
