@@ -1,5 +1,5 @@
 import { AGENDA_ITEM_TYPES } from "@campus/types/agenda.ts";
-import { isVisibleToStudent } from "@campus/features/agenda/index.ts";
+import { agendaItemsForSchoolYear, isVisibleToStudent } from "@campus/features/agenda/index.ts";
 import { parseConfirmCoordination } from "@campus/features/course-publications/index.ts";
 import { evaluateLiveControlCoordination } from "@campus/features/control-planning/index.ts";
 import {
@@ -43,9 +43,8 @@ export async function GET(request: Request) {
   const access = await requireClassroomReadAccess(request, classroomId);
   if ("error" in access && access.error) return access.error;
 
-  let items = await access.store!.listAgendaItems(classroomId);
+  let items = agendaItemsForSchoolYear(await access.store!.listAgendaItems(classroomId), schoolYearId);
   if (schoolYearId) {
-    items = items.filter((item) => item.schoolYearId === schoolYearId);
     const year = await getSchoolYearStore().then((store) => store.getSchoolYearById(schoolYearId));
     if (year) {
       items = items.map((item) => ({

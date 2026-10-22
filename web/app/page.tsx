@@ -195,8 +195,13 @@ function scheduleSlotsFromAgendaView(
   });
 }
 
-async function loadTeacherAgendaItems(classroomIds: string[]): Promise<PrototypeAgendaItem[]> {
-  const batches = await Promise.all(classroomIds.map((classroomId) => fetchAgendaItems(classroomId)));
+async function loadTeacherAgendaItems(
+  classroomIds: string[],
+  schoolYearId?: string | null,
+): Promise<PrototypeAgendaItem[]> {
+  const batches = await Promise.all(
+    classroomIds.map((classroomId) => fetchAgendaItems(classroomId, schoolYearId)),
+  );
   const merged = new Map<number, PrototypeAgendaItem>();
   for (const batch of batches) {
     for (const item of batch) merged.set(item.id, item);
@@ -502,10 +507,12 @@ export default function Home() {
             if (cancelled) return;
             setRuntimeClassrooms(runtime);
             const classroomIds = runtime.map((entry) => entry.id);
-            const loadedItems = await loadTeacherAgendaItems(classroomIds);
+            const loadedItems = await loadTeacherAgendaItems(classroomIds, viewedSchoolYearId);
             if (cancelled) return;
             setItems(loadedItems);
-            loadedAgendaClassroomIdsRef.current = new Set(classroomIds);
+            loadedAgendaClassroomIdsRef.current = new Set(
+              classroomIds.map((classroomId) => `${classroomId}|${viewedSchoolYearId}`),
+            );
           } catch {
             // Conservez les classes déjà chargées.
           }
@@ -520,6 +527,11 @@ export default function Home() {
             const runtime = await fetchTeacherClassroomsApi();
             if (cancelled) return;
             setRuntimeClassrooms(runtime);
+            const classroomIds = runtime.map((entry) => entry.id);
+            const loadedItems = await loadTeacherAgendaItems(classroomIds);
+            if (cancelled) return;
+            setItems(loadedItems);
+            loadedAgendaClassroomIdsRef.current = new Set(classroomIds);
           } catch {
             // Conservez le calendrier déjà chargé.
           }
@@ -577,6 +589,7 @@ export default function Home() {
       setClassNotesReady(false);
       return;
     }
+    if (adminYearConsult && !viewedSchoolYearId) return;
 
     let cancelled = false;
     setClassNotesReady(false);
@@ -585,20 +598,23 @@ export default function Home() {
       const fallback = () =>
         peekNotesFromBrowser(currentTeacherId) ??
         loadNotesFromBrowser(currentTeacherId);
+      const consult = adminYearConsult
+        ? { schoolYearId: viewedSchoolYearId, adminConsult: true as const }
+        : undefined;
 
       try {
-        const remote = await fetchTeacherNotesApi();
+        const remote = await fetchTeacherNotesApi(consult);
         if (cancelled) return;
 
         if (remote) {
           skipClassNotesSaveRef.current = true;
           setClassNotesDocument(remote);
-          clearNotesFromBrowser(currentTeacherId);
+          if (!adminYearConsult) clearNotesFromBrowser(currentTeacherId);
           setClassNotesReady(true);
           return;
         }
 
-        const local = peekNotesFromBrowser(currentTeacherId);
+        const local = !adminYearConsult ? peekNotesFromBrowser(currentTeacherId) : null;
         if (local) {
           const saved = await saveTeacherNotesApi(local);
           if (cancelled) return;
@@ -615,7 +631,7 @@ export default function Home() {
       } catch {
         if (cancelled) return;
         skipClassNotesSaveRef.current = true;
-        setClassNotesDocument(fallback());
+        setClassNotesDocument(adminYearConsult ? createEmptyNotesDocument() : fallback());
         setClassNotesReady(true);
       }
     }
@@ -624,10 +640,11 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [currentTeacherId, teacherAuthenticated]);
+  }, [adminYearConsult, currentTeacherId, teacherAuthenticated, viewedSchoolYearId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
+    if (adminYearConsult) return;
     if (!teacherAuthenticated || !classNotesReady) return;
     if (skipClassNotesSaveRef.current) {
       skipClassNotesSaveRef.current = false;
@@ -642,7 +659,7 @@ export default function Home() {
     }, 400);
 
     return () => window.clearTimeout(timer);
-  }, [classNotesDocument, classNotesReady, currentTeacherId, teacherAuthenticated]);
+  }, [adminYearConsult, classNotesDocument, classNotesReady, currentTeacherId, teacherAuthenticated]);
 
   useEffect(() => {
     let cancelled = false;
@@ -822,10 +839,13 @@ export default function Home() {
 
   useEffect(() => {
     if (!teacherAuthenticated || !notebookClassroomId) return;
-    if (loadedAgendaClassroomIdsRef.current.has(notebookClassroomId)) return;
-    loadedAgendaClassroomIdsRef.current.add(notebookClassroomId);
+    const agendaKey = adminYearConsult && viewedSchoolYearId
+      ? `${notebookClassroomId}|${viewedSchoolYearId}`
+      : notebookClassroomId;
+    if (loadedAgendaClassroomIdsRef.current.has(agendaKey)) return;
+    loadedAgendaClassroomIdsRef.current.add(agendaKey);
     let cancelled = false;
-    void fetchAgendaItems(notebookClassroomId)
+    void fetchAgendaItems(notebookClassroomId, adminYearConsult ? viewedSchoolYearId : null)
       .then((batch) => {
         if (cancelled) return;
         setItems((previous) => {
@@ -835,12 +855,12 @@ export default function Home() {
         });
       })
       .catch(() => {
-        loadedAgendaClassroomIdsRef.current.delete(notebookClassroomId);
+        loadedAgendaClassroomIdsRef.current.delete(agendaKey);
       });
     return () => {
       cancelled = true;
     };
-  }, [notebookClassroomId, teacherAuthenticated]);
+  }, [adminYearConsult, notebookClassroomId, teacherAuthenticated, viewedSchoolYearId]);
 
   const [studentToday, setStudentToday] = useState(() => new Date());
 

@@ -5,7 +5,12 @@ import {
   notebookRevision,
 } from "@campus/features/class-notebook/annual-private-notes.ts";
 import { NotebookConflictError } from "@campus/lib/persistence/teacher-notes-types.ts";
-import { getAnnualCourseNotesStore, getAnnualCourseStore } from "@campus/lib/persistence/store-factory.ts";
+import {
+  getAnnualCourseNotesStore,
+  getAnnualCourseStore,
+  getSchoolCatalogStore,
+  getSchoolYearStore,
+} from "@campus/lib/persistence/store-factory.ts";
 import {
   getTeacherNotesStore,
   jsonResponse,
@@ -26,13 +31,35 @@ async function handleGet(request: Request) {
   const auth = await requireTeacherSession(request);
   if ("error" in auth && auth.error) return auth.error;
 
-  const notes = await loadTeacherNotebookDocument(auth.session!.teacherId, await notebookDeps());
+  const url = new URL(request.url);
+  const teacherId = auth.session!.teacherId;
+  const schoolYearId = url.searchParams.get("schoolYearId")?.trim() || null;
+  const adminConsult = url.searchParams.get("consult") === "1";
+  const isAdmin = await auth.store!.teacherIsAdmin(teacherId);
+  const [deps, catalog, years] = await Promise.all([
+    notebookDeps(),
+    getSchoolCatalogStore(),
+    getSchoolYearStore(),
+  ]);
+  const notes = await loadTeacherNotebookDocument(teacherId, deps, {
+    schoolYearId,
+    isAdmin,
+    adminConsult,
+    catalog,
+    years,
+  });
   return jsonResponse({ ok: true, notes, revision: notebookRevision(notes) }, { headers: { "Cache-Control": "no-store" } });
 }
 
 async function handlePut(request: Request) {
   const auth = await requireTeacherSession(request);
   if ("error" in auth && auth.error) return auth.error;
+  if (new URL(request.url).searchParams.get("consult") === "1") {
+    return jsonResponse(
+      { ok: false, reason: "Consultation administrative en lecture seule." },
+      { status: 403 },
+    );
+  }
 
   let body: unknown;
   try {

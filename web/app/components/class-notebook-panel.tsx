@@ -371,6 +371,7 @@ export function ClassNotebookPanel({
         : centerWeekNumber;
 
   useEffect(() => {
+    if (adminConsult) return;
     if (!structuredCourse || sessionsLoading || courseSessions == null || sessionsError) return;
     const migrated = migrateClassNotesToSessions(notesDocument, courseSessions, classSetup.id, {
       annualCourseId: structuredCourseId,
@@ -380,6 +381,7 @@ export function ClassNotebookPanel({
       onNotesChange(migrated.document);
     }
   }, [
+    adminConsult,
     classAnnualCourseIds,
     classSetup.id,
     courseSessions,
