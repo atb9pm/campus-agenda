@@ -117,6 +117,8 @@ interface ClassNotebookPanelProps {
   notesDocument: ClassNotesDocument;
   canPublish: boolean;
   publishBlockedReason?: string;
+  /** Échec de chargement : le Carnet vide ne doit pas passer pour un Carnet sans contenu. */
+  loadError?: string;
   onBack: () => void;
   onShiftWeeks: (direction: -1 | 1) => void;
   onCenterWeekChange: (weekNumber: number) => void;
@@ -246,6 +248,7 @@ export function ClassNotebookPanel({
   notesDocument,
   canPublish,
   publishBlockedReason,
+  loadError,
   onBack,
   onShiftWeeks,
   onCenterWeekChange,
@@ -1500,6 +1503,10 @@ export function ClassNotebookPanel({
           ) : null}
         </div>
       </div>
+
+      {loadError ? (
+        <p className="class-notebook-warning" role="alert">{loadError}</p>
+      ) : null}
 
       {!canPublish && publishBlockedReason ? (
         <p className="class-notebook-warning">{publishBlockedReason}</p>

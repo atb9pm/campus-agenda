@@ -289,6 +289,8 @@ export default function Home() {
   const [agendaSubjects, setAgendaSubjects] = useState<AgendaSubjectLabel[]>([]);
   const [studentScheduleSlots, setStudentScheduleSlots] = useState<StudentDayScheduleSlot[]>([]);
   const [notice, setNotice] = useState("");
+  const [notebookAgendaLoadError, setNotebookAgendaLoadError] = useState("");
+  const [notebookNotesLoadError, setNotebookNotesLoadError] = useState("");
   const [teacherAuthenticated, setTeacherAuthenticated] = useState(false);
   const [teacherIsAdmin, setTeacherIsAdmin] = useState(false);
   const [loginPending, setLoginPending] = useState(false);
@@ -513,11 +515,17 @@ export default function Home() {
             });
             if (cancelled) return;
             setItems(loadedItems);
+            setNotebookAgendaLoadError("");
             loadedAgendaClassroomIdsRef.current = new Set(
               classroomIds.map((classroomId) => `${classroomId}|${viewedSchoolYearId}`),
             );
-          } catch {
+          } catch (error) {
             // Conservez les classes déjà chargées.
+            if (!cancelled) {
+              setNotebookAgendaLoadError(
+                `Devoirs et informations non chargés : ${error instanceof Error ? error.message : "erreur inconnue"}.`,
+              );
+            }
           }
         } else {
           setViewedSchoolYearStatus(null);
@@ -534,6 +542,7 @@ export default function Home() {
             const loadedItems = await loadTeacherAgendaItems(classroomIds);
             if (cancelled) return;
             setItems(loadedItems);
+            setNotebookAgendaLoadError("");
             loadedAgendaClassroomIdsRef.current = new Set(classroomIds);
           } catch {
             // Conservez le calendrier déjà chargé.
@@ -609,6 +618,7 @@ export default function Home() {
         const remote = await fetchTeacherNotesApi(consult);
         if (cancelled) return;
 
+        setNotebookNotesLoadError("");
         if (remote) {
           skipClassNotesSaveRef.current = true;
           setClassNotesDocument(remote);
@@ -631,8 +641,11 @@ export default function Home() {
         skipClassNotesSaveRef.current = true;
         setClassNotesDocument(createEmptyNotesDocument());
         setClassNotesReady(true);
-      } catch {
+      } catch (error) {
         if (cancelled) return;
+        setNotebookNotesLoadError(
+          `Notes du Carnet non chargées : ${error instanceof Error ? error.message : "erreur inconnue"}.`,
+        );
         skipClassNotesSaveRef.current = true;
         setClassNotesDocument(adminYearConsult ? createEmptyNotesDocument() : fallback());
         setClassNotesReady(true);
@@ -855,14 +868,19 @@ export default function Home() {
     )
       .then((batch) => {
         if (cancelled) return;
+        setNotebookAgendaLoadError("");
         setItems((previous) => {
           const merged = new Map(previous.map((item) => [item.id, item]));
           for (const item of batch) merged.set(item.id, item);
           return [...merged.values()].sort((left, right) => left.id - right.id);
         });
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         loadedAgendaClassroomIdsRef.current.delete(agendaKey);
+        if (cancelled) return;
+        setNotebookAgendaLoadError(
+          `Devoirs et informations non chargés : ${error instanceof Error ? error.message : "erreur inconnue"}.`,
+        );
       });
     return () => {
       cancelled = true;
@@ -1816,6 +1834,7 @@ export default function Home() {
             notesDocument={classNotesDocument}
             canPublish={notebookCanPublish}
             publishBlockedReason={notebookBlockedReason}
+            loadError={[notebookAgendaLoadError, notebookNotesLoadError].filter(Boolean).join(" ")}
             onBack={closeClassNotebook}
             onShiftWeeks={shiftNotebookWeeks}
             onCenterWeekChange={setNotebookCenterWeek}
