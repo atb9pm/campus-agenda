@@ -162,6 +162,8 @@ async function world(options: {
   extraItems?: PrototypeAgendaItem[];
   extraNotes?: AnnualCourseNote[];
   extraSlots?: CourseScheduleSlot[];
+  /** Classes de N listées avant SOURCE_CLASS dans le catalogue. */
+  leadingClasses?: { id: string; code: string; trainingYear: number }[];
 } = {}) {
   resetMemorySchoolYearStore();
   resetMemoryLegacySchool();
@@ -255,6 +257,20 @@ async function world(options: {
       },
     ],
     classes: [
+      ...(options.leadingClasses ?? []).map((entry, index) => ({
+        id: entry.id,
+        code: entry.code,
+        label: entry.code,
+        sortOrder: 10 + index,
+        isActive: true,
+        schoolYearId: SOURCE_YEAR,
+        schoolYearLabel: "2026-2027",
+        professionId: PROFESSION,
+        trainingYear: entry.trainingYear,
+        parallelCode: "A",
+        isArchived: false,
+        archivedAt: null,
+      })),
       {
         id: SOURCE_CLASS,
         code: "MA1A",
@@ -670,6 +686,44 @@ test("MeetingDays : admin sans enseignant, second admin peut APPLY", async () =>
     deps,
   );
   assert.equal(first.ok, true, JSON.stringify(first));
+});
+
+test("APPLY : plusieurs classes en N, ordre du catalogue différent de l’aperçu", async () => {
+  const seeded = await world({
+    leadingClasses: [
+      { id: "class-zz-ma3a-n", code: "MA3A", trainingYear: 3 },
+      { id: "class-mm-ma2a-n", code: "MA2A", trainingYear: 2 },
+    ],
+  });
+  const deps = seeded.deps as YearTransitionPrepareDeps;
+  const catalogOrder = (await deps.catalog!.listClasses()).map((entry) => entry.id);
+  assert.notDeepEqual(catalogOrder, [...catalogOrder].sort((left, right) => left.localeCompare(right)));
+  const created = await createAuthorizedYearTransitionPreview(
+    {
+      sourceSchoolYearId: SOURCE_YEAR,
+      targetSchoolYearId: TARGET_YEAR,
+      selectedSourceClassIds: [SOURCE_CLASS],
+      selectedSourceAnnualCourseIds: [SOURCE_INJECTION],
+      targetMeetingDayPlans: [thursdayB(SOURCE_INJECTION)],
+    },
+    "",
+    deps,
+  );
+  assert.equal(created.blocking, false, JSON.stringify(created.preview.mappingIssues));
+  const applied = await applyAuthorizedYearTransition(
+    { transitionId: created.transitionId, confirm: true },
+    "admin-b",
+    deps,
+  );
+  assert.equal(applied.ok, true, JSON.stringify(applied));
+  const targetCourse = await targetCourseOf(seeded, CTX_INJECTION);
+  const copied = (await seeded.agenda.exportAllItems()).filter((entry) => entry.schoolYearId === TARGET_YEAR);
+  assert.ok(copied.length > 0);
+  assert.ok(copied.every((entry) => entry.annualCourseId === targetCourse.id));
+  assert.equal(
+    (await seeded.notes.listNotesByAnnualCourse(targetCourse.id)).filter((entry) => entry.schoolYearId === TARGET_YEAR).length,
+    2,
+  );
 });
 
 test("MECAUTO3A : CP2 décoché absent du PREVIEW/APPLY, admin sans enseignant", async () => {
