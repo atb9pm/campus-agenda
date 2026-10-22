@@ -513,6 +513,39 @@ function ledgerEntry(
 }
 
 /**
+ * Empreinte source avant toute écriture N+1.
+ * Un MeetingDay ou une sélection modifiés après le PREVIEW refusent l’APPLY
+ * sans créer de classe, de cours ni de jour.
+ */
+async function sourceMaterialStillMatchesPreview(
+  deps: ApplyPersistedYearTransitionDeps,
+  persisted: PersistedYearTransitionPreview,
+  snapshot: YearTransitionPreviewInput,
+  classMappings: YearTransitionPreviewInput["classMappings"],
+): Promise<YearTransitionApplyOutcome | { ok: true }> {
+  const liveInput = await assembleLiveYearTransitionPreviewInput(
+    {
+      includePrivateNotes: snapshot.includePrivateNotes,
+      privateNotesOwnerTeacherId: snapshot.privateNotesOwnerTeacherId,
+      sourceSchoolYearId: persisted.sourceSchoolYearId,
+      targetSchoolYearId: persisted.targetSchoolYearId,
+      classMappings,
+      selectedSourceClassIds: snapshot.selectedSourceClassIds,
+      selectedSourceAnnualCourseIds: snapshot.selectedSourceAnnualCourseIds,
+      targetMeetingDayPlans: snapshot.targetMeetingDayPlans,
+    },
+    deps,
+  );
+  const currentFingerprint = yearTransitionSourceMaterialFingerprint(liveInput);
+  const expectedFingerprint = yearTransitionSourceMaterialFingerprint(snapshot);
+  if (currentFingerprint === expectedFingerprint) return { ok: true };
+  return fail("PREVIEW_STALE", {
+    persistedFingerprint: expectedFingerprint,
+    currentFingerprint,
+  });
+}
+
+/**
  * APPLY d’un PREVIEW persisté. Aucune mutation de N.
  * Le caller ne fournit que transitionId — destination et contenu viennent du PREVIEW + stores live.
  */
@@ -556,8 +589,13 @@ export async function applyPersistedYearTransition(
 
   const snapshotOptions = JSON.parse(persisted.snapshotJson) as YearTransitionPreviewInput;
   const selectedSourceClassIds = [...(snapshotOptions.selectedSourceClassIds ?? [])];
+  const pendingCreates = selectedSourceClassIds.length > 0;
+  if (pendingCreates) {
+    const fresh = await sourceMaterialStillMatchesPreview(deps, persisted, snapshotOptions, classMappings);
+    if (!fresh.ok) return fresh;
+  }
   let liveMappings = classMappings;
-  if (selectedSourceClassIds.length > 0) {
+  if (pendingCreates) {
     if (!deps.catalog) {
       return fail("APPLY_BLOCKED", { reason: "Catalogue scolaire requis pour reprendre les classes." });
     }
@@ -601,8 +639,7 @@ export async function applyPersistedYearTransition(
     },
     deps,
   );
-  const persistedInput = JSON.parse(persisted.snapshotJson) as YearTransitionPreviewInput;
-  const pendingCreates = selectedSourceClassIds.length > 0;
+  const persistedInput = snapshotOptions;
   const currentFingerprint = pendingCreates
     ? yearTransitionSourceMaterialFingerprint(liveInput)
     : yearTransitionPreviewFingerprintFromSnapshotJson(yearTransitionPreviewMaterialSnapshotJson(liveInput));
