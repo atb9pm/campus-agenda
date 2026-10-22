@@ -820,3 +820,16 @@ test("la page et les routes n’écrivent pas pendant la consultation admin", as
   const agendaClient = client.slice(client.indexOf("export async function fetchAgendaView"));
   assert.match(agendaClient, /if \(schoolYearId\?\.trim\(\)\) params\.set\("schoolYearId", schoolYearId\.trim\(\)\)/);
 });
+
+test("Carnet : un chargement refusé s'affiche au lieu de cartes vides", async () => {
+  const [page, panel] = await Promise.all([
+    readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(panel, /\{loadError \? \(\s*<p className="class-notebook-warning" role="alert">\{loadError\}<\/p>/);
+  assert.match(page, /loadError=\{\[notebookAgendaLoadError, notebookNotesLoadError\]\.filter\(Boolean\)\.join\(" "\)\}/);
+  assert.equal(page.match(/`Devoirs et informations non chargés : /g)?.length, 2);
+  assert.equal(page.match(/`Notes du Carnet non chargées : /g)?.length, 1);
+  const openEffect = page.slice(page.indexOf("void fetchAgendaItems(\n      notebookClassroomId"));
+  assert.match(openEffect.slice(0, 900), /\.catch\(\(error: unknown\) => \{\s*loadedAgendaClassroomIdsRef\.current\.delete\(agendaKey\);/);
+});
