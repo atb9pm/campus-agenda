@@ -40,7 +40,8 @@ export async function GET(request: Request) {
     return jsonResponse({ ok: false, reason: "Paramètre classroomId requis." }, { status: 400 });
   }
 
-  const access = await requireClassroomReadAccess(request, classroomId);
+  const adminConsult = url.searchParams.get("consult") === "1";
+  const access = await requireClassroomReadAccess(request, classroomId, { adminConsult, schoolYearId });
   if ("error" in access && access.error) return access.error;
 
   let items = agendaItemsForSchoolYear(await access.store!.listAgendaItems(classroomId), schoolYearId);
@@ -58,7 +59,7 @@ export async function GET(request: Request) {
   }
 
   const archivedIds = await getArchivedSchoolYearIds();
-  const readOnly = Boolean(schoolYearId && archivedIds.has(schoolYearId));
+  const readOnly = adminConsult || Boolean(schoolYearId && archivedIds.has(schoolYearId));
   const [attendanceDays, scheduleSlots] = await Promise.all([
     listAttendanceDaysForLegacyClassroom(classroomId),
     listPublicScheduleSlotsForClassroom(classroomId),

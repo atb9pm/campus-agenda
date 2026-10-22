@@ -522,7 +522,11 @@ export async function listPublicScheduleSlotsForClassroom(classroomId: string) {
   return classScopedStudentScheduleSlots(await schedules.listSlots(), classCourseIds);
 }
 
-export async function requireClassroomReadAccess(request: Request, classroomId: string) {
+export async function requireClassroomReadAccess(
+  request: Request,
+  classroomId: string,
+  options?: { adminConsult?: boolean; schoolYearId?: string | null },
+) {
   const session = await getRequestSession(request);
   const store = await getStore();
   if (!(await checkClassroomExists(classroomId))) {
@@ -546,7 +550,15 @@ export async function requireClassroomReadAccess(request: Request, classroomId: 
     ]);
     const linkedClass = await resolveStructuredSchoolClassForClassroom(adapters, classroomId, classes);
     if (linkedClass) {
-      const allowed = teacherHasStructuredClassroomReadAccess({
+      const consultYearId = options?.schoolYearId?.trim() || "";
+      // Lecture seule : l'admin consulte les classes de l'année explicitement demandée, sans attribution.
+      const adminConsultAllowed = Boolean(
+        options?.adminConsult
+          && consultYearId
+          && linkedClass.schoolYearId === consultYearId
+          && (await store.teacherIsAdmin(session.teacherId)),
+      );
+      const allowed = adminConsultAllowed || teacherHasStructuredClassroomReadAccess({
         teacherId: session.teacherId,
         schoolClass: linkedClass,
         courses,

@@ -198,9 +198,10 @@ function scheduleSlotsFromAgendaView(
 async function loadTeacherAgendaItems(
   classroomIds: string[],
   schoolYearId?: string | null,
+  options?: { adminConsult?: boolean },
 ): Promise<PrototypeAgendaItem[]> {
   const batches = await Promise.all(
-    classroomIds.map((classroomId) => fetchAgendaItems(classroomId, schoolYearId)),
+    classroomIds.map((classroomId) => fetchAgendaItems(classroomId, schoolYearId, options)),
   );
   const merged = new Map<number, PrototypeAgendaItem>();
   for (const batch of batches) {
@@ -507,7 +508,9 @@ export default function Home() {
             if (cancelled) return;
             setRuntimeClassrooms(runtime);
             const classroomIds = runtime.map((entry) => entry.id);
-            const loadedItems = await loadTeacherAgendaItems(classroomIds, viewedSchoolYearId);
+            const loadedItems = await loadTeacherAgendaItems(classroomIds, viewedSchoolYearId, {
+              adminConsult: true,
+            });
             if (cancelled) return;
             setItems(loadedItems);
             loadedAgendaClassroomIdsRef.current = new Set(
@@ -845,7 +848,11 @@ export default function Home() {
     if (loadedAgendaClassroomIdsRef.current.has(agendaKey)) return;
     loadedAgendaClassroomIdsRef.current.add(agendaKey);
     let cancelled = false;
-    void fetchAgendaItems(notebookClassroomId, adminYearConsult ? viewedSchoolYearId : null)
+    void fetchAgendaItems(
+      notebookClassroomId,
+      adminYearConsult ? viewedSchoolYearId : null,
+      { adminConsult: adminYearConsult },
+    )
       .then((batch) => {
         if (cancelled) return;
         setItems((previous) => {

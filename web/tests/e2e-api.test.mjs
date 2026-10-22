@@ -2188,3 +2188,45 @@ test("audit — professeur B ne peut pas modifier ni supprimer l'agenda de A", a
 });
 
 
+
+test("Carnet — consultation admin : agenda de classe en lecture seule sans attribution", async () => {
+  const adminCookie = await loginAdmin();
+  const years = await jsonRequest("/api/admin/school-year", { headers: { cookie: adminCookie } });
+  const active = (years.payload.years ?? []).find((year) => year.status === "active");
+  assert.ok(active, "année active requise");
+  const generated = await jsonRequest("/api/admin/student-access", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: adminCookie },
+    body: JSON.stringify({ schoolClassId: "school-class-macam4" }),
+  });
+  assert.equal(generated.response.status, 200, generated.payload.reason);
+  const classroomId = encodeURIComponent(generated.payload.access.classroomId);
+
+  const normal = await request(`/api/agenda?classroomId=${classroomId}&schoolYearId=${active.id}`, {
+    headers: { cookie: adminCookie },
+  });
+  assert.equal(normal.status, 401, "sans consult, l'admin non affecté reste refusé");
+
+  const consult = await jsonRequest(`/api/agenda?classroomId=${classroomId}&schoolYearId=${active.id}&consult=1`, {
+    headers: { cookie: adminCookie },
+  });
+  assert.equal(consult.response.status, 200, consult.payload.reason);
+  assert.equal(consult.payload.readOnly, true);
+  assert.ok(Array.isArray(consult.payload.items));
+
+  const withoutYear = await request(`/api/agenda?classroomId=${classroomId}&consult=1`, {
+    headers: { cookie: adminCookie },
+  });
+  assert.equal(withoutYear.status, 401, "consult exige l'année de la classe");
+
+  const otherYear = await request(`/api/agenda?classroomId=${classroomId}&schoolYearId=autre-annee&consult=1`, {
+    headers: { cookie: adminCookie },
+  });
+  assert.equal(otherYear.status, 401, "consult limité à l'année de la classe");
+
+  const teacherCookie = await loginTeacher("teacher-demo-martin");
+  const teacherConsult = await request(`/api/agenda?classroomId=${classroomId}&schoolYearId=${active.id}&consult=1`, {
+    headers: { cookie: teacherCookie },
+  });
+  assert.equal(teacherConsult.status, 401, "consult réservé aux administrateurs");
+});
