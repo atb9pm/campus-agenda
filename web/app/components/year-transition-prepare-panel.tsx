@@ -329,6 +329,7 @@ export function YearTransitionPreparePanel({
       }
     : null;
   const reclassifyCount = resultTotals?.reclassify ?? pendingReclassifyCount ?? 0;
+  const lostCount = resultTotals?.lost ?? 0;
 
   if (view === "reclassify" && targetYearId) {
     return (
@@ -871,8 +872,9 @@ export function YearTransitionPreparePanel({
                   {reclassifyCount > 0 ? "⚠ " : "✓ "}
                   {frenchCount(reclassifyCount, "élément à reclasser", "éléments à reclasser")}
                 </li>
-                <li className="ok">
-                  ✓ {frenchCount(resultTotals?.lost ?? 0, "élément perdu", "éléments perdus")}
+                <li className={lostCount > 0 ? "warn" : "ok"}>
+                  {lostCount > 0 ? "⚠ " : "✓ "}
+                  {frenchCount(lostCount, "élément perdu", "éléments perdus")}
                 </li>
               </ul>
               {reclassifyCount === 0 ? (
