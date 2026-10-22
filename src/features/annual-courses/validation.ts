@@ -9,8 +9,11 @@ import type { AnnualCourseInput, CourseMutationResult } from "./types.ts";
 
 export const COURSE_CLASS_YEAR_MISMATCH_REASON =
   "La classe n'appartient pas à cette année scolaire.";
-export const DRAFT_YEAR_ASSIGNMENT_REASON =
-  "Les affectations professeurs ne sont pas disponibles pour une année en préparation.";
+
+/** Attribution manuelle : année active ou en préparation. Une année archivée reste en lecture seule. */
+export function schoolYearAllowsTeacherAssignment(status: string | null | undefined): boolean {
+  return status === "active" || status === "draft";
+}
 
 export function validateAnnualCourseInput(options: {
   input: AnnualCourseInput;

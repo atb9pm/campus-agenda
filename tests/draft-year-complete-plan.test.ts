@@ -6,7 +6,6 @@ import test from "node:test";
 
 import { APP_VERSION } from "../src/lib/app-version.ts";
 import { ARCHIVED_YEAR_MUTATION_REASON } from "../src/features/school-catalog/school-year-attachment.ts";
-import { DRAFT_YEAR_ASSIGNMENT_REASON } from "../src/features/annual-courses/index.ts";
 import {
   buildSchoolDayPlan,
   countClassDays,
@@ -367,7 +366,10 @@ test("changer l’année de travail ne modifie aucun SchoolYear.status", async (
 });
 
 test("aucune affectation professeur n’est introduite par le plan DRAFT", () => {
-  assert.match(DRAFT_YEAR_ASSIGNMENT_REASON, /DRAFT|brouillon|préparation|affectation/i);
+  const sql = readFileSync(new URL("../src/lib/persistence/sql/sql-school-year-store.ts", import.meta.url), "utf8");
+  const memory = readFileSync(new URL("../src/lib/persistence/memory-school-year-store.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(sql, /teacher_course_assignments|createAssignment/);
+  assert.doesNotMatch(memory, /teacher_course_assignments|createAssignment/);
 });
 
 test("backup v4 : A/B DRAFT restaurables, week_kind null toujours accepté", async () => {

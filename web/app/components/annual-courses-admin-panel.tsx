@@ -15,6 +15,7 @@ import {
   effectiveAtForEndAssignment,
   isClassEligibleForAssignment,
 } from "@campus/features/annual-courses/admin-assign-ui.ts";
+import { schoolYearAllowsTeacherAssignment } from "@campus/features/annual-courses/validation.ts";
 import {
   TEACHER_ASSIGNMENT_EMPTY_ACTIVE_MESSAGE,
   TEACHER_ASSIGNMENT_HISTORY_CHECKBOX_LABEL,
@@ -130,7 +131,7 @@ export function AnnualCoursesAdminPanel({
   }, [refresh]);
 
   const yearReadOnly = workingYear?.status === "archived";
-  const canAssignTeachers = workingYear?.status === "active";
+  const canAssignTeachers = schoolYearAllowsTeacherAssignment(workingYear?.status);
 
   const structuredClasses = useMemo(() => {
     if (!data) return [];

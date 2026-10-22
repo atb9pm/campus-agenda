@@ -18,7 +18,7 @@ export {
   validateAnnualCourseInput,
   validateAttributionReferential,
   COURSE_CLASS_YEAR_MISMATCH_REASON,
-  DRAFT_YEAR_ASSIGNMENT_REASON,
+  schoolYearAllowsTeacherAssignment,
 } from "./validation.ts";
 export {
   assignmentsOverlap,
