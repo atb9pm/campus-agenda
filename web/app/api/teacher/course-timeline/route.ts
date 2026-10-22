@@ -7,6 +7,7 @@ import {
   getTeacherCourseTimeline,
   sessionTeacherIdForTimelineApi,
 } from "@campus/features/course-timeline/index.ts";
+import { schoolYearIdFromSearchParams } from "@campus/features/teacher-workspace";
 import {
   getCourseTimelineServiceDeps,
   jsonResponse,
@@ -28,10 +29,16 @@ async function handleGet(request: Request) {
   // teacherId fourni par le client est ignoré — seule la session fait foi.
   const teacherId = sessionTeacherIdForTimelineApi(auth.session!.teacherId);
   const annualCourseId = annualCourseIdFromSearchParams(url.searchParams);
+  const schoolYearId = schoolYearIdFromSearchParams(url.searchParams);
+  const adminConsult = url.searchParams.get("consult") === "1";
+  const isAdmin = await auth.store!.teacherIsAdmin(teacherId);
 
   const result = await getTeacherCourseTimeline(await getCourseTimelineServiceDeps(), {
     teacherId,
     annualCourseId,
+    schoolYearId,
+    isAdmin,
+    adminConsult,
   });
 
   if (!result.ok) {

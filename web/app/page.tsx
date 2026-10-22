@@ -1778,6 +1778,8 @@ export default function Home() {
             classSetup={openNotebookClass}
             branchLabel={openNotebookCourse.branchLabel}
             annualCourseId={openNotebookCourse.annualCourseId}
+            schoolYearId={adminYearConsult ? viewedSchoolYearId : null}
+            adminConsult={adminYearConsult}
             schoolYearLabel={teacherCoursesYearLabel}
             schoolYearStatus={viewedSchoolYearStatus}
             subjectId={notebookSubjectId}

@@ -104,7 +104,8 @@ test("carnet mobile — UI : une semaine, 2/3/4 masqués, ◀ ▶ et titre conse
 test("carnet mobile — AnnualCourse ouvert inchangé, pas de sélecteur CP2/CP3", async () => {
   const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
   assert.match(panel, /data-annual-course-id=\{annualCourseId \?\? undefined\}/);
-  assert.match(panel, /fetchTeacherCourseTimelineApi\(courseId, controller\.signal\)/);
+  assert.match(panel, /fetchTeacherCourseTimelineApi\(\s*courseId,\s*controller\.signal/);
+  assert.match(panel, /adminConsult \? \{ schoolYearId, adminConsult: true \} : undefined/);
   assert.match(panel, /const courseId = annualCourseId\?\.trim\(\) \|\| ""/);
   assert.doesNotMatch(panel, /setOpenNotebookCourse/);
   assert.doesNotMatch(panel, /CP2/);

@@ -148,12 +148,13 @@ export function buildTeacherCourseWorkspace(
     for (const course of input.courses) {
       const assignment = input.assignments.find(
         (entry) =>
+          entry.teacherId === input.teacherId &&
           entry.annualCourseId === course.id &&
           assignmentInstants.some((instant) => isAssignmentActiveAt(entry, instant)),
       );
       pushEntry(course, {
         id: assignment?.id ?? `consult:${course.id}`,
-        role: assignment?.role ?? "PRIMARY",
+        role: assignment?.role ?? "ADMIN_CONSULT",
         validFrom: assignment?.validFrom ?? requestedYear?.startsOn ?? now,
         validTo: assignment?.validTo ?? null,
       });
