@@ -18,6 +18,7 @@ import {
   parseYearTransitionPreviewRequest,
   pendingTargetClassId,
   pendingTargetCourseId,
+  previewHasBlockingEntries,
   previewPrivateNotes,
   yearTransitionPreviewFingerprint,
   type YearTransitionTargetMeetingDayPlan,
@@ -147,24 +148,30 @@ function item(patch: Partial<PrototypeAgendaItem> & Pick<PrototypeAgendaItem, "i
   };
 }
 
-function note(id: string, ownerTeacherId: string, date = "2027-08-23"): AnnualCourseNote {
+function note(
+  id: string,
+  ownerTeacherId: string,
+  date = "2027-08-23",
+  annualCourseId = SOURCE_INJECTION,
+  contextId = CTX_INJECTION,
+): AnnualCourseNote {
   return {
     id,
     schoolYearId: SOURCE_YEAR,
     classId: SOURCE_CLASS,
-    contextId: CTX_INJECTION,
+    contextId,
     referenceSessionId: null,
     authorTeacherId: ownerTeacherId,
     ownerTeacherId,
     text: `Note ${id}`,
     body: null,
-    courseSessionKey: `${SOURCE_YEAR}|${SOURCE_INJECTION}|${date}`,
+    courseSessionKey: `${SOURCE_YEAR}|${annualCourseId}|${date}`,
     legacyNoteId: null,
     notebookPosition: 0,
     sourceNoteId: null,
     sourceSchoolYearId: null,
     inheritedAt: null,
-    annualCourseId: SOURCE_INJECTION,
+    annualCourseId,
     createdAt: "2026-09-01T00:00:00.000Z",
     updatedAt: "2026-09-01T00:00:00.000Z",
   };
@@ -241,6 +248,7 @@ async function world(options: {
 async function assembleWithPlans(
   seeded: Awaited<ReturnType<typeof world>>,
   plans: YearTransitionTargetMeetingDayPlan[],
+  selectedSourceAnnualCourseIds?: readonly string[],
 ) {
   return assembleLiveYearTransitionPreviewInput(
     {
@@ -249,6 +257,9 @@ async function assembleWithPlans(
       classMappings: seeded.mappings,
       selectedSourceClassIds: [SOURCE_CLASS],
       targetMeetingDayPlans: plans,
+      ...(selectedSourceAnnualCourseIds !== undefined
+        ? { selectedSourceAnnualCourseIds: [...selectedSourceAnnualCourseIds] }
+        : {}),
     },
     seeded.deps,
   );
@@ -550,4 +561,94 @@ test("sources — clone N uniquement en legacy, fingerprint inclut le plan", asy
     /delete material\.targetMeetingDayPlans/,
   );
   assert.match(applySrc, /targetMeetingDayPlans: snapshotOptions\.targetMeetingDayPlans/);
+});
+
+test("cours décoché : publications et notes hors PREVIEW, pas de BLOCKING", async () => {
+  const seeded = await world({
+    extraCourses: [course(SOURCE_CHASSIS, CTX_CHASSIS)],
+    extraItems: [
+      item({ id: 10, title: "CP1 pub" }),
+      item({
+        id: 21,
+        title: "CP2 pub A",
+        annualCourseId: SOURCE_CHASSIS,
+        subjectId: "subj-chassis",
+        courseSessionKey: `${SOURCE_YEAR}|${SOURCE_CHASSIS}|2027-08-23`,
+      }),
+      item({
+        id: 22,
+        title: "CP2 pub B",
+        annualCourseId: SOURCE_CHASSIS,
+        subjectId: "subj-chassis",
+        courseSessionKey: `${SOURCE_YEAR}|${SOURCE_CHASSIS}|2027-08-30`,
+      }),
+    ],
+  });
+  seeded.deps.notes.replaceAllNotes([
+    note("n-cp1", TEACHER_A),
+    note("n-cp2-a", TEACHER_A, "2027-08-23", SOURCE_CHASSIS, CTX_CHASSIS),
+    note("n-cp2-b", TEACHER_B, "2027-08-30", SOURCE_CHASSIS, CTX_CHASSIS),
+  ]);
+  const input = await assembleWithPlans(seeded, [mondayAll(SOURCE_INJECTION)], [SOURCE_INJECTION]);
+  assert.equal(input.privateNotesOwnerTeacherId, undefined);
+  assert.equal(input.includePrivateNotes, true);
+  assert.deepEqual(input.sourceItems.map((entry) => entry.annualCourseId), [SOURCE_INJECTION]);
+  assert.deepEqual((input.sourceNotes ?? []).map((entry) => entry.annualCourseId), [SOURCE_INJECTION]);
+  assert.equal(
+    input.targetCourses.some((entry) => entry.contextId === CTX_CHASSIS && entry.schoolYearId === TARGET_YEAR),
+    false,
+  );
+  const preview = buildYearTransitionPreview(input);
+  assert.equal(preview.entries.length, 1);
+  assert.equal(preview.entries[0]?.sourceAnnualCourseId, SOURCE_INJECTION);
+  assert.equal(preview.privateNotes?.length, 1);
+  assert.equal(
+    preview.entries.some((entry) => entry.reason === "TARGET_COURSE_MISSING" || entry.sourceAnnualCourseId === SOURCE_CHASSIS),
+    false,
+  );
+  assert.equal(
+    preview.privateNotes?.some((entry) => entry.reason === "TARGET_COURSE_UNRESOLVED"),
+    false,
+  );
+  assert.equal(previewHasBlockingEntries(preview), false);
+});
+
+test("classe sélectionnée, tous les cours décochés : zéro contenu, PREVIEW non bloqué", async () => {
+  const seeded = await world();
+  seeded.deps.notes.replaceAllNotes([note("n-a", TEACHER_A)]);
+  const input = await assembleWithPlans(seeded, [], []);
+  assert.equal(input.sourceItems.length, 0);
+  assert.equal((input.sourceNotes ?? []).length, 0);
+  const preview = buildYearTransitionPreview(input);
+  assert.equal(preview.entries.length, 0);
+  assert.equal(preview.privateNotes?.length ?? 0, 0);
+  assert.equal(previewHasBlockingEntries(preview), false);
+});
+
+test("MeetingDays PREVIEW sans sessionTeacherId charge toutes les notes du cours", async () => {
+  const seeded = await world();
+  seeded.deps.notes.replaceAllNotes([note("n-a", TEACHER_A), note("n-b", TEACHER_B)]);
+  const parsed = parseYearTransitionPreviewRequest({
+    sourceSchoolYearId: SOURCE_YEAR,
+    targetSchoolYearId: TARGET_YEAR,
+    selectedSourceClassIds: [SOURCE_CLASS],
+    selectedSourceAnnualCourseIds: [SOURCE_INJECTION],
+    targetMeetingDayPlans: [mondayAll(SOURCE_INJECTION)],
+  }, "");
+  assert.equal(parsed.includePrivateNotes, true);
+  assert.equal(parsed.privateNotesOwnerTeacherId, undefined);
+  const input = await assembleLiveYearTransitionPreviewInput(
+    {
+      ...parsed,
+      classMappings: seeded.mappings,
+    },
+    seeded.deps,
+  );
+  assert.equal(input.privateNotesOwnerTeacherId, undefined);
+  assert.deepEqual(
+    (input.sourceNotes ?? []).map((entry) => entry.ownerTeacherId).sort(),
+    [TEACHER_A, TEACHER_B],
+  );
+  const preview = previewPrivateNotes(input);
+  assert.equal(preview.length, 2);
 });

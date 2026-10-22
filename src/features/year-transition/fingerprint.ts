@@ -53,7 +53,9 @@ function materialState(input: YearTransitionPreviewInput) {
   return {
     ...(input.includePrivateNotes ? {
       includePrivateNotes: true,
-      privateNotesOwnerTeacherId: input.privateNotesOwnerTeacherId,
+      ...(input.privateNotesOwnerTeacherId?.trim()
+        ? { privateNotesOwnerTeacherId: input.privateNotesOwnerTeacherId }
+        : {}),
       sourceNotes: [...(input.sourceNotes ?? [])].sort((a, b) => a.id.localeCompare(b.id)),
       targetNotes: [...(input.targetNotes ?? [])].sort((a, b) => a.id.localeCompare(b.id)),
     } : {}),
@@ -64,6 +66,14 @@ function materialState(input: YearTransitionPreviewInput) {
       .map((id) => id.trim())
       .filter(Boolean)
       .sort((left, right) => left.localeCompare(right)),
+    ...(input.selectedSourceAnnualCourseIds
+      ? {
+          selectedSourceAnnualCourseIds: [...input.selectedSourceAnnualCourseIds]
+            .map((id) => id.trim())
+            .filter(Boolean)
+            .sort((left, right) => left.localeCompare(right)),
+        }
+      : {}),
     classMappings: [...input.classMappings]
       .map((mapping) => ({
         sourceClassId: normalizeMappingClassId(mapping.sourceClassId),

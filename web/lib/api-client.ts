@@ -1179,6 +1179,24 @@ export type YearTransitionClassOption = {
   parallelCode: string | null;
 };
 
+export type YearTransitionCourseOption = {
+  id: string;
+  classId: string;
+  contextId: string;
+  label: string;
+  branchCode: string;
+  branchLabel: string;
+};
+
+export type YearTransitionMeetingDayPlan = {
+  sourceAnnualCourseId: string;
+  days: Array<{
+    dayOfWeek: 1 | 2 | 3 | 4 | 5;
+    weekKind: "all" | "A" | "B";
+    role: "PRIMARY" | "ADDITIONAL";
+  }>;
+};
+
 export type YearTransitionPresentedRow = {
   id: string;
   kind: "publication" | "privateNote";
@@ -1237,6 +1255,7 @@ export type YearTransitionPresentedPreview = {
 export async function fetchYearTransitionPrepare(): Promise<{
   years: YearTransitionYearOption[];
   classesByYearId: Record<string, YearTransitionClassOption[]>;
+  coursesByClassId: Record<string, YearTransitionCourseOption[]>;
   capabilities: Array<{
     id: string;
     available: boolean;
@@ -1253,6 +1272,7 @@ export async function fetchYearTransitionPrepare(): Promise<{
     reason?: string;
     years?: YearTransitionYearOption[];
     classesByYearId?: Record<string, YearTransitionClassOption[]>;
+    coursesByClassId?: Record<string, YearTransitionCourseOption[]>;
     capabilities?: Array<{
       id: string;
       available: boolean;
@@ -1269,6 +1289,7 @@ export async function fetchYearTransitionPrepare(): Promise<{
   return {
     years: payload.years ?? [],
     classesByYearId: payload.classesByYearId ?? {},
+    coursesByClassId: payload.coursesByClassId ?? {},
     capabilities: payload.capabilities ?? [],
     sessionTeacherId: payload.sessionTeacherId ?? "",
   };
@@ -1278,7 +1299,9 @@ export async function createYearTransitionPreviewApi(input: {
   sourceSchoolYearId: string;
   targetSchoolYearId: string;
   selectedSourceClassIds: string[];
+  selectedSourceAnnualCourseIds: string[];
   includePrivateNotes: boolean;
+  targetMeetingDayPlans: YearTransitionMeetingDayPlan[];
 }): Promise<{ transitionId: string; blocking: boolean; preview: YearTransitionPresentedPreview }> {
   const response = await fetch("/api/admin/year-transition/preview", {
     method: "POST",

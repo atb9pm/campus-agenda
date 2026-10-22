@@ -568,6 +568,7 @@ export async function applyPersistedYearTransition(
         sourceSchoolYearId: persisted.sourceSchoolYearId,
         targetSchoolYearId: persisted.targetSchoolYearId,
         targetMeetingDayPlans: snapshotOptions.targetMeetingDayPlans,
+        selectedSourceAnnualCourseIds: snapshotOptions.selectedSourceAnnualCourseIds,
       },
     );
     if (!materialized.ok) {
@@ -581,6 +582,7 @@ export async function applyPersistedYearTransition(
       sourceSchoolYearId: persisted.sourceSchoolYearId,
       targetSchoolYearId: persisted.targetSchoolYearId,
       selectedSourceClassIds,
+      selectedSourceAnnualCourseIds: snapshotOptions.selectedSourceAnnualCourseIds,
     });
     if (!persistedDays.ok) {
       return fail("APPLY_BLOCKED", { reason: persistedDays.reason });
@@ -594,6 +596,7 @@ export async function applyPersistedYearTransition(
       targetSchoolYearId: persisted.targetSchoolYearId,
       classMappings: liveMappings,
       selectedSourceClassIds,
+      selectedSourceAnnualCourseIds: snapshotOptions.selectedSourceAnnualCourseIds,
       targetMeetingDayPlans: snapshotOptions.targetMeetingDayPlans,
     },
     deps,
