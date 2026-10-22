@@ -5,7 +5,7 @@ import type { TeacherAccountStore } from "../../lib/persistence/teacher-account-
 import type { AnnualCourseStore } from "../../lib/persistence/annual-course-types.ts";
 import type { CourseScheduleStore } from "../../lib/persistence/course-schedule-types.ts";
 import type { AgendaStore } from "../../lib/persistence/types.ts";
-import { assertSchoolYearWritable } from "../school-catalog/school-year-attachment.ts";
+import { ARCHIVED_YEAR_MUTATION_REASON, assertSchoolYearWritable } from "../school-catalog/school-year-attachment.ts";
 import { teacherCanAccessAnnualCourse } from "./access.ts";
 import {
   evaluateTeachingTypeGuard,
@@ -29,7 +29,7 @@ import type {
   TypeMismatchWarning,
 } from "./types.ts";
 import {
-  DRAFT_YEAR_ASSIGNMENT_REASON,
+  schoolYearAllowsTeacherAssignment,
   validateAnnualCourseInput,
   validateAttributionReferential,
 } from "./validation.ts";
@@ -129,8 +129,8 @@ async function assertCourseAssignable(
     branch: ref.branch,
   });
   if (!referential.ok) return referential;
-  if (ref.year?.status !== "active") {
-    return { ok: false, reason: DRAFT_YEAR_ASSIGNMENT_REASON, status: 400 };
+  if (!schoolYearAllowsTeacherAssignment(ref.year?.status)) {
+    return { ok: false, reason: ARCHIVED_YEAR_MUTATION_REASON, status: 400 };
   }
   return { ok: true, value: true };
 }

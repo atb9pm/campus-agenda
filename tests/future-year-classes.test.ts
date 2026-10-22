@@ -6,7 +6,6 @@ import { APP_VERSION } from "../src/lib/app-version.ts";
 import {
   assignTeacherToCourse,
   createAnnualCourse,
-  DRAFT_YEAR_ASSIGNMENT_REASON,
   COURSE_CLASS_YEAR_MISMATCH_REASON,
 } from "../src/features/annual-courses/index.ts";
 import type { AnnualCourseServiceDeps } from "../src/features/annual-courses/service.ts";
@@ -415,7 +414,7 @@ test("UI — titres et badges année de travail", () => {
   assert.equal(ADMIN_WORKING_YEAR_BADGE_LABELS.active, "Active");
 });
 
-test("affectation professeur refusée sur une année DRAFT", async () => {
+test("affectation professeur autorisée sur une année DRAFT, qui reste en préparation", async () => {
   const world = await memoryWorld();
   const draftMa1 = await world.catalog.createClass({
     code: "MA1",
@@ -447,10 +446,11 @@ test("affectation professeur refusée sur une année DRAFT", async () => {
     validFrom: "2028-08-21",
     createdByAdminId: "admin-1",
   });
-  assert.equal(assigned.ok, false);
-  if (!assigned.ok) {
-    assert.equal(assigned.reason, DRAFT_YEAR_ASSIGNMENT_REASON);
-  }
+  assert.equal(assigned.ok, true, JSON.stringify(assigned));
+  const draftYear = (await world.years.listSchoolYears()).find((year) => year.id === DRAFT_ID);
+  assert.equal(draftYear?.status, "draft");
+  const activeYear = (await world.years.listSchoolYears()).find((year) => year.id === ACTIVE_ID);
+  assert.equal(activeYear?.status, "active");
 });
 
 test("version 2.61.8 — liste mémoire des années en ordre chronologique", async () => {
