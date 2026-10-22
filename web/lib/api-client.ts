@@ -714,8 +714,9 @@ export async function loginStudentApi(code: string, remember = true): Promise<Ap
 export async function fetchAgendaItems(
   classroomId: string,
   schoolYearId?: string | null,
+  options?: { adminConsult?: boolean },
 ): Promise<PrototypeAgendaItem[]> {
-  const view = await fetchAgendaView(classroomId, schoolYearId);
+  const view = await fetchAgendaView(classroomId, schoolYearId, options);
   return view.items;
 }
 
@@ -736,7 +737,11 @@ export type StudentAgendaScheduleSlot = {
   validTo: string | null;
 };
 
-export async function fetchAgendaView(classroomId: string, schoolYearId?: string | null): Promise<{
+export async function fetchAgendaView(
+  classroomId: string,
+  schoolYearId?: string | null,
+  options?: { adminConsult?: boolean },
+): Promise<{
   items: PrototypeAgendaItem[];
   subjects: AgendaSubjectLabel[];
   attendanceDays: Array<{ dayOfWeek: number; weekKind: "all" | "A" | "B"; role: string }>;
@@ -744,6 +749,7 @@ export async function fetchAgendaView(classroomId: string, schoolYearId?: string
 }> {
   const params = new URLSearchParams({ classroomId });
   if (schoolYearId?.trim()) params.set("schoolYearId", schoolYearId.trim());
+  if (options?.adminConsult && schoolYearId?.trim()) params.set("consult", "1");
   const response = await fetch(`/api/agenda?${params.toString()}`, {
     credentials: "include",
   });

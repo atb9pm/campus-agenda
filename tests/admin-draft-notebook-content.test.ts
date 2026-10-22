@@ -789,11 +789,13 @@ test("la page et les routes n’écrivent pas pendant la consultation admin", as
   const autosave = page.indexOf("if (adminYearConsult) return;");
   const saveCall = page.indexOf("saveTeacherNotesApi(classNotesDocument)");
   assert.ok(autosave > 0 && autosave < saveCall);
-  assert.match(page, /loadTeacherAgendaItems\(classroomIds, viewedSchoolYearId\)/);
+  assert.match(page, /loadTeacherAgendaItems\(classroomIds, viewedSchoolYearId, \{\s*adminConsult: true,\s*\}\)/);
   assert.match(
     page,
-    /fetchAgendaItems\(notebookClassroomId, adminYearConsult \? viewedSchoolYearId : null\)/,
+    /fetchAgendaItems\(\s*notebookClassroomId,\s*adminYearConsult \? viewedSchoolYearId : null,\s*\{ adminConsult: adminYearConsult \},\s*\)/,
   );
+  assert.match(agendaRoute, /requireClassroomReadAccess\(request, classroomId, \{ adminConsult, schoolYearId \}\)/);
+  assert.match(agendaRoute, /const readOnly = adminConsult \|\|/);
   assert.match(
     page,
     /Consultation administrative en lecture seule\. Les enseignants et les élèves utilisent toujours l’année active\./,
