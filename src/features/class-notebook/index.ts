@@ -50,6 +50,7 @@ export {
   type ResolvedNotebookPublishContext,
 } from "./notebook-publication-service.ts";
 export {
+  accessibleAnnualCourseIdsForNotebookConsult,
   accessibleAnnualCourseIdsForTeacher,
   annualCourseIdsTouchedByNotebookDocument,
   annualNotesToSessionMap,
@@ -57,6 +58,8 @@ export {
   loadTeacherNotebookDocument,
   persistTeacherNotebookDocument,
   splitResolvableNotebookNotes,
+  type NotebookConsultAccessDeps,
+  type NotebookConsultAccessOptions,
   type TeacherNotebookNotesDeps,
 } from "./annual-private-notes.ts";
 export {

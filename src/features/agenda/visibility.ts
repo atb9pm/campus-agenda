@@ -29,6 +29,19 @@ export function defaultStudentVisibleForCreate(input: {
  * Un élément « À reclasser » (cours annuel, sans séance, provenance de transition
  * ou sentinelle semaine 0) n’est jamais visible, même si `studentVisible` est vrai.
  */
+/**
+ * Année explicite : ne garde que les publications de cette année.
+ * Sans année, le chargement opérationnel actuel est conservé.
+ */
+export function agendaItemsForSchoolYear<T extends { schoolYearId?: string | null }>(
+  items: readonly T[],
+  schoolYearId?: string | null,
+): T[] {
+  const yearId = schoolYearId?.trim() ?? "";
+  if (!yearId) return [...items];
+  return items.filter((item) => item.schoolYearId === yearId);
+}
+
 export function isVisibleToStudent(
   item: Pick<
     PrototypeAgendaItem,

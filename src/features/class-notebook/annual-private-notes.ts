@@ -24,8 +24,11 @@ import {
   createAnnualCourseNote,
   type AnnualCourseNote,
 } from "../pedagogical-path/annual-notes.ts";
+import { listTeacherCourses } from "../teacher-workspace/service.ts";
 import type { AnnualCourseStore } from "../../lib/persistence/annual-course-types.ts";
 import type { AnnualCourseNotesStore } from "../../lib/persistence/pedagogical-path-types.ts";
+import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-types.ts";
+import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
 import { NotebookConflictError, type TeacherNotesStore } from "../../lib/persistence/teacher-notes-types.ts";
 import { preserveNotebookMetadata } from "../../lib/persistence/notebook-state.ts";
 import {
@@ -116,6 +119,47 @@ export async function accessibleAnnualCourseIdsForTeacher(
     if (isAssignmentActiveAt(assignment, at)) ids.add(assignment.annualCourseId);
   }
   return [...ids].sort();
+}
+
+export interface NotebookConsultAccessDeps {
+  courses: AnnualCourseStore;
+  catalog?: SchoolCatalogStore;
+  years?: SchoolYearStore;
+}
+
+export interface NotebookConsultAccessOptions {
+  teacherId: string;
+  at?: string;
+  schoolYearId?: string | null;
+  isAdmin?: boolean;
+  adminConsult?: boolean;
+}
+
+/**
+ * NORMAL : attributions actives à la date donnée.
+ * ADMIN_CONSULT : cours de l’année explicitement consultée, résolus comme Mes cours.
+ * `consult` sans compte administrateur retombe sur le mode normal.
+ */
+export async function accessibleAnnualCourseIdsForNotebookConsult(
+  deps: NotebookConsultAccessDeps,
+  options: NotebookConsultAccessOptions,
+): Promise<string[]> {
+  const catalog = deps.catalog;
+  const years = deps.years;
+  if (!(options.adminConsult === true && options.isAdmin === true && catalog && years)) {
+    return accessibleAnnualCourseIdsForTeacher(deps.courses, options.teacherId, options.at);
+  }
+  const workspace = await listTeacherCourses(
+    { courses: deps.courses, catalog, years },
+    {
+      teacherId: options.teacherId,
+      schoolYearId: options.schoolYearId,
+      isAdmin: true,
+      adminConsult: true,
+      at: options.at,
+    },
+  );
+  return [...new Set(workspace.courses.map((course) => course.annualCourseId))].sort();
 }
 
 /** Cours explicitement présents dans le document V2 (y compris séances vidées). */
@@ -282,8 +326,32 @@ export async function persistTeacherNotebookDocument(
 export async function loadTeacherNotebookDocument(
   teacherId: string,
   deps: TeacherNotebookNotesDeps,
+  options?: Omit<NotebookConsultAccessOptions, "teacherId"> & {
+    catalog?: SchoolCatalogStore;
+    years?: SchoolYearStore;
+  },
 ): Promise<ClassNotesDocument | null> {
-  const courseIds = await accessibleAnnualCourseIdsForTeacher(deps.courses, teacherId);
+  const catalog = options?.catalog;
+  const years = options?.years;
+  if (options?.adminConsult === true && options.isAdmin === true && catalog && years) {
+    const courseIds = await accessibleAnnualCourseIdsForNotebookConsult(
+      { courses: deps.courses, catalog, years },
+      {
+        teacherId,
+        at: options.at,
+        schoolYearId: options.schoolYearId,
+        isAdmin: true,
+        adminConsult: true,
+      },
+    );
+    const notes = (
+      await Promise.all(courseIds.map((annualCourseId) => deps.courseNotes.listNotesByAnnualCourse(annualCourseId)))
+    ).flat();
+    if (notes.length === 0) return null;
+    return composeTeacherNotebookDocument(null, notes);
+  }
+
+  const courseIds = await accessibleAnnualCourseIdsForTeacher(deps.courses, teacherId, options?.at);
   const allowed = new Set(courseIds);
   for (let attempt = 0; attempt < 4; attempt++) {
     const state = await deps.teacherNotes.readNotebook(teacherId, deps.courseNotes, courseIds);

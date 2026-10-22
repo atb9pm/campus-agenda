@@ -555,9 +555,18 @@ export async function saveTeacherSetupApi(setup: TeacherSetupConfig): Promise<Te
 const notebookAutosave = new NotebookAutosave();
 
 /** Null si aucun document de notes n'a encore été enregistré côté serveur. */
-export async function fetchTeacherNotesApi(): Promise<ClassNotesDocument | null> {
+export async function fetchTeacherNotesApi(options?: {
+  schoolYearId?: string | null;
+  adminConsult?: boolean;
+}): Promise<ClassNotesDocument | null> {
   notebookAutosave.reset();
-  const response = await fetch("/api/teacher/notes", { credentials: "include" });
+  const params = new URLSearchParams();
+  if (options?.adminConsult) {
+    if (options.schoolYearId?.trim()) params.set("schoolYearId", options.schoolYearId.trim());
+    params.set("consult", "1");
+  }
+  const query = params.toString();
+  const response = await fetch(`/api/teacher/notes${query ? `?${query}` : ""}`, { credentials: "include" });
   const payload = await parseJson<{ ok: boolean; reason?: string; notes?: ClassNotesDocument | null; revision?: string }>(
     response,
   );
@@ -702,8 +711,11 @@ export async function loginStudentApi(code: string, remember = true): Promise<Ap
   return payload.session;
 }
 
-export async function fetchAgendaItems(classroomId: string): Promise<PrototypeAgendaItem[]> {
-  const view = await fetchAgendaView(classroomId);
+export async function fetchAgendaItems(
+  classroomId: string,
+  schoolYearId?: string | null,
+): Promise<PrototypeAgendaItem[]> {
+  const view = await fetchAgendaView(classroomId, schoolYearId);
   return view.items;
 }
 
@@ -724,13 +736,15 @@ export type StudentAgendaScheduleSlot = {
   validTo: string | null;
 };
 
-export async function fetchAgendaView(classroomId: string): Promise<{
+export async function fetchAgendaView(classroomId: string, schoolYearId?: string | null): Promise<{
   items: PrototypeAgendaItem[];
   subjects: AgendaSubjectLabel[];
   attendanceDays: Array<{ dayOfWeek: number; weekKind: "all" | "A" | "B"; role: string }>;
   scheduleSlots: StudentAgendaScheduleSlot[];
 }> {
-  const response = await fetch(`/api/agenda?classroomId=${encodeURIComponent(classroomId)}`, {
+  const params = new URLSearchParams({ classroomId });
+  if (schoolYearId?.trim()) params.set("schoolYearId", schoolYearId.trim());
+  const response = await fetch(`/api/agenda?${params.toString()}`, {
     credentials: "include",
   });
   const payload = await parseJson<{
