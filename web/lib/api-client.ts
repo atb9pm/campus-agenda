@@ -1376,6 +1376,97 @@ export async function applyYearTransitionApi(transitionId: string): Promise<{
   };
 }
 
+export type YearTransitionReclassifySessionOption = {
+  key: string;
+  date: string;
+  sequenceNumber: number;
+  label: string;
+  annualCourseId: string;
+  schoolYearId: string;
+};
+
+export type YearTransitionReclassifyItem = {
+  id: string;
+  kind: "publication" | "note";
+  publicationId: number | null;
+  noteId: string | null;
+  type: string;
+  typeLabel: string;
+  title: string | null;
+  annualCourseId: string;
+  classId: string;
+  courseLabel: string;
+  classLabel: string;
+  reclassifyKind: "UNPLACED" | "ORPHANED";
+  reasonLabel: string;
+  sourceSessionLabel: string | null;
+  studentVisible: boolean | null;
+};
+
+export type YearTransitionReclassifyQueue = {
+  schoolYearId: string;
+  yearLabel: string;
+  count: number;
+  complete: boolean;
+  groups: Array<{
+    classId: string;
+    classLabel: string;
+    courses: Array<{
+      annualCourseId: string;
+      courseLabel: string;
+      classId: string;
+      sessions: YearTransitionReclassifySessionOption[];
+      items: YearTransitionReclassifyItem[];
+    }>;
+  }>;
+};
+
+export async function fetchYearTransitionReclassify(
+  schoolYearId: string,
+): Promise<YearTransitionReclassifyQueue> {
+  const response = await fetch(
+    `/api/admin/year-transition/reclassify?schoolYearId=${encodeURIComponent(schoolYearId)}`,
+    { credentials: "include" },
+  );
+  const payload = await parseJson<YearTransitionReclassifyQueue & { ok: boolean; reason?: string }>(response);
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.reason ?? "Chargement du reclassement impossible.");
+  }
+  return {
+    schoolYearId: payload.schoolYearId,
+    yearLabel: payload.yearLabel,
+    count: payload.count,
+    complete: Boolean(payload.complete),
+    groups: payload.groups ?? [],
+  };
+}
+
+export async function applyYearTransitionReclassifyApi(input: {
+  schoolYearId: string;
+  kind: "publication" | "note";
+  publicationId?: number | null;
+  noteId?: string | null;
+  courseSessionKey: string;
+}): Promise<YearTransitionReclassifyQueue> {
+  const response = await fetch("/api/admin/year-transition/reclassify", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const payload = await parseJson<{
+    ok: boolean;
+    reason?: string;
+    queue?: YearTransitionReclassifyQueue;
+    count?: number;
+    complete?: boolean;
+  }>(response);
+  if (!response.ok || !payload.ok || !payload.queue) {
+    throw new Error(payload.reason ?? "Reclassement impossible.");
+  }
+  return payload.queue;
+}
+
 export async function activateSchoolYear(
   schoolYearId: string,
   options?: { confirm?: boolean },

@@ -487,6 +487,7 @@ test("routes admin auditées : requireAdminSession sauf catalogue enseignant act
     "web/app/api/admin/year-transition/prepare/route.ts",
     "web/app/api/admin/year-transition/preview/route.ts",
     "web/app/api/admin/year-transition/apply/route.ts",
+    "web/app/api/admin/year-transition/reclassify/route.ts",
   ];
   for (const file of files) {
     const source = await readFile(new URL(`../${file}`, import.meta.url), "utf8");

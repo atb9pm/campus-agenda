@@ -316,6 +316,20 @@ export class SqlAnnualCourseNotesStore implements AnnualCourseNotesStore {
     );
     await this.db.batch(buildCourseNotebookStatements(annualCourseId, next));
   }
+
+  async updateNoteCourseSession(id: string, courseSessionKey: string): Promise<AnnualCourseNote | null> {
+    const existing = await this.getNote(id);
+    if (!existing) return null;
+    await this.db
+      .prepare(
+        `UPDATE annual_course_notes
+         SET course_session_key = ?, updated_at = datetime('now')
+         WHERE id = ?`,
+      )
+      .bind(courseSessionKey, id)
+      .run();
+    return this.getNote(id);
+  }
 }
 
 export const NOTEBOOK_COLUMNS = [

@@ -264,7 +264,11 @@ export {
   countNotesToReclassify,
   countPublicationsToReclassify,
   noteNeedsReclassification,
+  noteReclassifyKind,
   publicationNeedsReclassification,
+  publicationReclassifyKind,
+  RECLASSIFY_PLACEMENT_KINDS,
+  type ReclassifyPlacementKind,
 } from "./reclassify.ts";
 export {
   formatCourseSessionCardSubtitle,

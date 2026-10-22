@@ -39,4 +39,9 @@ export interface AnnualCourseNotesStore {
    * Ne touche pas les autres cours ni les notes structurelles (sans session / legacy / owner).
    */
   replaceNotebookNotesForAnnualCourse(annualCourseId: string, notes: readonly AnnualCourseNote[]): Promise<void>;
+  /**
+   * Repositionne uniquement la séance. Ne touche pas au texte, à l’auteur
+   * ni à la provenance N→N+1.
+   */
+  updateNoteCourseSession(id: string, courseSessionKey: string): Promise<AnnualCourseNote | null>;
 }

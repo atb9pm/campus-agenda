@@ -200,6 +200,18 @@ export class MemoryAnnualCourseNotesStore implements AnnualCourseNotesStore {
     this.stageCourseNotebookNotes([annualCourseId], next)();
   }
 
+  async updateNoteCourseSession(id: string, courseSessionKey: string): Promise<AnnualCourseNote | null> {
+    const current = this.notes.get(id);
+    if (!current) return null;
+    const updated: AnnualCourseNote = {
+      ...current,
+      courseSessionKey,
+      updatedAt: new Date().toISOString(),
+    };
+    this.notes.set(id, updated);
+    return structuredClone(updated);
+  }
+
   exportAllNotes(): AnnualCourseNote[] {
     return [...this.notes.values()].map((note) => structuredClone(note));
   }

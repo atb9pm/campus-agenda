@@ -356,6 +356,7 @@ test("apply refuse l’absence de confirmation et les routes exigent une session
     "web/app/api/admin/year-transition/prepare/route.ts",
     "web/app/api/admin/year-transition/preview/route.ts",
     "web/app/api/admin/year-transition/apply/route.ts",
+    "web/app/api/admin/year-transition/reclassify/route.ts",
   ];
   for (const file of files) {
     const source = await readFile(new URL(`../${file}`, import.meta.url), "utf8");
@@ -388,6 +389,9 @@ test("apply refuse l’absence de confirmation et les routes exigent une session
   assert.match(panel, /Actualisez l’aperçu/);
   assert.match(panel, /0 élément perdu|élément perdu/);
   assert.match(panel, /À reclasser/);
+  assert.match(panel, /Reclasser les/);
+  assert.match(panel, /Tous les éléments transférés sont positionnés/);
+  assert.match(panel, /YearTransitionReclassifyPanel/);
   assert.match(panel, /Attributions des cours/);
   assert.match(panel, /Horaire des classes/);
   assert.match(panel, /Consulter l’année préparée/);

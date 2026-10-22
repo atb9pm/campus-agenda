@@ -139,6 +139,33 @@ export {
   materializeSelectedContinuations,
   persistTargetMeetingDayPlans,
 } from "./materialize-continuations.ts";
+export {
+  YEAR_TRANSITION_RECLASSIFY_COMPLETE,
+  YEAR_TRANSITION_RECLASSIFY_FORBIDDEN,
+  YEAR_TRANSITION_RECLASSIFY_OTHER_COURSE,
+  YEAR_TRANSITION_RECLASSIFY_SESSION_GONE,
+  YearTransitionReclassifyAuthError,
+  applyYearTransitionReclassify,
+  assertAdminReclassifyAccess,
+  candidateSessionsForCourse,
+  formatReclassifySessionLabel,
+  inheritedNoteReclassifyKind,
+  inheritedPublicationReclassifyKind,
+  listYearTransitionReclassifyQueue,
+  parseYearTransitionReclassifyRequest,
+} from "./admin-reclassify.ts";
+export type {
+  YearTransitionReclassifyActor,
+  YearTransitionReclassifyClassGroup,
+  YearTransitionReclassifyCourseGroup,
+  YearTransitionReclassifyDeps,
+  YearTransitionReclassifyFailure,
+  YearTransitionReclassifyItem,
+  YearTransitionReclassifyItemKind,
+  YearTransitionReclassifyQueue,
+  YearTransitionReclassifySessionOption,
+  YearTransitionReclassifySuccess,
+} from "./admin-reclassify.ts";
 export { applyPersistedYearTransition, expectedApplyResultForPreviewReason } from "./apply.ts";
 export type { ApplyPersistedYearTransitionDeps } from "./apply.ts";
 export {
