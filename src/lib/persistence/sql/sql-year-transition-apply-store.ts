@@ -17,20 +17,25 @@ export function transitionNoteToken(notes: readonly AnnualCourseNote[]): string 
 
 function noteGuardStatement(guard: YearTransitionApplyNoteGuard, transitionId: string) {
   const courseIds = (guard.annualCourseIds ?? []).map((id) => id.trim()).filter(Boolean);
+  const ownerTeacherId = guard.ownerTeacherId?.trim() ?? "";
   const notebookJson = NOTEBOOK_COLUMNS.map(
     (c) => `'${c}', ${c === "body_json" ? "json(body_json)" : c}`,
   ).join(", ");
   const where = courseIds.length > 0
     ? `annual_course_id IN (${courseIds.map(() => "?").join(", ")}) AND school_year_id IN (?, ?)`
-    : "owner_teacher_id = ? AND school_year_id IN (?, ?)";
+    : ownerTeacherId
+      ? "owner_teacher_id = ? AND school_year_id IN (?, ?)"
+      : "0";
   const identityValues = courseIds.length > 0
     ? [...courseIds, guard.sourceSchoolYearId, guard.targetSchoolYearId]
-    : [guard.ownerTeacherId, guard.sourceSchoolYearId, guard.targetSchoolYearId];
+    : ownerTeacherId
+      ? [ownerTeacherId, guard.sourceSchoolYearId, guard.targetSchoolYearId]
+      : [];
   const token = transitionNoteToken(guard.expected);
   return {
     // Compare in the same transaction as all copies and ledger writes.
     sql: `WITH current(token) AS (
-      SELECT json_group_array(json_object(${notebookJson}))
+      SELECT COALESCE(json_group_array(json_object(${notebookJson})), '[]')
       FROM (SELECT * FROM annual_course_notes WHERE ${where} ORDER BY id))
       UPDATE year_transition_previews SET fingerprint = CASE WHEN
       NOT EXISTS (SELECT fullkey, type, atom FROM json_tree((SELECT token FROM current))
