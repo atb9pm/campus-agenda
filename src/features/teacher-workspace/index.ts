@@ -4,6 +4,7 @@ export {
   CONTROL_COURSES_UNAVAILABLE_MESSAGE,
   SCHOOL_YEAR_UNCONFIGURED_MESSAGE,
   WORKSPACE_ASSIGNMENT_ROLE_LABELS,
+  type WorkspaceDisplayRole,
   type TeacherCourseClassGroup,
   type TeacherCourseWorkspaceEntry,
   type TeacherCourseWorkspaceResult,

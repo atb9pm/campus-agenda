@@ -105,6 +105,9 @@ interface ClassNotebookPanelProps {
   classSetup: TeacherClassSetup;
   branchLabel?: string | null;
   annualCourseId?: string | null;
+  schoolYearId?: string | null;
+  /** Consultation administrative explicite. N’envoie `consult=1` que dans ce cas. */
+  adminConsult?: boolean;
   schoolYearLabel?: string | null;
   schoolYearStatus?: "draft" | "active" | "archived" | null;
   subjectId?: string | null;
@@ -232,6 +235,8 @@ export function ClassNotebookPanel({
   classSetup,
   branchLabel: selectedBranchLabel,
   annualCourseId,
+  schoolYearId = null,
+  adminConsult = false,
   schoolYearLabel,
   schoolYearStatus = null,
   subjectId,
@@ -310,7 +315,11 @@ export function ClassNotebookPanel({
     const controller = new AbortController();
     void (async () => {
       try {
-        const payload = await fetchTeacherCourseTimelineApi(courseId, controller.signal);
+        const payload = await fetchTeacherCourseTimelineApi(
+          courseId,
+          controller.signal,
+          adminConsult ? { schoolYearId, adminConsult: true } : undefined,
+        );
         if (controller.signal.aborted) return;
         const sessions = payload.timeline.entries.map((entry) => entry.courseSession);
         setCourseSessions(sessions);
@@ -327,7 +336,7 @@ export function ClassNotebookPanel({
     })();
 
     return () => controller.abort();
-  }, [annualCourseId]);
+  }, [adminConsult, annualCourseId, schoolYearId]);
 
   const eligibleWeeks = useMemo(() => {
     if (!structuredCourse || sessionsLoading || courseSessions == null) return schoolWeeks;

@@ -231,6 +231,7 @@ test("version 2.24.0 — Mes cours depuis les attributions", () => {
   assert.equal(WORKSPACE_ASSIGNMENT_ROLE_LABELS.PRIMARY, "Titulaire");
   assert.equal(WORKSPACE_ASSIGNMENT_ROLE_LABELS.CO_TEACHER, "Co-enseignant");
   assert.equal(WORKSPACE_ASSIGNMENT_ROLE_LABELS.REPLACEMENT, "Remplacement temporaire");
+  assert.equal(WORKSPACE_ASSIGNMENT_ROLE_LABELS.ADMIN_CONSULT, "Consultation admin");
   assert.match(TEACHER_COURSES_EMPTY_MESSAGE, /Aucun cours ne vous est encore attribué/);
 });
 
@@ -1034,6 +1035,15 @@ test("consultation admin : année demandée, tous les cours de l’année, pas s
   });
   assert.equal(consult.schoolYearId, "year-2027");
   assert.equal(consult.courses.length, 2);
+  const consultedAssigned = consult.courses.find((course) => course.annualCourseId === assigned.value.id);
+  const consultedOpen = consult.courses.find((course) => course.annualCourseId === unassigned.value.id);
+  assert.equal(consultedAssigned?.role, "PRIMARY");
+  assert.equal(consultedOpen?.role, "ADMIN_CONSULT");
+  assert.equal(consultedOpen?.assignmentId, `consult:${unassigned.value.id}`);
+  assert.equal(
+    (await fx.deps.courses.listAssignments()).some((entry) => entry.annualCourseId === unassigned.value.id),
+    false,
+  );
   const years = await fx.deps.years.listSchoolYears();
   assert.equal(
     resolveTeacherWorkspaceYearRequest({

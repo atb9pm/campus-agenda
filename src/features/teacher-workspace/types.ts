@@ -9,11 +9,18 @@ export const CONTROL_COURSES_UNAVAILABLE_MESSAGE = "Aucun cours disponible.";
 
 export const SCHOOL_YEAR_UNCONFIGURED_MESSAGE = "Aucune année scolaire configurée.";
 
-/** Libellés d’affichage de l’espace enseignant — pas de nouveaux rôles. */
-export const WORKSPACE_ASSIGNMENT_ROLE_LABELS: Record<AssignmentRole, string> = {
+/**
+ * Rôle affiché dans l’espace enseignant.
+ * `ADMIN_CONSULT` n’est jamais persisté : ce n’est pas un TeacherCourseAssignment.
+ */
+export type WorkspaceDisplayRole = AssignmentRole | "ADMIN_CONSULT";
+
+/** Libellés d’affichage. `ADMIN_CONSULT` reste hors du référentiel d’attribution. */
+export const WORKSPACE_ASSIGNMENT_ROLE_LABELS: Record<WorkspaceDisplayRole, string> = {
   PRIMARY: "Titulaire",
   CO_TEACHER: "Co-enseignant",
   REPLACEMENT: "Remplacement temporaire",
+  ADMIN_CONSULT: "Consultation admin",
 };
 
 /**
@@ -23,7 +30,7 @@ export const WORKSPACE_ASSIGNMENT_ROLE_LABELS: Record<AssignmentRole, string> = 
 export interface TeacherCourseWorkspaceEntry {
   annualCourseId: string;
   assignmentId: string;
-  role: AssignmentRole;
+  role: WorkspaceDisplayRole;
   validFrom: string;
   validTo: string | null;
   schoolYearId: string;

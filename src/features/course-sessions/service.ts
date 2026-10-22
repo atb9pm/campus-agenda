@@ -74,6 +74,10 @@ export async function listComputedCourseSessions(
 
   const courseIds = new Set(courses.map((course) => course.id));
   const slots = (await deps.schedules.listSlots()).filter((slot) => courseIds.has(slot.annualCourseId));
+  const meetingDays =
+    typeof deps.schedules.listMeetingDays === "function"
+      ? (await deps.schedules.listMeetingDays()).filter((day) => courseIds.has(day.annualCourseId))
+      : [];
   const exceptions = await deps.years.listDayExceptions(schoolYearId);
 
   return {
@@ -82,6 +86,7 @@ export async function listComputedCourseSessions(
       schoolYearId: year.id,
       courses,
       slots,
+      meetingDays,
       weeks: year.weeks,
       holidays: valaisHolidaysForSchoolYear(year.label),
       exceptions,

@@ -462,13 +462,19 @@ export async function fetchTeacherNotebookExportApi(input: {
 export async function fetchTeacherCourseTimelineApi(
   annualCourseId: string,
   signal?: AbortSignal,
+  options?: { schoolYearId?: string | null; adminConsult?: boolean },
 ): Promise<{
   course: TeacherCourseTimelineCourse;
   timeline: CourseTimelineProjection;
   publications: CourseTimelinePublicationSummary[];
 }> {
-  const params = `?annualCourseId=${encodeURIComponent(annualCourseId)}`;
-  const response = await fetch(`/api/teacher/course-timeline${params}`, {
+  const params = new URLSearchParams();
+  params.set("annualCourseId", annualCourseId);
+  if (options?.adminConsult) {
+    if (options.schoolYearId?.trim()) params.set("schoolYearId", options.schoolYearId.trim());
+    params.set("consult", "1");
+  }
+  const response = await fetch(`/api/teacher/course-timeline?${params.toString()}`, {
     credentials: "include",
     signal,
   });

@@ -46,7 +46,9 @@ function toTimelineCourse(entry: TeacherCourseWorkspaceEntry): TeacherCourseTime
 
 /**
  * Lecture enseignant : séances réelles (PR57) + parcours CTX, sans écriture.
- * L’autorisation réutilise `listTeacherCourses` (espace opérationnel, TCA active).
+ * L’autorisation réutilise `listTeacherCourses`.
+ * Enseignant standard : année active uniquement.
+ * Autre année : `adminConsult` et `isAdmin` ensemble, comme le workspace.
  * Une fois autorisé, la timeline n’est pas filtrée par validFrom/validTo.
  */
 export async function getTeacherCourseTimeline(
@@ -54,6 +56,9 @@ export async function getTeacherCourseTimeline(
   options: {
     teacherId: string;
     annualCourseId: string;
+    schoolYearId?: string | null;
+    isAdmin?: boolean;
+    adminConsult?: boolean;
     at?: string;
   },
 ): Promise<TeacherCourseTimelineResult> {
@@ -69,6 +74,9 @@ export async function getTeacherCourseTimeline(
 
   const workspace = await listTeacherCourses(deps, {
     teacherId: options.teacherId,
+    schoolYearId: options.schoolYearId,
+    isAdmin: options.isAdmin,
+    adminConsult: options.adminConsult,
     at: options.at,
   });
   const entry = workspace.courses.find((course) => course.annualCourseId === annualCourseId);
