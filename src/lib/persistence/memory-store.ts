@@ -135,6 +135,28 @@ export class MemoryAgendaStore implements AgendaStore {
     return { ok: true, item };
   }
 
+  async placeAgendaItemOnCourseSession(
+    itemId: number,
+    placement: {
+      courseSessionKey: string;
+      courseSessionDate: string;
+      schoolWeekNumber: number;
+      day: number;
+    },
+  ): Promise<AgendaMutationResult> {
+    const existing = await this.findAgendaItem(itemId);
+    if (!existing) return { ok: false, reason: "Publication introuvable.", status: 404 };
+    const item: PrototypeAgendaItem = {
+      ...existing,
+      courseSessionKey: placement.courseSessionKey,
+      courseSessionDate: placement.courseSessionDate,
+      schoolWeekNumber: placement.schoolWeekNumber,
+      day: placement.day,
+    };
+    this.items = this.items.map((entry) => (entry.id === itemId ? item : entry));
+    return { ok: true, item };
+  }
+
   async deleteAgendaItem(
     itemId: number,
     actorTeacherId: string,

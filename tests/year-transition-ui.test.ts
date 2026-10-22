@@ -356,6 +356,7 @@ test("apply refuse l’absence de confirmation et les routes exigent une session
     "web/app/api/admin/year-transition/prepare/route.ts",
     "web/app/api/admin/year-transition/preview/route.ts",
     "web/app/api/admin/year-transition/apply/route.ts",
+    "web/app/api/admin/year-transition/reclassify/route.ts",
   ];
   for (const file of files) {
     const source = await readFile(new URL(`../${file}`, import.meta.url), "utf8");
@@ -386,8 +387,12 @@ test("apply refuse l’absence de confirmation et les routes exigent une session
   assert.doesNotMatch(meetingDayDraft, /Toutes les semaines/);
   assert.match(panel, /La configuration a changé/);
   assert.match(panel, /Actualisez l’aperçu/);
-  assert.match(panel, /0 élément perdu|élément perdu/);
+  assert.match(panel, /élément perdu/);
   assert.match(panel, /À reclasser/);
+  assert.match(panel, /Reclasser les/);
+  assert.match(panel, /Tous les éléments transférés sont positionnés/);
+  assert.match(panel, /YearTransitionReclassifyPanel/);
+  assert.match(panel, /queueMicrotask/);
   assert.match(panel, /Attributions des cours/);
   assert.match(panel, /Horaire des classes/);
   assert.match(panel, /Consulter l’année préparée/);
@@ -426,6 +431,16 @@ test("apply refuse l’absence de confirmation et les routes exigent une session
   const coursesRoute = await readFile(new URL("../web/app/api/teacher/courses/route.ts", import.meta.url), "utf8");
   assert.match(coursesRoute, /consult/);
   assert.match(coursesRoute, /adminConsult/);
+});
+
+test("APPLY : 0 perdu affiche ✓ ok, des pertes affichent ⚠ warn", async () => {
+  const panel = await readFile(new URL("../web/app/components/year-transition-prepare-panel.tsx", import.meta.url), "utf8");
+  assert.match(panel, /const lostCount = resultTotals\?\.lost \?\? 0/);
+  assert.match(
+    panel,
+    /<li className=\{lostCount > 0 \? "warn" : "ok"\}>\s*\{lostCount > 0 \? "⚠ " : "✓ "\}\s*\{frenchCount\(lostCount, "élément perdu", "éléments perdus"\)\}/,
+  );
+  assert.doesNotMatch(panel, /frenchCount\(resultTotals\?\.lost \?\? 0, "élément perdu"/);
 });
 
 function draft(patch: Partial<MeetingDayDraft>): MeetingDayDraft {

@@ -2,12 +2,34 @@ import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
 import type { AnnualCourseNote } from "../pedagogical-path/annual-notes.ts";
 import type { CourseSession } from "../course-sessions/types.ts";
 
+export const RECLASSIFY_PLACEMENT_KINDS = ["UNPLACED", "ORPHANED"] as const;
+export type ReclassifyPlacementKind = (typeof RECLASSIFY_PLACEMENT_KINDS)[number];
+
 /**
  * Publication à reclasser : cours annuel connu, mais aucune séance vivante.
- * `courseSessionKey == null` suffit. Une clé orpheline (séance disparue après
- * un changement de MeetingDay) est aussi à reclasser — jamais reprojetée
+ * `courseSessionKey == null` → UNPLACED. Une clé orpheline (séance disparue
+ * après un changement de MeetingDay) → ORPHANED. Jamais reprojetée
  * automatiquement par sequenceNumber.
  */
+export function publicationReclassifyKind(
+  item: Pick<PrototypeAgendaItem, "annualCourseId" | "courseSessionKey">,
+  liveSessionKeys: ReadonlySet<string>,
+): ReclassifyPlacementKind | null {
+  if (!item.annualCourseId?.trim()) return null;
+  const key = item.courseSessionKey?.trim() ?? "";
+  if (!key) return "UNPLACED";
+  return liveSessionKeys.has(key) ? null : "ORPHANED";
+}
+
+export function noteReclassifyKind(
+  note: Pick<AnnualCourseNote, "courseSessionKey">,
+  liveSessionKeys: ReadonlySet<string>,
+): ReclassifyPlacementKind | null {
+  const key = note.courseSessionKey?.trim() ?? "";
+  if (!key) return "UNPLACED";
+  return liveSessionKeys.has(key) ? null : "ORPHANED";
+}
+
 export function publicationNeedsReclassification(
   item: Pick<PrototypeAgendaItem, "annualCourseId" | "courseSessionKey">,
   liveSessionKeys?: ReadonlySet<string>,

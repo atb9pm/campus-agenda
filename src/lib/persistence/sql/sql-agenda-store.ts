@@ -246,6 +246,45 @@ export class SqlAgendaStore implements AgendaStore {
     return { ok: true, item };
   }
 
+  async placeAgendaItemOnCourseSession(
+    itemId: number,
+    placement: {
+      courseSessionKey: string;
+      courseSessionDate: string;
+      schoolWeekNumber: number;
+      day: number;
+    },
+  ): Promise<AgendaMutationResult> {
+    const existing = await this.findAgendaItem(itemId);
+    if (!existing) return { ok: false, reason: "Publication introuvable.", status: 404 };
+    const item: PrototypeAgendaItem = {
+      ...existing,
+      courseSessionKey: placement.courseSessionKey,
+      courseSessionDate: placement.courseSessionDate,
+      schoolWeekNumber: placement.schoolWeekNumber,
+      day: placement.day,
+    };
+    await this.db
+      .prepare(
+        `UPDATE agenda_items SET
+          course_session_key = ?,
+          course_session_date = ?,
+          school_week_number = ?,
+          day = ?,
+          updated_at = datetime('now')
+         WHERE id = ?`,
+      )
+      .bind(
+        item.courseSessionKey,
+        item.courseSessionDate,
+        item.schoolWeekNumber,
+        item.day,
+        itemId,
+      )
+      .run();
+    return { ok: true, item };
+  }
+
   async deleteAgendaItem(
     itemId: number,
     actorTeacherId: string,

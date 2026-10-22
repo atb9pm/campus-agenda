@@ -16,6 +16,7 @@ import {
   applyYearTransitionApi,
   createYearTransitionPreviewApi,
   fetchYearTransitionPrepare,
+  fetchYearTransitionReclassify,
   type YearTransitionClassOption,
   type YearTransitionCourseOption,
   type YearTransitionPresentedPreview,
@@ -23,6 +24,7 @@ import {
   type YearTransitionYearOption,
 } from "../../lib/api-client.ts";
 import { ConfirmDialog } from "./confirm-dialog.tsx";
+import { YearTransitionReclassifyPanel } from "./year-transition-reclassify-panel.tsx";
 
 interface YearTransitionPreparePanelProps {
   onNotice: (message: string) => void;
@@ -125,6 +127,8 @@ export function YearTransitionPreparePanel({
   const [exclusionsAcknowledged, setExclusionsAcknowledged] = useState(false);
   const [expandedClassId, setExpandedClassId] = useState<string | null>(null);
   const [appliedPreview, setAppliedPreview] = useState<YearTransitionPresentedPreview | null>(null);
+  const [view, setView] = useState<"wizard" | "reclassify">("wizard");
+  const [liveReclassifyCount, setLiveReclassifyCount] = useState<number | null>(null);
   const [result, setResult] = useState<{
     ok: boolean;
     code: string;
@@ -204,6 +208,23 @@ export function YearTransitionPreparePanel({
     });
   }, [refresh]);
 
+  useEffect(() => {
+    if (!targetYearId) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      void fetchYearTransitionReclassify(targetYearId)
+        .then((queue) => {
+          if (!cancelled) setLiveReclassifyCount(queue.count);
+        })
+        .catch(() => {
+          if (!cancelled) setLiveReclassifyCount(null);
+        });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [targetYearId]);
+
   function updateDraft(courseId: string, patch: Partial<MeetingDayDraft>) {
     setDrafts((current) => {
       const previous = current[courseId] ?? emptyMeetingDayDraft();
@@ -274,6 +295,9 @@ export function YearTransitionPreparePanel({
           : preview,
       );
       setStep("result");
+      const remaining =
+        (outcome.toReclassifyCount ?? 0) + (outcome.notes?.toReclassifyCount ?? 0);
+      setLiveReclassifyCount(remaining);
       onNotice(outcome.codeLabel);
       if (!outcome.ok) setError(outcome.reason ?? outcome.codeLabel);
     } catch (applyError) {
@@ -293,15 +317,34 @@ export function YearTransitionPreparePanel({
     !transitionId ||
     previewStale ||
     (excludedCount > 0 && !exclusionsAcknowledged);
+  const pendingReclassifyCount = targetYearId ? liveReclassifyCount : null;
   const resultTotals = result
     ? {
         planned:
           (result.createdCount ?? 0) + (result.notes?.createdCount ?? 0),
         reclassify:
+          pendingReclassifyCount ??
           (result.toReclassifyCount ?? 0) + (result.notes?.toReclassifyCount ?? 0),
         lost: (result.skippedCount ?? 0) + (result.notes?.skippedCount ?? 0),
       }
     : null;
+  const reclassifyCount = resultTotals?.reclassify ?? pendingReclassifyCount ?? 0;
+  const lostCount = resultTotals?.lost ?? 0;
+
+  if (view === "reclassify" && targetYearId) {
+    return (
+      <YearTransitionReclassifyPanel
+        schoolYearId={targetYearId}
+        yearLabel={targetYear?.displayLabel ?? yearCaption(targetYear)}
+        onBack={() => {
+          setView("wizard");
+          setStep(result ? "result" : "years");
+        }}
+        onCountChange={setLiveReclassifyCount}
+        onNotice={onNotice}
+      />
+    );
+  }
 
   return (
     <section className="school-year-admin year-transition-prepare" aria-labelledby="year-transition-title">
@@ -414,6 +457,23 @@ export function YearTransitionPreparePanel({
           >
             Continuer
           </button>
+        </article>
+      ) : null}
+
+      {step === "years" && targetYearId && (pendingReclassifyCount ?? 0) > 0 ? (
+        <article className="school-year-card">
+          <header>
+            <span className="eyebrow">Année préparée</span>
+            <h3>À reclasser : {pendingReclassifyCount}</h3>
+          </header>
+          <p className="school-year-hint">
+            Des éléments transférés attendent encore une séance dans {yearCaption(targetYear)}.
+          </p>
+          <div className="year-transition-actions">
+            <button type="button" className="workspace-action" onClick={() => setView("reclassify")}>
+              {`Reclasser les ${pendingReclassifyCount} élément${(pendingReclassifyCount ?? 0) > 1 ? "s" : ""}`}
+            </button>
+          </div>
         </article>
       ) : null}
 
@@ -803,14 +863,23 @@ export function YearTransitionPreparePanel({
           {result.ok ? (
             <>
               <p>{frenchCount(result.targetCourses.length, "cours créé", "cours créés")}.</p>
-              <p>Contenu transféré :</p>
-              <ul className="year-transition-summary">
-                <li>{frenchCount(resultTotals?.planned ?? 0, "élément planifié", "éléments planifiés")}</li>
-                <li>{frenchCount(resultTotals?.reclassify ?? 0, "élément à reclasser", "éléments à reclasser")}</li>
-                <li className="year-transition-lost">
-                  {frenchCount(resultTotals?.lost ?? 0, "élément perdu", "éléments perdus")}
+              <p>Contenu transféré</p>
+              <ul className="year-transition-totals">
+                <li className="ok">
+                  ✓ {frenchCount(resultTotals?.planned ?? 0, "élément planifié", "éléments planifiés")}
+                </li>
+                <li className={reclassifyCount > 0 ? "warn" : "ok"}>
+                  {reclassifyCount > 0 ? "⚠ " : "✓ "}
+                  {frenchCount(reclassifyCount, "élément à reclasser", "éléments à reclasser")}
+                </li>
+                <li className={lostCount > 0 ? "warn" : "ok"}>
+                  {lostCount > 0 ? "⚠ " : "✓ "}
+                  {frenchCount(lostCount, "élément perdu", "éléments perdus")}
                 </li>
               </ul>
+              {reclassifyCount === 0 ? (
+                <p className="school-year-hint">✓ Tous les éléments transférés sont positionnés.</p>
+              ) : null}
               <p>À faire ensuite :</p>
               <ul className="year-transition-summary">
                 <li>attribuer les enseignants ;</li>
@@ -820,16 +889,23 @@ export function YearTransitionPreparePanel({
           ) : (
             <p>{result.codeLabel}</p>
           )}
-          {onOpenAdminTab ? (
-            <div className="year-transition-actions">
-              <button type="button" className="workspace-action secondary" onClick={() => onOpenAdminTab("assignments")}>
-                Attributions des cours
+          <div className="year-transition-actions">
+            {reclassifyCount > 0 ? (
+              <button type="button" className="workspace-action" onClick={() => setView("reclassify")}>
+                {`Reclasser les ${reclassifyCount} élément${reclassifyCount > 1 ? "s" : ""}`}
               </button>
-              <button type="button" className="workspace-action secondary" onClick={() => onOpenAdminTab("schedules")}>
-                Horaire des classes
-              </button>
-            </div>
-          ) : null}
+            ) : null}
+            {onOpenAdminTab ? (
+              <>
+                <button type="button" className="workspace-action secondary" onClick={() => onOpenAdminTab("assignments")}>
+                  Attributions des cours
+                </button>
+                <button type="button" className="workspace-action secondary" onClick={() => onOpenAdminTab("schedules")}>
+                  Horaire des classes
+                </button>
+              </>
+            ) : null}
+          </div>
           {appliedPreview?.classSummaries.length ? (
             <ul className="year-transition-class-summaries">
               {appliedPreview.classSummaries.map((summary) => (

@@ -100,6 +100,19 @@ export interface AgendaStore {
     placement: StructuredControlPlacement,
     access?: PublicationMutationAccess,
   ): Promise<AgendaMutationResult>;
+  /**
+   * Repositionnement administratif d’une publication héritée.
+   * Ne touche pas `studentVisible`, le titre, l’auteur ni la provenance N→N+1.
+   */
+  placeAgendaItemOnCourseSession(
+    itemId: number,
+    placement: {
+      courseSessionKey: string;
+      courseSessionDate: string;
+      schoolWeekNumber: number;
+      day: number;
+    },
+  ): Promise<AgendaMutationResult>;
   deleteAgendaItem(
     itemId: number,
     actorTeacherId: string,
