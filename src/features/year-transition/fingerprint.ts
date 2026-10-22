@@ -53,7 +53,9 @@ function materialState(input: YearTransitionPreviewInput) {
   return {
     ...(input.includePrivateNotes ? {
       includePrivateNotes: true,
-      privateNotesOwnerTeacherId: input.privateNotesOwnerTeacherId,
+      ...(input.privateNotesOwnerTeacherId?.trim()
+        ? { privateNotesOwnerTeacherId: input.privateNotesOwnerTeacherId }
+        : {}),
       sourceNotes: [...(input.sourceNotes ?? [])].sort((a, b) => a.id.localeCompare(b.id)),
       targetNotes: [...(input.targetNotes ?? [])].sort((a, b) => a.id.localeCompare(b.id)),
     } : {}),

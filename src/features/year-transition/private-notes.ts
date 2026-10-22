@@ -61,9 +61,11 @@ function withNoteDisposition(
 /** Placement N+1 : séance annuelle réelle, parcours CTX facultatif. */
 export function previewPrivateNotes(input: YearTransitionPreviewInput): PrivateNotePreviewEntry[] {
   if (!input.includePrivateNotes) return [];
-  const owner = input.privateNotesOwnerTeacherId?.trim();
-  if (!owner) throw new Error("Le propriétaire des notes privées est obligatoire.");
   const zeroLoss = usesExplicitTargetMeetingDayPlans(input.targetMeetingDayPlans);
+  if (!zeroLoss) {
+    const owner = input.privateNotesOwnerTeacherId?.trim();
+    if (!owner) throw new Error("Le propriétaire des notes privées est obligatoire.");
+  }
   const mapping = indexClassMappings(input.classMappings);
   return [...(input.sourceNotes ?? [])].filter(n => n.schoolYearId === input.sourceSchoolYearId)
     .sort((a, b) => a.id.localeCompare(b.id)).map(note => {

@@ -35,7 +35,12 @@ function coursesForYear(all: readonly AnnualCourse[], schoolYearId: string): Ann
   return all.filter((course) => course.schoolYearId === schoolYearId).map((course) => ({ ...course }));
 }
 
-/** Notes du cours, tous propriétaires. APPLY reste cadré sur le propriétaire de session. */
+function selectedAnnualCourseIdSet(ids?: readonly string[]): Set<string> | null {
+  if (ids === undefined) return null;
+  return new Set(ids.map((id) => id.trim()).filter(Boolean));
+}
+
+/** Notes du cours, tous propriétaires. Le propriétaire de session n’est requis qu’en legacy. */
 async function notesForAnnualCourses(
   store: AnnualCourseNotesStore,
   courses: readonly AnnualCourse[],
@@ -74,8 +79,13 @@ export async function assembleLiveYearTransitionPreviewInput(
   },
   deps: AssembleLiveYearTransitionPreviewInputDeps,
 ): Promise<YearTransitionPreviewInput> {
-  if (options.includePrivateNotes && (!deps.notes || !options.privateNotesOwnerTeacherId?.trim())) {
-    throw new Error("Le stockage et le propriétaire des notes privées sont obligatoires.");
+  const newFlow = usesExplicitTargetMeetingDayPlans(options.targetMeetingDayPlans);
+  const includePrivateNotes = Boolean(options.includePrivateNotes) || newFlow;
+  if (includePrivateNotes && !deps.notes) {
+    throw new Error("Le stockage des notes privées est obligatoire.");
+  }
+  if (includePrivateNotes && !newFlow && !options.privateNotesOwnerTeacherId?.trim()) {
+    throw new Error("Le propriétaire des notes privées est obligatoire.");
   }
   const allCourses = await deps.courses.listCourses();
   const sourceCourses = coursesForYear(allCourses, options.sourceSchoolYearId);
@@ -83,12 +93,17 @@ export async function assembleLiveYearTransitionPreviewInput(
   const selectedClassIds = new Set(
     (options.selectedSourceClassIds ?? []).map((id) => id.trim()).filter(Boolean),
   );
+  const selectedCourseIds = selectedAnnualCourseIdSet(options.selectedSourceAnnualCourseIds);
 
   const items = await deps.agenda.exportAllItems();
   const sourceItems = items.filter((item) => {
     if ((item.schoolYearId ?? null) !== options.sourceSchoolYearId) return false;
-    if (selectedClassIds.size === 0) return true;
     const course = sourceCourses.find((entry) => entry.id === item.annualCourseId);
+    if (selectedCourseIds) {
+      return Boolean(course && selectedCourseIds.has(course.id)
+        && (selectedClassIds.size === 0 || selectedClassIds.has(course.classId)));
+    }
+    if (selectedClassIds.size === 0) return true;
     return Boolean(course && selectedClassIds.has(course.classId));
   });
   const targetItems = items.filter((item) => (item.schoolYearId ?? null) === options.targetSchoolYearId);
@@ -167,9 +182,12 @@ export async function assembleLiveYearTransitionPreviewInput(
       })
     : [];
 
-  const privateNotes = options.includePrivateNotes
+  const sourceCoursesForNotes = selectedCourseIds
+    ? sourceCourses.filter((course) => selectedCourseIds.has(course.id))
+    : sourceCourses;
+  const privateNotes = includePrivateNotes
     ? [
-        ...(await notesForAnnualCourses(deps.notes!, sourceCourses)),
+        ...(await notesForAnnualCourses(deps.notes!, sourceCoursesForNotes)),
         ...(await notesForAnnualCourses(deps.notes!, projected.targetCourses.filter((course) => !isPendingTargetCourseId(course.id)))),
       ]
     : [];
@@ -178,16 +196,27 @@ export async function assembleLiveYearTransitionPreviewInput(
       if (note.schoolYearId !== options.sourceSchoolYearId && note.schoolYearId !== options.targetSchoolYearId) {
         return false;
       }
-      if (note.schoolYearId === options.targetSchoolYearId) return true;
+      if (note.schoolYearId === options.targetSchoolYearId) {
+        if (!selectedCourseIds) return true;
+        return projected.targetCourses.some((course) => course.id === note.annualCourseId);
+      }
+      if (selectedCourseIds) {
+        return Boolean(note.annualCourseId && selectedCourseIds.has(note.annualCourseId)
+          && (selectedClassIds.size === 0 || selectedClassIds.has(note.classId)));
+      }
       if (selectedClassIds.size === 0) return true;
       return selectedClassIds.has(note.classId);
     });
 
   return {
-    ...(options.includePrivateNotes ? { includePrivateNotes: true,
-      privateNotesOwnerTeacherId: options.privateNotesOwnerTeacherId!.trim(),
+    ...(includePrivateNotes ? {
+      includePrivateNotes: true,
+      ...(newFlow
+        ? {}
+        : { privateNotesOwnerTeacherId: options.privateNotesOwnerTeacherId!.trim() }),
       sourceNotes: scopedNotes(privateNotes).filter(n => n.schoolYearId === options.sourceSchoolYearId),
-      targetNotes: scopedNotes(privateNotes).filter(n => n.schoolYearId === options.targetSchoolYearId) } : {}),
+      targetNotes: scopedNotes(privateNotes).filter(n => n.schoolYearId === options.targetSchoolYearId),
+    } : {}),
     sourceSchoolYearId: options.sourceSchoolYearId,
     targetSchoolYearId: options.targetSchoolYearId,
     classMappings: options.classMappings.map((mapping) => ({ ...mapping })),

@@ -126,6 +126,7 @@ export {
   parseSelectedSourceClassIds,
   parseYearTransitionPreviewRequest,
 } from "./prepare.ts";
+export type { YearTransitionPrepareDeps } from "./prepare.ts";
 export {
   classContinuationIdentity,
   isPendingTargetClassId,

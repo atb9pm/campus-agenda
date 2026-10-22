@@ -391,6 +391,8 @@ test("apply refuse l’absence de confirmation et les routes exigent une session
   assert.match(panel, /Attributions des cours/);
   assert.match(panel, /Horaire des classes/);
   assert.match(panel, /Consulter l’année préparée/);
+  assert.match(panel, /Cinq étapes/);
+  assert.doesNotMatch(panel, /Quatre étapes/);
   assert.match(panel, /includePrivateNotes: true/);
   assert.doesNotMatch(panel, /Inclure mes notes privées/);
   assert.doesNotMatch(panel, /notes privées du professeur/);
@@ -527,7 +529,7 @@ test("PREVIEW est refusé côté UI si un plan manque, et le payload porte les s
     ],
   }, "teacher-a");
   assert.equal(parsed.includePrivateNotes, true);
-  assert.equal(parsed.privateNotesOwnerTeacherId, "teacher-a");
+  assert.equal(parsed.privateNotesOwnerTeacherId, undefined);
   assert.deepEqual(parsed.selectedSourceAnnualCourseIds, ["ac-cp1-electro"]);
   assert.deepEqual(parsed.targetMeetingDayPlans, [
     {
@@ -535,6 +537,31 @@ test("PREVIEW est refusé côté UI si un plan manque, et le payload porte les s
       days: [{ dayOfWeek: 1, weekKind: "all", role: "PRIMARY" }],
     },
   ]);
+
+  const withoutTeacher = parseYearTransitionPreviewRequest({
+    sourceSchoolYearId: "year-n",
+    targetSchoolYearId: "year-n1",
+    selectedSourceClassIds: ["class-a"],
+    selectedSourceAnnualCourseIds: ["ac-cp1-electro"],
+    targetMeetingDayPlans: [
+      {
+        sourceAnnualCourseId: "ac-cp1-electro",
+        days: [{ dayOfWeek: 1, weekKind: "all", role: "PRIMARY" }],
+      },
+    ],
+  }, "");
+  assert.equal(withoutTeacher.includePrivateNotes, true);
+  assert.equal(withoutTeacher.privateNotesOwnerTeacherId, undefined);
+
+  assert.throws(
+    () => parseYearTransitionPreviewRequest({
+      sourceSchoolYearId: "year-n",
+      targetSchoolYearId: "year-n1",
+      classMappings: [],
+      includePrivateNotes: true,
+    }, ""),
+    /Session enseignant requise/,
+  );
 });
 
 test("une modification de jour invalide l’empreinte d’aperçu jusqu’au prochain calcul", () => {

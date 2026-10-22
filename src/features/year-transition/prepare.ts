@@ -23,6 +23,7 @@ import {
 import { loadContinuationResolution, materializeSelectedContinuations } from "./materialize-continuations.ts";
 import {
   parseTargetMeetingDayPlans,
+  usesExplicitTargetMeetingDayPlans,
   type YearTransitionTargetMeetingDayPlan,
 } from "./target-meeting-days.ts";
 import type { YearTransitionClassMapping, YearTransitionPreviewResult } from "./types.ts";
@@ -122,11 +123,14 @@ export function parseYearTransitionPreviewRequest(
     throw new Error("includePrivateNotes doit être un booléen.");
   }
   const targetMeetingDayPlans = parseTargetMeetingDayPlans(record.targetMeetingDayPlans);
-  const notes = bindPrivateNotesOwner({
-    sessionTeacherId,
-    includePrivateNotes: targetMeetingDayPlans !== undefined || record.includePrivateNotes === true,
-    requestedOwnerTeacherId: record.privateNotesOwnerTeacherId,
-  });
+  const newFlow = usesExplicitTargetMeetingDayPlans(targetMeetingDayPlans);
+  const notes = newFlow
+    ? { includePrivateNotes: true as const }
+    : bindPrivateNotesOwner({
+        sessionTeacherId,
+        includePrivateNotes: record.includePrivateNotes === true,
+        requestedOwnerTeacherId: record.privateNotesOwnerTeacherId,
+      });
   const resolveContinuations = record.selectedSourceClassIds !== undefined;
   const selectedSourceClassIds = resolveContinuations
     ? parseSelectedSourceClassIds(record.selectedSourceClassIds)
@@ -224,8 +228,15 @@ export async function applyAuthorizedYearTransition(
 
   let snapshotOwner: string | undefined;
   try {
-    const snapshot = JSON.parse(persisted.snapshotJson) as { includePrivateNotes?: boolean; privateNotesOwnerTeacherId?: string };
-    snapshotOwner = snapshot.includePrivateNotes ? snapshot.privateNotesOwnerTeacherId : undefined;
+    const snapshot = JSON.parse(persisted.snapshotJson) as {
+      includePrivateNotes?: boolean;
+      privateNotesOwnerTeacherId?: string;
+      targetMeetingDayPlans?: YearTransitionTargetMeetingDayPlan[];
+    };
+    const legacyOwnerBound =
+      snapshot.includePrivateNotes === true
+      && !usesExplicitTargetMeetingDayPlans(snapshot.targetMeetingDayPlans);
+    snapshotOwner = legacyOwnerBound ? snapshot.privateNotesOwnerTeacherId : undefined;
   } catch {
     snapshotOwner = undefined;
   }

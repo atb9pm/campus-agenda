@@ -11,13 +11,16 @@ import type { AnnualCourseNote } from "../src/features/pedagogical-path/annual-n
 import { valaisHolidaysForSchoolYear } from "../src/features/school-days/holidays-valais.ts";
 import type { SchoolWeekEntry } from "../src/features/school-year/types.ts";
 import {
+  applyAuthorizedYearTransition,
   applyPersistedYearTransition,
   assembleLiveYearTransitionPreviewInput,
+  createAuthorizedYearTransitionPreview,
   createPersistedYearTransitionPreview,
   pendingTargetClassId,
   pendingTargetCourseId,
   yearTransitionPreviewFingerprint,
   type ApplyPersistedYearTransitionDeps,
+  type YearTransitionPrepareDeps,
   type YearTransitionTargetMeetingDayPlan,
 } from "../src/features/year-transition/index.ts";
 import { yearTransitionSourceMaterialFingerprint } from "../src/features/year-transition/fingerprint.ts";
@@ -47,8 +50,10 @@ const TARGET_YEAR = "year-n1";
 const SOURCE_CLASS = "class-ma1a-n";
 const SOURCE_INJECTION = "ac-injection-n";
 const SOURCE_CHASSIS = "ac-chassis-n";
+const SOURCE_ELECTRO = "ac-electro-n";
 const CTX_INJECTION = "ctx-injection";
 const CTX_CHASSIS = "ctx-chassis";
+const CTX_ELECTRO = "ctx-electro";
 const TEACHER_A = "teacher-a";
 const TEACHER_B = "teacher-b";
 const PROFESSION = "prf-meca";
@@ -124,24 +129,29 @@ function item(
   };
 }
 
-function note(id: string, ownerTeacherId: string): AnnualCourseNote {
+function note(
+  id: string,
+  ownerTeacherId: string,
+  annualCourseId = SOURCE_INJECTION,
+  contextId = CTX_INJECTION,
+): AnnualCourseNote {
   return {
     id,
     schoolYearId: SOURCE_YEAR,
     classId: SOURCE_CLASS,
-    contextId: CTX_INJECTION,
+    contextId,
     referenceSessionId: null,
     authorTeacherId: ownerTeacherId,
     ownerTeacherId,
     text: `Note ${id}`,
     body: null,
-    courseSessionKey: `${SOURCE_YEAR}|${SOURCE_INJECTION}|2027-08-23`,
+    courseSessionKey: `${SOURCE_YEAR}|${annualCourseId}|2027-08-23`,
     legacyNoteId: null,
     notebookPosition: 0,
     sourceNoteId: null,
     sourceSchoolYearId: null,
     inheritedAt: null,
-    annualCourseId: SOURCE_INJECTION,
+    annualCourseId,
     createdAt: "2026-09-01T00:00:00.000Z",
     updatedAt: "2026-09-01T00:00:00.000Z",
   };
@@ -226,6 +236,16 @@ async function world(options: {
       {
         id: CTX_CHASSIS,
         adminCode: "CTX-0002",
+        professionId: PROFESSION,
+        trainingYear: 1,
+        branchId: BRANCH,
+        isActive: true,
+        isArchived: false,
+        archivedAt: null,
+      },
+      {
+        id: CTX_ELECTRO,
+        adminCode: "CTX-0003",
         professionId: PROFESSION,
         trainingYear: 1,
         branchId: BRANCH,
@@ -339,6 +359,7 @@ async function persistPreview(
   seeded: Awaited<ReturnType<typeof world>>,
   plans?: YearTransitionTargetMeetingDayPlan[],
   id = "transition-apply-md",
+  selectedSourceAnnualCourseIds?: readonly string[],
 ) {
   const input = await assembleLiveYearTransitionPreviewInput(
     {
@@ -349,6 +370,9 @@ async function persistPreview(
       classMappings: seeded.mappings,
       selectedSourceClassIds: [SOURCE_CLASS],
       ...(plans ? { targetMeetingDayPlans: plans } : {}),
+      ...(selectedSourceAnnualCourseIds !== undefined
+        ? { selectedSourceAnnualCourseIds: [...selectedSourceAnnualCourseIds] }
+        : {}),
     },
     seeded.deps,
   );
@@ -574,6 +598,157 @@ test("legacy sans targetMeetingDayPlans : copie encore slots / enseignants / att
   assert.ok((await seeded.courses.listAssignments(targetCourse.id)).length > 0);
   assert.ok((await seeded.schedules.listAttendanceDaysByClass(targetClass.id)).length > 0);
   assert.equal((await seeded.schedules.listMeetingDaysByAnnualCourse(targetCourse.id)).length, 0);
+});
+
+function countTarget(seeded: Awaited<ReturnType<typeof world>>, contextId: string) {
+  return seeded.courses.listCourses().then((courses) =>
+    courses.filter((entry) => entry.schoolYearId === TARGET_YEAR && entry.contextId === contextId && !entry.isArchived),
+  );
+}
+
+test("cours décoché : APPLY ne crée ni ne copie CP2", async () => {
+  const seeded = await world({
+    extraCourses: [course(SOURCE_CHASSIS, CTX_CHASSIS)],
+    extraItems: [
+      item({ id: 10, title: "CP1" }),
+      item({
+        id: 21,
+        title: "CP2 A",
+        annualCourseId: SOURCE_CHASSIS,
+        courseSessionKey: `${SOURCE_YEAR}|${SOURCE_CHASSIS}|2027-08-23`,
+      }),
+      item({
+        id: 22,
+        title: "CP2 B",
+        annualCourseId: SOURCE_CHASSIS,
+        courseSessionKey: `${SOURCE_YEAR}|${SOURCE_CHASSIS}|2027-08-30`,
+      }),
+    ],
+    extraNotes: [
+      note("n-cp1", TEACHER_A),
+      note("n-cp2-a", TEACHER_A, SOURCE_CHASSIS, CTX_CHASSIS),
+      note("n-cp2-b", TEACHER_B, SOURCE_CHASSIS, CTX_CHASSIS),
+    ],
+  });
+  const { input, persisted } = await persistPreview(
+    seeded,
+    [mondayAll(SOURCE_INJECTION)],
+    "omit-cp2",
+    [SOURCE_INJECTION],
+  );
+  assert.equal(input.sourceItems.length, 1);
+  assert.equal((input.sourceNotes ?? []).length, 1);
+  const result = await applyPersistedYearTransition(persisted.id, seeded.deps);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal((await countTarget(seeded, CTX_INJECTION)).length, 1);
+  assert.equal((await countTarget(seeded, CTX_CHASSIS)).length, 0);
+  const targetCourse = await targetCourseOf(seeded, CTX_INJECTION);
+  assert.equal((await seeded.agenda.exportAllItems()).filter((entry) => entry.schoolYearId === TARGET_YEAR).length, 1);
+  assert.equal((await seeded.notes.listNotesByAnnualCourse(targetCourse.id)).length, 1);
+  assert.equal((await seeded.schedules.listMeetingDaysByAnnualCourse(targetCourse.id)).length, 1);
+});
+
+test("MeetingDays : admin sans enseignant, second admin peut APPLY", async () => {
+  const seeded = await world();
+  const deps = seeded.deps as YearTransitionPrepareDeps;
+  const created = await createAuthorizedYearTransitionPreview(
+    {
+      sourceSchoolYearId: SOURCE_YEAR,
+      targetSchoolYearId: TARGET_YEAR,
+      selectedSourceClassIds: [SOURCE_CLASS],
+      selectedSourceAnnualCourseIds: [SOURCE_INJECTION],
+      targetMeetingDayPlans: [thursdayB(SOURCE_INJECTION)],
+    },
+    "",
+    deps,
+  );
+  assert.equal(created.blocking, false, JSON.stringify(created.preview.mappingIssues));
+  assert.equal(created.preview.includePrivateNotes, true);
+  const first = await applyAuthorizedYearTransition(
+    { transitionId: created.transitionId, confirm: true },
+    "admin-b",
+    deps,
+  );
+  assert.equal(first.ok, true, JSON.stringify(first));
+});
+
+test("MECAUTO3A : CP2 décoché absent du PREVIEW/APPLY, admin sans enseignant", async () => {
+  const pubs = (courseId: string, count: number, startId: number) =>
+    Array.from({ length: count }, (_, index) =>
+      item({
+        id: startId + index,
+        title: `${courseId}-${index}`,
+        annualCourseId: courseId,
+        courseSessionKey: `${SOURCE_YEAR}|${courseId}|2027-08-${String(23 + (index % 4)).padStart(2, "0")}`,
+      }),
+    );
+  const notesFor = (courseId: string, contextId: string, count: number, prefix: string) =>
+    Array.from({ length: count }, (_, index) =>
+      note(`${prefix}-${index}`, index % 2 === 0 ? TEACHER_A : TEACHER_B, courseId, contextId),
+    );
+  const seeded = await world({
+    extraCourses: [
+      course(SOURCE_CHASSIS, CTX_CHASSIS),
+      course(SOURCE_ELECTRO, CTX_ELECTRO),
+    ],
+    extraItems: [
+      ...pubs(SOURCE_ELECTRO, 10, 100),
+      ...pubs(SOURCE_CHASSIS, 5, 200),
+      ...pubs(SOURCE_INJECTION, 8, 300),
+    ],
+    extraNotes: [
+      ...notesFor(SOURCE_ELECTRO, CTX_ELECTRO, 3, "n-cp1"),
+      ...notesFor(SOURCE_CHASSIS, CTX_CHASSIS, 4, "n-cp2"),
+      ...notesFor(SOURCE_INJECTION, CTX_INJECTION, 2, "n-cp3"),
+    ],
+  });
+  const deps = seeded.deps as YearTransitionPrepareDeps;
+  const created = await createAuthorizedYearTransitionPreview(
+    {
+      sourceSchoolYearId: SOURCE_YEAR,
+      targetSchoolYearId: TARGET_YEAR,
+      selectedSourceClassIds: [SOURCE_CLASS],
+      selectedSourceAnnualCourseIds: [SOURCE_ELECTRO, SOURCE_INJECTION],
+      targetMeetingDayPlans: [mondayAll(SOURCE_ELECTRO), thursdayB(SOURCE_INJECTION)],
+    },
+    "",
+    deps,
+  );
+  assert.equal(created.blocking, false, JSON.stringify(created.preview.mappingIssues));
+  assert.equal(created.preview.publications.projectable.length
+    + created.preview.publications.toReclassify.length
+    + created.preview.publications.alreadyPresent.length
+    + created.preview.publications.excluded.length
+    + created.preview.publications.blocking.length, 18);
+  assert.equal(
+    (created.preview.notes?.projectable.length ?? 0)
+      + (created.preview.notes?.toReclassify.length ?? 0)
+      + (created.preview.notes?.alreadyPresent.length ?? 0)
+      + (created.preview.notes?.excluded.length ?? 0)
+      + (created.preview.notes?.blocking.length ?? 0),
+    5,
+  );
+  assert.equal(created.preview.publications.blocking.length, 0);
+  assert.doesNotMatch(JSON.stringify(created.preview), /ac-chassis-n/);
+  const applied = await applyAuthorizedYearTransition(
+    { transitionId: created.transitionId, confirm: true },
+    "admin-c",
+    deps,
+  );
+  assert.equal(applied.ok, true, JSON.stringify(applied));
+  assert.equal((await countTarget(seeded, CTX_ELECTRO)).length, 1);
+  assert.equal((await countTarget(seeded, CTX_INJECTION)).length, 1);
+  assert.equal((await countTarget(seeded, CTX_CHASSIS)).length, 0);
+  const copied = (await seeded.agenda.exportAllItems()).filter((entry) => entry.schoolYearId === TARGET_YEAR);
+  assert.equal(copied.length, 18);
+  const allowed = new Set(
+    [...(await countTarget(seeded, CTX_ELECTRO)), ...(await countTarget(seeded, CTX_INJECTION))].map((entry) => entry.id),
+  );
+  assert.ok(copied.every((entry) => entry.annualCourseId && allowed.has(entry.annualCourseId)));
+  assert.equal(
+    (await seeded.notes.listNotesByAnnualCourse(SOURCE_CHASSIS)).filter((entry) => entry.schoolYearId === TARGET_YEAR).length,
+    0,
+  );
 });
 
 test("sources — nouveau flux n’appelle pas les copies N", async () => {

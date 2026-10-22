@@ -309,7 +309,7 @@ export function YearTransitionPreparePanel({
         <p className="eyebrow">ANNÉE SCOLAIRE</p>
         <h2 id="year-transition-title">Préparer l’année suivante</h2>
         <p>
-          Quatre étapes : classes et cours, jours N+1 de chaque cours, aperçu, confirmation.
+          Cinq étapes : années, classes et cours, jours N+1, aperçu, résultat.
           L’année cible reste en préparation. Les enseignants et l’horaire détaillé se
           configurent ensuite dans les écrans existants.
         </p>
