@@ -209,18 +209,17 @@ export function YearTransitionPreparePanel({
   }, [refresh]);
 
   useEffect(() => {
-    if (!targetYearId) {
-      setLiveReclassifyCount(null);
-      return;
-    }
+    if (!targetYearId) return;
     let cancelled = false;
-    void fetchYearTransitionReclassify(targetYearId)
-      .then((queue) => {
-        if (!cancelled) setLiveReclassifyCount(queue.count);
-      })
-      .catch(() => {
-        if (!cancelled) setLiveReclassifyCount(null);
-      });
+    queueMicrotask(() => {
+      void fetchYearTransitionReclassify(targetYearId)
+        .then((queue) => {
+          if (!cancelled) setLiveReclassifyCount(queue.count);
+        })
+        .catch(() => {
+          if (!cancelled) setLiveReclassifyCount(null);
+        });
+    });
     return () => {
       cancelled = true;
     };
@@ -318,17 +317,18 @@ export function YearTransitionPreparePanel({
     !transitionId ||
     previewStale ||
     (excludedCount > 0 && !exclusionsAcknowledged);
+  const pendingReclassifyCount = targetYearId ? liveReclassifyCount : null;
   const resultTotals = result
     ? {
         planned:
           (result.createdCount ?? 0) + (result.notes?.createdCount ?? 0),
         reclassify:
-          liveReclassifyCount ??
+          pendingReclassifyCount ??
           (result.toReclassifyCount ?? 0) + (result.notes?.toReclassifyCount ?? 0),
         lost: (result.skippedCount ?? 0) + (result.notes?.skippedCount ?? 0),
       }
     : null;
-  const reclassifyCount = resultTotals?.reclassify ?? liveReclassifyCount ?? 0;
+  const reclassifyCount = resultTotals?.reclassify ?? pendingReclassifyCount ?? 0;
 
   if (view === "reclassify" && targetYearId) {
     return (
@@ -459,18 +459,18 @@ export function YearTransitionPreparePanel({
         </article>
       ) : null}
 
-      {step === "years" && targetYearId && (liveReclassifyCount ?? 0) > 0 ? (
+      {step === "years" && targetYearId && (pendingReclassifyCount ?? 0) > 0 ? (
         <article className="school-year-card">
           <header>
             <span className="eyebrow">Année préparée</span>
-            <h3>À reclasser : {liveReclassifyCount}</h3>
+            <h3>À reclasser : {pendingReclassifyCount}</h3>
           </header>
           <p className="school-year-hint">
             Des éléments transférés attendent encore une séance dans {yearCaption(targetYear)}.
           </p>
           <div className="year-transition-actions">
             <button type="button" className="workspace-action" onClick={() => setView("reclassify")}>
-              {`Reclasser les ${liveReclassifyCount} élément${(liveReclassifyCount ?? 0) > 1 ? "s" : ""}`}
+              {`Reclasser les ${pendingReclassifyCount} élément${(pendingReclassifyCount ?? 0) > 1 ? "s" : ""}`}
             </button>
           </div>
         </article>

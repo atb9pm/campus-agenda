@@ -49,7 +49,9 @@ export function YearTransitionReclassifyPanel({
   }, [onCountChange, schoolYearId]);
 
   useEffect(() => {
-    void load();
+    queueMicrotask(() => {
+      void load();
+    });
   }, [load]);
 
   async function handleReclassify(item: YearTransitionReclassifyItem, courseSessionKey: string) {

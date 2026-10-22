@@ -392,6 +392,7 @@ test("apply refuse l’absence de confirmation et les routes exigent une session
   assert.match(panel, /Reclasser les/);
   assert.match(panel, /Tous les éléments transférés sont positionnés/);
   assert.match(panel, /YearTransitionReclassifyPanel/);
+  assert.match(panel, /queueMicrotask/);
   assert.match(panel, /Attributions des cours/);
   assert.match(panel, /Horaire des classes/);
   assert.match(panel, /Consulter l’année préparée/);

@@ -819,6 +819,7 @@ test("routes et UI : admin only, pas de bac Carnet, pas de texte de note", async
   const view = await readFile(new URL("../web/app/components/year-transition-reclassify-panel.tsx", import.meta.url), "utf8");
   assert.match(view, /item\.typeLabel/);
   assert.match(view, /Séance cible/);
+  assert.match(view, /queueMicrotask/);
   assert.doesNotMatch(view, /item\.text|note\.text|\.body/);
   const notebook = await readFile(new URL("../src/features/class-notebook/index.ts", import.meta.url), "utf8");
   assert.doesNotMatch(notebook, /YearTransitionReclassifyPanel/);
