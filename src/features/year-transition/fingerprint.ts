@@ -235,11 +235,18 @@ export function yearTransitionSourceMaterialFingerprint(input: YearTransitionPre
   delete material.targetCourses;
   delete material.targetItems;
   delete material.targetCourseSessions;
-  material.classMappings = (input.classMappings ?? []).map((mapping) => ({
-    sourceClassId: normalizeMappingClassId(mapping.sourceClassId),
-    selected: Boolean(mapping.targetClassId?.trim()) || Boolean(
-      (input.selectedSourceClassIds ?? []).includes(mapping.sourceClassId ?? ""),
-    ),
-  }));
+  // Le PREVIEW persiste les mappings triés, l’APPLY les relit dans l’ordre du catalogue.
+  material.classMappings = (input.classMappings ?? [])
+    .map((mapping) => ({
+      sourceClassId: normalizeMappingClassId(mapping.sourceClassId),
+      selected: Boolean(mapping.targetClassId?.trim()) || Boolean(
+        (input.selectedSourceClassIds ?? []).includes(mapping.sourceClassId ?? ""),
+      ),
+    }))
+    .sort(
+      (left, right) =>
+        compareNullable(left.sourceClassId, right.sourceClassId) ||
+        Number(left.selected) - Number(right.selected),
+    );
   return yearTransitionPreviewFingerprintFromSnapshotJson(JSON.stringify(canonical(material)));
 }
