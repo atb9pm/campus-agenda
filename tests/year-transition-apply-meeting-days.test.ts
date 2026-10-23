@@ -20,6 +20,9 @@ import {
   pendingTargetClassId,
   pendingTargetCourseId,
   yearTransitionPreviewFingerprint,
+  YEAR_TRANSITION_REIMPORT_APPLY_PENDING,
+  YEAR_TRANSITION_REIMPORT_NOT_IMPORTED,
+  YEAR_TRANSITION_REIMPORT_REQUIRES_PLAN,
   type ApplyPersistedYearTransitionDeps,
   type YearTransitionPrepareDeps,
   type YearTransitionTargetMeetingDayPlan,
@@ -881,4 +884,217 @@ test("état d’import : année cible activée → plus rien à préparer", asyn
     { ...target!, status: "active", activatedAt: "2027-08-01T00:00:00.000Z" },
   ]);
   assert.deepEqual((await loadYearTransitionPrepareState(deps, "admin-1")).courseImports, []);
+});
+
+async function adminPreview(
+  seeded: Awaited<ReturnType<typeof world>>,
+  plans: YearTransitionTargetMeetingDayPlan[],
+  extra: { reimport?: string[]; selected?: string[] } = {},
+) {
+  return createAuthorizedYearTransitionPreview(
+    {
+      sourceSchoolYearId: SOURCE_YEAR,
+      targetSchoolYearId: TARGET_YEAR,
+      selectedSourceClassIds: [SOURCE_CLASS],
+      selectedSourceAnnualCourseIds: extra.selected ?? plans.map((entry) => entry.sourceAnnualCourseId),
+      targetMeetingDayPlans: plans,
+      ...(extra.reimport ? { reimportSourceAnnualCourseIds: extra.reimport } : {}),
+    },
+    "",
+    seeded.deps as YearTransitionPrepareDeps,
+  );
+}
+
+async function adminImport(seeded: Awaited<ReturnType<typeof world>>, plans: YearTransitionTargetMeetingDayPlan[]) {
+  const created = await adminPreview(seeded, plans);
+  assert.equal(created.blocking, false, JSON.stringify(created.preview.mappingIssues));
+  const applied = await applyAuthorizedYearTransition(
+    { transitionId: created.transitionId, confirm: true },
+    "admin-1",
+    seeded.deps as YearTransitionPrepareDeps,
+  );
+  assert.equal(applied.ok, true, JSON.stringify(applied));
+  return created.transitionId;
+}
+
+function sixthMondayItem(id: number, title: string) {
+  return item({
+    id,
+    title,
+    courseSessionKey: `${SOURCE_YEAR}|${SOURCE_INJECTION}|2027-09-27`,
+    courseSessionDate: "2027-09-27",
+    schoolWeekNumber: 6,
+  });
+}
+
+test("réimportation : lundi → jeudi B, contenu hérité remplacé et reprojeté depuis N", async () => {
+  const seeded = await world();
+  await adminImport(seeded, [mondayAll(SOURCE_INJECTION)]);
+  const targetCourse = await targetCourseOf(seeded);
+  const beforeItems = (await seeded.agenda.exportAllItems()).filter((entry) => entry.schoolYearId === TARGET_YEAR);
+  const beforeNotes = await seeded.notes.listNotesByAnnualCourse(targetCourse.id);
+  assert.equal(beforeItems.length, 3);
+  assert.equal(beforeNotes.length, 2);
+
+  const created = await adminPreview(seeded, [thursdayB(SOURCE_INJECTION)], { reimport: [SOURCE_INJECTION] });
+  assert.equal(created.blocking, false, JSON.stringify(created.preview));
+  assert.deepEqual(created.reimport.unchangedSourceAnnualCourseIds, []);
+  const [summary] = created.reimport.courses;
+  assert.ok(summary);
+  assert.equal(summary.sourceAnnualCourseId, SOURCE_INJECTION);
+  assert.equal(summary.targetAnnualCourseId, targetCourse.id);
+  assert.deepEqual(summary.replaced, { publications: 3, notes: 2 });
+  assert.deepEqual(summary.positioned, { publications: 3, notes: 2 });
+  assert.deepEqual(summary.toReclassify, { publications: 0, notes: 0 });
+  assert.deepEqual(summary.lost, { publications: 0, notes: 0 });
+  assert.deepEqual(summary.blocking, { publications: 0, notes: 0 });
+  assert.equal(summary.adminPlacementsRecalculated, 0);
+  assert.deepEqual(summary.manualContent, { kept: 0, onVanishedSession: 0 });
+  assert.doesNotMatch(JSON.stringify(created.preview), /TARGET_EXISTING_DIVERGED/);
+  for (const entry of created.preview.publications.projectable) {
+    assert.match(entry.sessionLabel ?? "", /jeudi 02\.09\.2027/, "première séance jeudi B");
+  }
+
+  const after = (await seeded.agenda.exportAllItems()).filter((entry) => entry.schoolYearId === TARGET_YEAR);
+  assert.deepEqual(after, beforeItems, "l’aperçu n’écrit rien");
+  assert.deepEqual(await seeded.notes.listNotesByAnnualCourse(targetCourse.id), beforeNotes);
+});
+
+test("réimportation : plan identique → aucun remplacement, cours signalé inchangé", async () => {
+  const seeded = await world();
+  await adminImport(seeded, [mondayAll(SOURCE_INJECTION)]);
+  const created = await adminPreview(seeded, [mondayAll(SOURCE_INJECTION)], { reimport: [SOURCE_INJECTION] });
+  assert.deepEqual(created.reimport.unchangedSourceAnnualCourseIds, [SOURCE_INJECTION]);
+  assert.deepEqual(created.reimport.courses, []);
+  assert.equal(created.preview.publications.alreadyPresent.length, 3);
+  assert.equal(created.blocking, false);
+});
+
+test("réimportation : cours jamais importé ou ancien flux refusés côté serveur", async () => {
+  const seeded = await world();
+  await assert.rejects(
+    adminPreview(seeded, [thursdayB(SOURCE_INJECTION)], { reimport: [SOURCE_INJECTION] }),
+    { message: YEAR_TRANSITION_REIMPORT_NOT_IMPORTED },
+  );
+  await assert.rejects(
+    createAuthorizedYearTransitionPreview(
+      {
+        sourceSchoolYearId: SOURCE_YEAR,
+        targetSchoolYearId: TARGET_YEAR,
+        selectedSourceClassIds: [SOURCE_CLASS],
+        reimportSourceAnnualCourseIds: [SOURCE_INJECTION],
+      },
+      "",
+      seeded.deps as YearTransitionPrepareDeps,
+    ),
+    { message: YEAR_TRANSITION_REIMPORT_REQUIRES_PLAN },
+  );
+});
+
+test("réimportation : placement admin recalculé, contenu manuel et créneau signalés", async () => {
+  const seeded = await world({
+    extraItems: [item({ id: 10, title: "Devoir S1" }), sixthMondayItem(13, "Devoir S6")],
+    extraNotes: [note("n-a", TEACHER_A)],
+  });
+  const firstTransition = await adminImport(seeded, [thursdayB(SOURCE_INJECTION)]);
+  const targetCourse = await targetCourseOf(seeded);
+  const targetYear = (await seeded.years.getSchoolYearById(TARGET_YEAR))!;
+  const sessions = computeCourseSessions({
+    schoolYearId: TARGET_YEAR,
+    courses: [{ id: targetCourse.id, classId: targetCourse.classId, contextId: targetCourse.contextId }],
+    slots: [],
+    weeks: targetYear.weeks,
+    holidays: valaisHolidaysForSchoolYear(targetYear.label),
+    meetingDays: (await seeded.schedules.listMeetingDaysByAnnualCourse(targetCourse.id)).map((day) => ({
+      annualCourseId: day.annualCourseId,
+      dayOfWeek: day.dayOfWeek,
+      weekKind: day.weekKind,
+    })),
+  });
+  const thursdays = sessions.map((session) => session.key);
+  assert.ok(thursdays.length >= 2);
+
+  const items = await seeded.agenda.exportAllItems();
+  const unplaced = items.find((entry) => entry.sourceAgendaItemId === 13);
+  assert.ok(unplaced, "S6 copiée");
+  assert.equal(unplaced.courseSessionKey ?? null, null, "S6 laissée « À reclasser »");
+  assert.equal(unplaced.sourceTransitionId, firstTransition);
+  await seeded.agenda.replaceAllItems([
+    ...items.map((entry) => (entry.id === unplaced.id ? { ...entry, courseSessionKey: thursdays[1]! } : entry)),
+    item({
+      id: 900,
+      title: "Ajout manuel",
+      schoolYearId: TARGET_YEAR,
+      annualCourseId: targetCourse.id,
+      courseSessionKey: thursdays[0]!,
+      courseSessionDate: thursdays[0]!.split("|")[2]!,
+    }),
+  ]);
+  await seeded.schedules.createSlot({
+    id: "slot-target-thursday",
+    annualCourseId: targetCourse.id,
+    dayOfWeek: 4,
+    periodStart: 5,
+    periodEnd: 6,
+    weekKind: "B",
+    validFrom: null,
+    validTo: null,
+    createdAt: "2027-03-01T00:00:00.000Z",
+    updatedAt: "2027-03-01T00:00:00.000Z",
+  });
+
+  const created = await adminPreview(seeded, [mondayAll(SOURCE_INJECTION)], { reimport: [SOURCE_INJECTION] });
+  const [summary] = created.reimport.courses;
+  assert.ok(summary);
+  assert.deepEqual(summary.replaced, { publications: 2, notes: 1 });
+  assert.deepEqual(summary.positioned, { publications: 2, notes: 1 });
+  assert.equal(summary.adminPlacementsRecalculated, 1);
+  assert.deepEqual(summary.manualContent, { kept: 1, onVanishedSession: 1 });
+  assert.deepEqual(summary.unusedSlots.map((slot) => slot.slotId), ["slot-target-thursday"]);
+  assert.ok(
+    (await seeded.schedules.listSlotsByAnnualCourse(targetCourse.id)).some((slot) => slot.id === "slot-target-thursday"),
+    "le créneau n’est jamais déplacé",
+  );
+});
+
+test("réimportation : APPLY refusé tant que la confirmation dédiée n’existe pas, aucune écriture", async () => {
+  const seeded = await world({ extraCourses: [course(SOURCE_CHASSIS, CTX_CHASSIS)] });
+  await adminImport(seeded, [mondayAll(SOURCE_INJECTION)]);
+  const targetCourse = await targetCourseOf(seeded);
+  const meetingDaysBefore = await seeded.schedules.listMeetingDaysByAnnualCourse(targetCourse.id);
+  const itemsBefore = await seeded.agenda.exportAllItems();
+  const coursesBefore = await seeded.courses.listCourses();
+
+  const created = await adminPreview(
+    seeded,
+    [thursdayB(SOURCE_INJECTION), mondayAll(SOURCE_CHASSIS)],
+    { reimport: [SOURCE_INJECTION] },
+  );
+  assert.equal(created.reimport.courses.length, 1, "CP2 non importé n’est pas une réimportation");
+  const outcome = await applyPersistedYearTransition(created.transitionId, seeded.deps);
+  assert.equal(outcome.ok, false);
+  assert.equal(outcome.ok ? null : outcome.code, "APPLY_BLOCKED");
+  assert.ok(JSON.stringify(outcome).includes(YEAR_TRANSITION_REIMPORT_APPLY_PENDING));
+  assert.deepEqual(await seeded.schedules.listMeetingDaysByAnnualCourse(targetCourse.id), meetingDaysBefore);
+  assert.deepEqual(await seeded.agenda.exportAllItems(), itemsBefore);
+  assert.deepEqual(await seeded.courses.listCourses(), coursesBefore, "CP2 n’est pas créé non plus");
+});
+
+test("réimportation : l’empreinte dépend du contenu hérité remplacé", async () => {
+  const seeded = await world();
+  await adminImport(seeded, [mondayAll(SOURCE_INJECTION)]);
+  const fingerprintOf = async () => {
+    const created = await adminPreview(seeded, [thursdayB(SOURCE_INJECTION)], { reimport: [SOURCE_INJECTION] });
+    const persisted = await seeded.previews.getById(created.transitionId);
+    assert.ok(persisted);
+    assert.match(persisted.snapshotJson, /"reimport"/);
+    return persisted.fingerprint;
+  };
+  const first = await fingerprintOf();
+  assert.equal(await fingerprintOf(), first, "même état → même empreinte");
+  const items = await seeded.agenda.exportAllItems();
+  await seeded.agenda.replaceAllItems(
+    items.map((entry) => (entry.schoolYearId === TARGET_YEAR && entry.type === "TEST" ? { ...entry, title: "Modifié" } : entry)),
+  );
+  assert.notEqual(await fingerprintOf(), first);
 });
