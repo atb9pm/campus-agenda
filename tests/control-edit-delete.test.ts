@@ -31,7 +31,10 @@ import {
 } from "../src/features/course-publications/index.ts";
 import { listComputedCourseSessions } from "../src/features/course-sessions/index.ts";
 import { structuredAgendaPatchGuard } from "../src/features/agenda/index.ts";
-import { ARCHIVED_YEAR_READONLY_REASON } from "../src/features/school-year/archived-readonly.ts";
+import {
+  ARCHIVED_YEAR_READONLY_REASON,
+  DRAFT_YEAR_TEACHER_READONLY_REASON,
+} from "../src/features/school-year/archived-readonly.ts";
 import { APP_VERSION } from "../src/lib/app-version.ts";
 import { MemoryAgendaStore } from "../src/lib/persistence/memory-store.ts";
 import {
@@ -651,6 +654,39 @@ test("rejet — suppression collègue, année archivée pour edit et delete", as
     const stillThere = await world.agenda.findAgendaItem(created.id);
     assert.ok(stillThere);
     assert.equal(stillThere?.title, "Contrôle protégé");
+  });
+});
+
+test("rejet — année en préparation : enseignant attribué ne modifie ni ne supprime", async () => {
+  await withWorlds(async (world) => {
+    const seeded = await seedCourse(world);
+    const [source] = await sessionsFor(world, seeded.course.id);
+    const created = await publishTest(world, seeded.teacher.id, seeded.course.id, source!.key, "Contrôle hérité");
+
+    world.publishDeps.years = yearsStub("draft");
+    const draftEdit = await updateStructuredControlContent(world.publishDeps, {
+      teacherId: seeded.teacher.id,
+      agendaItemId: created.id,
+      title: "Modifié avant activation",
+    });
+    assert.equal(draftEdit.ok, false);
+    if (!draftEdit.ok) {
+      assert.equal(draftEdit.status, 403);
+      assert.equal(draftEdit.reason, DRAFT_YEAR_TEACHER_READONLY_REASON);
+    }
+
+    const draftDelete = await deleteStructuredControl(world.publishDeps, {
+      teacherId: seeded.teacher.id,
+      agendaItemId: created.id,
+    });
+    assert.equal(draftDelete.ok, false);
+    if (!draftDelete.ok) {
+      assert.equal(draftDelete.status, 403);
+      assert.equal(draftDelete.reason, DRAFT_YEAR_TEACHER_READONLY_REASON);
+    }
+
+    const stillThere = await world.agenda.findAgendaItem(created.id);
+    assert.equal(stillThere?.title, "Contrôle hérité");
   });
 });
 

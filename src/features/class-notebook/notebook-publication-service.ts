@@ -21,6 +21,7 @@ import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-ty
 import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
 import type { SchoolClassRecord } from "../school-catalog/types.ts";
 import type { SchoolYearRecord } from "../school-year/types.ts";
+import { DRAFT_YEAR_TEACHER_READONLY_REASON } from "../school-year/archived-readonly.ts";
 import {
   evaluateNotebookPublishAccess,
   NOTEBOOK_PUBLISH_ARCHIVED,
@@ -366,6 +367,12 @@ export async function authorizeAssignedCoursePublication(
       return { ok: false, reason: access.reason, status: statusForPublishReason(access.reason) };
     }
     return { ok: true, value: true };
+  }
+
+  const course = await deps.courses.getCourse(annualCourseId);
+  const courseYear = course ? await deps.years.getSchoolYearById(course.schoolYearId) : null;
+  if (courseYear?.status === "draft") {
+    return { ok: false, reason: DRAFT_YEAR_TEACHER_READONLY_REASON, status: 403 };
   }
 
   const assignments = await deps.courses.listAssignments(annualCourseId);

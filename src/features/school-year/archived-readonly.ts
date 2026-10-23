@@ -11,3 +11,11 @@ export function isArchivedYearItem(item: PrototypeAgendaItem, archivedYearIds: S
 
 export const ARCHIVED_YEAR_READONLY_REASON =
   "Cette publication appartient à une année archivée (lecture seule).";
+
+export function getDraftYearIds(years: SchoolYearRecord[]): Set<string> {
+  return new Set(years.filter((year) => year.status === "draft").map((year) => year.id));
+}
+
+/** Une année en préparation n’est modifiable que par les outils d’administration (transition, reclassement). */
+export const DRAFT_YEAR_TEACHER_READONLY_REASON =
+  "Cette publication appartient à une année en préparation (lecture seule pour les enseignants).";

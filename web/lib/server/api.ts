@@ -29,7 +29,13 @@ import {
 import { isoDateForSchoolWeekDay } from "@campus/features/school-days/index.ts";
 import { evaluateAgendaBranchForClass, assertAgendaClassMutable } from "@campus/features/school-catalog/index.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
-import { ARCHIVED_YEAR_READONLY_REASON, getArchivedYearIds, isArchivedYearItem } from "@campus/features/school-year/archived-readonly.ts";
+import {
+  ARCHIVED_YEAR_READONLY_REASON,
+  DRAFT_YEAR_TEACHER_READONLY_REASON,
+  getArchivedYearIds,
+  getDraftYearIds,
+  isArchivedYearItem,
+} from "@campus/features/school-year/archived-readonly.ts";
 import { classScopedStudentScheduleSlots } from "@campus/features/student/course-day-order.ts";
 import { revalidateStructuredStudentSession } from "@campus/features/student-access/index.ts";
 import type { AppSession } from "@campus/lib/persistence/types.ts";
@@ -394,11 +400,15 @@ export async function getArchivedSchoolYearIds(): Promise<Set<string>> {
   return getArchivedYearIds(years);
 }
 
+/** Mutations enseignant : année archivée et année en préparation sont en lecture seule. */
 export async function assertAgendaItemMutable(item: PrototypeAgendaItem | undefined): Promise<Response | null> {
   if (!item?.schoolYearId) return null;
-  const archivedIds = await getArchivedSchoolYearIds();
-  if (isArchivedYearItem(item, archivedIds)) {
+  const years = await (await getSchoolYearStore()).listSchoolYears();
+  if (isArchivedYearItem(item, getArchivedYearIds(years))) {
     return jsonResponse({ ok: false, reason: ARCHIVED_YEAR_READONLY_REASON }, { status: 403 });
+  }
+  if (getDraftYearIds(years).has(item.schoolYearId)) {
+    return jsonResponse({ ok: false, reason: DRAFT_YEAR_TEACHER_READONLY_REASON }, { status: 403 });
   }
   return null;
 }
