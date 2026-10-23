@@ -16,6 +16,7 @@ import {
   getStudentAgendaItems,
   groupControlPlanning,
   msUntilNextLocalMidnight,
+  nextControlDatePerSubject,
   studentAccessFromApiSession,
   studentCalendarDateNeedsRefresh,
   type StudentDayScheduleSlot,
@@ -993,12 +994,14 @@ export default function Home() {
 
   const studentFutureTests = useMemo(() => {
     if (!studentSession || !schoolWeeksMemo.length) return [];
-    return listFutureTestsForClass(
-      items,
-      studentControlCatalog,
-      studentSession.classroomId,
-      studentToday,
-      schoolWeeksMemo,
+    return nextControlDatePerSubject(
+      listFutureTestsForClass(
+        items,
+        studentControlCatalog,
+        studentSession.classroomId,
+        studentToday,
+        schoolWeeksMemo,
+      ),
     );
   }, [studentSession, items, studentControlCatalog, studentToday, schoolWeeksMemo]);
 
