@@ -727,6 +727,12 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .year-transition-totals .ok { color: #027a48; }
 .year-transition-totals .warn { color: #b54708; }
 .year-transition-lost { font-weight: 800; color: var(--navy); }
+.year-transition-reimport-course { display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+.year-transition-reimport-course h4 { margin: 0; color: var(--navy); font-size: 14px; }
+.year-transition-reimport-warnings {
+  margin: 8px 0 0; padding: 10px 12px; list-style: none; display: grid; gap: 4px;
+  border: 1px solid #fdb022; border-radius: 8px; background: #fffaeb; color: #93370d; font-size: 13px;
+}
 .year-transition-reclassify-class { display: grid; gap: 16px; }
 .year-transition-reclassify-course h4 {
   margin: 0 0 8px; padding-bottom: 8px; border-bottom: 1px solid var(--line);

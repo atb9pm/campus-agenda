@@ -1,4 +1,4 @@
-import type { CourseWeekKind, CourseWeekday } from "../course-schedule/types.ts";
+import { COURSE_WEEKDAY_LABELS, type CourseWeekKind, type CourseWeekday } from "../course-schedule/types.ts";
 import type { YearTransitionContentDisposition } from "./disposition.ts";
 import type { YearTransitionPreviewInput, YearTransitionPreviewResult } from "./types.ts";
 
@@ -131,4 +131,60 @@ export function summarizeYearTransitionReimport(
       .sort((left, right) => left.dayOfWeek - right.dayOfWeek || left.periodStart - right.periodStart);
     return summary;
   });
+}
+
+function countLabel(counts: YearTransitionReimportCounts): string {
+  const publications = `${counts.publications} publication${counts.publications > 1 ? "s" : ""}`;
+  const notes = `${counts.notes} note${counts.notes > 1 ? "s" : ""}`;
+  return `${publications} · ${notes}`;
+}
+
+function slotLabel(slot: YearTransitionReimportUnusedSlot): string {
+  const rhythm = slot.weekKind === "all" ? "chaque semaine" : `semaine ${slot.weekKind}`;
+  const periods = slot.periodStart === slot.periodEnd ? `P${slot.periodStart}` : `P${slot.periodStart}-P${slot.periodEnd}`;
+  return `${COURSE_WEEKDAY_LABELS[slot.dayOfWeek]} ${periods}, ${rhythm}`;
+}
+
+/** Lignes affichées avant « Réimporter ce cours ». Aucun code technique. */
+export function yearTransitionReimportSummaryLines(summary: YearTransitionReimportCourseSummary): {
+  counts: Array<{ label: string; value: string; tone: "ok" | "warn" | "lost" | "neutral" }>;
+  warnings: string[];
+} {
+  const total = (counts: YearTransitionReimportCounts) => counts.publications + counts.notes;
+  const counts: Array<{ label: string; value: string; tone: "ok" | "warn" | "lost" | "neutral" }> = [
+    { label: "Contenu hérité remplacé", value: countLabel(summary.replaced), tone: "neutral" },
+    { label: "Positionné automatiquement", value: countLabel(summary.positioned), tone: "ok" },
+    {
+      label: "À reclasser",
+      value: countLabel(summary.toReclassify),
+      tone: total(summary.toReclassify) > 0 ? "warn" : "ok",
+    },
+    { label: "Perdu", value: countLabel(summary.lost), tone: total(summary.lost) > 0 ? "lost" : "ok" },
+  ];
+  if (total(summary.blocking) > 0) {
+    counts.push({ label: "Bloquant", value: countLabel(summary.blocking), tone: "lost" });
+  }
+  const warnings: string[] = [];
+  if (summary.adminPlacementsRecalculated > 0) {
+    const plural = summary.adminPlacementsRecalculated > 1;
+    warnings.push(
+      `${summary.adminPlacementsRecalculated} élément${plural ? "s" : ""} placé${plural ? "s" : ""} à la main par l’administration ${plural ? "seront recalculés" : "sera recalculé"}.`,
+    );
+  }
+  if (summary.manualContent.kept > 0) {
+    const plural = summary.manualContent.kept > 1;
+    warnings.push(
+      `${summary.manualContent.kept} élément${plural ? "s" : ""} ajouté${plural ? "s" : ""} à la main ${plural ? "sont conservés" : "est conservé"} tel${plural ? "s" : ""} quel${plural ? "s" : ""}.`,
+    );
+  }
+  if (summary.manualContent.onVanishedSession > 0) {
+    const plural = summary.manualContent.onVanishedSession > 1;
+    warnings.push(
+      `${summary.manualContent.onVanishedSession} élément${plural ? "s" : ""} ajouté${plural ? "s" : ""} à la main ${plural ? "restent" : "reste"} sur une séance qui n’existe plus dans le nouveau plan.`,
+    );
+  }
+  for (const slot of summary.unusedSlots) {
+    warnings.push(`Créneau ${slotLabel(slot)} sans séance dans le nouveau plan : il n’est pas déplacé.`);
+  }
+  return { counts, warnings };
 }

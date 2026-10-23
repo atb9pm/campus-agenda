@@ -182,3 +182,22 @@ export function yearTransitionConfigSignature(input: {
     drafts,
   });
 }
+
+/**
+ * Cours déjà importés, cochés, dont le plan saisi diffère du plan actuel :
+ * ce sont les seuls à réimporter. Un plan identique ne remplace rien.
+ */
+export function reimportSourceAnnualCourseIds(
+  selectedCourseIds: readonly string[],
+  drafts: Readonly<Record<string, MeetingDayDraft>>,
+  currentPlans: ReadonlyMap<string, ReadonlyArray<MeetingDayPlanPayload["days"][number]> | null>,
+): string[] {
+  return selectedCourseIds
+    .filter((courseId) => {
+      if (!currentPlans.has(courseId)) return false;
+      const draft = drafts[courseId];
+      if (!draft) return false;
+      return !sameMeetingDayDraft(draft, meetingDayDraftFromPlanDays(currentPlans.get(courseId)));
+    })
+    .sort((left, right) => left.localeCompare(right));
+}

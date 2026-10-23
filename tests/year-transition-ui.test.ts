@@ -11,7 +11,9 @@ import {
   parseYearTransitionPreviewRequest,
   presentYearTransitionPreview,
   previewHasBlockingEntries,
+  reimportSourceAnnualCourseIds,
   validateMeetingDayDraft,
+  yearTransitionReimportSummaryLines,
   yearTransitionConfigSignature,
   YEAR_TRANSITION_ADDITIONAL_SAME_DAY,
   YEAR_TRANSITION_PRIMARY_DAY_REQUIRED,
@@ -779,3 +781,59 @@ test("l’aperçu présente À reclasser comme avertissement humain, sans code t
   assert.equal(previewHasBlockingEntries(preview), false);
 });
 
+
+test("réimportation : seuls les cours déjà importés, cochés, au plan différent sont envoyés", () => {
+  const monday = { ...emptyMeetingDayDraft(), primaryDay: 1 as const };
+  const thursdayB = { ...emptyMeetingDayDraft(), primaryDay: 4 as const, primaryWeekKind: "B" as const };
+  const current = new Map([
+    ["ac-same", [{ dayOfWeek: 1 as const, weekKind: "all" as const, role: "PRIMARY" as const }]],
+    ["ac-moved", [{ dayOfWeek: 1 as const, weekKind: "all" as const, role: "PRIMARY" as const }]],
+    ["ac-unchecked", [{ dayOfWeek: 1 as const, weekKind: "all" as const, role: "PRIMARY" as const }]],
+  ]);
+  assert.deepEqual(
+    reimportSourceAnnualCourseIds(
+      ["ac-same", "ac-moved", "ac-new"],
+      { "ac-same": monday, "ac-moved": thursdayB, "ac-new": thursdayB, "ac-unchecked": thursdayB },
+      current,
+    ),
+    ["ac-moved"],
+  );
+});
+
+test("réimportation : résumé humain avec alertes de placements, contenu manuel et créneaux", () => {
+  const lines = yearTransitionReimportSummaryLines({
+    sourceAnnualCourseId: "ac-n",
+    targetAnnualCourseId: "ac-n1",
+    replaced: { publications: 3, notes: 2 },
+    positioned: { publications: 2, notes: 2 },
+    toReclassify: { publications: 1, notes: 0 },
+    lost: { publications: 0, notes: 0 },
+    blocking: { publications: 0, notes: 0 },
+    adminPlacementsRecalculated: 1,
+    manualContent: { kept: 2, onVanishedSession: 1 },
+    unusedSlots: [{ slotId: "s1", dayOfWeek: 1, weekKind: "all", periodStart: 1, periodEnd: 4 }],
+  });
+  assert.deepEqual(lines.counts.map((line) => `${line.label} : ${line.value} (${line.tone})`), [
+    "Contenu hérité remplacé : 3 publications · 2 notes (neutral)",
+    "Positionné automatiquement : 2 publications · 2 notes (ok)",
+    "À reclasser : 1 publication · 0 note (warn)",
+    "Perdu : 0 publication · 0 note (ok)",
+  ]);
+  assert.deepEqual(lines.warnings, [
+    "1 élément placé à la main par l’administration sera recalculé.",
+    "2 éléments ajoutés à la main sont conservés tels quels.",
+    "1 élément ajouté à la main reste sur une séance qui n’existe plus dans le nouveau plan.",
+    "Créneau Lundi P1-P4, chaque semaine sans séance dans le nouveau plan : il n’est pas déplacé.",
+  ]);
+  assert.doesNotMatch(JSON.stringify(lines), /TO_RECLASSIFY|PROJECTABLE|SKIPPED/);
+});
+
+test("réimportation : l’assistant envoie la liste, affiche le résumé et confirme « Réimporter ce cours »", async () => {
+  const panel = await readFile(new URL("../web/app/components/year-transition-prepare-panel.tsx", import.meta.url), "utf8");
+  const client = await readFile(new URL("../web/lib/api-client.ts", import.meta.url), "utf8");
+  assert.match(panel, /reimportSourceAnnualCourseIds: reimportCourseIds/);
+  assert.match(panel, /<ReimportSummaryCard/);
+  assert.match(panel, /applyYearTransitionApi\(transitionId, \{ confirmReimport: reimportCount > 0 \}\)/);
+  assert.match(panel, /"Réimporter ce cours"/);
+  assert.match(client, /confirmReimport: true/);
+});
