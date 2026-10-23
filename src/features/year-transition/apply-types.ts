@@ -1,4 +1,5 @@
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
+import type { AnnualCourseMeetingDay } from "../annual-courses/meeting-days.ts";
 import type { AnnualCourseNote } from "../pedagogical-path/annual-notes.ts";
 import type { PrivateNotePreviewEntry } from "./private-notes.ts";
 import type { YearTransitionPreviewReason } from "./reasons.ts";
@@ -123,9 +124,25 @@ export function notesMatchingApplyGuard(
   });
 }
 
+/**
+ * Réimportation d’un cours déjà importé : le contenu hérité actuel est retiré et le plan
+ * de jours remplacé dans la même transaction que les nouvelles copies.
+ * Le contenu manuel, les créneaux et les affectations ne sont jamais touchés.
+ */
+export interface YearTransitionApplyReimport {
+  targetAnnualCourseIds: readonly string[];
+  /** Exactement le contenu hérité de ces cours au moment de l’aperçu ; tout écart annule la transaction. */
+  replacedItemIds: readonly number[];
+  replacedNoteIds: readonly string[];
+  meetingDays: readonly AnnualCourseMeetingDay[];
+}
+
+export const YEAR_TRANSITION_REIMPORT_CONTENT_CHANGED = "Inherited content changed during reimport";
+
 export interface YearTransitionApplyPlan {
   noteGuard?: YearTransitionApplyNoteGuard;
   notes?: readonly AnnualCourseNote[];
+  reimport?: YearTransitionApplyReimport;
   apply: PersistedYearTransitionApply;
   items: readonly YearTransitionApplyAgendaInsert[];
   entries: readonly PersistedYearTransitionApplyEntry[];

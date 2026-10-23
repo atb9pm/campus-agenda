@@ -1,5 +1,6 @@
 import {
   notesMatchingApplyGuard,
+  YEAR_TRANSITION_REIMPORT_CONTENT_CHANGED,
   type PersistedYearTransitionApply,
   type PersistedYearTransitionApplyEntry,
   type YearTransitionApplyPlan,
@@ -7,6 +8,7 @@ import {
 } from "../../features/year-transition/apply-types.ts";
 import type { PrototypeAgendaItem } from "../../features/agenda/demo-items.ts";
 import { getMemoryAgendaStore, MemoryAgendaStore } from "./memory-store.ts";
+import { getMemoryCourseScheduleStore, MemoryCourseScheduleStore } from "./memory-course-schedule-store.ts";
 import { getMemoryAnnualCourseNotesStore, MemoryAnnualCourseNotesStore } from "./memory-pedagogical-path-store.ts";
 import { transitionNoteToken } from "./sql/sql-year-transition-apply-store.ts";
 
@@ -22,15 +24,22 @@ function cloneItem(item: PrototypeAgendaItem): PrototypeAgendaItem {
   return { ...item };
 }
 
+function sameMembers<T>(left: readonly T[], right: readonly T[]): boolean {
+  const expected = new Set(right);
+  return left.length === right.length && expected.size === right.length && left.every((value) => expected.has(value));
+}
+
 export class MemoryYearTransitionApplyStore implements YearTransitionApplyStore {
   private readonly applies = new Map<string, PersistedYearTransitionApply>();
   private readonly entries = new Map<string, PersistedYearTransitionApplyEntry[]>();
   private readonly agenda: MemoryAgendaStore;
   private readonly notes?: MemoryAnnualCourseNotesStore;
+  private readonly schedules?: MemoryCourseScheduleStore;
 
-  constructor(agenda: MemoryAgendaStore, notes?: MemoryAnnualCourseNotesStore) {
+  constructor(agenda: MemoryAgendaStore, notes?: MemoryAnnualCourseNotesStore, schedules?: MemoryCourseScheduleStore) {
     this.agenda = agenda;
     this.notes = notes;
+    this.schedules = schedules;
   }
 
   async getByTransitionId(transitionId: string): Promise<PersistedYearTransitionApply | null> {
@@ -60,7 +69,34 @@ export class MemoryYearTransitionApplyStore implements YearTransitionApplyStore 
         throw new Error("UNIQUE constraint failed: year_transition_applies.transition_id");
       }
 
-      const nextItems = itemsSnapshot.map(cloneItem);
+      let nextItems = itemsSnapshot.map(cloneItem);
+      let publishMeetingDays: (() => void) | undefined;
+      const removedNoteIds: string[] = [];
+      if (plan.reimport) {
+        const reimport = plan.reimport;
+        if (!this.notes || !this.schedules) throw new Error("Reimport stores unavailable");
+        const courses = new Set(reimport.targetAnnualCourseIds);
+        const inheritedItemIds = nextItems
+          .filter((item) => courses.has(item.annualCourseId ?? "") && item.sourceTransitionId?.trim())
+          .map((item) => item.id);
+        const inheritedNoteIds = this.notes
+          .exportAllNotes()
+          .filter((note) => courses.has(note.annualCourseId ?? "") && (note.sourceNoteId?.trim() || note.inheritedAt?.trim()))
+          .map((note) => note.id);
+        if (
+          !sameMembers(inheritedItemIds, reimport.replacedItemIds) ||
+          !sameMembers(inheritedNoteIds, reimport.replacedNoteIds)
+        ) {
+          throw new Error(YEAR_TRANSITION_REIMPORT_CONTENT_CHANGED);
+        }
+        const removedItems = new Set(reimport.replacedItemIds);
+        nextItems = nextItems.filter((item) => !removedItems.has(item.id));
+        removedNoteIds.push(...reimport.replacedNoteIds);
+        publishMeetingDays = this.schedules.stageMeetingDaysForAnnualCourses(
+          reimport.targetAnnualCourseIds,
+          reimport.meetingDays,
+        );
+      }
       if (plan.noteGuard) {
         const guard = plan.noteGuard;
         if (!this.notes) throw new Error("Private note store unavailable");
@@ -70,7 +106,7 @@ export class MemoryYearTransitionApplyStore implements YearTransitionApplyStore 
         }
       }
       if (plan.notes?.length && !this.notes) throw new Error("Private note store unavailable");
-      const publishNotes = this.notes?.stageInsertedNotes(plan.notes ?? []);
+      const publishNotes = this.notes?.stageInsertedNotes(plan.notes ?? [], removedNoteIds);
       let nextId = Math.max(0, ...nextItems.map((item) => item.id)) + 1;
       for (const insert of plan.items) {
         const annualCourseId = insert.annualCourseId.trim();
@@ -120,6 +156,7 @@ export class MemoryYearTransitionApplyStore implements YearTransitionApplyStore 
       );
       this.agenda.installExactItemsCopyOnWrite(nextItems);
       publishNotes?.();
+      publishMeetingDays?.();
     } catch (error) {
       this.applies.clear();
       for (const [id, row] of appliesSnapshot) this.applies.set(id, row);
@@ -202,7 +239,11 @@ export class MemoryYearTransitionApplyStore implements YearTransitionApplyStore 
 let memoryYearTransitionApplyStore: MemoryYearTransitionApplyStore | null = null;
 
 export function getMemoryYearTransitionApplyStore(): MemoryYearTransitionApplyStore {
-  memoryYearTransitionApplyStore ??= new MemoryYearTransitionApplyStore(getMemoryAgendaStore(), getMemoryAnnualCourseNotesStore());
+  memoryYearTransitionApplyStore ??= new MemoryYearTransitionApplyStore(
+    getMemoryAgendaStore(),
+    getMemoryAnnualCourseNotesStore(),
+    getMemoryCourseScheduleStore(),
+  );
   return memoryYearTransitionApplyStore;
 }
 
