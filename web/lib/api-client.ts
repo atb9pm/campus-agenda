@@ -1334,6 +1334,7 @@ export async function createYearTransitionPreviewApi(input: {
   includePrivateNotes: boolean;
   targetMeetingDayPlans: YearTransitionMeetingDayPlan[];
   reimportSourceAnnualCourseIds?: string[];
+  refreshSourceAnnualCourseIds?: string[];
 }): Promise<{
   transitionId: string;
   blocking: boolean;

@@ -7,6 +7,7 @@ import {
   emptyMeetingDayDraft,
   meetingDayDraftFromPlanDays,
   meetingDayPlanLabel,
+  refreshSourceAnnualCourseIds,
   reimportSourceAnnualCourseIds,
   sameMeetingDayDraft,
   validateMeetingDayDraft,
@@ -107,7 +108,13 @@ function preparationDateLabel(iso: string): string {
   return date.toLocaleDateString("fr-CH", { timeZone: "Europe/Zurich", day: "numeric", month: "long", year: "numeric" });
 }
 
-function CourseImportStatus({ state }: { state: YearTransitionCourseImportState | null }) {
+function CourseImportStatus({
+  state,
+  sourceYearLabel,
+}: {
+  state: YearTransitionCourseImportState | null;
+  sourceYearLabel: string;
+}) {
   if (!state) {
     return <p className="year-transition-import-status">Non importé</p>;
   }
@@ -121,6 +128,9 @@ function CourseImportStatus({ state }: { state: YearTransitionCourseImportState 
       {last && last !== first ? <span>Dernière préparation : {preparationDateLabel(last.appliedAt)}</span> : null}
       {!state.matchesLastPreparation ? (
         <em>Les jours enregistrés sur le cours N+1 diffèrent du plan de la dernière préparation.</em>
+      ) : null}
+      {state.sourceContentChanged ? (
+        <em>Contenu modifié en {sourceYearLabel} depuis la dernière préparation.</em>
       ) : null}
     </div>
   );
@@ -204,6 +214,7 @@ export function YearTransitionPreparePanel({
   const [omittedCourseIds, setOmittedCourseIds] = useState<string[]>([]);
   const [courseImports, setCourseImports] = useState<YearTransitionCourseImportState[]>([]);
   const [includedImportedCourseIds, setIncludedImportedCourseIds] = useState<string[]>([]);
+  const [refreshRequestedCourseIds, setRefreshRequestedCourseIds] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Record<string, MeetingDayDraft>>({});
   const [transitionId, setTransitionId] = useState<string | null>(null);
   const [preview, setPreview] = useState<YearTransitionPresentedPreview | null>(null);
@@ -273,6 +284,16 @@ export function YearTransitionPreparePanel({
       ),
     [selectedCourseIds, drafts, importByCourseId],
   );
+  const refreshCourseIds = useMemo(
+    () =>
+      refreshSourceAnnualCourseIds(
+        selectedCourseIds,
+        refreshRequestedCourseIds,
+        reimportCourseIds,
+        new Set(importByCourseId.keys()),
+      ),
+    [selectedCourseIds, refreshRequestedCourseIds, reimportCourseIds, importByCourseId],
+  );
   const courseLabelById = useMemo(
     () =>
       new Map(
@@ -283,14 +304,14 @@ export function YearTransitionPreparePanel({
   const reimportCount = reimportPreview?.courses.length ?? 0;
   const configSignature = useMemo(
     () =>
-      yearTransitionConfigSignature({
+      `${yearTransitionConfigSignature({
         sourceSchoolYearId: sourceYearId,
         targetSchoolYearId: targetYearId,
         selectedSourceClassIds: selectedClassIds,
         selectedSourceAnnualCourseIds: selectedCourseIds,
         drafts,
-      }),
-    [sourceYearId, targetYearId, selectedClassIds, selectedCourseIds, drafts],
+      })}|refresh:${refreshCourseIds.join(",")}`,
+    [sourceYearId, targetYearId, selectedClassIds, selectedCourseIds, drafts, refreshCourseIds],
   );
   const previewStale = Boolean(preview) && previewSignature !== configSignature;
   const staleResult = Boolean(result) && step !== "result";
@@ -381,6 +402,7 @@ export function YearTransitionPreparePanel({
         includePrivateNotes: true,
         targetMeetingDayPlans: planBuild.plans,
         ...(reimportCourseIds.length > 0 ? { reimportSourceAnnualCourseIds: reimportCourseIds } : {}),
+        ...(refreshCourseIds.length > 0 ? { refreshSourceAnnualCourseIds: refreshCourseIds } : {}),
       });
       setTransitionId(created.transitionId);
       setPreview(created.preview);
@@ -724,7 +746,7 @@ export function YearTransitionPreparePanel({
                               />
                               <strong>{course.label}</strong>
                             </label>
-                            <CourseImportStatus state={imported} />
+                            <CourseImportStatus state={imported} sourceYearLabel={sourceYear?.displayLabel ?? "N"} />
                             {imported && !continued ? (
                               <p className="school-year-hint">
                                 Plan actuel conservé : rien ne sera modifié pour ce cours.
@@ -732,10 +754,34 @@ export function YearTransitionPreparePanel({
                             ) : null}
                             {imported && continued && importedDraft ? (
                               <p className="school-year-hint">
-                                {sameMeetingDayDraft(draft, importedDraft)
-                                  ? "Plan identique à la préparation actuelle."
-                                  : "Plan différent de la préparation actuelle : le contenu hérité de ce cours sera remplacé après l’aperçu, si vous confirmez « Réimporter ce cours »."}
+                                {!sameMeetingDayDraft(draft, importedDraft)
+                                  ? "Plan différent de la préparation actuelle : le contenu hérité de ce cours sera remplacé après l’aperçu, si vous confirmez « Réimporter ce cours »."
+                                  : refreshCourseIds.includes(course.id)
+                                    ? `Plan identique : le contenu hérité de ce cours sera remplacé par le contenu actuel de ${sourceYear?.displayLabel ?? "N"} après l’aperçu, si vous confirmez « Réimporter ce cours ».`
+                                    : "Plan identique à la préparation actuelle."}
                               </p>
+                            ) : null}
+                            {imported && continued && importedDraft && sameMeetingDayDraft(draft, importedDraft) ? (
+                              <label
+                                className="year-transition-notes-option"
+                                htmlFor={`year-transition-refresh-${course.id}`}
+                              >
+                                <input
+                                  id={`year-transition-refresh-${course.id}`}
+                                  type="checkbox"
+                                  checked={refreshRequestedCourseIds.includes(course.id)}
+                                  onChange={(event) => {
+                                    const enabled = event.target.checked;
+                                    setRefreshRequestedCourseIds((current) =>
+                                      enabled
+                                        ? current.includes(course.id) ? current : [...current, course.id]
+                                        : current.filter((id) => id !== course.id),
+                                    );
+                                    setTransitionId(null);
+                                  }}
+                                />
+                                Reprendre le contenu actuel de {sourceYear?.displayLabel ?? "N"}
+                              </label>
                             ) : null}
                             {continued ? (
                               <>

@@ -13,6 +13,12 @@ import {
   sameMeetingDayPlan,
   type AppliedTransitionRecord,
 } from "../src/features/year-transition/index.ts";
+import { refreshSourceAnnualCourseIds } from "../src/features/year-transition/meeting-day-draft.ts";
+import {
+  sourceContentChangedSincePreparation,
+  type SourceItemMaterial,
+  type SourceNoteMaterial,
+} from "../src/features/year-transition/course-import-state.ts";
 
 const N = "year-n";
 const N1 = "year-n1";
@@ -179,3 +185,84 @@ test("écran Jours des cours N+1 : statut par cours, déjà importé décoché p
   const route = await readFile(new URL("../web/app/api/admin/year-transition/prepare/route.ts", import.meta.url), "utf8");
   assert.match(route, /requireAdminSession/);
 });
+
+function sourceItem(id: number, patch: Partial<SourceItemMaterial> = {}): SourceItemMaterial {
+  return {
+    id,
+    type: "lesson",
+    title: `Séance ${id}`,
+    detail: "",
+    schoolYearId: N,
+    annualCourseId: "course-n",
+    courseSessionKey: `${N}|course-n|2026-09-0${id}`,
+    referenceItemId: null,
+    referenceSessionId: null,
+    ...patch,
+  } as SourceItemMaterial;
+}
+
+function sourceNote(id: string, patch: Partial<SourceNoteMaterial> = {}): SourceNoteMaterial {
+  return {
+    id,
+    schoolYearId: N,
+    annualCourseId: "course-n",
+    text: "Note",
+    body: null,
+    courseSessionKey: `${N}|course-n|2026-09-01`,
+    referenceSessionId: null,
+    ...patch,
+  } as SourceNoteMaterial;
+}
+
+test("contenu N depuis la dernière préparation : modifié, ajouté, supprimé, déplacé ; autres cours ignorés", () => {
+  const snapshot = {
+    sourceItems: [sourceItem(1), sourceItem(2), sourceItem(9, { annualCourseId: "other" })],
+    sourceNotes: [sourceNote("n1")],
+  };
+  const check = (items: SourceItemMaterial[], notes: SourceNoteMaterial[] = [sourceNote("n1")]) =>
+    sourceContentChangedSincePreparation({
+      snapshot,
+      sourceSchoolYearId: N,
+      sourceAnnualCourseId: "course-n",
+      items,
+      notes,
+    });
+  assert.equal(check([sourceItem(2), sourceItem(1)]), false, "ordre sans importance");
+  assert.equal(check([sourceItem(1), sourceItem(2), sourceItem(9, { annualCourseId: "other", title: "x" })]), false);
+  assert.equal(check([sourceItem(1, { detail: "corrigé" }), sourceItem(2)]), true);
+  assert.equal(check([sourceItem(1), sourceItem(2), sourceItem(3)]), true);
+  assert.equal(check([sourceItem(1)]), true);
+  assert.equal(check([sourceItem(1, { courseSessionKey: `${N}|course-n|2026-09-08` }), sourceItem(2)]), true);
+  assert.equal(check([sourceItem(1), sourceItem(2)], [sourceNote("n1", { text: "Autre" })]), true);
+  assert.equal(check([sourceItem(1), sourceItem(2)], []), true);
+  assert.equal(
+    sourceContentChangedSincePreparation({
+      snapshot: { sourceItems: [sourceItem(1)] },
+      sourceSchoolYearId: N,
+      sourceAnnualCourseId: "course-n",
+      items: [sourceItem(1)],
+      notes: [sourceNote("n1", { text: "sans notes au snapshot" })],
+    }),
+    false,
+    "snapshot legacy sans notes : notes non comparées",
+  );
+});
+
+test("reprendre le contenu : uniquement cours repris, déjà importés, sans changement de plan", () => {
+  assert.deepEqual(
+    refreshSourceAnnualCourseIds(["b", "a", "c", "d"], ["a", "b", "c", "x"], ["c"], new Set(["a", "b", "c"])),
+    ["a", "b"],
+  );
+  assert.deepEqual(refreshSourceAnnualCourseIds(["a"], ["a"], [], new Set()), []);
+  assert.deepEqual(refreshSourceAnnualCourseIds([], ["a"], [], new Set(["a"])), []);
+});
+
+test("écran Jours des cours N+1 : contenu N modifié signalé et reprise explicite", async () => {
+  const panel = await readFile(new URL("../web/app/components/year-transition-prepare-panel.tsx", import.meta.url), "utf8");
+  assert.match(panel, /Contenu modifié en \{sourceYearLabel\} depuis la dernière préparation\./);
+  assert.match(panel, /Reprendre le contenu actuel de \{sourceYear\?\.displayLabel \?\? "N"\}/);
+  assert.match(panel, /refreshSourceAnnualCourseIds: refreshCourseIds/);
+  assert.match(panel, /\|refresh:\$\{refreshCourseIds\.join\(","\)\}/);
+  assert.match(panel, /checked=\{refreshRequestedCourseIds\.includes\(course\.id\)\}/);
+});
+

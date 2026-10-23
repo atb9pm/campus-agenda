@@ -201,3 +201,20 @@ export function reimportSourceAnnualCourseIds(
     })
     .sort((left, right) => left.localeCompare(right));
 }
+
+/**
+ * Cours déjà importés dont l’administration demande de reprendre le contenu actuel de N
+ * sans changer les jours. Un plan modifié est déjà une réimportation : il n’est pas répété ici.
+ */
+export function refreshSourceAnnualCourseIds(
+  selectedCourseIds: readonly string[],
+  requestedCourseIds: readonly string[],
+  reimportCourseIds: readonly string[],
+  importedCourseIds: ReadonlySet<string>,
+): string[] {
+  const requested = new Set(requestedCourseIds);
+  const reimport = new Set(reimportCourseIds);
+  return selectedCourseIds
+    .filter((courseId) => requested.has(courseId) && importedCourseIds.has(courseId) && !reimport.has(courseId))
+    .sort((left, right) => left.localeCompare(right));
+}
