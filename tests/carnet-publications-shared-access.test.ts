@@ -154,11 +154,14 @@ async function seedSharedCourse(store: MemoryAnnualCourseStore) {
   await store.createAssignment(assignment("asg-a-cp1", TEACHER_A, COURSE_CP1));
 }
 
-function courseAuthDeps(store: MemoryAnnualCourseStore) {
+function courseAuthDeps(store: MemoryAnnualCourseStore, year: SchoolYearRecord = activeYear()) {
   return {
     courses: store,
     catalog: { listClasses: async () => [schoolClass()] },
-    years: { getActiveSchoolYear: async () => activeYear() },
+    years: {
+      getActiveSchoolYear: async () => (year.status === "active" ? year : null),
+      getSchoolYearById: async (id: string) => (id === year.id ? year : null),
+    },
   };
 }
 
@@ -587,6 +590,28 @@ test("accès AnnualCourse — TCA gouverne, authorTeacherId reste une provenance
   });
   assert.ok(testAuth && testAuth.ok);
 
+  const structuredTest = item({
+    id: 10,
+    type: "TEST",
+    title: "Contrôle du parcours",
+    referenceSessionId: "ref-session-1",
+    referenceItemId: "ref-item-1",
+  });
+  const structuredAuth = await authorizeAssignedCoursePublication(courseAuthDeps(courses), {
+    teacherId: TEACHER_B,
+    item: structuredTest,
+  });
+  assert.ok(structuredAuth && structuredAuth.ok);
+
+  const draftYear: SchoolYearRecord = { ...activeYear(), status: "draft", activatedAt: null };
+  for (const draftItem of [testItem, structuredTest]) {
+    const draftAuth = await authorizeAssignedCoursePublication(courseAuthDeps(courses, draftYear), {
+      teacherId: TEACHER_B,
+      item: draftItem,
+    });
+    assert.ok(draftAuth && !draftAuth.ok, `année en préparation refusée : ${draftItem.title}`);
+  }
+
   const created = createPublication([], {
     id: 99,
     classroomId: CLASSROOM,
@@ -635,4 +660,21 @@ test("sources — filtres auteur remplacés, studentVisible uniforme, hors trans
   assert.match(apply, /studentVisible: false/);
   assert.doesNotMatch(apply, /canAccessAnnualCourse/);
   assert.doesNotMatch(preview, /canAccessAnnualCourse/);
+});
+
+test("année en préparation — PATCH et DELETE agenda refusés aux enseignants avant toute autorisation", async () => {
+  const [api, agendaId] = await Promise.all([
+    readFile(new URL("../web/lib/server/api.ts", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/api/agenda/[id]/route.ts", import.meta.url), "utf8"),
+  ]);
+  const mutableGuard = api.slice(api.indexOf("export async function assertAgendaItemMutable"));
+  assert.match(mutableGuard, /getDraftYearIds\(years\)\.has\(item\.schoolYearId\)/);
+  assert.match(mutableGuard, /DRAFT_YEAR_TEACHER_READONLY_REASON/);
+  for (const handler of ["export async function PATCH", "export async function DELETE"]) {
+    const body = agendaId.slice(agendaId.indexOf(handler));
+    assert.ok(
+      body.indexOf("assertAgendaItemMutable(existing)") < body.indexOf("authorizeNotebookOwnedItemMutation"),
+      `${handler} : garde année avant les autorisations`,
+    );
+  }
 });

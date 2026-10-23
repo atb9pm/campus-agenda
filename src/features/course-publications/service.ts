@@ -29,7 +29,10 @@ import {
   ensureRuntimeSubjectForAnnualCourse,
   teacherHasStructuredPublishAccess,
 } from "../agenda-bridge/index.ts";
-import { ARCHIVED_YEAR_READONLY_REASON } from "../school-year/archived-readonly.ts";
+import {
+  ARCHIVED_YEAR_READONLY_REASON,
+  DRAFT_YEAR_TEACHER_READONLY_REASON,
+} from "../school-year/archived-readonly.ts";
 
 /** Compatibilité Agenda historique. Ce n'est PAS l'identité de la CourseSession. */
 export const STRUCTURED_AGENDA_COMPAT_HOUR = 8;
@@ -684,6 +687,9 @@ async function loadOwnStructuredControl(
     }
     if (year.status === "archived") {
       return { ok: false, reason: ARCHIVED_YEAR_READONLY_REASON, status: 403 };
+    }
+    if (year.status === "draft") {
+      return { ok: false, reason: DRAFT_YEAR_TEACHER_READONLY_REASON, status: 403 };
     }
   }
 
