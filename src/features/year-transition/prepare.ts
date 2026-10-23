@@ -3,7 +3,11 @@ import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-ty
 import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
 import type { AgendaStore } from "../../lib/persistence/types.ts";
 import { sortSchoolYearsChronologically } from "../school-year/admin-working-year.ts";
-import { assembleLiveYearTransitionPreviewInput } from "./assemble.ts";
+import {
+  assembleLiveYearTransitionPreviewInput,
+  YEAR_TRANSITION_REIMPORT_NOT_IMPORTED,
+  YEAR_TRANSITION_REIMPORT_REQUIRES_PLAN,
+} from "./assemble.ts";
 import { applyPersistedYearTransition, type ApplyPersistedYearTransitionDeps } from "./apply.ts";
 import { createPersistedYearTransitionPreview } from "./persist.ts";
 import {
@@ -26,9 +30,21 @@ import {
   usesExplicitTargetMeetingDayPlans,
   type YearTransitionTargetMeetingDayPlan,
 } from "./target-meeting-days.ts";
-import type { YearTransitionClassMapping, YearTransitionPreviewResult } from "./types.ts";
+import type {
+  YearTransitionClassMapping,
+  YearTransitionPreviewResult,
+  YearTransitionReimportScope,
+} from "./types.ts";
+import type { PersistedYearTransitionPreview } from "./store.ts";
+import { privateNoteCopyId } from "./private-notes.ts";
+import {
+  summarizeYearTransitionReimport,
+  type YearTransitionReimportCourseSummary,
+} from "./reimport-summary.ts";
+
 import {
   buildYearTransitionCourseImportStates,
+  sameMeetingDayPlan,
   type AppliedTransitionRecord,
   type AppliedTransitionSnapshot,
   type YearTransitionCourseImportState,
@@ -93,6 +109,78 @@ export async function loadYearTransitionPrepareState(
   };
 }
 
+type LoadedAppliedTransition = AppliedTransitionRecord & { preview: PersistedYearTransitionPreview };
+
+async function loadAppliedTransitions(
+  deps: Pick<YearTransitionPrepareDeps, "applyStore" | "previews">,
+  pair?: { sourceSchoolYearId: string; targetSchoolYearId: string },
+): Promise<LoadedAppliedTransition[]> {
+  const records: LoadedAppliedTransition[] = [];
+  for (const apply of await deps.applyStore.listApplies()) {
+    const preview = await deps.previews.getById(apply.transitionId);
+    if (!preview) continue;
+    if (pair && (preview.sourceSchoolYearId !== pair.sourceSchoolYearId || preview.targetSchoolYearId !== pair.targetSchoolYearId)) {
+      continue;
+    }
+    try {
+      const snapshot = JSON.parse(preview.snapshotJson) as AppliedTransitionSnapshot;
+      records.push({ transitionId: apply.transitionId, appliedAt: apply.appliedAt, snapshot, preview });
+    } catch {
+      continue;
+    }
+  }
+  return records;
+}
+
+/**
+ * Éléments hérités qu’un transfert avait laissés « À reclasser » et que l’administration
+ * a positionnés depuis. Publications : registre CREATED_UNPLACED. Notes : aperçu appliqué.
+ */
+export async function loadAdminPlacedInheritedContent(
+  deps: Pick<YearTransitionPrepareDeps, "applyStore">,
+  scope: YearTransitionReimportScope,
+  applied: readonly LoadedAppliedTransition[],
+): Promise<{ itemIds: Set<number>; noteIds: Set<string> }> {
+  const itemIds = new Set<number>();
+  const entriesByTransition = new Map<string, Awaited<ReturnType<typeof deps.applyStore.listEntries>>>();
+  for (const item of scope.replacedItems) {
+    const transitionId = item.sourceTransitionId?.trim() ?? "";
+    if (!transitionId || !item.courseSessionKey?.trim()) continue;
+    let entries = entriesByTransition.get(transitionId);
+    if (!entries) {
+      entries = await deps.applyStore.listEntries(transitionId);
+      entriesByTransition.set(transitionId, entries);
+    }
+    const entry = entries.find((row) => row.sourceAgendaItemId === item.sourceAgendaItemId);
+    if (entry?.applyResult === "CREATED_UNPLACED") itemIds.add(item.id);
+  }
+
+  const noteIds = new Set<string>();
+  const unplacedBySource = new Map<string, Set<string>>();
+  for (const record of applied) {
+    try {
+      const result = JSON.parse(record.preview.previewJson) as YearTransitionPreviewResult;
+      unplacedBySource.set(
+        record.transitionId,
+        new Set((result.privateNotes ?? []).filter((entry) => entry.disposition === "TO_RECLASSIFY").map((entry) => entry.sourceNoteId)),
+      );
+    } catch {
+      continue;
+    }
+  }
+  for (const note of scope.replacedNotes) {
+    const sourceNoteId = note.sourceNoteId?.trim() ?? "";
+    if (!sourceNoteId || !note.courseSessionKey?.trim()) continue;
+    for (const [transitionId, unplaced] of unplacedBySource) {
+      if (privateNoteCopyId(transitionId, sourceNoteId) === note.id && unplaced.has(sourceNoteId)) {
+        noteIds.add(note.id);
+        break;
+      }
+    }
+  }
+  return { itemIds, noteIds };
+}
+
 /** Cours déjà importés vers une année en préparation, d’après le registre des transferts appliqués. */
 export async function loadYearTransitionCourseImports(
   deps: Pick<YearTransitionPrepareDeps, "applyStore" | "previews" | "schedules">,
@@ -100,22 +188,15 @@ export async function loadYearTransitionCourseImports(
 ): Promise<YearTransitionCourseImportState[]> {
   const draftYearIds = new Set(lookups.years.filter((year) => year.status === "draft").map((year) => year.id));
   const byPair = new Map<string, { sourceSchoolYearId: string; targetSchoolYearId: string; applied: AppliedTransitionRecord[] }>();
-  for (const apply of await deps.applyStore.listApplies()) {
-    const preview = await deps.previews.getById(apply.transitionId);
-    if (!preview || !draftYearIds.has(preview.targetSchoolYearId)) continue;
-    let snapshot: AppliedTransitionSnapshot;
-    try {
-      snapshot = JSON.parse(preview.snapshotJson) as AppliedTransitionSnapshot;
-    } catch {
-      continue;
-    }
-    const key = `${preview.sourceSchoolYearId}|${preview.targetSchoolYearId}`;
+  for (const record of await loadAppliedTransitions(deps)) {
+    if (!draftYearIds.has(record.preview.targetSchoolYearId)) continue;
+    const key = `${record.preview.sourceSchoolYearId}|${record.preview.targetSchoolYearId}`;
     const pair = byPair.get(key) ?? {
-      sourceSchoolYearId: preview.sourceSchoolYearId,
-      targetSchoolYearId: preview.targetSchoolYearId,
+      sourceSchoolYearId: record.preview.sourceSchoolYearId,
+      targetSchoolYearId: record.preview.targetSchoolYearId,
       applied: [],
     };
-    pair.applied.push({ transitionId: apply.transitionId, appliedAt: apply.appliedAt, snapshot });
+    pair.applied.push(record);
     byPair.set(key, pair);
   }
   if (byPair.size === 0) return [];
@@ -157,6 +238,7 @@ export function parseYearTransitionPreviewRequest(
   privateNotesOwnerTeacherId?: string;
   targetMeetingDayPlans?: YearTransitionTargetMeetingDayPlan[];
   selectedSourceAnnualCourseIds?: string[];
+  reimportSourceAnnualCourseIds?: string[];
 } {
   if (!body || typeof body !== "object") throw new Error("Requête invalide.");
   const record = body as Record<string, unknown>;
@@ -191,6 +273,12 @@ export function parseYearTransitionPreviewRequest(
   const selectedSourceAnnualCourseIds = record.selectedSourceAnnualCourseIds === undefined
     ? undefined
     : parseSelectedSourceClassIds(record.selectedSourceAnnualCourseIds);
+  const reimportSourceAnnualCourseIds = record.reimportSourceAnnualCourseIds === undefined
+    ? undefined
+    : parseSelectedSourceClassIds(record.reimportSourceAnnualCourseIds);
+  if (reimportSourceAnnualCourseIds?.length && !newFlow) {
+    throw new Error(YEAR_TRANSITION_REIMPORT_REQUIRES_PLAN);
+  }
   return {
     sourceSchoolYearId,
     targetSchoolYearId,
@@ -199,15 +287,53 @@ export function parseYearTransitionPreviewRequest(
     resolveContinuations,
     targetMeetingDayPlans,
     ...(selectedSourceAnnualCourseIds !== undefined ? { selectedSourceAnnualCourseIds } : {}),
+    ...(reimportSourceAnnualCourseIds?.length ? { reimportSourceAnnualCourseIds } : {}),
     ...notes,
   };
+}
+
+/**
+ * Liste de réimportation validée côté serveur : uniquement des cours déjà importés
+ * vers cette année. Un plan identique au plan actuel n’est pas une réimportation.
+ */
+export async function resolveRequestedReimport(
+  deps: Pick<YearTransitionPrepareDeps, "applyStore" | "previews" | "schedules">,
+  lookups: Pick<YearTransitionCatalogLookups, "years" | "classes" | "courses">,
+  request: {
+    sourceSchoolYearId: string;
+    targetSchoolYearId: string;
+    reimportSourceAnnualCourseIds?: readonly string[];
+    targetMeetingDayPlans?: readonly YearTransitionTargetMeetingDayPlan[];
+  },
+): Promise<{ reimportSourceAnnualCourseIds: string[]; unchangedSourceAnnualCourseIds: string[] }> {
+  const requested = request.reimportSourceAnnualCourseIds ?? [];
+  if (requested.length === 0) return { reimportSourceAnnualCourseIds: [], unchangedSourceAnnualCourseIds: [] };
+  const states = (await loadYearTransitionCourseImports(deps, lookups)).filter(
+    (state) =>
+      state.sourceSchoolYearId === request.sourceSchoolYearId && state.targetSchoolYearId === request.targetSchoolYearId,
+  );
+  const reimport: string[] = [];
+  const unchanged: string[] = [];
+  for (const sourceAnnualCourseId of requested) {
+    const state = states.find((entry) => entry.sourceAnnualCourseId === sourceAnnualCourseId);
+    if (!state) throw new Error(YEAR_TRANSITION_REIMPORT_NOT_IMPORTED);
+    const plan = request.targetMeetingDayPlans?.find((entry) => entry.sourceAnnualCourseId === sourceAnnualCourseId);
+    if (plan && sameMeetingDayPlan(plan.days, state.currentPlan)) unchanged.push(sourceAnnualCourseId);
+    else reimport.push(sourceAnnualCourseId);
+  }
+  return { reimportSourceAnnualCourseIds: reimport.sort(), unchangedSourceAnnualCourseIds: unchanged.sort() };
 }
 
 export async function createAuthorizedYearTransitionPreview(
   body: unknown,
   sessionTeacherId: string,
   deps: YearTransitionPrepareDeps,
-): Promise<{ transitionId: string; preview: YearTransitionPresentedPreview; blocking: boolean }> {
+): Promise<{
+  transitionId: string;
+  preview: YearTransitionPresentedPreview;
+  blocking: boolean;
+  reimport: { courses: YearTransitionReimportCourseSummary[]; unchangedSourceAnnualCourseIds: string[] };
+}> {
   const parsed = parseYearTransitionPreviewRequest(body, sessionTeacherId);
   const target = await deps.years.getSchoolYearById(parsed.targetSchoolYearId);
   if (!target) throw new Error("Année cible introuvable.");
@@ -229,12 +355,15 @@ export async function createAuthorizedYearTransitionPreview(
     continuationBlocking = continuation.blocking;
   }
 
+  const lookupsBefore = await loadYearTransitionCatalogLookups(deps);
+  const requestedReimport = await resolveRequestedReimport(deps, lookupsBefore, parsed);
   const input = await assembleLiveYearTransitionPreviewInput(
     {
       ...parsed,
       classMappings,
       selectedSourceClassIds: parsed.selectedSourceClassIds,
       selectedSourceAnnualCourseIds: parsed.selectedSourceAnnualCourseIds,
+      reimportSourceAnnualCourseIds: requestedReimport.reimportSourceAnnualCourseIds,
     },
     deps,
   );
@@ -244,10 +373,23 @@ export async function createAuthorizedYearTransitionPreview(
     selectedSourceClassIds: parsed.selectedSourceClassIds,
     extraIssues: continuationIssues,
   });
+  let reimportCourses: YearTransitionReimportCourseSummary[] = [];
+  if (input.reimport) {
+    const applied = await loadAppliedTransitions(deps, parsed);
+    const adminPlaced = await loadAdminPlacedInheritedContent(deps, input.reimport, applied);
+    reimportCourses = summarizeYearTransitionReimport(input, persisted.preview, {
+      adminPlacedItemIds: adminPlaced.itemIds,
+      adminPlacedNoteIds: adminPlaced.noteIds,
+    });
+  }
   return {
     transitionId: persisted.id,
     preview,
     blocking: continuationBlocking || preview.blocking || previewHasBlockingEntries(persisted.preview),
+    reimport: {
+      courses: reimportCourses,
+      unchangedSourceAnnualCourseIds: requestedReimport.unchangedSourceAnnualCourseIds,
+    },
   };
 }
 

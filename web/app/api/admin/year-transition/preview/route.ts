@@ -29,6 +29,7 @@ async function handlePost(request: Request) {
       transitionId: result.transitionId,
       blocking: result.blocking,
       preview: result.preview,
+      reimport: result.reimport,
     });
   } catch (error) {
     if (error instanceof YearTransitionPreviewContractError) {

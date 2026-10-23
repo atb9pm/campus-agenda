@@ -4,6 +4,7 @@ import type { YearTransitionContentDisposition } from "./disposition.ts";
 import type { PrivateNotePreviewEntry } from "./private-notes.ts";
 import type { AnnualCourse } from "../annual-courses/types.ts";
 import type { CourseSession } from "../course-sessions/types.ts";
+import type { CourseScheduleSlot } from "../course-schedule/types.ts";
 import type { ReferencePedagogicalPath } from "../pedagogical-path/types.ts";
 import type {
   YearTransitionPreviewReason,
@@ -53,6 +54,19 @@ export interface YearTransitionPreviewInput {
    * Absent = assembleur legacy uniquement.
    */
   targetMeetingDayPlans?: readonly YearTransitionTargetMeetingDayPlan[];
+  /**
+   * Réimportation volontaire de cours déjà importés. Leur contenu hérité actuel est
+   * retiré de `targetItems` / `targetNotes` et listé ici : il sera remplacé par la
+   * reprojection depuis N. Le contenu sans provenance reste dans la cible.
+   */
+  reimport?: YearTransitionReimportScope;
+}
+
+export interface YearTransitionReimportScope {
+  courses: ReadonlyArray<{ sourceAnnualCourseId: string; targetAnnualCourseId: string }>;
+  replacedItems: readonly PrototypeAgendaItem[];
+  replacedNotes: readonly AnnualCourseNote[];
+  targetSlots: readonly CourseScheduleSlot[];
 }
 
 /** Placement proposé : uniquement des champs de la CourseSession N+1. */
