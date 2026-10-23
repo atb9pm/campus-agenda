@@ -889,7 +889,7 @@ test("état d’import : année cible activée → plus rien à préparer", asyn
 async function adminPreview(
   seeded: Awaited<ReturnType<typeof world>>,
   plans: YearTransitionTargetMeetingDayPlan[],
-  extra: { reimport?: string[]; selected?: string[] } = {},
+  extra: { reimport?: string[]; refresh?: string[]; selected?: string[] } = {},
 ) {
   return createAuthorizedYearTransitionPreview(
     {
@@ -899,6 +899,7 @@ async function adminPreview(
       selectedSourceAnnualCourseIds: extra.selected ?? plans.map((entry) => entry.sourceAnnualCourseId),
       targetMeetingDayPlans: plans,
       ...(extra.reimport ? { reimportSourceAnnualCourseIds: extra.reimport } : {}),
+      ...(extra.refresh ? { refreshSourceAnnualCourseIds: extra.refresh } : {}),
     },
     "",
     seeded.deps as YearTransitionPrepareDeps,
@@ -1251,3 +1252,109 @@ test("réimportation : l’empreinte dépend du contenu hérité remplacé", asy
   );
   assert.notEqual(await fingerprintOf(), first);
 });
+
+async function injectionImportState(seeded: Awaited<ReturnType<typeof world>>) {
+  const state = await loadYearTransitionPrepareState(seeded.deps as YearTransitionPrepareDeps, "admin-1");
+  return state.courseImports.find((entry) => entry.sourceAnnualCourseId === SOURCE_INJECTION);
+}
+
+test("contenu N modifié après préparation : signalé, plan identique sans demande → rien remplacé", async () => {
+  const seeded = await world();
+  await adminImport(seeded, [mondayAll(SOURCE_INJECTION)]);
+  assert.equal((await injectionImportState(seeded))?.sourceContentChanged, false);
+
+  const sourceItems = (await seeded.agenda.exportAllItems()).filter((entry) => entry.schoolYearId === SOURCE_YEAR);
+  const edited = sourceItems[0]!;
+  await seeded.agenda.replaceAllItems(
+    (await seeded.agenda.exportAllItems()).map((entry) =>
+      entry.id === edited.id ? { ...entry, detail: `${entry.detail} (corrigé en N)` } : entry,
+    ),
+  );
+  assert.equal((await injectionImportState(seeded))?.sourceContentChanged, true);
+
+  const created = await adminPreview(seeded, [mondayAll(SOURCE_INJECTION)], { reimport: [SOURCE_INJECTION] });
+  assert.deepEqual(created.reimport.unchangedSourceAnnualCourseIds, [SOURCE_INJECTION]);
+  assert.deepEqual(created.reimport.courses, []);
+});
+
+test("contenu N modifié : une note N modifiée est aussi signalée", async () => {
+  const seeded = await world();
+  await adminImport(seeded, [mondayAll(SOURCE_INJECTION)]);
+  const sourceNotes = await seeded.notes.listNotesByAnnualCourse(SOURCE_INJECTION);
+  await seeded.notes.replaceNotebookNotesForAnnualCourse(
+    SOURCE_INJECTION,
+    sourceNotes.map((entry, index) => (index === 0 ? { ...entry, text: `${entry.text} (corrigé)` } : entry)),
+  );
+  assert.equal((await injectionImportState(seeded))?.sourceContentChanged, true);
+});
+
+test("reprendre le contenu actuel de N, plan identique : copies remplacées, N intact, signal levé", async () => {
+  const seeded = await world();
+  const firstTransition = await adminImport(seeded, [mondayAll(SOURCE_INJECTION)]);
+  const targetCourse = await targetCourseOf(seeded);
+  const daysBefore = await seeded.schedules.listMeetingDaysByAnnualCourse(targetCourse.id);
+  const sourceItem = (await seeded.agenda.exportAllItems()).find((entry) => entry.schoolYearId === SOURCE_YEAR)!;
+  await seeded.agenda.replaceAllItems(
+    (await seeded.agenda.exportAllItems()).map((entry) =>
+      entry.id === sourceItem.id ? { ...entry, title: "Titre corrigé en N" } : entry,
+    ),
+  );
+  const sourceAfterEdit = (await seeded.agenda.exportAllItems()).filter((entry) => entry.schoolYearId === SOURCE_YEAR);
+  seeded.deps.now = () => "2027-03-02T00:00:00.000Z";
+
+  const created = await adminPreview(seeded, [mondayAll(SOURCE_INJECTION)], { refresh: [SOURCE_INJECTION] });
+  assert.equal(created.blocking, false, JSON.stringify(created.preview));
+  assert.deepEqual(created.reimport.unchangedSourceAnnualCourseIds, []);
+  const [summary] = created.reimport.courses;
+  assert.equal(summary?.sourceAnnualCourseId, SOURCE_INJECTION);
+  assert.deepEqual(summary?.replaced, { publications: 3, notes: 2 });
+  assert.deepEqual(summary?.positioned, { publications: 3, notes: 2 });
+  assert.deepEqual(summary?.lost, { publications: 0, notes: 0 });
+
+  const refused = await reimportApply(seeded, created.transitionId, false).catch((error: Error) => error);
+  assert.ok(refused instanceof Error);
+  assert.equal(refused.message, YEAR_TRANSITION_REIMPORT_CONFIRMATION_REQUIRED);
+
+  const applied = await reimportApply(seeded, created.transitionId);
+  assert.equal(applied.ok, true, JSON.stringify(applied));
+  const inherited = (await seeded.agenda.exportAllItems()).filter((entry) => entry.annualCourseId === targetCourse.id);
+  assert.equal(inherited.length, 3);
+  assert.ok(inherited.every((entry) => entry.sourceTransitionId === created.transitionId));
+  assert.ok(inherited.every((entry) => entry.sourceTransitionId !== firstTransition));
+  assert.ok(inherited.every((entry) => entry.studentVisible === false));
+  assert.equal(inherited.find((entry) => entry.sourceAgendaItemId === sourceItem.id)?.title, "Titre corrigé en N");
+  assert.deepEqual(
+    (await seeded.schedules.listMeetingDaysByAnnualCourse(targetCourse.id)).map((day) => [day.dayOfWeek, day.weekKind, day.role]),
+    daysBefore.map((day) => [day.dayOfWeek, day.weekKind, day.role]),
+  );
+  assert.deepEqual(
+    (await seeded.agenda.exportAllItems()).filter((entry) => entry.schoolYearId === SOURCE_YEAR),
+    sourceAfterEdit,
+    "N immuable",
+  );
+  const state = await injectionImportState(seeded);
+  assert.equal(state?.sourceContentChanged, false);
+  assert.equal(state?.preparations.length, 2);
+});
+
+test("reprendre le contenu : refusé pour un cours jamais importé ou en ancien flux", async () => {
+  const seeded = await world();
+  await assert.rejects(
+    adminPreview(seeded, [mondayAll(SOURCE_INJECTION)], { refresh: [SOURCE_INJECTION] }),
+    { message: YEAR_TRANSITION_REIMPORT_NOT_IMPORTED },
+  );
+  await assert.rejects(
+    createAuthorizedYearTransitionPreview(
+      {
+        sourceSchoolYearId: SOURCE_YEAR,
+        targetSchoolYearId: TARGET_YEAR,
+        selectedSourceClassIds: [SOURCE_CLASS],
+        refreshSourceAnnualCourseIds: [SOURCE_INJECTION],
+      },
+      "",
+      seeded.deps as YearTransitionPrepareDeps,
+    ),
+    { message: YEAR_TRANSITION_REIMPORT_REQUIRES_PLAN },
+  );
+});
+

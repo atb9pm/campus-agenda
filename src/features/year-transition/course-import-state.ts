@@ -1,5 +1,7 @@
+import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
 import type { AnnualCourseMeetingDayInput } from "../annual-courses/meeting-days.ts";
 import type { AnnualCourse } from "../annual-courses/types.ts";
+import type { AnnualCourseNote } from "../pedagogical-path/annual-notes.ts";
 import type { SchoolClassRecord } from "../school-catalog/types.ts";
 import { resolveClassContinuations } from "./continuation-identity.ts";
 import {
@@ -17,7 +19,19 @@ export interface AppliedTransitionSnapshot {
   selectedSourceClassIds?: string[];
   selectedSourceAnnualCourseIds?: string[];
   targetMeetingDayPlans?: YearTransitionTargetMeetingDayPlan[];
+  sourceItems?: SourceItemMaterial[];
+  sourceNotes?: SourceNoteMaterial[];
 }
+
+export type SourceItemMaterial = Pick<
+  PrototypeAgendaItem,
+  "id" | "type" | "title" | "detail" | "schoolYearId" | "annualCourseId" | "courseSessionKey" | "referenceItemId" | "referenceSessionId"
+>;
+
+export type SourceNoteMaterial = Pick<
+  AnnualCourseNote,
+  "id" | "schoolYearId" | "annualCourseId" | "text" | "body" | "courseSessionKey" | "referenceSessionId"
+>;
 
 export interface AppliedTransitionRecord {
   transitionId: string;
@@ -42,6 +56,11 @@ export interface YearTransitionCourseImportState {
   currentPlanOrigin: "target-course" | "last-preparation" | null;
   /** Faux si les jours du cours N+1 ne correspondent plus au plan de la dernière préparation. */
   matchesLastPreparation: boolean;
+  /**
+   * Vrai si les publications ou notes du cours dans N ont changé (ajout, modification,
+   * déplacement, suppression) depuis la dernière préparation. Les copies N+1 ne suivent pas N.
+   */
+  sourceContentChanged: boolean;
   preparations: YearTransitionCoursePreparation[];
 }
 
@@ -68,7 +87,57 @@ export function sameMeetingDayPlan(
   return JSON.stringify(canonicalMeetingDays(left)) === JSON.stringify(canonicalMeetingDays(right));
 }
 
-function importedSourceCourseIds(snapshot: AppliedTransitionSnapshot): string[] {
+function itemMaterial(item: SourceItemMaterial) {
+  return [
+    item.id,
+    item.type,
+    item.title,
+    item.detail,
+    item.courseSessionKey ?? null,
+    item.referenceItemId ?? null,
+    item.referenceSessionId ?? null,
+  ];
+}
+
+function noteMaterial(note: SourceNoteMaterial) {
+  return [note.id, note.text, note.body ?? null, note.courseSessionKey ?? null, note.referenceSessionId ?? null];
+}
+
+function materialToken<T extends { id: number | string }>(rows: readonly T[], material: (row: T) => unknown[]): string {
+  return JSON.stringify(
+    [...rows].sort((left, right) => String(left.id).localeCompare(String(right.id))).map(material),
+  );
+}
+
+/** Contenu N du cours comparé au snapshot de sa dernière préparation. Notes ignorées si le snapshot n’en a pas. */
+export function sourceContentChangedSincePreparation(options: {
+  snapshot: AppliedTransitionSnapshot;
+  sourceSchoolYearId: string;
+  sourceAnnualCourseId: string;
+  items: readonly SourceItemMaterial[];
+  notes: readonly SourceNoteMaterial[];
+}): boolean {
+  if (!options.snapshot.sourceItems) return false;
+  const ofCourse = <T extends { schoolYearId?: string | null; annualCourseId?: string | null }>(rows: readonly T[]) =>
+    rows.filter(
+      (row) =>
+        (row.schoolYearId ?? null) === options.sourceSchoolYearId &&
+        (row.annualCourseId ?? null) === options.sourceAnnualCourseId,
+    );
+  if (
+    materialToken(ofCourse(options.snapshot.sourceItems), itemMaterial) !==
+    materialToken(ofCourse(options.items), itemMaterial)
+  ) {
+    return true;
+  }
+  if (!options.snapshot.sourceNotes) return false;
+  return (
+    materialToken(ofCourse(options.snapshot.sourceNotes), noteMaterial) !==
+    materialToken(ofCourse(options.notes), noteMaterial)
+  );
+}
+
+export function importedSourceCourseIds(snapshot: AppliedTransitionSnapshot): string[] {
   const sourceCourses = (snapshot.sourceCourses ?? []) as AnnualCourse[];
   return continuationSourceCourses(
     snapshot.classMappings ?? [],
@@ -115,8 +184,11 @@ export function buildYearTransitionCourseImportStates(options: {
   classes: readonly SchoolClassRecord[];
   courses: readonly AnnualCourse[];
   meetingDays: ReadonlyArray<AnnualCourseMeetingDayInput & { annualCourseId: string }>;
+  /** Contenu actuel de N ; sans lui, aucun changement n’est signalé. */
+  sourceContent?: { items: readonly SourceItemMaterial[]; notes: readonly SourceNoteMaterial[] };
 }): YearTransitionCourseImportState[] {
   const preparationsBySource = new Map<string, YearTransitionCoursePreparation[]>();
+  const lastSnapshotBySource = new Map<string, AppliedTransitionSnapshot>();
   const ordered = [...options.applied].sort(
     (left, right) => left.appliedAt.localeCompare(right.appliedAt) || left.transitionId.localeCompare(right.transitionId),
   );
@@ -135,6 +207,7 @@ export function buildYearTransitionCourseImportStates(options: {
         days: plans.get(sourceCourseId) ?? null,
       });
       preparationsBySource.set(sourceCourseId, list);
+      lastSnapshotBySource.set(sourceCourseId, record.snapshot);
     }
   }
 
@@ -163,6 +236,15 @@ export function buildYearTransitionCourseImportStates(options: {
       currentPlan,
       currentPlanOrigin: targetDays.length > 0 ? "target-course" : lastDays ? "last-preparation" : null,
       matchesLastPreparation: targetDays.length === 0 || sameMeetingDayPlan(targetDays, lastDays),
+      sourceContentChanged: options.sourceContent
+        ? sourceContentChangedSincePreparation({
+            snapshot: lastSnapshotBySource.get(sourceAnnualCourseId)!,
+            sourceSchoolYearId: options.sourceSchoolYearId,
+            sourceAnnualCourseId,
+            items: options.sourceContent.items,
+            notes: options.sourceContent.notes,
+          })
+        : false,
       preparations,
     });
   }

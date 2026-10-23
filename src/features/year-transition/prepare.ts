@@ -44,9 +44,11 @@ import {
 
 import {
   buildYearTransitionCourseImportStates,
+  importedSourceCourseIds,
   sameMeetingDayPlan,
   type AppliedTransitionRecord,
   type AppliedTransitionSnapshot,
+  type SourceNoteMaterial,
   type YearTransitionCourseImportState,
 } from "./course-import-state.ts";
 
@@ -183,7 +185,7 @@ export async function loadAdminPlacedInheritedContent(
 
 /** Cours déjà importés vers une année en préparation, d’après le registre des transferts appliqués. */
 export async function loadYearTransitionCourseImports(
-  deps: Pick<YearTransitionPrepareDeps, "applyStore" | "previews" | "schedules">,
+  deps: Pick<YearTransitionPrepareDeps, "applyStore" | "previews" | "schedules" | "agenda" | "notes">,
   lookups: Pick<YearTransitionCatalogLookups, "years" | "classes" | "courses">,
 ): Promise<YearTransitionCourseImportState[]> {
   const draftYearIds = new Set(lookups.years.filter((year) => year.status === "draft").map((year) => year.id));
@@ -201,12 +203,23 @@ export async function loadYearTransitionCourseImports(
   }
   if (byPair.size === 0) return [];
   const meetingDays = await deps.schedules.listMeetingDays();
+  const items = await deps.agenda.exportAllItems();
+  const notes: SourceNoteMaterial[] = [];
+  if (deps.notes) {
+    const importedIds = new Set(
+      [...byPair.values()].flatMap((pair) => pair.applied.flatMap((record) => importedSourceCourseIds(record.snapshot))),
+    );
+    for (const sourceCourseId of [...importedIds].sort()) {
+      notes.push(...(await deps.notes.listNotesByAnnualCourse(sourceCourseId)));
+    }
+  }
   return [...byPair.values()].flatMap((pair) =>
     buildYearTransitionCourseImportStates({
       ...pair,
       classes: lookups.classes,
       courses: lookups.courses,
       meetingDays,
+      sourceContent: { items, notes },
     }),
   );
 }
@@ -239,6 +252,7 @@ export function parseYearTransitionPreviewRequest(
   targetMeetingDayPlans?: YearTransitionTargetMeetingDayPlan[];
   selectedSourceAnnualCourseIds?: string[];
   reimportSourceAnnualCourseIds?: string[];
+  refreshSourceAnnualCourseIds?: string[];
 } {
   if (!body || typeof body !== "object") throw new Error("Requête invalide.");
   const record = body as Record<string, unknown>;
@@ -276,7 +290,10 @@ export function parseYearTransitionPreviewRequest(
   const reimportSourceAnnualCourseIds = record.reimportSourceAnnualCourseIds === undefined
     ? undefined
     : parseSelectedSourceClassIds(record.reimportSourceAnnualCourseIds);
-  if (reimportSourceAnnualCourseIds?.length && !newFlow) {
+  const refreshSourceAnnualCourseIds = record.refreshSourceAnnualCourseIds === undefined
+    ? undefined
+    : parseSelectedSourceClassIds(record.refreshSourceAnnualCourseIds);
+  if ((reimportSourceAnnualCourseIds?.length || refreshSourceAnnualCourseIds?.length) && !newFlow) {
     throw new Error(YEAR_TRANSITION_REIMPORT_REQUIRES_PLAN);
   }
   return {
@@ -288,25 +305,30 @@ export function parseYearTransitionPreviewRequest(
     targetMeetingDayPlans,
     ...(selectedSourceAnnualCourseIds !== undefined ? { selectedSourceAnnualCourseIds } : {}),
     ...(reimportSourceAnnualCourseIds?.length ? { reimportSourceAnnualCourseIds } : {}),
+    ...(refreshSourceAnnualCourseIds?.length ? { refreshSourceAnnualCourseIds } : {}),
     ...notes,
   };
 }
 
 /**
  * Liste de réimportation validée côté serveur : uniquement des cours déjà importés
- * vers cette année. Un plan identique au plan actuel n’est pas une réimportation.
+ * vers cette année. Un plan identique au plan actuel n’est pas une réimportation,
+ * sauf si le cours est demandé explicitement dans `refreshSourceAnnualCourseIds`
+ * (reprendre le contenu actuel de N sans changer les jours).
  */
 export async function resolveRequestedReimport(
-  deps: Pick<YearTransitionPrepareDeps, "applyStore" | "previews" | "schedules">,
+  deps: Pick<YearTransitionPrepareDeps, "applyStore" | "previews" | "schedules" | "agenda" | "notes">,
   lookups: Pick<YearTransitionCatalogLookups, "years" | "classes" | "courses">,
   request: {
     sourceSchoolYearId: string;
     targetSchoolYearId: string;
     reimportSourceAnnualCourseIds?: readonly string[];
+    refreshSourceAnnualCourseIds?: readonly string[];
     targetMeetingDayPlans?: readonly YearTransitionTargetMeetingDayPlan[];
   },
 ): Promise<{ reimportSourceAnnualCourseIds: string[]; unchangedSourceAnnualCourseIds: string[] }> {
-  const requested = request.reimportSourceAnnualCourseIds ?? [];
+  const refresh = new Set(request.refreshSourceAnnualCourseIds ?? []);
+  const requested = [...new Set([...(request.reimportSourceAnnualCourseIds ?? []), ...refresh])];
   if (requested.length === 0) return { reimportSourceAnnualCourseIds: [], unchangedSourceAnnualCourseIds: [] };
   const states = (await loadYearTransitionCourseImports(deps, lookups)).filter(
     (state) =>
@@ -318,7 +340,9 @@ export async function resolveRequestedReimport(
     const state = states.find((entry) => entry.sourceAnnualCourseId === sourceAnnualCourseId);
     if (!state) throw new Error(YEAR_TRANSITION_REIMPORT_NOT_IMPORTED);
     const plan = request.targetMeetingDayPlans?.find((entry) => entry.sourceAnnualCourseId === sourceAnnualCourseId);
-    if (plan && sameMeetingDayPlan(plan.days, state.currentPlan)) unchanged.push(sourceAnnualCourseId);
+    if (!refresh.has(sourceAnnualCourseId) && plan && sameMeetingDayPlan(plan.days, state.currentPlan)) {
+      unchanged.push(sourceAnnualCourseId);
+    }
     else reimport.push(sourceAnnualCourseId);
   }
   return { reimportSourceAnnualCourseIds: reimport.sort(), unchangedSourceAnnualCourseIds: unchanged.sort() };
