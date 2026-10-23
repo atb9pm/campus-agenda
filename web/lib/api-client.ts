@@ -22,6 +22,7 @@ import {
 } from "@campus/features/evaluations";
 import type { AgendaItemType } from "@campus/types/agenda";
 import type { YearTransitionCourseImportState } from "@campus/features/year-transition/course-import-state.ts";
+import type { YearTransitionReimportCourseSummary } from "@campus/features/year-transition/reimport-summary.ts";
 
 export type { TeacherAccountRecord };
 
@@ -1332,7 +1333,13 @@ export async function createYearTransitionPreviewApi(input: {
   selectedSourceAnnualCourseIds: string[];
   includePrivateNotes: boolean;
   targetMeetingDayPlans: YearTransitionMeetingDayPlan[];
-}): Promise<{ transitionId: string; blocking: boolean; preview: YearTransitionPresentedPreview }> {
+  reimportSourceAnnualCourseIds?: string[];
+}): Promise<{
+  transitionId: string;
+  blocking: boolean;
+  preview: YearTransitionPresentedPreview;
+  reimport: YearTransitionReimportPreview;
+}> {
   const response = await fetch("/api/admin/year-transition/preview", {
     method: "POST",
     credentials: "include",
@@ -1345,6 +1352,7 @@ export async function createYearTransitionPreviewApi(input: {
     transitionId?: string;
     blocking?: boolean;
     preview?: YearTransitionPresentedPreview;
+    reimport?: Partial<YearTransitionReimportPreview>;
   }>(response);
   if (!response.ok || !payload.ok || !payload.transitionId || !payload.preview) {
     throw new Error(payload.reason ?? "Aperçu impossible.");
@@ -1353,10 +1361,22 @@ export async function createYearTransitionPreviewApi(input: {
     transitionId: payload.transitionId,
     blocking: Boolean(payload.blocking),
     preview: payload.preview,
+    reimport: {
+      courses: payload.reimport?.courses ?? [],
+      unchangedSourceAnnualCourseIds: payload.reimport?.unchangedSourceAnnualCourseIds ?? [],
+    },
   };
 }
 
-export async function applyYearTransitionApi(transitionId: string): Promise<{
+export type YearTransitionReimportPreview = {
+  courses: YearTransitionReimportCourseSummary[];
+  unchangedSourceAnnualCourseIds: string[];
+};
+
+export async function applyYearTransitionApi(
+  transitionId: string,
+  options: { confirmReimport?: boolean } = {},
+): Promise<{
   ok: boolean;
   code: string;
   codeLabel: string;
@@ -1373,7 +1393,7 @@ export async function applyYearTransitionApi(transitionId: string): Promise<{
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ transitionId, confirm: true }),
+    body: JSON.stringify({ transitionId, confirm: true, ...(options.confirmReimport ? { confirmReimport: true } : {}) }),
   });
   const payload = await parseJson<{
     ok?: boolean;

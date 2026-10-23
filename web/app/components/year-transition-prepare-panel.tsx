@@ -7,6 +7,7 @@ import {
   emptyMeetingDayDraft,
   meetingDayDraftFromPlanDays,
   meetingDayPlanLabel,
+  reimportSourceAnnualCourseIds,
   sameMeetingDayDraft,
   validateMeetingDayDraft,
   yearTransitionConfigSignature,
@@ -15,6 +16,7 @@ import {
   type MeetingDayDraft,
 } from "@campus/features/year-transition/meeting-day-draft.ts";
 import type { CourseWeekKind, CourseWeekday } from "@campus/features/course-schedule/types.ts";
+import { yearTransitionReimportSummaryLines } from "@campus/features/year-transition/reimport-summary.ts";
 import {
   applyYearTransitionApi,
   createYearTransitionPreviewApi,
@@ -24,6 +26,7 @@ import {
   type YearTransitionCourseOption,
   type YearTransitionPresentedPreview,
   type YearTransitionPresentedRow,
+  type YearTransitionReimportPreview,
   type YearTransitionYearOption,
 } from "../../lib/api-client.ts";
 import type { YearTransitionCourseImportState } from "@campus/features/year-transition/course-import-state.ts";
@@ -123,6 +126,58 @@ function CourseImportStatus({ state }: { state: YearTransitionCourseImportState 
   );
 }
 
+function ReimportSummaryCard({
+  preview,
+  courseLabel,
+}: {
+  preview: YearTransitionReimportPreview;
+  courseLabel: (sourceAnnualCourseId: string) => string;
+}) {
+  if (preview.courses.length === 0 && preview.unchangedSourceAnnualCourseIds.length === 0) return null;
+  return (
+    <article className="school-year-card year-transition-reimport">
+      <header>
+        <span className="eyebrow">Réimportation</span>
+        <h3>Cours déjà importés</h3>
+      </header>
+      {preview.courses.map((summary) => {
+        const lines = yearTransitionReimportSummaryLines(summary);
+        return (
+          <section key={summary.sourceAnnualCourseId} className="year-transition-reimport-course">
+            <h4>{courseLabel(summary.sourceAnnualCourseId)}</h4>
+            <p className="school-year-hint">
+              Le contenu hérité actuel de ce cours est remplacé par une nouvelle reprise depuis l’année source,
+              qui reste intacte. Les attributions, les créneaux et les autres cours ne changent pas.
+            </p>
+            <ul className="year-transition-totals">
+              {lines.counts.map((line) => (
+                <li
+                  key={line.label}
+                  className={line.tone === "lost" ? "year-transition-lost" : line.tone === "neutral" ? undefined : line.tone}
+                >
+                  {line.label} : {line.value}
+                </li>
+              ))}
+            </ul>
+            {lines.warnings.length > 0 ? (
+              <ul className="year-transition-reimport-warnings" role="note">
+                {lines.warnings.map((warning) => (
+                  <li key={warning}>⚠ {warning}</li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
+        );
+      })}
+      {preview.unchangedSourceAnnualCourseIds.map((id) => (
+        <p key={id} className="school-year-hint">
+          {courseLabel(id)} : plan identique à la préparation actuelle, rien n’est remplacé.
+        </p>
+      ))}
+    </article>
+  );
+}
+
 function parseWeekday(value: string): CourseWeekday | null {
   if (!value) return null;
   const parsed = Number(value);
@@ -153,6 +208,7 @@ export function YearTransitionPreparePanel({
   const [transitionId, setTransitionId] = useState<string | null>(null);
   const [preview, setPreview] = useState<YearTransitionPresentedPreview | null>(null);
   const [previewSignature, setPreviewSignature] = useState<string | null>(null);
+  const [reimportPreview, setReimportPreview] = useState<YearTransitionReimportPreview | null>(null);
   const [blocking, setBlocking] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [exclusionsAcknowledged, setExclusionsAcknowledged] = useState(false);
@@ -208,6 +264,23 @@ export function YearTransitionPreparePanel({
     () => continuedCourses.filter((entry) => isCourseContinued(entry.course.id)).map((entry) => entry.course.id),
     [continuedCourses, isCourseContinued],
   );
+  const reimportCourseIds = useMemo(
+    () =>
+      reimportSourceAnnualCourseIds(
+        selectedCourseIds,
+        drafts,
+        new Map([...importByCourseId].map(([courseId, state]) => [courseId, state.currentPlan])),
+      ),
+    [selectedCourseIds, drafts, importByCourseId],
+  );
+  const courseLabelById = useMemo(
+    () =>
+      new Map(
+        continuedCourses.map(({ schoolClass, course }) => [course.id, `${course.label} · ${schoolClass.code}`]),
+      ),
+    [continuedCourses],
+  );
+  const reimportCount = reimportPreview?.courses.length ?? 0;
   const configSignature = useMemo(
     () =>
       yearTransitionConfigSignature({
@@ -307,9 +380,11 @@ export function YearTransitionPreparePanel({
         selectedSourceAnnualCourseIds: selectedCourseIds,
         includePrivateNotes: true,
         targetMeetingDayPlans: planBuild.plans,
+        ...(reimportCourseIds.length > 0 ? { reimportSourceAnnualCourseIds: reimportCourseIds } : {}),
       });
       setTransitionId(created.transitionId);
       setPreview(created.preview);
+      setReimportPreview(created.reimport);
       setPreviewSignature(configSignature);
       setBlocking(created.blocking);
       setExclusionsAcknowledged(false);
@@ -329,7 +404,7 @@ export function YearTransitionPreparePanel({
     setError("");
     setConfirmOpen(false);
     try {
-      const outcome = await applyYearTransitionApi(transitionId);
+      const outcome = await applyYearTransitionApi(transitionId, { confirmReimport: reimportCount > 0 });
       setResult(outcome);
       setAppliedPreview(
         preview
@@ -659,7 +734,7 @@ export function YearTransitionPreparePanel({
                               <p className="school-year-hint">
                                 {sameMeetingDayDraft(draft, importedDraft)
                                   ? "Plan identique à la préparation actuelle."
-                                  : "Plan différent de la préparation actuelle."}
+                                  : "Plan différent de la préparation actuelle : le contenu hérité de ce cours sera remplacé après l’aperçu, si vous confirmez « Réimporter ce cours »."}
                               </p>
                             ) : null}
                             {continued ? (
@@ -817,6 +892,12 @@ export function YearTransitionPreparePanel({
               Les enseignants et les périodes seront configurés ensuite.
             </p>
           </article>
+          {reimportPreview ? (
+            <ReimportSummaryCard
+              preview={reimportPreview}
+              courseLabel={(id) => courseLabelById.get(id) ?? "Cours"}
+            />
+          ) : null}
           {totals && totals.toReclassifyCount > 0 ? (
             <article className="school-year-card">
               <header>
@@ -917,7 +998,11 @@ export function YearTransitionPreparePanel({
               disabled={applyDisabled}
               onClick={() => setConfirmOpen(true)}
             >
-              Confirmer le transfert
+              {reimportCount === 0
+                ? "Confirmer le transfert"
+                : reimportCount === 1
+                  ? "Réimporter ce cours"
+                  : `Réimporter ces ${reimportCount} cours`}
             </button>
           </div>
         </>
@@ -1024,9 +1109,15 @@ export function YearTransitionPreparePanel({
 
       <ConfirmDialog
         open={confirmOpen}
-        title="Confirmer le transfert ?"
-        body={`Cette opération créera la structure ${yearCaption(targetYear)} et transférera le contenu pédagogique sélectionné. Les enseignants et les périodes seront configurés ensuite dans les écrans existants.`}
-        confirmLabel="Confirmer le transfert"
+        title={reimportCount > 0 ? "Réimporter ce cours ?" : "Confirmer le transfert ?"}
+        body={
+          reimportCount > 0
+            ? `Le contenu hérité actuel de ${reimportPreview!.courses
+                .map((summary) => courseLabelById.get(summary.sourceAnnualCourseId) ?? "ce cours")
+                .join(", ")} sera remplacé par une nouvelle reprise depuis ${yearCaption(sourceYear)}, en une seule opération. Le contenu ajouté à la main, les attributions et les créneaux sont conservés. Rien n’est visible pour les élèves.`
+            : `Cette opération créera la structure ${yearCaption(targetYear)} et transférera le contenu pédagogique sélectionné. Les enseignants et les périodes seront configurés ensuite dans les écrans existants.`
+        }
+        confirmLabel={reimportCount > 0 ? "Réimporter ce cours" : "Confirmer le transfert"}
         cancelLabel="Annuler"
         onConfirm={() => void handleApply()}
         onCancel={() => setConfirmOpen(false)}

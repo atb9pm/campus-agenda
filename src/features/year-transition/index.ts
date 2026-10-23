@@ -111,6 +111,7 @@ export {
   meetingDayDraftFromPlanDays,
   meetingDayDraftToPlanDays,
   meetingDayPlanLabel,
+  reimportSourceAnnualCourseIds,
   sameMeetingDayDraft,
   validateMeetingDayDraft,
   yearTransitionConfigSignature,
@@ -134,7 +135,7 @@ export {
   parseYearTransitionPreviewRequest,
 } from "./prepare.ts";
 export type { YearTransitionPrepareDeps } from "./prepare.ts";
-export { summarizeYearTransitionReimport } from "./reimport-summary.ts";
+export { summarizeYearTransitionReimport, yearTransitionReimportSummaryLines } from "./reimport-summary.ts";
 export type {
   YearTransitionReimportCounts,
   YearTransitionReimportCourseSummary,
