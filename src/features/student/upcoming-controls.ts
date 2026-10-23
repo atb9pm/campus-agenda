@@ -67,6 +67,23 @@ export function nextControlsForSubject(
   return forSubject.filter((entry) => calendarDateKey(entry.slot.date) === nextDate);
 }
 
+/**
+ * Vue élève : seule la prochaine date de contrôle de chaque branche est affichée
+ * (plusieurs contrôles à cette même date restent visibles). Les contrôles suivants
+ * apparaissent d’eux-mêmes une fois cette date passée.
+ */
+export function nextControlDatePerSubject(futureTests: UpcomingTestEntry[]): UpcomingTestEntry[] {
+  const nextDateBySubject = new Map<string, string>();
+  for (const entry of futureTests) {
+    const dateKey = calendarDateKey(entry.slot.date);
+    const current = nextDateBySubject.get(entry.item.subjectId);
+    if (current === undefined || dateKey < current) nextDateBySubject.set(entry.item.subjectId, dateKey);
+  }
+  return futureTests.filter(
+    (entry) => nextDateBySubject.get(entry.item.subjectId) === calendarDateKey(entry.slot.date),
+  );
+}
+
 export function formatNextControlHeadline(
   daysUntil: number,
   dateLabel: string,
@@ -298,5 +315,7 @@ export function listStudentControlPlanning(
   fromDate: Date,
   weeks: SchoolWeek[],
 ): ControlPlanningWeek[] {
-  return groupControlPlanning(listFutureTestsForClass(items, catalog, classroomId, fromDate, weeks));
+  return groupControlPlanning(
+    nextControlDatePerSubject(listFutureTestsForClass(items, catalog, classroomId, fromDate, weeks)),
+  );
 }

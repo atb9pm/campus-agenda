@@ -21,6 +21,7 @@ import {
   formatNextControlHeadline,
   groupControlPlanning,
   msUntilNextLocalMidnight,
+  nextControlDatePerSubject,
   nextControlHeadlineForEntries,
   nextControlsForSubject,
   studentHomeworkOnlySections,
@@ -492,3 +493,47 @@ test("tableau de bord — aperçu professeur et cours précédents restent branc
   assert.doesNotMatch(page, /TYPE_LABELS/);
   assert.doesNotMatch(page, /void TYPE_LABELS/);
 });
+
+test("liste élève — une seule prochaine date de contrôle par branche, ordre chronologique", () => {
+  const entries = nextControlDatePerSubject(future(monday("2026-09-28")));
+  assert.deepEqual(
+    entries.map((entry) => [entry.item.subjectId, entry.item.title]),
+    [
+      [INJECTION_ID, "Révision"],
+      [TRANSMISSION_ID, "Contrôle 1"],
+    ],
+  );
+  assert.deepEqual(
+    groupControlPlanning(entries).flatMap((week) => week.days.flatMap((day) => day.entries.map((entry) => entry.item.id))),
+    entries.map((entry) => entry.item.id),
+  );
+});
+
+test("liste élève — le contrôle reste affiché le jour même, le suivant le remplace dès le lendemain", () => {
+  const sameDay = nextControlDatePerSubject(future(monday("2026-09-28")));
+  assert.equal(sameDay.find((entry) => entry.item.subjectId === INJECTION_ID)?.item.title, "Révision");
+  const nextDay = nextControlDatePerSubject(future(monday("2026-09-29")));
+  assert.equal(nextDay.find((entry) => entry.item.subjectId === INJECTION_ID)?.item.title, "Injection");
+  const later = nextControlDatePerSubject(future(monday("2026-10-20")));
+  assert.deepEqual(later.map((entry) => entry.item.title), ["Dépollution"], "Transmission sans date suivante : disparaît");
+});
+
+test("liste élève — plusieurs contrôles à la même prochaine date de la branche restent visibles", () => {
+  const sameDate = item({ id: 104, type: "TEST", title: "Pratique", subjectId: INJECTION_ID, schoolWeekNumber: 7, day: 0 });
+  const entries = nextControlDatePerSubject(future(monday("2026-09-28"), [sameDate]));
+  assert.deepEqual(
+    entries.filter((entry) => entry.item.subjectId === INJECTION_ID).map((entry) => entry.item.title).sort(),
+    ["Pratique", "Révision"],
+  );
+  assert.ok(!entries.some((entry) => entry.item.title === "Injection" || entry.item.title === "Dépollution"));
+});
+
+test("liste élève — page et planning appliquent la règle une date par branche", async () => {
+  const [page, logic] = await Promise.all([
+    readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/student/upcoming-controls.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(page, /return nextControlDatePerSubject\(\s*listFutureTestsForClass\(/);
+  assert.match(logic, /groupControlPlanning\(\s*nextControlDatePerSubject\(listFutureTestsForClass\(/);
+});
+

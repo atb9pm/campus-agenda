@@ -30,6 +30,7 @@ export {
   formatNextControlHeadline,
   groupControlPlanning,
   listStudentControlPlanning,
+  nextControlDatePerSubject,
   nextControlHeadlineForEntries,
   nextControlsForSubject,
   planningDayParts,
