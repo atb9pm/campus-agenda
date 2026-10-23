@@ -203,6 +203,35 @@ function materialState(input: YearTransitionPreviewInput) {
     ...(input.targetMeetingDayPlans
       ? { targetMeetingDayPlans: canonicalizeTargetMeetingDayPlans(input.targetMeetingDayPlans) }
       : {}),
+    ...(input.reimport
+      ? {
+          reimport: {
+            courses: [...input.reimport.courses]
+              .map((entry) => ({
+                sourceAnnualCourseId: entry.sourceAnnualCourseId,
+                targetAnnualCourseId: entry.targetAnnualCourseId,
+              }))
+              .sort((left, right) => compareIds(left.sourceAnnualCourseId, right.sourceAnnualCourseId)),
+            replacedItems: [...input.reimport.replacedItems]
+              .map((item) => ({
+                id: item.id,
+                annualCourseId: item.annualCourseId ?? null,
+                sourceTransitionId: item.sourceTransitionId ?? null,
+                sourceAgendaItemId: item.sourceAgendaItemId ?? null,
+                referenceItemId: item.referenceItemId ?? null,
+                referenceSessionId: item.referenceSessionId ?? null,
+                courseSessionKey: item.courseSessionKey ?? null,
+                studentVisible: item.studentVisible ?? null,
+                type: item.type,
+                title: item.title,
+                detail: item.detail,
+              }))
+              .sort((left, right) => left.id - right.id),
+            replacedNotes: [...input.reimport.replacedNotes].sort((a, b) => a.id.localeCompare(b.id)),
+            targetSlots: [...input.reimport.targetSlots].sort((a, b) => a.id.localeCompare(b.id)),
+          },
+        }
+      : {}),
   };
 }
 

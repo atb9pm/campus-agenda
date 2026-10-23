@@ -549,6 +549,19 @@ async function sourceMaterialStillMatchesPreview(
  * APPLY d’un PREVIEW persisté. Aucune mutation de N.
  * Le caller ne fournit que transitionId — destination et contenu viennent du PREVIEW + stores live.
  */
+export const YEAR_TRANSITION_REIMPORT_APPLY_PENDING =
+  "Cet aperçu réimporte un cours déjà importé : sa confirmation arrive avec l’étape « Réimporter ce cours ». Aucune donnée n’a été modifiée.";
+
+/** Refus avant toute écriture : la matérialisation persisterait sinon le nouveau plan de jours. */
+function snapshotRequestsReimport(snapshotJson: string): boolean {
+  try {
+    const parsed = JSON.parse(snapshotJson) as { reimport?: { courses?: unknown[] } };
+    return Array.isArray(parsed.reimport?.courses) && parsed.reimport.courses.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function applyPersistedYearTransition(
   transitionId: string,
   deps: ApplyPersistedYearTransitionDeps,
@@ -565,6 +578,10 @@ export async function applyPersistedYearTransition(
   const existingApply = await deps.applyStore.getByTransitionId(transitionId);
   if (existingApply) {
     return verifyExistingApply(deps, existingApply, persisted);
+  }
+
+  if (snapshotRequestsReimport(persisted.snapshotJson)) {
+    return fail("APPLY_BLOCKED", { reason: YEAR_TRANSITION_REIMPORT_APPLY_PENDING });
   }
 
   if (persisted.sourceSchoolYearId === persisted.targetSchoolYearId) {

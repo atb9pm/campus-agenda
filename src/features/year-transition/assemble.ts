@@ -76,6 +76,8 @@ export async function assembleLiveYearTransitionPreviewInput(
      * Absent = repli legacy (tests / APPLY déjà persistés sans plan).
      */
     targetMeetingDayPlans?: readonly YearTransitionTargetMeetingDayPlan[];
+    /** Cours source déjà importés dont le contenu hérité N+1 est remplacé (nouveau flux uniquement). */
+    reimportSourceAnnualCourseIds?: readonly string[];
   },
   deps: AssembleLiveYearTransitionPreviewInputDeps,
 ): Promise<YearTransitionPreviewInput> {
@@ -106,7 +108,7 @@ export async function assembleLiveYearTransitionPreviewInput(
     if (selectedClassIds.size === 0) return true;
     return Boolean(course && selectedClassIds.has(course.classId));
   });
-  const targetItems = items.filter((item) => (item.schoolYearId ?? null) === options.targetSchoolYearId);
+  const allTargetItems = items.filter((item) => (item.schoolYearId ?? null) === options.targetSchoolYearId);
 
   const contextIds = new Set<string>();
   for (const course of [...sourceCourses, ...targetCourses]) {
@@ -182,6 +184,27 @@ export async function assembleLiveYearTransitionPreviewInput(
       })
     : [];
 
+  const reimportCourses = resolveReimportCourses({
+    reimportSourceAnnualCourseIds: options.reimportSourceAnnualCourseIds,
+    explicitPlans,
+    continuedSourceCourseIds: explicitPlans
+      ? continuationSourceCourses(
+          options.classMappings,
+          sourceCourses,
+          options.selectedSourceClassIds,
+          options.selectedSourceAnnualCourseIds,
+        ).map((course) => course.id)
+      : [],
+    sourceToTargetCourseId: projected.sourceToTargetCourseId,
+  });
+  const reimportTargetIds = new Set(reimportCourses.map((entry) => entry.targetAnnualCourseId));
+  const isReplacedItem = (item: (typeof allTargetItems)[number]) =>
+    reimportTargetIds.has(item.annualCourseId?.trim() ?? "") && Boolean(item.sourceTransitionId?.trim());
+  const isReplacedNote = (note: AnnualCourseNote) =>
+    reimportTargetIds.has(note.annualCourseId?.trim() ?? "") &&
+    Boolean(note.sourceNoteId?.trim() || note.inheritedAt?.trim());
+  const targetItems = allTargetItems.filter((item) => !isReplacedItem(item));
+
   const sourceCoursesForNotes = selectedCourseIds
     ? sourceCourses.filter((course) => selectedCourseIds.has(course.id))
     : sourceCourses;
@@ -207,6 +230,7 @@ export async function assembleLiveYearTransitionPreviewInput(
       if (selectedClassIds.size === 0) return true;
       return selectedClassIds.has(note.classId);
     });
+  const allTargetNotes = scopedNotes(privateNotes).filter((n) => n.schoolYearId === options.targetSchoolYearId);
 
   return {
     ...(includePrivateNotes ? {
@@ -215,8 +239,20 @@ export async function assembleLiveYearTransitionPreviewInput(
         ? {}
         : { privateNotesOwnerTeacherId: options.privateNotesOwnerTeacherId!.trim() }),
       sourceNotes: scopedNotes(privateNotes).filter(n => n.schoolYearId === options.sourceSchoolYearId),
-      targetNotes: scopedNotes(privateNotes).filter(n => n.schoolYearId === options.targetSchoolYearId),
+      targetNotes: allTargetNotes.filter((note) => !isReplacedNote(note)),
     } : {}),
+    ...(reimportCourses.length > 0
+      ? {
+          reimport: {
+            courses: reimportCourses,
+            replacedItems: allTargetItems.filter(isReplacedItem).map((item) => ({ ...item })),
+            replacedNotes: allTargetNotes.filter(isReplacedNote).map((note) => ({ ...note })),
+            targetSlots: allSlots
+              .filter((slot) => reimportTargetIds.has(slot.annualCourseId))
+              .map((slot) => ({ ...slot })),
+          },
+        }
+      : {}),
     sourceSchoolYearId: options.sourceSchoolYearId,
     targetSchoolYearId: options.targetSchoolYearId,
     classMappings: options.classMappings.map((mapping) => ({ ...mapping })),
@@ -237,6 +273,33 @@ export async function assembleLiveYearTransitionPreviewInput(
     targetCourseSessions,
     ...(explicitPlans ? { targetMeetingDayPlans: explicitPlans } : {}),
   };
+}
+
+export const YEAR_TRANSITION_REIMPORT_REQUIRES_PLAN =
+  "La réimportation d’un cours exige un plan de jours N+1 explicite.";
+export const YEAR_TRANSITION_REIMPORT_NOT_SELECTED =
+  "Un cours à réimporter doit faire partie des cours repris.";
+export const YEAR_TRANSITION_REIMPORT_NOT_IMPORTED =
+  "Ce cours n’a pas encore été importé : il se reprend normalement, sans réimportation.";
+
+function resolveReimportCourses(options: {
+  reimportSourceAnnualCourseIds?: readonly string[];
+  explicitPlans: readonly CanonicalTargetMeetingDayPlan[] | undefined;
+  continuedSourceCourseIds: readonly string[];
+  sourceToTargetCourseId: ReadonlyMap<string, string>;
+}): Array<{ sourceAnnualCourseId: string; targetAnnualCourseId: string }> {
+  const ids = [...new Set((options.reimportSourceAnnualCourseIds ?? []).map((id) => id.trim()).filter(Boolean))].sort();
+  if (ids.length === 0) return [];
+  if (!options.explicitPlans) throw new Error(YEAR_TRANSITION_REIMPORT_REQUIRES_PLAN);
+  const continued = new Set(options.continuedSourceCourseIds);
+  return ids.map((sourceAnnualCourseId) => {
+    if (!continued.has(sourceAnnualCourseId)) throw new Error(YEAR_TRANSITION_REIMPORT_NOT_SELECTED);
+    const targetAnnualCourseId = options.sourceToTargetCourseId.get(sourceAnnualCourseId) ?? "";
+    if (!targetAnnualCourseId || isPendingTargetCourseId(targetAnnualCourseId)) {
+      throw new Error(YEAR_TRANSITION_REIMPORT_NOT_IMPORTED);
+    }
+    return { sourceAnnualCourseId, targetAnnualCourseId };
+  });
 }
 
 function meetingDaysForProjectedCourses(
