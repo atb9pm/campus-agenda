@@ -102,6 +102,14 @@ export class SqlYearTransitionApplyStore implements YearTransitionApplyStore {
     return row ? mapApply(row) : null;
   }
 
+  async listApplies(): Promise<PersistedYearTransitionApply[]> {
+    const { results } = await this.db
+      .prepare("SELECT * FROM year_transition_applies ORDER BY applied_at, transition_id")
+      .bind()
+      .all<ApplyRow>();
+    return (results ?? []).map(mapApply);
+  }
+
   async listEntries(transitionId: string): Promise<PersistedYearTransitionApplyEntry[]> {
     const { results } = await this.db
       .prepare(

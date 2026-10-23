@@ -5,6 +5,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   buildTargetMeetingDayPlans,
   emptyMeetingDayDraft,
+  meetingDayDraftFromPlanDays,
+  meetingDayPlanLabel,
+  sameMeetingDayDraft,
   validateMeetingDayDraft,
   yearTransitionConfigSignature,
   YEAR_TRANSITION_WEEK_KIND_OPTIONS,
@@ -23,6 +26,7 @@ import {
   type YearTransitionPresentedRow,
   type YearTransitionYearOption,
 } from "../../lib/api-client.ts";
+import type { YearTransitionCourseImportState } from "@campus/features/year-transition/course-import-state.ts";
 import { ConfirmDialog } from "./confirm-dialog.tsx";
 import { YearTransitionReclassifyPanel } from "./year-transition-reclassify-panel.tsx";
 
@@ -94,6 +98,31 @@ function PreviewRows({ rows }: { rows: YearTransitionPresentedRow[] }) {
   );
 }
 
+function preparationDateLabel(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString("fr-CH", { timeZone: "Europe/Zurich", day: "numeric", month: "long", year: "numeric" });
+}
+
+function CourseImportStatus({ state }: { state: YearTransitionCourseImportState | null }) {
+  if (!state) {
+    return <p className="year-transition-import-status">Non importé</p>;
+  }
+  const first = state.preparations[0];
+  const last = state.preparations[state.preparations.length - 1];
+  return (
+    <div className="year-transition-import-status year-transition-import-status--imported" role="note">
+      <strong>Déjà importé</strong>
+      <span>Plan actuel : {meetingDayPlanLabel(state.currentPlan)}</span>
+      {first ? <span>Première préparation : {preparationDateLabel(first.appliedAt)}</span> : null}
+      {last && last !== first ? <span>Dernière préparation : {preparationDateLabel(last.appliedAt)}</span> : null}
+      {!state.matchesLastPreparation ? (
+        <em>Les jours enregistrés sur le cours N+1 diffèrent du plan de la dernière préparation.</em>
+      ) : null}
+    </div>
+  );
+}
+
 function parseWeekday(value: string): CourseWeekday | null {
   if (!value) return null;
   const parsed = Number(value);
@@ -118,6 +147,8 @@ export function YearTransitionPreparePanel({
   const [targetYearId, setTargetYearId] = useState("");
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [omittedCourseIds, setOmittedCourseIds] = useState<string[]>([]);
+  const [courseImports, setCourseImports] = useState<YearTransitionCourseImportState[]>([]);
+  const [includedImportedCourseIds, setIncludedImportedCourseIds] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Record<string, MeetingDayDraft>>({});
   const [transitionId, setTransitionId] = useState<string | null>(null);
   const [preview, setPreview] = useState<YearTransitionPresentedPreview | null>(null);
@@ -157,12 +188,25 @@ export function YearTransitionPreparePanel({
       ),
     [selectedClasses, coursesByClassId],
   );
+  const importByCourseId = useMemo(() => {
+    const map = new Map<string, YearTransitionCourseImportState>();
+    for (const state of courseImports) {
+      if (state.sourceSchoolYearId === sourceYearId && state.targetSchoolYearId === targetYearId) {
+        map.set(state.sourceAnnualCourseId, state);
+      }
+    }
+    return map;
+  }, [courseImports, sourceYearId, targetYearId]);
+  const isCourseContinued = useCallback(
+    (courseId: string) =>
+      importByCourseId.has(courseId)
+        ? includedImportedCourseIds.includes(courseId)
+        : !omittedCourseIds.includes(courseId),
+    [importByCourseId, includedImportedCourseIds, omittedCourseIds],
+  );
   const selectedCourseIds = useMemo(
-    () =>
-      continuedCourses
-        .filter((entry) => !omittedCourseIds.includes(entry.course.id))
-        .map((entry) => entry.course.id),
-    [continuedCourses, omittedCourseIds],
+    () => continuedCourses.filter((entry) => isCourseContinued(entry.course.id)).map((entry) => entry.course.id),
+    [continuedCourses, isCourseContinued],
   );
   const configSignature = useMemo(
     () =>
@@ -191,6 +235,7 @@ export function YearTransitionPreparePanel({
       setYears(payload.years);
       setClassesByYearId(payload.classesByYearId);
       setCoursesByClassId(payload.coursesByClassId);
+      setCourseImports(payload.courseImports);
       const active = payload.years.find((year) => year.status === "active");
       const draft = payload.years.find((year) => year.status === "draft");
       setSourceYearId((current) => current || active?.id || "");
@@ -298,6 +343,14 @@ export function YearTransitionPreparePanel({
       const remaining =
         (outcome.toReclassifyCount ?? 0) + (outcome.notes?.toReclassifyCount ?? 0);
       setLiveReclassifyCount(remaining);
+      if (outcome.ok) {
+        void fetchYearTransitionPrepare()
+          .then((payload) => {
+            setCourseImports(payload.courseImports);
+            setIncludedImportedCourseIds([]);
+          })
+          .catch(() => undefined);
+      }
       onNotice(outcome.codeLabel);
       if (!outcome.ok) setError(outcome.reason ?? outcome.codeLabel);
     } catch (applyError) {
@@ -567,6 +620,8 @@ export function YearTransitionPreparePanel({
                         const continued = selectedCourseIds.includes(course.id);
                         const draft = courseDraft(course.id);
                         const invalid = continued ? validateMeetingDayDraft(draft) : { ok: true as const };
+                        const imported = importByCourseId.get(course.id) ?? null;
+                        const importedDraft = imported ? meetingDayDraftFromPlanDays(imported.currentPlan) : null;
                         return (
                           <article key={course.id} className="year-transition-course-card">
                             <label className="year-transition-notes-option" htmlFor={`year-transition-course-${course.id}`}>
@@ -574,21 +629,39 @@ export function YearTransitionPreparePanel({
                                 id={`year-transition-course-${course.id}`}
                                 type="checkbox"
                                 checked={continued}
-                                aria-label={`${course.label} : reprendre`}
+                                aria-label={`${course.label} : ${imported ? "réimporter" : "reprendre"}`}
                                 onChange={(event) => {
                                   const enabled = event.target.checked;
-                                  setOmittedCourseIds((current) =>
-                                    enabled
-                                      ? current.filter((id) => id !== course.id)
-                                      : current.includes(course.id)
-                                        ? current
-                                        : [...current, course.id],
-                                  );
+                                  const toggle = (current: string[], include: boolean) =>
+                                    include
+                                      ? current.includes(course.id) ? current : [...current, course.id]
+                                      : current.filter((id) => id !== course.id);
+                                  if (imported) {
+                                    setIncludedImportedCourseIds((current) => toggle(current, enabled));
+                                    if (enabled && !drafts[course.id] && importedDraft) {
+                                      setDrafts((current) => ({ ...current, [course.id]: importedDraft }));
+                                    }
+                                  } else {
+                                    setOmittedCourseIds((current) => toggle(current, !enabled));
+                                  }
                                   setTransitionId(null);
                                 }}
                               />
                               <strong>{course.label}</strong>
                             </label>
+                            <CourseImportStatus state={imported} />
+                            {imported && !continued ? (
+                              <p className="school-year-hint">
+                                Plan actuel conservé : rien ne sera modifié pour ce cours.
+                              </p>
+                            ) : null}
+                            {imported && continued && importedDraft ? (
+                              <p className="school-year-hint">
+                                {sameMeetingDayDraft(draft, importedDraft)
+                                  ? "Plan identique à la préparation actuelle."
+                                  : "Plan différent de la préparation actuelle."}
+                              </p>
+                            ) : null}
                             {continued ? (
                               <>
                                 <div className="year-transition-day-fields">
@@ -673,7 +746,7 @@ export function YearTransitionPreparePanel({
                                   <p className="year-transition-course-error">{invalid.reason}</p>
                                 ) : null}
                               </>
-                            ) : (
+                            ) : imported ? null : (
                               <p className="school-year-hint">Ce cours ne sera pas repris.</p>
                             )}
                           </article>

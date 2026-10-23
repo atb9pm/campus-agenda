@@ -127,6 +127,43 @@ export function buildTargetMeetingDayPlans(
   return { ok: true, plans };
 }
 
+export function meetingDayDraftFromPlanDays(
+  days: ReadonlyArray<MeetingDayPlanPayload["days"][number]> | null | undefined,
+): MeetingDayDraft {
+  const draft = emptyMeetingDayDraft();
+  const primary = days?.find((day) => day.role === "PRIMARY");
+  const additional = days?.find((day) => day.role === "ADDITIONAL");
+  if (primary) {
+    draft.primaryDay = primary.dayOfWeek;
+    draft.primaryWeekKind = primary.weekKind;
+  }
+  if (additional) {
+    draft.additionalDay = additional.dayOfWeek;
+    draft.additionalWeekKind = additional.weekKind;
+  }
+  return draft;
+}
+
+export function sameMeetingDayDraft(left: MeetingDayDraft, right: MeetingDayDraft): boolean {
+  const normalize = (draft: MeetingDayDraft) =>
+    draft.additionalDay == null ? { ...draft, additionalWeekKind: "all" as const } : draft;
+  return meetingDayDraftSignature(normalize(left)) === meetingDayDraftSignature(normalize(right));
+}
+
+/** « Lundi, chaque semaine · Jeudi, semaine A » */
+export function meetingDayPlanLabel(
+  days: ReadonlyArray<MeetingDayPlanPayload["days"][number]> | null | undefined,
+): string {
+  const draft = meetingDayDraftFromPlanDays(days);
+  if (draft.primaryDay == null) return "Plan de jours non renseigné";
+  const rhythm = (kind: CourseWeekKind) => (kind === "all" ? "chaque semaine" : `semaine ${kind}`);
+  const parts = [`${COURSE_WEEKDAY_LABELS[draft.primaryDay]}, ${rhythm(draft.primaryWeekKind)}`];
+  if (draft.additionalDay != null) {
+    parts.push(`${COURSE_WEEKDAY_LABELS[draft.additionalDay]}, ${rhythm(draft.additionalWeekKind)}`);
+  }
+  return parts.join(" · ");
+}
+
 export function yearTransitionConfigSignature(input: {
   sourceSchoolYearId: string;
   targetSchoolYearId: string;

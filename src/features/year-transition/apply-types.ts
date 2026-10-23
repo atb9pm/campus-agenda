@@ -133,6 +133,8 @@ export interface YearTransitionApplyPlan {
 
 export interface YearTransitionApplyStore {
   getByTransitionId(transitionId: string): Promise<PersistedYearTransitionApply | null>;
+  /** Registre complet, du plus ancien au plus récent. */
+  listApplies(): Promise<PersistedYearTransitionApply[]>;
   listEntries(transitionId: string): Promise<PersistedYearTransitionApplyEntry[]>;
   applyAtomically(plan: YearTransitionApplyPlan): Promise<void>;
 }

@@ -1281,6 +1281,10 @@ test("SQLite PROJECTABLE + rollback + Memory/SQLite parité", async () => {
     .first<{ author_teacher_id: string | null; student_visible: number; source_transition_id: string }>();
   assert.equal(author?.student_visible, 0);
   assert.equal(author?.source_transition_id, "transition-sql");
+  assert.deepEqual(
+    (await applyStore.listApplies()).map((entry) => [entry.transitionId, entry.appliedAt]),
+    [["transition-sql", "2027-03-01T00:00:00.000Z"]],
+  );
 
   const wrapped: SqlDatabase = {
     prepare: (query) => db.prepare(query),

@@ -108,7 +108,10 @@ export type {
 export {
   buildTargetMeetingDayPlans,
   emptyMeetingDayDraft,
+  meetingDayDraftFromPlanDays,
   meetingDayDraftToPlanDays,
+  meetingDayPlanLabel,
+  sameMeetingDayDraft,
   validateMeetingDayDraft,
   yearTransitionConfigSignature,
   YEAR_TRANSITION_ADDITIONAL_SAME_DAY,
@@ -122,11 +125,23 @@ export type { MeetingDayDraft, MeetingDayPlanPayload } from "./meeting-day-draft
 export {
   applyAuthorizedYearTransition,
   createAuthorizedYearTransitionPreview,
+  loadYearTransitionCourseImports,
   loadYearTransitionPrepareState,
   parseSelectedSourceClassIds,
   parseYearTransitionPreviewRequest,
 } from "./prepare.ts";
 export type { YearTransitionPrepareDeps } from "./prepare.ts";
+export {
+  buildYearTransitionCourseImportStates,
+  canonicalMeetingDays,
+  sameMeetingDayPlan,
+} from "./course-import-state.ts";
+export type {
+  AppliedTransitionRecord,
+  AppliedTransitionSnapshot,
+  YearTransitionCourseImportState,
+  YearTransitionCoursePreparation,
+} from "./course-import-state.ts";
 export {
   classContinuationIdentity,
   isPendingTargetClassId,

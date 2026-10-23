@@ -38,6 +38,12 @@ export class MemoryYearTransitionApplyStore implements YearTransitionApplyStore 
     return row ? cloneApply(row) : null;
   }
 
+  async listApplies(): Promise<PersistedYearTransitionApply[]> {
+    return [...this.applies.values()]
+      .sort((left, right) => left.appliedAt.localeCompare(right.appliedAt) || left.transitionId.localeCompare(right.transitionId))
+      .map(cloneApply);
+  }
+
   async listEntries(transitionId: string): Promise<PersistedYearTransitionApplyEntry[]> {
     return (this.entries.get(transitionId) ?? []).map(cloneEntry);
   }
