@@ -393,6 +393,9 @@ export async function createAuthorizedYearTransitionPreview(
   };
 }
 
+export const YEAR_TRANSITION_REIMPORT_CONFIRMATION_REQUIRED =
+  "Cet aperçu remplace le contenu hérité d’un cours déjà importé : confirmez avec « Réimporter ce cours ».";
+
 export async function applyAuthorizedYearTransition(
   body: unknown,
   sessionTeacherId: string,
@@ -414,18 +417,24 @@ export async function applyAuthorizedYearTransition(
   }
 
   let snapshotOwner: string | undefined;
+  let reimportRequested = false;
   try {
     const snapshot = JSON.parse(persisted.snapshotJson) as {
       includePrivateNotes?: boolean;
       privateNotesOwnerTeacherId?: string;
       targetMeetingDayPlans?: YearTransitionTargetMeetingDayPlan[];
+      reimport?: { courses?: unknown[] };
     };
     const legacyOwnerBound =
       snapshot.includePrivateNotes === true
       && !usesExplicitTargetMeetingDayPlans(snapshot.targetMeetingDayPlans);
     snapshotOwner = legacyOwnerBound ? snapshot.privateNotesOwnerTeacherId : undefined;
+    reimportRequested = Array.isArray(snapshot.reimport?.courses) && snapshot.reimport.courses.length > 0;
   } catch {
     snapshotOwner = undefined;
+  }
+  if (reimportRequested && record.confirmReimport !== true) {
+    throw new Error(YEAR_TRANSITION_REIMPORT_CONFIRMATION_REQUIRED);
   }
   if (snapshotOwner && snapshotOwner !== sessionTeacherId) {
     throw new Error("Cet aperçu inclut des notes privées d’un autre enseignant.");
