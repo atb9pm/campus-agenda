@@ -29,13 +29,18 @@ import { yearTransitionConfigSignature } from "../src/features/year-transition/m
 import {
   YEAR_TRANSITION_RECLASSIFY_COMPLETE,
   YEAR_TRANSITION_RECLASSIFY_FORBIDDEN,
+  applyAuthorizedYearTransition,
   applyPersistedYearTransition,
   applyYearTransitionReclassify,
   assembleLiveYearTransitionPreviewInput,
+  createAuthorizedYearTransitionPreview,
   createPersistedYearTransitionPreview,
   listYearTransitionReclassifyQueue,
+  loadYearTransitionPrepareState,
+  YEAR_TRANSITION_REIMPORT_CONFIRMATION_REQUIRED,
   pendingTargetClassId,
   type ApplyPersistedYearTransitionDeps,
+  type YearTransitionPrepareDeps,
   type YearTransitionReclassifyDeps,
   type YearTransitionTargetMeetingDayPlan,
 } from "../src/features/year-transition/index.ts";
@@ -261,7 +266,7 @@ async function openCampus(backend: "memory" | "sqlite"): Promise<Omit<Campus, "c
     const years = new MemorySchoolYearStore();
     const adapters = new MemoryRuntimeAgendaAdapterStore();
     const previews = new MemoryYearTransitionPreviewStore();
-    const applyStore = new MemoryYearTransitionApplyStore(agenda, notes);
+    const applyStore = new MemoryYearTransitionApplyStore(agenda, notes, schedules);
     const teacherNotes = new MemoryTeacherNotesStore();
     const deps: ApplyPersistedYearTransitionDeps = {
       notes,
@@ -1335,3 +1340,102 @@ test("sécurité admin et bouton Reclasser masqué quand le compteur est à 0", 
   assert.doesNotMatch(notebook, /YearTransitionReclassifyPanel/);
   assert.doesNotMatch(notebook, /À reclasser/);
 });
+
+for (const backend of ["memory", "sqlite"] as const) {
+  test(`E2E ${backend} — réimporter CP1 lundi → mercredi A, autres cours et N intacts`, async () => {
+    const campus = await seedMecauto(backend);
+    try {
+      const deps = campus.deps as YearTransitionPrepareDeps;
+      const selected = [campus.courseId.cp1, campus.courseId.cp3, campus.courseId.injection];
+      const body = (plans: YearTransitionTargetMeetingDayPlan[], extra: Record<string, unknown> = {}) => ({
+        sourceSchoolYearId: SOURCE_YEAR,
+        targetSchoolYearId: TARGET_YEAR,
+        selectedSourceClassIds: [campus.classId],
+        selectedSourceAnnualCourseIds: plans.map((plan) => plan.sourceAnnualCourseId),
+        targetMeetingDayPlans: plans,
+        ...extra,
+      });
+      const first = await createAuthorizedYearTransitionPreview(body(plansFor(campus)), "admin-e2e", deps);
+      assert.equal(first.blocking, false);
+      assert.equal(selected.length, plansFor(campus).length);
+      const firstApplied = await applyAuthorizedYearTransition({ transitionId: first.transitionId, confirm: true }, "admin-e2e", deps);
+      assert.equal(firstApplied.ok, true, JSON.stringify(firstApplied));
+
+      const before = await snapshotSource(campus);
+      const cp1 = await targetCourse(campus, "cp1");
+      const cp3 = await targetCourse(campus, "cp3");
+      const injection = await targetCourse(campus, "injection");
+      const targetState = async (courseId: string) => ({
+        items: (await campus.agenda.exportAllItems()).filter((entry) => entry.annualCourseId === courseId).sort((a, b) => a.id - b.id),
+        notes: (await campus.notes.listNotesByAnnualCourse(courseId)).sort((a, b) => a.id.localeCompare(b.id)),
+        days: await campus.schedules.listMeetingDaysByAnnualCourse(courseId),
+      });
+      const othersBefore = [await targetState(cp3.id), await targetState(injection.id)];
+      const cp1Before = await targetState(cp1.id);
+      assert.equal(cp1Before.items.length, 3);
+      assert.equal(cp1Before.notes.length, 2);
+      await campus.courses.createAssignment(assignment("asg-cp1-n1", cp1.id, TEACHER_NEW));
+      await campus.schedules.createSlot(slot("slot-cp1-n1", cp1.id, 1, 1, 2));
+
+      campus.deps.now = () => "2027-06-02T00:00:00.000Z";
+      const cp1Wednesday: YearTransitionTargetMeetingDayPlan = {
+        sourceAnnualCourseId: campus.courseId.cp1,
+        days: [{ dayOfWeek: 3, weekKind: "A", role: "PRIMARY" }],
+      };
+      const cp3Same = plansFor(campus).find((plan) => plan.sourceAnnualCourseId === campus.courseId.cp3)!;
+      const preview = await createAuthorizedYearTransitionPreview(
+        body([cp1Wednesday, cp3Same], {
+          reimportSourceAnnualCourseIds: [campus.courseId.cp1, campus.courseId.cp3],
+        }),
+        "admin-e2e",
+        deps,
+      );
+      assert.equal(preview.blocking, false, JSON.stringify(preview.preview.mappingIssues));
+      assert.deepEqual(preview.reimport.unchangedSourceAnnualCourseIds, [campus.courseId.cp3]);
+      assert.equal(preview.reimport.courses.length, 1);
+      const [summary] = preview.reimport.courses;
+      assert.deepEqual(summary!.replaced, { publications: 3, notes: 2 });
+      assert.deepEqual(summary!.positioned, { publications: 3, notes: 2 });
+      assert.deepEqual(summary!.unusedSlots.map((entry) => entry.slotId), ["slot-cp1-n1"]);
+
+      await assert.rejects(
+        applyAuthorizedYearTransition({ transitionId: preview.transitionId, confirm: true }, "admin-e2e", deps),
+        { message: YEAR_TRANSITION_REIMPORT_CONFIRMATION_REQUIRED },
+      );
+      assert.deepEqual(await targetState(cp1.id), cp1Before);
+
+      const applied = await applyAuthorizedYearTransition(
+        { transitionId: preview.transitionId, confirm: true, confirmReimport: true },
+        "admin-e2e",
+        deps,
+      );
+      assert.equal(applied.ok, true, JSON.stringify(applied));
+
+      const cp1After = await targetState(cp1.id);
+      assert.equal(cp1After.items.length, 3);
+      assert.ok(cp1After.items.every((entry) => entry.sourceTransitionId === preview.transitionId));
+      assert.ok(cp1After.items.every((entry) => entry.courseSessionDate && isoWeekday(entry.courseSessionDate) === 3));
+      assert.ok(cp1After.items.every((entry) => entry.studentVisible === false));
+      assert.equal(cp1After.notes.length, 2);
+      assert.ok(cp1After.notes.every((entry) => !cp1Before.notes.some((old) => old.id === entry.id)));
+      assert.ok(cp1After.notes.every((entry) => isoWeekday(entry.courseSessionKey!.split("|")[2]!) === 3));
+      assert.deepEqual(cp1After.days.map((day) => `${day.dayOfWeek}|${day.weekKind}|${day.role}`), ["3|A|PRIMARY"]);
+      assert.deepEqual([await targetState(cp3.id), await targetState(injection.id)], othersBefore, "CP3 et Injection intacts");
+      assert.ok((await campus.schedules.listSlots()).some((entry) => entry.id === "slot-cp1-n1"));
+      assert.ok((await campus.courses.listAssignments(cp1.id)).some((entry) => entry.id === "asg-cp1-n1" && !entry.endedAt));
+      assert.deepEqual(await snapshotSource(campus), before, "N intact");
+
+      const state = await loadYearTransitionPrepareState(deps, "admin-e2e");
+      const cp1State = state.courseImports.find((entry) => entry.sourceAnnualCourseId === campus.courseId.cp1);
+      assert.deepEqual(cp1State?.preparations.map((entry) => entry.transitionId), [first.transitionId, preview.transitionId]);
+      assert.deepEqual(cp1State?.currentPlan, [{ dayOfWeek: 3, weekKind: "A", role: "PRIMARY" }]);
+
+      for (const transitionId of [first.transitionId, preview.transitionId]) {
+        const retry = await applyPersistedYearTransition(transitionId, campus.deps);
+        assert.ok(retry.ok && retry.code === "ALREADY_APPLIED", JSON.stringify(retry));
+      }
+    } finally {
+      campus.close();
+    }
+  });
+}
