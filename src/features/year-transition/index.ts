@@ -125,12 +125,26 @@ export type { MeetingDayDraft, MeetingDayPlanPayload } from "./meeting-day-draft
 export {
   applyAuthorizedYearTransition,
   createAuthorizedYearTransitionPreview,
+  loadAdminPlacedInheritedContent,
   loadYearTransitionCourseImports,
   loadYearTransitionPrepareState,
+  resolveRequestedReimport,
   parseSelectedSourceClassIds,
   parseYearTransitionPreviewRequest,
 } from "./prepare.ts";
 export type { YearTransitionPrepareDeps } from "./prepare.ts";
+export { summarizeYearTransitionReimport } from "./reimport-summary.ts";
+export type {
+  YearTransitionReimportCounts,
+  YearTransitionReimportCourseSummary,
+  YearTransitionReimportUnusedSlot,
+} from "./reimport-summary.ts";
+export {
+  YEAR_TRANSITION_REIMPORT_NOT_IMPORTED,
+  YEAR_TRANSITION_REIMPORT_NOT_SELECTED,
+  YEAR_TRANSITION_REIMPORT_REQUIRES_PLAN,
+} from "./assemble.ts";
+export { YEAR_TRANSITION_REIMPORT_APPLY_PENDING } from "./apply.ts";
 export {
   buildYearTransitionCourseImportStates,
   canonicalMeetingDays,
