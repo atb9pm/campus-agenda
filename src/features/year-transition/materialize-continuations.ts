@@ -11,6 +11,7 @@ import {
   ensureRuntimeSubjectForAnnualCourse,
 } from "../agenda-bridge/reconcile.ts";
 import { buildClassCode, buildClassLabel } from "../school-catalog/class-codes.ts";
+import { sameMeetingDayPlan } from "./course-import-state.ts";
 import {
   classContinuationIdentity,
   resolveClassContinuations,
@@ -78,6 +79,8 @@ export async function persistTargetMeetingDayPlans(
     targetSchoolYearId: string;
     selectedSourceClassIds?: readonly string[];
     selectedSourceAnnualCourseIds?: readonly string[];
+    /** Cours réimportés : leurs jours sont remplacés dans la transaction de l’APPLY. */
+    deferredSourceAnnualCourseIds?: readonly string[];
   },
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   const courses = await deps.courses.listCourses();
@@ -114,6 +117,8 @@ export async function persistTargetMeetingDayPlans(
     if (!targetCourse) {
       return { ok: false, reason: "Cours cible introuvable pour persister les jours de séance." };
     }
+    if (options.deferredSourceAnnualCourseIds?.includes(sourceCourse.id)) continue;
+    if (sameMeetingDayPlan(await deps.schedules.listMeetingDaysByAnnualCourse(targetCourse.id), plan.days)) continue;
     const saved = await replaceAnnualCourseMeetingDays(deps, targetCourse.id, plan.days);
     if (!saved.ok) return { ok: false, reason: saved.reason };
   }
@@ -132,6 +137,7 @@ export async function materializeSelectedContinuations(
      * Absent = legacy : copie encore l’organisation de N.
      */
     targetMeetingDayPlans?: readonly YearTransitionTargetMeetingDayPlan[];
+    deferredSourceAnnualCourseIds?: readonly string[];
     selectedSourceAnnualCourseIds?: readonly string[];
   },
 ): Promise<{ ok: true; mappings: YearTransitionClassMapping[]; createdClassIds: string[] } | { ok: false; reason: string }> {
@@ -339,6 +345,7 @@ export async function materializeSelectedContinuations(
       targetSchoolYearId: options.targetSchoolYearId,
       selectedSourceClassIds: options.selectedSourceClassIds,
       selectedSourceAnnualCourseIds: options.selectedSourceAnnualCourseIds,
+      deferredSourceAnnualCourseIds: options.deferredSourceAnnualCourseIds,
     });
     if (!persistedDays.ok) return persistedDays;
   }

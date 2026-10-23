@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { APP_VERSION } from "../../lib/app-version.ts";
 import type { AnnualCourseStore } from "../../lib/persistence/annual-course-types.ts";
 import type { CourseScheduleStore } from "../../lib/persistence/course-schedule-types.ts";
@@ -14,22 +16,28 @@ import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-ty
 import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
 import type { AgendaStore } from "../../lib/persistence/types.ts";
 import type { PrototypeAgendaItem } from "../agenda/demo-items.ts";
+import {
+  validateAnnualCourseMeetingDayPlan,
+  type AnnualCourseMeetingDay,
+} from "../annual-courses/meeting-days.ts";
 import type { AnnualCourse } from "../annual-courses/types.ts";
 import { parseCourseSessionKey } from "../course-sessions/compute.ts";
 import {
   isPendingTargetCourseId,
   PENDING_TARGET_COURSE_PREFIX,
 } from "./continuation-identity.ts";
-import { assembleLiveYearTransitionPreviewInput } from "./assemble.ts";
+import { assembleLiveYearTransitionPreviewInput, YEAR_TRANSITION_REIMPORT_REQUIRES_PLAN } from "./assemble.ts";
 import {
   YEAR_TRANSITION_APPLY_BLOCKING_REASONS,
   YEAR_TRANSITION_APPLY_RESULTS,
+  YEAR_TRANSITION_REIMPORT_CONTENT_CHANGED,
   type PersistedYearTransitionApply,
   type PersistedYearTransitionApplyEntry,
   type YearTransitionApplyAgendaInsert,
   type YearTransitionApplyFailure,
   type YearTransitionApplyOutcome,
   type YearTransitionApplyPlan,
+  type YearTransitionApplyReimport,
   type YearTransitionApplyResult,
   type YearTransitionApplyStore,
 } from "./apply-types.ts";
@@ -229,12 +237,44 @@ function success(
   };
 }
 
+function reimportSourceAnnualCourseIds(snapshot: Pick<YearTransitionPreviewInput, "reimport">): string[] {
+  return (snapshot.reimport?.courses ?? []).map((course) => course.sourceAnnualCourseId);
+}
+
+/**
+ * Cours de ce transfert dont le contenu hérité a été remplacé par une réimportation
+ * appliquée plus tard. Le registre de ces cours reste comme historique, sans être revérifié.
+ */
+async function sourceCoursesReimportedLater(
+  deps: ApplyPersistedYearTransitionDeps,
+  apply: PersistedYearTransitionApply,
+): Promise<Set<string>> {
+  const superseded = new Set<string>();
+  for (const later of await deps.applyStore.listApplies()) {
+    if (later.transitionId === apply.transitionId) continue;
+    const after = later.appliedAt.localeCompare(apply.appliedAt) || later.transitionId.localeCompare(apply.transitionId);
+    if (after <= 0) continue;
+    const preview = await deps.previews.getById(later.transitionId);
+    if (!preview) continue;
+    try {
+      const snapshot = JSON.parse(preview.snapshotJson) as Pick<YearTransitionPreviewInput, "reimport">;
+      for (const id of reimportSourceAnnualCourseIds(snapshot)) superseded.add(id);
+    } catch {
+      continue;
+    }
+  }
+  return superseded;
+}
+
 async function verifyExistingApply(
   deps: ApplyPersistedYearTransitionDeps,
   apply: PersistedYearTransitionApply,
   persisted: PersistedYearTransitionPreview,
 ): Promise<YearTransitionApplyOutcome> {
   const snapshot = JSON.parse(persisted.snapshotJson) as YearTransitionPreviewInput;
+  const supersededSourceCourses = await sourceCoursesReimportedLater(deps, apply);
+  const sourceItemCourse = new Map(snapshot.sourceItems.map((item) => [item.id, item.annualCourseId ?? null]));
+  const sourceNoteCourse = new Map((snapshot.sourceNotes ?? []).map((note) => [note.id, note.annualCourseId ?? null]));
   const liveTargetCoursesForVerify = (await deps.courses.listCourses()).filter(
     (course) => course.schoolYearId === persisted.targetSchoolYearId && !course.isArchived,
   );
@@ -256,6 +296,7 @@ async function verifyExistingApply(
         entry.reason === "PROJECTABLE" ||
         (newFlow && isNoteReclassifyReason(entry.reason));
       if (!copiedNow && entry.reason !== "ALREADY_PRESENT") continue;
+      if (supersededSourceCourses.has(sourceNoteCourse.get(entry.sourceNoteId) ?? "")) continue;
       const candidates = listed.filter(n =>
         n.schoolYearId === persisted.targetSchoolYearId && n.sourceNoteId === entry.sourceNoteId);
       if (candidates.length !== 1) return fail("APPLY_LEDGER_DIVERGED");
@@ -310,6 +351,7 @@ async function verifyExistingApply(
     if (!entry) return fail("APPLY_LEDGER_DIVERGED");
     if (entry.transitionId !== apply.transitionId) return fail("APPLY_LEDGER_DIVERGED");
     if (entry.previewReason !== previewEntry.reason) return fail("APPLY_LEDGER_DIVERGED");
+    if (supersededSourceCourses.has(sourceItemCourse.get(previewEntry.sourceAgendaItemId) ?? "")) continue;
     if (
       !liveTargetMatchesPreviewTarget(
         previewEntry.targetAnnualCourseId,
@@ -533,6 +575,7 @@ async function sourceMaterialStillMatchesPreview(
       selectedSourceClassIds: snapshot.selectedSourceClassIds,
       selectedSourceAnnualCourseIds: snapshot.selectedSourceAnnualCourseIds,
       targetMeetingDayPlans: snapshot.targetMeetingDayPlans,
+      reimportSourceAnnualCourseIds: reimportSourceAnnualCourseIds(snapshot),
     },
     deps,
   );
@@ -549,19 +592,6 @@ async function sourceMaterialStillMatchesPreview(
  * APPLY d’un PREVIEW persisté. Aucune mutation de N.
  * Le caller ne fournit que transitionId — destination et contenu viennent du PREVIEW + stores live.
  */
-export const YEAR_TRANSITION_REIMPORT_APPLY_PENDING =
-  "Cet aperçu réimporte un cours déjà importé : sa confirmation arrive avec l’étape « Réimporter ce cours ». Aucune donnée n’a été modifiée.";
-
-/** Refus avant toute écriture : la matérialisation persisterait sinon le nouveau plan de jours. */
-function snapshotRequestsReimport(snapshotJson: string): boolean {
-  try {
-    const parsed = JSON.parse(snapshotJson) as { reimport?: { courses?: unknown[] } };
-    return Array.isArray(parsed.reimport?.courses) && parsed.reimport.courses.length > 0;
-  } catch {
-    return false;
-  }
-}
-
 export async function applyPersistedYearTransition(
   transitionId: string,
   deps: ApplyPersistedYearTransitionDeps,
@@ -578,10 +608,6 @@ export async function applyPersistedYearTransition(
   const existingApply = await deps.applyStore.getByTransitionId(transitionId);
   if (existingApply) {
     return verifyExistingApply(deps, existingApply, persisted);
-  }
-
-  if (snapshotRequestsReimport(persisted.snapshotJson)) {
-    return fail("APPLY_BLOCKED", { reason: YEAR_TRANSITION_REIMPORT_APPLY_PENDING });
   }
 
   if (persisted.sourceSchoolYearId === persisted.targetSchoolYearId) {
@@ -605,6 +631,7 @@ export async function applyPersistedYearTransition(
   }
 
   const snapshotOptions = JSON.parse(persisted.snapshotJson) as YearTransitionPreviewInput;
+  const reimportSourceIds = reimportSourceAnnualCourseIds(snapshotOptions);
   const selectedSourceClassIds = [...(snapshotOptions.selectedSourceClassIds ?? [])];
   const pendingCreates = selectedSourceClassIds.length > 0;
   if (pendingCreates) {
@@ -624,6 +651,7 @@ export async function applyPersistedYearTransition(
         targetSchoolYearId: persisted.targetSchoolYearId,
         targetMeetingDayPlans: snapshotOptions.targetMeetingDayPlans,
         selectedSourceAnnualCourseIds: snapshotOptions.selectedSourceAnnualCourseIds,
+        deferredSourceAnnualCourseIds: reimportSourceIds,
       },
     );
     if (!materialized.ok) {
@@ -638,6 +666,7 @@ export async function applyPersistedYearTransition(
       targetSchoolYearId: persisted.targetSchoolYearId,
       selectedSourceClassIds,
       selectedSourceAnnualCourseIds: snapshotOptions.selectedSourceAnnualCourseIds,
+      deferredSourceAnnualCourseIds: reimportSourceIds,
     });
     if (!persistedDays.ok) {
       return fail("APPLY_BLOCKED", { reason: persistedDays.reason });
@@ -653,6 +682,7 @@ export async function applyPersistedYearTransition(
       selectedSourceClassIds,
       selectedSourceAnnualCourseIds: snapshotOptions.selectedSourceAnnualCourseIds,
       targetMeetingDayPlans: snapshotOptions.targetMeetingDayPlans,
+      reimportSourceAnnualCourseIds: reimportSourceIds,
     },
     deps,
   );
@@ -759,12 +789,43 @@ export async function applyPersistedYearTransition(
     if (item.schoolYearId !== persisted.targetSchoolYearId) return fail("APPLY_BLOCKED");
   }
 
+  let reimport: YearTransitionApplyReimport | undefined;
+  if (liveInput.reimport) {
+    const meetingDays: AnnualCourseMeetingDay[] = [];
+    for (const course of liveInput.reimport.courses) {
+      const plan = snapshotOptions.targetMeetingDayPlans?.find(
+        (entry) => entry.sourceAnnualCourseId === course.sourceAnnualCourseId,
+      );
+      if (!plan) return fail("APPLY_BLOCKED", { reason: YEAR_TRANSITION_REIMPORT_REQUIRES_PLAN });
+      const parsed = validateAnnualCourseMeetingDayPlan(plan.days);
+      if (!parsed.ok) return fail("APPLY_BLOCKED", { reason: parsed.reason });
+      for (const day of parsed.value) {
+        meetingDays.push({
+          id: `acmd-${randomUUID()}`,
+          annualCourseId: course.targetAnnualCourseId,
+          dayOfWeek: day.dayOfWeek,
+          weekKind: day.weekKind,
+          role: day.role,
+          createdAt: appliedAt,
+          updatedAt: appliedAt,
+        });
+      }
+    }
+    reimport = {
+      targetAnnualCourseIds: liveInput.reimport.courses.map((course) => course.targetAnnualCourseId),
+      replacedItemIds: liveInput.reimport.replacedItems.map((item) => item.id),
+      replacedNoteIds: liveInput.reimport.replacedNotes.map((note) => note.id),
+      meetingDays,
+    };
+  }
+
+  const guardedNotes = [
+    ...(applyNotesInput.sourceNotes ?? []),
+    ...(applyNotesInput.targetNotes ?? []),
+    ...(liveInput.reimport?.replacedNotes ?? []),
+  ];
   const courseNoteIds = usesExplicitTargetMeetingDayPlans(applyNotesInput.targetMeetingDayPlans)
-    ? [...new Set(
-        [...(applyNotesInput.sourceNotes ?? []), ...(applyNotesInput.targetNotes ?? [])]
-          .map((note) => note.annualCourseId)
-          .filter((id): id is string => Boolean(id)),
-      )]
+    ? [...new Set(guardedNotes.map((note) => note.annualCourseId).filter((id): id is string => Boolean(id)))]
     : undefined;
   const plan: YearTransitionApplyPlan = { apply, items: inserts, entries,
     ...(applyNotesInput.includePrivateNotes ? { noteGuard: {
@@ -772,13 +833,15 @@ export async function applyPersistedYearTransition(
         ? { annualCourseIds: courseNoteIds }
         : { ownerTeacherId: applyNotesInput.privateNotesOwnerTeacherId! }),
       sourceSchoolYearId: applyNotesInput.sourceSchoolYearId, targetSchoolYearId: applyNotesInput.targetSchoolYearId,
-      expected: [...(applyNotesInput.sourceNotes ?? []), ...(applyNotesInput.targetNotes ?? [])] } } : {}),
+      expected: guardedNotes } } : {}),
+    ...(reimport ? { reimport } : {}),
     notes: planPrivateNoteCopies(applyNotesInput, applyNotePreview, transitionId, appliedAt) };
   try {
     await deps.applyStore.applyAtomically(plan);
   } catch (error) {
     if (String(error).includes("NOT NULL constraint failed: year_transition_previews.fingerprint")
-      || String(error).includes("Private notes changed during transition")) {
+      || String(error).includes("Private notes changed during transition")
+      || String(error).includes(YEAR_TRANSITION_REIMPORT_CONTENT_CHANGED)) {
       const raced = await deps.applyStore.getByTransitionId(transitionId);
       return raced ? verifyExistingApply(deps, raced, persisted) : fail("PREVIEW_STALE");
     }

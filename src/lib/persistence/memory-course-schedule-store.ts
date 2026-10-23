@@ -82,6 +82,24 @@ export class MemoryCourseScheduleStore implements CourseScheduleStore {
     return this.listMeetingDaysByAnnualCourse(annualCourseId);
   }
 
+  /** Stage without writes; the commit is synchronous and cannot yield. */
+  stageMeetingDaysForAnnualCourses(annualCourseIds: readonly string[], days: readonly AnnualCourseMeetingDay[]): () => void {
+    const courses = new Set(annualCourseIds);
+    const next = new Map(this.meetingDays);
+    for (const [id, day] of next) {
+      if (courses.has(day.annualCourseId)) next.delete(id);
+    }
+    for (const day of days) {
+      if (!courses.has(day.annualCourseId) || next.has(day.id)) {
+        throw new Error("UNIQUE constraint failed: annual_course_meeting_days.id");
+      }
+      next.set(day.id, { ...day });
+    }
+    return () => {
+      this.meetingDays = next;
+    };
+  }
+
   replaceSnapshot(
     slots: CourseScheduleSlot[],
     days: ClassAttendanceDay[],

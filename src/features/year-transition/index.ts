@@ -130,6 +130,7 @@ export {
   loadYearTransitionPrepareState,
   resolveRequestedReimport,
   parseSelectedSourceClassIds,
+  YEAR_TRANSITION_REIMPORT_CONFIRMATION_REQUIRED,
   parseYearTransitionPreviewRequest,
 } from "./prepare.ts";
 export type { YearTransitionPrepareDeps } from "./prepare.ts";
@@ -144,7 +145,6 @@ export {
   YEAR_TRANSITION_REIMPORT_NOT_SELECTED,
   YEAR_TRANSITION_REIMPORT_REQUIRES_PLAN,
 } from "./assemble.ts";
-export { YEAR_TRANSITION_REIMPORT_APPLY_PENDING } from "./apply.ts";
 export {
   buildYearTransitionCourseImportStates,
   canonicalMeetingDays,
@@ -202,6 +202,7 @@ export {
   YEAR_TRANSITION_APPLY_FAILURE_CODES,
   YEAR_TRANSITION_APPLY_RESULTS,
   YEAR_TRANSITION_APPLY_SUCCESS_CODES,
+  YEAR_TRANSITION_REIMPORT_CONTENT_CHANGED,
 } from "./apply-types.ts";
 export type {
   PersistedYearTransitionApply,
@@ -211,6 +212,7 @@ export type {
   YearTransitionApplyFailureCode,
   YearTransitionApplyOutcome,
   YearTransitionApplyPlan,
+  YearTransitionApplyReimport,
   YearTransitionApplyResult,
   YearTransitionApplyStore,
   YearTransitionApplySuccess,

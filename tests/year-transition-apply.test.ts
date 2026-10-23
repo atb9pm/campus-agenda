@@ -999,6 +999,7 @@ test("78-80 — rollback Memory item 2/3", async () => {
   const inner = world.applyStore;
   const wrapped: YearTransitionApplyStore = {
     getByTransitionId: (id) => inner.getByTransitionId(id),
+    listApplies: () => inner.listApplies(),
     listEntries: (id) => inner.listEntries(id),
     async applyAtomically(plan) {
       if (plan.items.length < 3) throw new Error("expected 3");
@@ -1024,6 +1025,7 @@ test("82 — unique conflict same T → ALREADY_APPLIED après relecture", async
   const inner = world.applyStore;
   const wrapped: YearTransitionApplyStore = {
     getByTransitionId: (id) => inner.getByTransitionId(id),
+    listApplies: () => inner.listApplies(),
     listEntries: (id) => inner.listEntries(id),
     async applyAtomically(plan) {
       await inner.applyAtomically(plan);
@@ -2196,3 +2198,139 @@ for (const sql of [false, true]) {
     } finally { w.close(); }
   });
 }
+
+test("SQL — réimportation atomique : héritage retiré, jours remplacés, copies insérées ; sinon rien", async () => {
+  const db = createNodeSqliteDatabase(":memory:");
+  await applyMigrations(db);
+  await db.exec(`INSERT INTO teachers (id, display_name, initials, password_hash, is_admin, is_active)
+    VALUES ('teacher-1', 'Prof', 'Pr', 'x', 0, 1)`);
+  await db
+    .prepare("INSERT INTO school_years (id, label, status, starts_on, ends_on, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(TARGET_YEAR, "2027-2028", "draft", "2027-08-23", "2028-07-01", "2026-01-01T00:00:00.000Z")
+    .run();
+  await db
+    .prepare("INSERT INTO classrooms (id, name, program_label, access_code_hint, school_class_id) VALUES (?, ?, ?, ?, ?)")
+    .bind(CLASSROOM_N1, "C", "p", "h", TARGET_CLASS)
+    .run();
+  await db
+    .prepare("INSERT INTO subjects (id, classroom_id, name, annual_course_id) VALUES (?, ?, ?, ?)")
+    .bind(SUBJECT_N1, CLASSROOM_N1, "Branche", TARGET_COURSE)
+    .run();
+  const courses = new SqlAnnualCourseStore(db);
+  await courses.createCourse(course(TARGET_COURSE, TARGET_CLASS, TARGET_YEAR));
+  const schedules = new SqlCourseScheduleStore(db);
+  const mondayDay = {
+    id: "acmd-monday",
+    annualCourseId: TARGET_COURSE,
+    dayOfWeek: 1 as const,
+    weekKind: "all" as const,
+    role: "PRIMARY" as const,
+    createdAt: "2027-03-01T00:00:00.000Z",
+    updatedAt: "2027-03-01T00:00:00.000Z",
+  };
+  await schedules.replaceMeetingDaysForAnnualCourse(TARGET_COURSE, [mondayDay]);
+  const agenda = new SqlAgendaStore(db);
+  const base = {
+    classroomId: CLASSROOM_N1,
+    subjectId: SUBJECT_N1,
+    authorTeacherId: "teacher-1",
+    day: 1,
+    hour: 8,
+    schoolWeekNumber: 1,
+    type: "HOMEWORK" as const,
+    detail: "N+1",
+    schoolYearId: TARGET_YEAR,
+    annualCourseId: TARGET_COURSE,
+    courseSessionKey: `${TARGET_YEAR}|${TARGET_COURSE}|2027-08-23`,
+    courseSessionDate: "2027-08-23",
+    studentVisible: false,
+  };
+  const inherited = await agenda.createAgendaItem({ ...base, title: "Copie", referenceSessionId: SESS_P, referenceItemId: ITEM_X });
+  await db
+    .prepare("UPDATE agenda_items SET source_transition_id = 't-old', source_agenda_item_id = 1 WHERE id = ?")
+    .bind(inherited.id)
+    .run();
+  const manual = await agenda.createAgendaItem({ ...base, title: "Manuel" });
+  const notes = new SqlAnnualCourseNotesStore(db);
+  const noteInput = {
+    schoolYearId: TARGET_YEAR,
+    classId: TARGET_CLASS,
+    contextId: CTX,
+    annualCourseId: TARGET_COURSE,
+    authorTeacherId: "teacher-1",
+    ownerTeacherId: "teacher-1",
+    text: "Note",
+  };
+  const inheritedNote = await notes.createNote("note-old", {
+    ...noteInput,
+    sourceNoteId: "note-n",
+    sourceSchoolYearId: SOURCE_YEAR,
+    inheritedAt: "2027-03-01T00:00:00.000Z",
+  });
+  await notes.createNote("note-manual", noteInput);
+  const previews = new SqlYearTransitionPreviewStore(db);
+  for (const id of ["t-new", "t-stale"]) {
+    await previews.create(
+      {
+        id,
+        sourceSchoolYearId: SOURCE_YEAR,
+        targetSchoolYearId: TARGET_YEAR,
+        fingerprint: `fp-${id}`,
+        engineVersion: 5,
+        appVersion: "test",
+        snapshotJson: "{}",
+        previewJson: "{}",
+        createdAt: "2027-03-02T00:00:00.000Z",
+      },
+      [],
+    );
+  }
+  const applyStore = new SqlYearTransitionApplyStore(db);
+  const plan = (transitionId: string, replacedItemIds: number[]) => ({
+    apply: { transitionId, fingerprint: `fp-${transitionId}`, engineVersion: 5, appVersion: "test", appliedAt: "2027-03-02T00:00:00.000Z" },
+    items: [{
+      ...base,
+      title: "Copie",
+      authorTeacherId: "teacher-1",
+      weekOffset: 0,
+      templateId: null,
+      courseSessionKey: `${TARGET_YEAR}|${TARGET_COURSE}|2027-09-02`,
+      courseSessionDate: "2027-09-02",
+      referenceSessionId: SESS_P,
+      referenceItemId: ITEM_X,
+      studentVisible: false as const,
+      sourceTransitionId: transitionId,
+      sourceAgendaItemId: 1,
+    }],
+    entries: [],
+    notes: [{ ...inheritedNote, id: `note-${transitionId}`, courseSessionKey: `${TARGET_YEAR}|${TARGET_COURSE}|2027-09-02` }],
+    reimport: {
+      targetAnnualCourseIds: [TARGET_COURSE],
+      replacedItemIds,
+      replacedNoteIds: ["note-old"],
+      meetingDays: [{ ...mondayDay, id: `acmd-${transitionId}`, dayOfWeek: 4 as const, weekKind: "B" as const }],
+    },
+  });
+
+  const itemsBefore = await agenda.exportAllItems();
+  await assert.rejects(applyStore.applyAtomically(plan("t-stale", [])), /NOT NULL constraint failed: year_transition_previews\.fingerprint/);
+  assert.deepEqual(await agenda.exportAllItems(), itemsBefore, "contenu hérité non conforme : rien n’est écrit");
+  assert.deepEqual((await notes.listNotesByAnnualCourse(TARGET_COURSE)).map((note) => note.id).sort(), ["note-manual", "note-old"]);
+  assert.deepEqual((await schedules.listMeetingDaysByAnnualCourse(TARGET_COURSE)).map((day) => day.id), ["acmd-monday"]);
+  assert.equal(await applyStore.getByTransitionId("t-stale"), null);
+
+  await applyStore.applyAtomically(plan("t-new", [inherited.id]));
+  const after = await agenda.exportAllItems();
+  assert.deepEqual(after.map((item) => item.title).sort(), ["Copie", "Manuel"]);
+  assert.ok(after.some((item) => item.id === manual.id));
+  const copy = after.find((item) => item.title === "Copie")!;
+  assert.equal(copy.sourceTransitionId, "t-new");
+  assert.equal(copy.courseSessionDate, "2027-09-02");
+  assert.deepEqual((await notes.listNotesByAnnualCourse(TARGET_COURSE)).map((note) => note.id).sort(), ["note-manual", "note-t-new"]);
+  assert.deepEqual(
+    (await schedules.listMeetingDaysByAnnualCourse(TARGET_COURSE)).map((day) => [day.id, day.dayOfWeek, day.weekKind]),
+    [["acmd-t-new", 4, "B"]],
+  );
+  assert.equal((await applyStore.getByTransitionId("t-new"))?.fingerprint, "fp-t-new");
+  db.close();
+});

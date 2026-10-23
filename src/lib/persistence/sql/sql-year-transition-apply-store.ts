@@ -3,6 +3,7 @@ import type {
   PersistedYearTransitionApplyEntry,
   YearTransitionApplyNoteGuard,
   YearTransitionApplyPlan,
+  YearTransitionApplyReimport,
   YearTransitionApplyStore,
 } from "../../../features/year-transition/apply-types.ts";
 import type { SqlDatabase } from "./types.ts";
@@ -45,6 +46,60 @@ function noteGuardStatement(guard: YearTransitionApplyNoteGuard, transitionId: s
       THEN fingerprint ELSE NULL END WHERE id = ?`,
     values: [...identityValues, token, token, transitionId],
   };
+}
+
+function placeholders(count: number): string {
+  return Array.from({ length: count }, () => "?").join(", ");
+}
+
+/**
+ * Le contenu hérité des cours réimportés doit être exactement celui de l’aperçu.
+ * Sinon la ligne d’aperçu viole NOT NULL et toute la transaction est annulée.
+ */
+function reimportStatements(reimport: YearTransitionApplyReimport, transitionId: string) {
+  const courseIds = [...reimport.targetAnnualCourseIds];
+  const itemIds = [...reimport.replacedItemIds];
+  const noteIds = [...reimport.replacedNoteIds];
+  const courses = placeholders(courseIds.length);
+  const inheritedItem = `annual_course_id IN (${courses}) AND COALESCE(TRIM(source_transition_id), '') <> ''`;
+  const inheritedNote = `annual_course_id IN (${courses})
+    AND (COALESCE(TRIM(source_note_id), '') <> '' OR COALESCE(TRIM(inherited_at), '') <> '')`;
+  const itemGuard = itemIds.length
+    ? `(SELECT COUNT(*) FROM agenda_items WHERE ${inheritedItem} AND id IN (${placeholders(itemIds.length)}))`
+    : "0";
+  const noteGuard = noteIds.length
+    ? `(SELECT COUNT(*) FROM annual_course_notes WHERE ${inheritedNote} AND id IN (${placeholders(noteIds.length)}))`
+    : "0";
+  return [
+    {
+      sql: `UPDATE year_transition_previews SET fingerprint = CASE WHEN
+        (SELECT COUNT(*) FROM agenda_items WHERE ${inheritedItem}) = ?
+        AND ${itemGuard} = ?
+        AND (SELECT COUNT(*) FROM annual_course_notes WHERE ${inheritedNote}) = ?
+        AND ${noteGuard} = ?
+        THEN fingerprint ELSE NULL END WHERE id = ?`,
+      values: [
+        ...courseIds,
+        itemIds.length,
+        ...(itemIds.length ? [...courseIds, ...itemIds] : []),
+        itemIds.length,
+        ...courseIds,
+        noteIds.length,
+        ...(noteIds.length ? [...courseIds, ...noteIds] : []),
+        noteIds.length,
+        transitionId,
+      ],
+    },
+    ...itemIds.map((id) => ({ sql: "DELETE FROM agenda_items WHERE id = ?", values: [id] })),
+    ...noteIds.map((id) => ({ sql: "DELETE FROM annual_course_notes WHERE id = ?", values: [id] })),
+    { sql: `DELETE FROM annual_course_meeting_days WHERE annual_course_id IN (${courses})`, values: courseIds },
+    ...reimport.meetingDays.map((day) => ({
+      sql: `INSERT INTO annual_course_meeting_days (
+        id, annual_course_id, day_of_week, week_kind, role, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      values: [day.id, day.annualCourseId, day.dayOfWeek, day.weekKind, day.role, day.createdAt, day.updatedAt],
+    })),
+  ];
 }
 
 interface ApplyRow {
@@ -125,6 +180,7 @@ export class SqlYearTransitionApplyStore implements YearTransitionApplyStore {
   async applyAtomically(plan: YearTransitionApplyPlan): Promise<void> {
     const statements = [
       ...(plan.noteGuard ? [noteGuardStatement(plan.noteGuard, plan.apply.transitionId)] : []),
+      ...(plan.reimport ? reimportStatements(plan.reimport, plan.apply.transitionId) : []),
       ...(plan.notes ?? []).map(note => ({
         sql: `INSERT INTO annual_course_notes (${NOTEBOOK_COLUMNS.join(", ")}) VALUES (${NOTEBOOK_COLUMNS.map(() => "?").join(", ")})`,
         values: bindAnnualNoteValues(note),
