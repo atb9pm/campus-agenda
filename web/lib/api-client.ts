@@ -21,6 +21,7 @@ import {
   type ControlCoordinationSummary,
 } from "@campus/features/evaluations";
 import type { AgendaItemType } from "@campus/types/agenda";
+import type { YearTransitionCourseImportState } from "@campus/features/year-transition/course-import-state.ts";
 
 export type { TeacherAccountRecord };
 
@@ -1282,6 +1283,7 @@ export async function fetchYearTransitionPrepare(): Promise<{
   years: YearTransitionYearOption[];
   classesByYearId: Record<string, YearTransitionClassOption[]>;
   coursesByClassId: Record<string, YearTransitionCourseOption[]>;
+  courseImports: YearTransitionCourseImportState[];
   capabilities: Array<{
     id: string;
     available: boolean;
@@ -1299,6 +1301,7 @@ export async function fetchYearTransitionPrepare(): Promise<{
     years?: YearTransitionYearOption[];
     classesByYearId?: Record<string, YearTransitionClassOption[]>;
     coursesByClassId?: Record<string, YearTransitionCourseOption[]>;
+    courseImports?: YearTransitionCourseImportState[];
     capabilities?: Array<{
       id: string;
       available: boolean;
@@ -1316,6 +1319,7 @@ export async function fetchYearTransitionPrepare(): Promise<{
     years: payload.years ?? [],
     classesByYearId: payload.classesByYearId ?? {},
     coursesByClassId: payload.coursesByClassId ?? {},
+    courseImports: payload.courseImports ?? [],
     capabilities: payload.capabilities ?? [],
     sessionTeacherId: payload.sessionTeacherId ?? "",
   };
