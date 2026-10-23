@@ -16,6 +16,7 @@ import {
   assembleLiveYearTransitionPreviewInput,
   createAuthorizedYearTransitionPreview,
   createPersistedYearTransitionPreview,
+  loadYearTransitionPrepareState,
   pendingTargetClassId,
   pendingTargetCourseId,
   yearTransitionPreviewFingerprint,
@@ -814,4 +815,70 @@ test("sources — nouveau flux n’appelle pas les copies N", async () => {
   assert.match(applySrc, /legacyOwnedNotesForApply/);
   assert.match(applySrc, /notesInputForApply/);
   assert.doesNotMatch(applySrc, /notesOwnedBySessionTeacher/);
+});
+
+test("état d’import : seuls les cours appliqués sont « Déjà importé », plan lu sur le cours N+1", async () => {
+  const seeded = await world({
+    extraCourses: [course(SOURCE_CHASSIS, CTX_CHASSIS)],
+    extraItems: [item({ id: 10, title: "CP1" })],
+    extraNotes: [note("n-cp1", TEACHER_A)],
+  });
+  const deps = seeded.deps as YearTransitionPrepareDeps;
+  const { persisted } = await persistPreview(seeded, [mondayAll(SOURCE_INJECTION)], "import-inj", [SOURCE_INJECTION]);
+
+  const beforeApply = await loadYearTransitionPrepareState(deps, "admin-1");
+  assert.deepEqual(beforeApply.courseImports, [], "un aperçu non appliqué n’importe rien");
+
+  assert.equal((await applyPersistedYearTransition(persisted.id, seeded.deps)).ok, true);
+  const targetInjection = await targetCourseOf(seeded, CTX_INJECTION);
+  const afterFirst = await loadYearTransitionPrepareState(deps, "admin-1");
+  assert.deepEqual(
+    afterFirst.courseImports.map((state) => state.sourceAnnualCourseId),
+    [SOURCE_INJECTION],
+    "CP2 décoché reste « Non importé »",
+  );
+  const [injection] = afterFirst.courseImports;
+  assert.equal(injection!.sourceSchoolYearId, SOURCE_YEAR);
+  assert.equal(injection!.targetSchoolYearId, TARGET_YEAR);
+  assert.equal(injection!.targetAnnualCourseId, targetInjection.id);
+  assert.deepEqual(injection!.currentPlan, [{ dayOfWeek: 1, weekKind: "all", role: "PRIMARY" }]);
+  assert.equal(injection!.currentPlanOrigin, "target-course");
+  assert.equal(injection!.matchesLastPreparation, true);
+  assert.deepEqual(injection!.preparations.map((entry) => entry.transitionId), ["import-inj"]);
+
+  const second = await persistPreview(seeded, [thursdayB(SOURCE_CHASSIS)], "import-chassis", [SOURCE_CHASSIS]);
+  assert.equal((await applyPersistedYearTransition(second.persisted.id, seeded.deps)).ok, true);
+  const same = await persistPreview(seeded, [mondayAll(SOURCE_INJECTION)], "import-inj-again", [SOURCE_INJECTION]);
+  assert.equal((await applyPersistedYearTransition(same.persisted.id, seeded.deps)).ok, true);
+
+  const afterAll = await loadYearTransitionPrepareState(deps, "admin-1");
+  const bySource = new Map(afterAll.courseImports.map((state) => [state.sourceAnnualCourseId, state]));
+  assert.deepEqual(
+    bySource.get(SOURCE_CHASSIS)?.currentPlan,
+    [{ dayOfWeek: 4, weekKind: "B", role: "PRIMARY" }],
+  );
+  assert.deepEqual(
+    bySource.get(SOURCE_INJECTION)?.preparations.map((entry) => entry.transitionId),
+    ["import-inj", "import-inj-again"],
+    "première et dernière préparation conservées",
+  );
+  assert.deepEqual(
+    bySource.get(SOURCE_INJECTION)?.currentPlan,
+    [{ dayOfWeek: 1, weekKind: "all", role: "PRIMARY" }],
+    "la préparation CP2 ne touche pas au plan CP1",
+  );
+});
+
+test("état d’import : année cible activée → plus rien à préparer", async () => {
+  const seeded = await world();
+  const deps = seeded.deps as YearTransitionPrepareDeps;
+  const { persisted } = await persistPreview(seeded, [mondayAll(SOURCE_INJECTION)]);
+  assert.equal((await applyPersistedYearTransition(persisted.id, seeded.deps)).ok, true);
+  assert.equal((await loadYearTransitionPrepareState(deps, "admin-1")).courseImports.length, 1);
+  const target = await seeded.years.getSchoolYearById(TARGET_YEAR);
+  replaceMemorySchoolYears([
+    { ...(await seeded.years.getSchoolYearById(SOURCE_YEAR))!, status: "archived" },
+    { ...target!, status: "active", activatedAt: "2027-08-01T00:00:00.000Z" },
+  ]);
+  assert.deepEqual((await loadYearTransitionPrepareState(deps, "admin-1")).courseImports, []);
 });

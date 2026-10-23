@@ -27,6 +27,12 @@ import {
   type YearTransitionTargetMeetingDayPlan,
 } from "./target-meeting-days.ts";
 import type { YearTransitionClassMapping, YearTransitionPreviewResult } from "./types.ts";
+import {
+  buildYearTransitionCourseImportStates,
+  type AppliedTransitionRecord,
+  type AppliedTransitionSnapshot,
+  type YearTransitionCourseImportState,
+} from "./course-import-state.ts";
 
 export interface YearTransitionPrepareDeps extends ApplyPersistedYearTransitionDeps {
   catalog: SchoolCatalogStore;
@@ -76,13 +82,52 @@ export async function loadYearTransitionPrepareState(
   for (const list of Object.values(coursesByClassId)) {
     list.sort((left, right) => left.label.localeCompare(right.label, "fr"));
   }
+  const courseImports = await loadYearTransitionCourseImports(deps, lookups);
   return {
     years,
     classesByYearId,
     coursesByClassId,
+    courseImports,
     capabilities: YEAR_TRANSITION_TRANSFER_CAPABILITIES,
     sessionTeacherId,
   };
+}
+
+/** Cours déjà importés vers une année en préparation, d’après le registre des transferts appliqués. */
+export async function loadYearTransitionCourseImports(
+  deps: Pick<YearTransitionPrepareDeps, "applyStore" | "previews" | "schedules">,
+  lookups: Pick<YearTransitionCatalogLookups, "years" | "classes" | "courses">,
+): Promise<YearTransitionCourseImportState[]> {
+  const draftYearIds = new Set(lookups.years.filter((year) => year.status === "draft").map((year) => year.id));
+  const byPair = new Map<string, { sourceSchoolYearId: string; targetSchoolYearId: string; applied: AppliedTransitionRecord[] }>();
+  for (const apply of await deps.applyStore.listApplies()) {
+    const preview = await deps.previews.getById(apply.transitionId);
+    if (!preview || !draftYearIds.has(preview.targetSchoolYearId)) continue;
+    let snapshot: AppliedTransitionSnapshot;
+    try {
+      snapshot = JSON.parse(preview.snapshotJson) as AppliedTransitionSnapshot;
+    } catch {
+      continue;
+    }
+    const key = `${preview.sourceSchoolYearId}|${preview.targetSchoolYearId}`;
+    const pair = byPair.get(key) ?? {
+      sourceSchoolYearId: preview.sourceSchoolYearId,
+      targetSchoolYearId: preview.targetSchoolYearId,
+      applied: [],
+    };
+    pair.applied.push({ transitionId: apply.transitionId, appliedAt: apply.appliedAt, snapshot });
+    byPair.set(key, pair);
+  }
+  if (byPair.size === 0) return [];
+  const meetingDays = await deps.schedules.listMeetingDays();
+  return [...byPair.values()].flatMap((pair) =>
+    buildYearTransitionCourseImportStates({
+      ...pair,
+      classes: lookups.classes,
+      courses: lookups.courses,
+      meetingDays,
+    }),
+  );
 }
 
 export function parseSelectedSourceClassIds(raw: unknown): string[] {
