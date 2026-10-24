@@ -12,6 +12,16 @@ export function getStudentAgendaItems(
   return getItemsForClassroom(items, classroomId).filter(isVisibleToStudent);
 }
 
+/** Contenu élève d’un seul AnnualCourse — identité du cours, pas le libellé de branche. */
+export function itemsForAnnualCourse<T extends { annualCourseId?: string | null }>(
+  items: readonly T[],
+  annualCourseId: string,
+): T[] {
+  const id = annualCourseId.trim();
+  if (!id) return [];
+  return items.filter((item) => (item.annualCourseId ?? "").trim() === id);
+}
+
 export function anonymizeAuthorForStudent(_authorTeacherId: string): string {
   return STUDENT_AUTHOR_LABEL;
 }

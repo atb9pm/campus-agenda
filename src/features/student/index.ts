@@ -37,6 +37,7 @@ export {
   previewUpcomingControls,
   studentHomeworkOnlySections,
   studentTodoSections,
+  upcomingTestsForAnnualCourse,
   type ControlPlanningDay,
   type ControlPlanningWeek,
   type ControlUrgency,
@@ -53,5 +54,6 @@ export {
   buildStudentAgendaSummary,
   canStudentModifyAgenda,
   getStudentAgendaItems,
+  itemsForAnnualCourse,
   type StudentAgendaSummary,
 } from "./agenda.ts";

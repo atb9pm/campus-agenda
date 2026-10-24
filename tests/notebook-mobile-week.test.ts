@@ -117,7 +117,8 @@ test("carnet mobile — Contrôles / Publications / Notes / Export inchangés", 
   const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
   assert.match(panel, /Contrôles 📅/);
   assert.match(panel, /📄 Exporter le carnet/);
-  assert.match(panel, /Aperçu élève/);
+  assert.match(panel, /Aperçu branche/);
+  assert.match(panel, /Agenda élève/);
   assert.match(panel, /onSaveControl/);
   assert.match(panel, /onDeleteControl/);
   assert.match(panel, /persistSaveWeekPublication/);
