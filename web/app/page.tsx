@@ -15,9 +15,11 @@ import {
   filterItemsForCourseDay,
   getStudentAgendaItems,
   groupControlPlanning,
+  itemsForAnnualCourse,
   msUntilNextLocalMidnight,
   nextControlDatePerSubject,
   studentAccessFromApiSession,
+  upcomingTestsForAnnualCourse,
   studentCalendarDateNeedsRefresh,
   type StudentDayScheduleSlot,
 } from "@campus/features/student";
@@ -126,7 +128,14 @@ import { ControlPlanningPanel } from "./components/control-planning-panel.tsx";
 import { StudentDashboard, type StudentDashboardTab } from "./components/student-dashboard.tsx";
 
 type AppMode = "teacher" | "student";
-type StudentEntry = "code" | "teacher-preview";
+type StudentEntry = "code" | "teacher-preview" | "teacher-branch-preview";
+
+function localNoonFromIsoDay(iso: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0, 0);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
 
 const EMPTY_CLASSROOM_CATALOG: ClassroomCatalog = {
   classrooms: [],
@@ -284,6 +293,7 @@ export default function Home() {
     role: "PRIMARY" | "ADDITIONAL";
   }>>([]);
   const [studentEntry, setStudentEntry] = useState<StudentEntry | null>(null);
+  const [previewAnnualCourseId, setPreviewAnnualCourseId] = useState<string | null>(null);
   const [studentCodeModalOpen, setStudentCodeModalOpen] = useState(false);
   const [selectedSchoolWeekNumber, setSelectedSchoolWeekNumber] = useState(1);
   const [items, setItems] = useState<PrototypeAgendaItem[]>([]);
@@ -891,6 +901,7 @@ export default function Home() {
   const [studentToday, setStudentToday] = useState(() => new Date());
 
   useEffect(() => {
+    if (studentEntry === "teacher-branch-preview") return;
     function refreshIfNeeded() {
       const now = new Date();
       setStudentToday((current) => (studentCalendarDateNeedsRefresh(current, now) ? now : current));
@@ -911,7 +922,7 @@ export default function Home() {
       document.removeEventListener("visibilitychange", refreshIfNeeded);
       window.clearTimeout(timeoutId);
     };
-  }, []);
+  }, [studentEntry]);
 
   const studentAutoCourseDay = useMemo(() => {
     if (!schoolWeeksMemo.length) return null;
@@ -992,18 +1003,49 @@ export default function Home() {
       : EMPTY_CLASSROOM_CATALOG;
   }, [studentSession, studentClassroomSubjects, studentClassroomName, runtimeClassrooms]);
 
+  const studentAgendaItems = useMemo(() => {
+    if (!studentSession) return [];
+    const visible = getStudentAgendaItems(items, studentSession.classroomId);
+    if (studentEntry === "teacher-branch-preview" && previewAnnualCourseId) {
+      return itemsForAnnualCourse(visible, previewAnnualCourseId);
+    }
+    return visible;
+  }, [studentSession, items, studentEntry, previewAnnualCourseId]);
+
+  const studentPreviewSubjects = useMemo(() => {
+    if (studentEntry !== "teacher-branch-preview" || !previewAnnualCourseId) return studentClassroomSubjects;
+    return studentClassroomSubjects.filter((subject) => (subject.annualCourseId ?? "").trim() === previewAnnualCourseId);
+  }, [studentClassroomSubjects, studentEntry, previewAnnualCourseId]);
+
+  const studentPreviewScheduleSlots = useMemo(() => {
+    if (studentEntry !== "teacher-branch-preview" || !previewAnnualCourseId) return studentScheduleSlots;
+    return studentScheduleSlots.filter((slot) => slot.annualCourseId === previewAnnualCourseId);
+  }, [studentScheduleSlots, studentEntry, previewAnnualCourseId]);
+
   const studentFutureTests = useMemo(() => {
     if (!studentSession || !schoolWeeksMemo.length) return [];
-    return nextControlDatePerSubject(
+    const tests = nextControlDatePerSubject(
       listFutureTestsForClass(
-        items,
+        studentAgendaItems,
         studentControlCatalog,
         studentSession.classroomId,
         studentToday,
         schoolWeeksMemo,
       ),
     );
-  }, [studentSession, items, studentControlCatalog, studentToday, schoolWeeksMemo]);
+    if (studentEntry === "teacher-branch-preview" && previewAnnualCourseId) {
+      return upcomingTestsForAnnualCourse(tests, previewAnnualCourseId);
+    }
+    return tests;
+  }, [
+    studentSession,
+    studentAgendaItems,
+    studentControlCatalog,
+    studentToday,
+    schoolWeeksMemo,
+    studentEntry,
+    previewAnnualCourseId,
+  ]);
 
   const studentFollowingCourseDay = useMemo(() => {
     if (!studentDisplayCourseDay || !studentAutoCourseDay) return true;
@@ -1012,26 +1054,25 @@ export default function Home() {
 
   const studentCourseDaySections = useMemo(() => {
     if (!studentSession || !studentDisplayCourseDay) return [];
-    const classroomItems = getStudentAgendaItems(items, studentSession.classroomId);
-    const dayItems = filterItemsForCourseDay(classroomItems, studentDisplayCourseDay);
+    const dayItems = filterItemsForCourseDay(studentAgendaItems, studentDisplayCourseDay);
     return buildStudentCourseDaySections(
       dayItems,
-      studentClassroomSubjects,
+      studentPreviewSubjects,
       studentFutureTests,
       {
         includeNextControls: studentFollowingCourseDay,
-        scheduleSlots: studentScheduleSlots,
+        scheduleSlots: studentPreviewScheduleSlots,
         courseDay: studentDisplayCourseDay,
       },
     );
   }, [
     studentSession,
-    items,
+    studentAgendaItems,
     studentDisplayCourseDay,
-    studentClassroomSubjects,
+    studentPreviewSubjects,
     studentFutureTests,
     studentFollowingCourseDay,
-    studentScheduleSlots,
+    studentPreviewScheduleSlots,
   ]);
 
   const studentControlPlanning = useMemo(
@@ -1051,7 +1092,14 @@ export default function Home() {
     }
   }
 
-  function enterTeacherPreview() {
+  function openTeacherStudentView(options: {
+    entry: Exclude<StudentEntry, "code">;
+    annualCourseId?: string | null;
+    classroomLabel?: string;
+    focusDate?: string | null;
+    schoolWeekNumber?: number | null;
+    dayOfWeek?: number | null;
+  }) {
     const classroomId = notebookClassroomId || selectedClassroomId;
     const classroom =
       runtimeClassrooms.find((entry) => entry.id === classroomId)
@@ -1064,15 +1112,48 @@ export default function Home() {
     const access = {
       id: `preview:${classroom.id}`,
       classroomId: classroom.id,
-      label: "aperçu",
+      label: options.entry === "teacher-branch-preview" ? "aperçu branche" : "agenda élève",
     };
+    const focusDate = options.focusDate ? localNoonFromIsoDay(options.focusDate) : null;
     setStudentSession(access);
-    setStudentClassroomName(classroom.name);
-    setStudentEntry("teacher-preview");
+    setStudentClassroomName(options.classroomLabel?.trim() || classroom.name);
+    setStudentEntry(options.entry);
+    setPreviewAnnualCourseId(options.annualCourseId?.trim() || null);
     setAppMode("student");
-    setStudentCourseDayKey(null);
     setStudentHistoryOpen(false);
-    resetSelectedWeek();
+    setStudentMobileTab("tout");
+    if (focusDate) {
+      setStudentToday(focusDate);
+      const week =
+        schoolWeeksMemo.find((entry) => entry.number === options.schoolWeekNumber)
+        ?? (() => {
+          try {
+            return findSchoolWeekForDate(focusDate, schoolWeeksMemo);
+          } catch {
+            return schoolWeeksMemo[0] ?? null;
+          }
+        })();
+      if (week) {
+        const dayIndex =
+          options.dayOfWeek != null && options.dayOfWeek >= 1 && options.dayOfWeek <= 5
+            ? options.dayOfWeek - 1
+            : (focusDate.getDay() + 6) % 7;
+        setStudentCourseDayKey(
+          courseDayKey({
+            schoolWeekNumber: week.number,
+            weekKind: week.kind,
+            date: focusDate,
+            dayIndex,
+          }),
+        );
+      } else {
+        setStudentCourseDayKey(null);
+      }
+    } else {
+      setStudentToday(new Date());
+      setStudentCourseDayKey(null);
+      resetSelectedWeek();
+    }
     void fetchAgendaView(access.classroomId)
       .then((view) => {
         setItems(view.items);
@@ -1081,6 +1162,31 @@ export default function Home() {
         setStudentScheduleSlots(scheduleSlotsFromAgendaView(view.scheduleSlots));
       })
       .catch(() => undefined);
+  }
+
+  function enterTeacherPreview() {
+    openTeacherStudentView({ entry: "teacher-preview" });
+  }
+
+  function enterTeacherBranchPreview(context: {
+    annualCourseId: string;
+    focusDate?: string | null;
+    schoolWeekNumber?: number | null;
+    dayOfWeek?: number | null;
+  }) {
+    const branch = openNotebookCourse?.branchLabel?.trim();
+    const className =
+      runtimeClassrooms.find((entry) => entry.id === (notebookClassroomId || selectedClassroomId))?.name
+      ?? openNotebookClass?.name
+      ?? studentClassroomName;
+    openTeacherStudentView({
+      entry: "teacher-branch-preview",
+      annualCourseId: context.annualCourseId,
+      classroomLabel: branch ? `${className} · ${branch}` : className,
+      focusDate: context.focusDate,
+      schoolWeekNumber: context.schoolWeekNumber,
+      dayOfWeek: context.dayOfWeek,
+    });
   }
 
   function enterStudentWithCode(code: string) {
@@ -1094,6 +1200,7 @@ export default function Home() {
         setStudentClassroomName(session.classroomName ?? "");
         setSelectedClassroomId(session.classroomId);
         setStudentEntry("code");
+        setPreviewAnnualCourseId(null);
         setAppMode("student");
         setStudentCourseDayKey(null);
         setStudentHistoryOpen(false);
@@ -1123,11 +1230,14 @@ export default function Home() {
 
   function exitStudentMode() {
     void (async () => {
-      const wasPreview = studentEntry === "teacher-preview";
+      const wasPreview = studentEntry === "teacher-preview" || studentEntry === "teacher-branch-preview";
       if (wasPreview) {
         setAppMode("teacher");
         setStudentSession(null);
         setStudentEntry(null);
+        setPreviewAnnualCourseId(null);
+        setStudentToday(new Date());
+        setStudentCourseDayKey(null);
         setActiveSection("ma-semaine");
         return;
       }
@@ -1722,7 +1832,13 @@ export default function Home() {
           futureTests={studentFutureTests}
           planning={studentControlPlanning}
           today={studentToday}
-          signOutLabel={studentEntry === "teacher-preview" ? "Quitter l’aperçu" : "Se déconnecter"}
+          signOutLabel={
+            studentEntry === "teacher-branch-preview"
+              ? "Quitter l’aperçu"
+              : studentEntry === "teacher-preview"
+                ? "Quitter l’agenda"
+                : "Se déconnecter"
+          }
           onToggleHistory={() => setStudentHistoryOpen((open) => !open)}
           onSelectCourseDay={(key) => {
             setStudentCourseDayKey(key);
@@ -1851,7 +1967,8 @@ export default function Home() {
             onSaveControl={notebookSaveControl}
             onUpdateControl={notebookUpdateControl}
             onDeleteControl={notebookDeletePublication}
-            onPreviewStudent={enterTeacherPreview}
+            onPreviewStudentAgenda={enterTeacherPreview}
+            onPreviewBranch={enterTeacherBranchPreview}
           />
         )}
 

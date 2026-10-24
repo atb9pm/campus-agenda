@@ -67,6 +67,16 @@ export function nextControlsForSubject(
   return forSubject.filter((entry) => calendarDateKey(entry.slot.date) === nextDate);
 }
 
+/** Contrôles élève d’un seul AnnualCourse — même identité que le Carnet ouvert. */
+export function upcomingTestsForAnnualCourse(
+  futureTests: UpcomingTestEntry[],
+  annualCourseId: string,
+): UpcomingTestEntry[] {
+  const id = annualCourseId.trim();
+  if (!id) return [];
+  return futureTests.filter((entry) => (entry.item.annualCourseId ?? "").trim() === id);
+}
+
 /**
  * Vue élève : seule la prochaine date de contrôle de chaque branche est affichée
  * (plusieurs contrôles à cette même date restent visibles). Les contrôles suivants

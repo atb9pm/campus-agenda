@@ -159,7 +159,13 @@ interface ClassNotebookPanelProps {
   }) => Promise<void>;
   onUpdateControl: (itemId: number, input: { title: string; detail: string }) => Promise<void>;
   onDeleteControl: (itemId: number) => Promise<void>;
-  onPreviewStudent?: () => void;
+  onPreviewStudentAgenda?: () => void;
+  onPreviewBranch?: (context: {
+    annualCourseId: string;
+    focusDate?: string | null;
+    schoolWeekNumber?: number | null;
+    dayOfWeek?: number | null;
+  }) => void;
 }
 
 type LineSelection =
@@ -262,7 +268,8 @@ export function ClassNotebookPanel({
   onSaveControl,
   onUpdateControl,
   onDeleteControl,
-  onPreviewStudent,
+  onPreviewStudentAgenda,
+  onPreviewBranch,
 }: ClassNotebookPanelProps) {
   const [weekDisplayCount, setWeekDisplayCount] = useState<WeekDisplayCount>(3);
   const narrowViewport = useNotebookNarrowViewport();
@@ -1491,11 +1498,6 @@ export function ClassNotebookPanel({
           >
             Contrôles 📅
           </button>
-          {onPreviewStudent ? (
-            <button type="button" className="workspace-action secondary" onClick={onPreviewStudent}>
-              Aperçu élève
-            </button>
-          ) : null}
           {annualCourseId?.trim() ? (
             <button type="button" className="workspace-action secondary" onClick={() => setExportOpen(true)}>
               📄 Exporter le carnet
@@ -1513,13 +1515,39 @@ export function ClassNotebookPanel({
       ) : null}
 
       <div className="class-notebook-week-controls">
-        <div className="class-notebook-shift">
-          <button type="button" onClick={() => shiftVisibleWeeks(-1)} aria-label="Séquences précédentes">
-            ◀
-          </button>
-          <button type="button" onClick={() => shiftVisibleWeeks(1)} aria-label="Séquences suivantes">
-            ▶
-          </button>
+        <div className="class-notebook-week-nav">
+          <div className="class-notebook-shift">
+            <button type="button" onClick={() => shiftVisibleWeeks(-1)} aria-label="Séquences précédentes">
+              ◀
+            </button>
+            <button type="button" onClick={() => shiftVisibleWeeks(1)} aria-label="Séquences suivantes">
+              ▶
+            </button>
+          </div>
+          <div className="class-notebook-preview-actions">
+            {onPreviewBranch && annualCourseId?.trim() ? (
+              <button
+                type="button"
+                className="workspace-action secondary"
+                onClick={() => {
+                  const card = visibleCards[0];
+                  onPreviewBranch({
+                    annualCourseId,
+                    focusDate: card?.session?.date ?? null,
+                    schoolWeekNumber: card?.weekNumber ?? null,
+                    dayOfWeek: card?.session?.dayOfWeek ?? null,
+                  });
+                }}
+              >
+                Aperçu branche
+              </button>
+            ) : null}
+            {onPreviewStudentAgenda ? (
+              <button type="button" className="workspace-action secondary" onClick={onPreviewStudentAgenda}>
+                Agenda élève
+              </button>
+            ) : null}
+          </div>
         </div>
         <fieldset className="class-notebook-display-count">
           <legend>Affichage</legend>

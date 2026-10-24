@@ -381,7 +381,7 @@ test("sources — agenda élève trie sur l’horaire du jour consulté", async 
   assert.doesNotMatch(route, /listAssignments\(/);
   assert.doesNotMatch(route, /getAnnualCourseNotesStore/);
   assert.match(client, /scheduleSlots: payload\.scheduleSlots \?\? \[\]/);
-  assert.match(page, /scheduleSlots: studentScheduleSlots/);
+  assert.match(page, /scheduleSlots: studentPreviewScheduleSlots/);
   assert.match(page, /courseDay: studentDisplayCourseDay/);
   assert.match(page, /scheduleSlotsFromAgendaView/);
   assert.match(page, /teacher-preview/);

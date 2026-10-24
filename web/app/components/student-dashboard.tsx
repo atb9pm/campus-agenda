@@ -224,7 +224,7 @@ export function StudentDashboard({
         </button>
         <button type="button" onClick={onSignOut}>
           <span aria-hidden="true">↪</span>
-          {signOutLabel === "Quitter l’aperçu" ? "Quitter" : "Sortir"}
+          {signOutLabel === "Se déconnecter" ? "Sortir" : "Quitter"}
         </button>
       </nav>
     </div>

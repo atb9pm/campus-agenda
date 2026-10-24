@@ -533,7 +533,7 @@ test("liste élève — page et planning appliquent la règle une date par branc
     readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../src/features/student/upcoming-controls.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(page, /return nextControlDatePerSubject\(\s*listFutureTestsForClass\(/);
+  assert.match(page, /nextControlDatePerSubject\(\s*listFutureTestsForClass\(/);
   assert.match(logic, /groupControlPlanning\(\s*nextControlDatePerSubject\(listFutureTestsForClass\(/);
 });
 
