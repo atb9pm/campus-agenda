@@ -41,9 +41,9 @@ export const PROFESSION_COLOR_THEMES: Record<string, ProfessionColorTheme> = {
   MACAM: {
     prefix: "MACAM",
     legendLabel: "Mécanicien machines agricoles",
-    accent: "#d97706",
-    background: "#fef3c7",
-    foreground: "#b45309",
+    accent: "#64748b",
+    background: "#ffffff",
+    foreground: "#334155",
   },
 };
 
@@ -95,6 +95,10 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
 }
 
+function isWhiteHex(hex: string): boolean {
+  return hex.replace("#", "").toLowerCase() === "ffffff";
+}
+
 export function professionColorStyleVars(theme: ProfessionColorTheme): Record<
   | "--profession-accent"
   | "--profession-bg"
@@ -112,7 +116,7 @@ export function professionColorStyleVars(theme: ProfessionColorTheme): Record<
     "--profession-halo": hexToRgba(theme.accent, 0.22),
     "--profession-halo-strong": hexToRgba(theme.accent, 0.34),
     "--profession-ring": hexToRgba(theme.accent, 0.3),
-    "--profession-wash": hexToRgba(theme.accent, 0.06),
+    "--profession-wash": isWhiteHex(theme.background) ? theme.background : hexToRgba(theme.accent, 0.06),
   };
 }
 
