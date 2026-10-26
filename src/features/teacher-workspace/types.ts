@@ -1,3 +1,4 @@
+import type { AttendanceRole, CourseWeekKind, CourseWeekday } from "../course-schedule/types.ts";
 import type { AssignmentRole } from "../annual-courses/types.ts";
 import type { TeachingType } from "../teaching-types/index.ts";
 
@@ -22,6 +23,13 @@ export const WORKSPACE_ASSIGNMENT_ROLE_LABELS: Record<WorkspaceDisplayRole, stri
   REPLACEMENT: "Remplacement temporaire",
   ADMIN_CONSULT: "Consultation admin",
 };
+
+/** Plan officiel de jours, sans identifiants internes — source de « Ma semaine ». */
+export interface TeacherCourseMeetingDay {
+  dayOfWeek: CourseWeekday;
+  weekKind: CourseWeekKind;
+  role: AttendanceRole;
+}
 
 /**
  * Cours attribué, calculé côté serveur.
@@ -50,6 +58,8 @@ export interface TeacherCourseWorkspaceEntry {
   branchLabel: string;
   branchSortOrder: number;
   teachingType: TeachingType | null;
+  /** Absent ou vide : aucun plan officiel, repli sur la préférence d’affichage. */
+  meetingDays?: TeacherCourseMeetingDay[];
 }
 
 export interface TeacherCourseWorkspaceResult {

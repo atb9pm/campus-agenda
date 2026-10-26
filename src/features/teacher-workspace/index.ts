@@ -26,6 +26,13 @@ export {
 } from "./queries.ts";
 export { matchSetupPreference, workspaceEntryClassMeta } from "./setup-match.ts";
 export {
+  groupMaSemaineByMeetingDays,
+  officialDisplayDaysForCourse,
+  type MaSemaineDayClass,
+  type MaSemaineDayGroup,
+} from "./ma-semaine-days.ts";
+export type { TeacherCourseMeetingDay } from "./types.ts";
+export {
   listTeacherCourses,
   schoolYearIdFromSearchParams,
   sessionTeacherIdForCoursesApi,

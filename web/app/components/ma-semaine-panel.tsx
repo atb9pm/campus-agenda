@@ -8,12 +8,11 @@ import { resolveProfessionColorTheme } from "@campus/features/school-catalog";
 import { professionColorStyle } from "../../lib/profession-color-style.ts";
 import {
   formatWeekdayLabel,
-  groupClassesByWeekday,
   type TeacherClassSetup,
 } from "@campus/features/teacher-setup";
 import {
   TEACHER_WEEK_EMPTY_CLASSES_MESSAGE,
-  teacherCoursesForClass,
+  groupMaSemaineByMeetingDays,
   type TeacherCourseWorkspaceEntry,
 } from "@campus/features/teacher-workspace";
 
@@ -43,18 +42,21 @@ export function MaSemainePanel({
     () => classes.filter((entry) => entry.name.trim()),
     [classes],
   );
-  const grouped = useMemo(() => groupClassesByWeekday(activeClasses), [activeClasses]);
   const selectedWeek =
     schoolWeeks.find((week) => week.number === selectedSchoolWeekNumber) ??
     schoolWeeks[0] ??
     null;
+  const grouped = useMemo(
+    () => groupMaSemaineByMeetingDays(activeClasses, courses, selectedWeek?.kind ?? null),
+    [activeClasses, courses, selectedWeek?.kind],
+  );
 
   return (
     <section className="teacher-workspace" aria-label="Ma semaine">
       <div className="workspace-intro ma-semaine-intro">
         <p className="eyebrow">VUE PERSONNELLE</p>
         <h2>Ma semaine</h2>
-        <p>Vos cours attribués, organisés selon vos préférences de jours d’affichage.</p>
+        <p>Vos cours attribués, organisés selon les jours configurés dans l’horaire des classes.</p>
       </div>
 
       {selectedWeek && (
@@ -64,9 +66,9 @@ export function MaSemainePanel({
             <strong>{formatSchoolWeekHeading(selectedWeek)}</strong>
             <p>
               {selectedWeek.kind === "A"
-                ? "Semaine A — jour de cours : lundi"
+                ? "Semaine A"
                 : selectedWeek.kind === "B"
-                  ? "Semaine B — jours de cours : lundi et jeudi"
+                  ? "Semaine B"
                   : "Semaine de cours"}
             </p>
           </div>
@@ -97,9 +99,8 @@ export function MaSemainePanel({
                 <small>{group.classes.length} classe{group.classes.length > 1 ? "s" : ""}</small>
               </header>
               <div className="ma-semaine-class-grid">
-                {group.classes.map((entry) => {
+                {group.classes.map(({ setup: entry, courses: classCourses }) => {
                   const theme = resolveProfessionColorTheme(entry.professionPrefix, entry.name);
-                  const classCourses = teacherCoursesForClass(courses, entry.id);
                   const uniqueCourse = classCourses.length === 1 ? classCourses[0] : null;
                   const cardStyle = professionColorStyle(theme);
                   const cardTitle = entry.programLabel || theme.legendLabel;
@@ -165,8 +166,10 @@ export function MaSemainePanel({
       {selectedWeek && (
         <aside className="ma-semaine-plan-hint" aria-label="Rappel semaine A ou B">
           <p>
-            Cette semaine est une semaine <strong>{selectedWeek.kind}</strong>. Les jours affichés ici
-            sont une préférence personnelle, pas une attribution.
+            {selectedWeek.kind
+              ? <>Cette semaine est une semaine <strong>{selectedWeek.kind}</strong>. </>
+              : null}
+            Les cours sont affichés selon les jours configurés dans l’horaire des classes.
           </p>
         </aside>
       )}
