@@ -24,7 +24,7 @@ import {
 } from "@campus/features/annual-courses/operational-assignment.ts";
 import type { PedagogicalContextRecord, SchoolProfessionRecord } from "@campus/features/school-catalog";
 import type { SchoolBranchRecord, SchoolClassRecord } from "@campus/features/school-catalog";
-import { formatPedagogicalContextLabel } from "@campus/features/school-catalog";
+import { compareClassCode, formatPedagogicalContextLabel } from "@campus/features/school-catalog";
 import { filterBySchoolYearId } from "@campus/features/school-year/admin-working-year.ts";
 import { AdminWorkingYearBanner } from "./admin-working-year-banner.tsx";
 import type { SchoolYearSummary } from "../../lib/api-client.ts";
@@ -136,20 +136,27 @@ export function AnnualCoursesAdminPanel({
   const structuredClasses = useMemo(() => {
     if (!data) return [];
     const yearClasses = filterBySchoolYearId(data.classes, workingYearId);
-    return yearClasses.filter((entry) => {
-      const year = (data.schoolYears ?? schoolYears).find((item) => item.id === entry.schoolYearId) ?? null;
-      const profession = data.professions.find((item) => item.id === entry.professionId) ?? null;
-      return isClassEligibleForAssignment({
-        isActive: entry.isActive,
-        isArchived: entry.isArchived,
-        schoolYearId: entry.schoolYearId,
-        professionId: entry.professionId,
-        trainingYear: entry.trainingYear,
-        yearStatus: year?.status ?? null,
-        professionActive: profession?.isActive,
-        professionArchived: profession?.isArchived,
+    return yearClasses
+      .filter((entry) => {
+        const year = (data.schoolYears ?? schoolYears).find((item) => item.id === entry.schoolYearId) ?? null;
+        const profession = data.professions.find((item) => item.id === entry.professionId) ?? null;
+        return isClassEligibleForAssignment({
+          isActive: entry.isActive,
+          isArchived: entry.isArchived,
+          schoolYearId: entry.schoolYearId,
+          professionId: entry.professionId,
+          trainingYear: entry.trainingYear,
+          yearStatus: year?.status ?? null,
+          professionActive: profession?.isActive,
+          professionArchived: profession?.isArchived,
+        });
+      })
+      .sort((left, right) => {
+        const byLabel = compareClassCode(left.label, right.label);
+        if (byLabel !== 0) return byLabel;
+        const byCode = compareClassCode(left.code, right.code);
+        return byCode !== 0 ? byCode : left.id.localeCompare(right.id);
       });
-    });
   }, [data, schoolYears, workingYearId]);
 
   const currentClass = structuredClasses.find((entry) => entry.id === selectedClassId) ?? structuredClasses[0] ?? null;

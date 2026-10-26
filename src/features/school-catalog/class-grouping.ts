@@ -27,7 +27,8 @@ export function countClassesByStatus(classes: SchoolClassRecord[]): Record<Class
   };
 }
 
-function compareClassCode(left: string, right: string): number {
+/** Ordre alphabétique d’affichage (codes / libellés de classe), locale suisse, chiffres naturels. */
+export function compareClassCode(left: string, right: string): number {
   return left.localeCompare(right, "fr-CH", { numeric: true, sensitivity: "base" });
 }
 
