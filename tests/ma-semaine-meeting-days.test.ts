@@ -117,13 +117,13 @@ test("cas 4 — préférence lundi ignorée si MeetingDay officiel = mardi (MECM
   assert.equal(setup(1).dayOfWeek, 1, "la préférence persistée n’est pas modifiée");
 });
 
-test("cas 5 — aucun MeetingDay : repli sur la préférence legacy", () => {
+test("cas 5 — aucun MeetingDay ni ClassAttendanceDay : repli sur la préférence legacy", () => {
   const assigned = course({ annualCourseId: "ac-legacy" });
   const groups = groupMaSemaineByMeetingDays([setup(1)], [assigned], "A");
   assert.deepEqual(daysOn(groups), [1]);
   assert.deepEqual(courseIdsOn(groups, 1), ["ac-legacy"]);
-  assert.deepEqual(officialDisplayDaysForCourse(undefined, 4, "A"), [4]);
-  assert.deepEqual(officialDisplayDaysForCourse([], 3, "B"), [3]);
+  assert.deepEqual(officialDisplayDaysForCourse(undefined, undefined, 4, "A"), [4]);
+  assert.deepEqual(officialDisplayDaysForCourse([], [], 3, "B"), [3]);
 });
 
 test("PRIMARY mardi A + ADDITIONAL jeudi B suivent la semaine consultée", () => {
@@ -139,9 +139,10 @@ test("PRIMARY mardi A + ADDITIONAL jeudi B suivent la semaine consultée", () =>
 });
 
 test("Ma semaine — copy et groupement officiel, préférences inchangées", async () => {
-  const [panel, page] = await Promise.all([
+  const [panel, page, service] = await Promise.all([
     readFile(new URL("../web/app/components/ma-semaine-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/features/teacher-workspace/service.ts", import.meta.url), "utf8"),
   ]);
   assert.match(panel, /groupMaSemaineByMeetingDays/);
   assert.match(panel, /Les cours sont affichés selon les jours configurés dans l’horaire des classes/);
@@ -150,4 +151,95 @@ test("Ma semaine — copy et groupement officiel, préférences inchangées", as
   assert.match(page, /jours configurés dans l’horaire des classes/);
   const config = await readFile(new URL("../web/app/components/configuration-panel.tsx", import.meta.url), "utf8");
   assert.match(config, /upsertSetupPreferenceForCourse/);
+  assert.match(service, /listAttendanceDays/);
+  assert.match(service, /classAttendanceDays/);
+});
+
+const TUESDAY_ALL: TeacherCourseMeetingDay[] = [{ dayOfWeek: 2, weekKind: "all", role: "PRIMARY" }];
+const THURSDAY_ALL: TeacherCourseMeetingDay[] = [{ dayOfWeek: 4, weekKind: "all", role: "PRIMARY" }];
+const THURSDAY_B: TeacherCourseMeetingDay[] = [{ dayOfWeek: 4, weekKind: "B", role: "PRIMARY" }];
+const TUESDAY_A: TeacherCourseMeetingDay[] = [{ dayOfWeek: 2, weekKind: "A", role: "PRIMARY" }];
+
+test("attendance 1 — aucun MeetingDay + classe mardi/all + préférence lundi → mardi uniquement", () => {
+  const injection = course({
+    annualCourseId: "ac-injection",
+    branchLabel: "CP Léger Injection, dépollution",
+    classAttendanceDays: TUESDAY_ALL,
+  });
+  const transmission = course({
+    annualCourseId: "ac-transmission",
+    branchId: "br-2",
+    branchCode: "br-2",
+    branchLabel: "CP2 Transmission",
+    classAttendanceDays: TUESDAY_ALL,
+  });
+  const groups = groupMaSemaineByMeetingDays([setup(1)], [injection, transmission], "A");
+  assert.deepEqual(daysOn(groups), [2]);
+  assert.deepEqual(courseIdsOn(groups, 2), ["ac-injection", "ac-transmission"]);
+  assert.deepEqual(courseIdsOn(groups, 1), []);
+});
+
+test("attendance 2 — MeetingDay jeudi/all + classe mardi/all → jeudi uniquement", () => {
+  const assigned = course({
+    annualCourseId: "ac-mecma",
+    meetingDays: THURSDAY_ALL,
+    classAttendanceDays: TUESDAY_ALL,
+  });
+  const groups = groupMaSemaineByMeetingDays([setup(1)], [assigned], "A");
+  assert.deepEqual(daysOn(groups), [4]);
+  assert.deepEqual(courseIdsOn(groups, 2), []);
+  assert.deepEqual(courseIdsOn(groups, 1), []);
+});
+
+test("attendance 3 — MeetingDay jeudi/B + classe mardi/all, semaine A → absent (pas de repli)", () => {
+  const assigned = course({
+    annualCourseId: "ac-mecma",
+    meetingDays: THURSDAY_B,
+    classAttendanceDays: TUESDAY_ALL,
+  });
+  const weekA = groupMaSemaineByMeetingDays([setup(1)], [assigned], "A");
+  assert.deepEqual(daysOn(weekA), []);
+  assert.deepEqual(courseIdsOn(weekA, 2), []);
+  assert.deepEqual(courseIdsOn(weekA, 1), []);
+  assert.deepEqual(officialDisplayDaysForCourse(THURSDAY_B, TUESDAY_ALL, 1, "A"), []);
+});
+
+test("attendance 4 — MeetingDay jeudi/B + classe mardi/all, semaine B → jeudi", () => {
+  const assigned = course({
+    annualCourseId: "ac-mecma",
+    meetingDays: THURSDAY_B,
+    classAttendanceDays: TUESDAY_ALL,
+  });
+  const weekB = groupMaSemaineByMeetingDays([setup(1)], [assigned], "B");
+  assert.deepEqual(daysOn(weekB), [4]);
+  assert.deepEqual(courseIdsOn(weekB, 4), ["ac-mecma"]);
+  assert.deepEqual(courseIdsOn(weekB, 2), []);
+});
+
+test("attendance 5 — aucun MeetingDay + classe mardi/A, semaine A → mardi", () => {
+  const assigned = course({
+    annualCourseId: "ac-mecma",
+    classAttendanceDays: TUESDAY_A,
+  });
+  const weekA = groupMaSemaineByMeetingDays([setup(1)], [assigned], "A");
+  assert.deepEqual(daysOn(weekA), [2]);
+  assert.deepEqual(courseIdsOn(weekA, 2), ["ac-mecma"]);
+});
+
+test("attendance 6 — aucun MeetingDay + classe mardi/A, semaine B → absent (pas de repli personnel)", () => {
+  const assigned = course({
+    annualCourseId: "ac-mecma",
+    classAttendanceDays: TUESDAY_A,
+  });
+  const weekB = groupMaSemaineByMeetingDays([setup(1)], [assigned], "B");
+  assert.deepEqual(daysOn(weekB), []);
+  assert.deepEqual(courseIdsOn(weekB, 1), []);
+  assert.deepEqual(officialDisplayDaysForCourse([], TUESDAY_A, 1, "B"), []);
+});
+
+test("attendance 7 — aucun MeetingDay + aucun ClassAttendanceDay + préférence lundi → lundi", () => {
+  const assigned = course({ annualCourseId: "ac-legacy", classAttendanceDays: [] });
+  const groups = groupMaSemaineByMeetingDays([setup(1)], [assigned], "B");
+  assert.deepEqual(daysOn(groups), [1]);
+  assert.deepEqual(courseIdsOn(groups, 1), ["ac-legacy"]);
 });
