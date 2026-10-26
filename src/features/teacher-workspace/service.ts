@@ -1,15 +1,17 @@
 import type { AnnualCourseStore } from "../../lib/persistence/annual-course-types.ts";
+import type { CourseScheduleStore } from "../../lib/persistence/course-schedule-types.ts";
 import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-types.ts";
 import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
 import type { TeacherAccountStore } from "../../lib/persistence/teacher-account-types.ts";
 import { buildTeacherCourseWorkspace, resolveTeacherWorkspaceYearRequest } from "./queries.ts";
-import type { TeacherCourseWorkspaceResult } from "./types.ts";
+import type { TeacherCourseMeetingDay, TeacherCourseWorkspaceResult } from "./types.ts";
 
 export interface TeacherCourseWorkspaceDeps {
   courses: AnnualCourseStore;
   catalog: SchoolCatalogStore;
   years: SchoolYearStore;
   teachers?: TeacherAccountStore;
+  schedules?: Pick<CourseScheduleStore, "listMeetingDays">;
 }
 
 /**
@@ -44,20 +46,40 @@ export async function listTeacherCourses(
     adminConsult: options.adminConsult,
   });
 
-  return buildTeacherCourseWorkspace({
-    teacherId: options.teacherId,
-    at: options.at,
-    schoolYearId,
-    isAdmin: options.isAdmin,
-    adminConsult: options.adminConsult,
-    assignments,
-    courses,
-    classes,
-    contexts,
-    branches,
-    years,
-    professions,
-  });
+  const [workspace, meetingDays] = await Promise.all([
+    Promise.resolve(
+      buildTeacherCourseWorkspace({
+        teacherId: options.teacherId,
+        at: options.at,
+        schoolYearId,
+        isAdmin: options.isAdmin,
+        adminConsult: options.adminConsult,
+        assignments,
+        courses,
+        classes,
+        contexts,
+        branches,
+        years,
+        professions,
+      }),
+    ),
+    deps.schedules ? deps.schedules.listMeetingDays() : Promise.resolve([]),
+  ]);
+  if (meetingDays.length === 0) return workspace;
+
+  const daysByCourse = new Map<string, TeacherCourseMeetingDay[]>();
+  for (const day of meetingDays) {
+    const list = daysByCourse.get(day.annualCourseId) ?? [];
+    list.push({ dayOfWeek: day.dayOfWeek, weekKind: day.weekKind, role: day.role });
+    daysByCourse.set(day.annualCourseId, list);
+  }
+  return {
+    ...workspace,
+    courses: workspace.courses.map((course) => ({
+      ...course,
+      meetingDays: daysByCourse.get(course.annualCourseId) ?? [],
+    })),
+  };
 }
 
 /** Le paramètre client `teacherId` est ignoré : seule la session compte. */

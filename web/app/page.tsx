@@ -260,7 +260,7 @@ function sectionDescription(
     return "Planification des contrôles publiés dans l’agenda.";
   }
   if (activeSection === "ma-semaine") {
-    return "Vos cours attribués, organisés selon vos préférences d’affichage.";
+    return "Vos cours attribués, organisés selon les jours configurés dans l’horaire des classes.";
   }
   if (activeSection === "administration") {
     return "Référentiel école : classes, branches, accès et année scolaire.";
