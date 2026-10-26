@@ -34,12 +34,25 @@ test("version 2.61.8 — halo et badge branche Ma semaine, pas de migration", as
   assert.match(professionsPanel, /is-profession-colored/);
 });
 
-test("palette — MECAUTO bleu, CONDVL ardoise, MACAM ocre", () => {
+test("palette — MECAUTO bleu, CONDVL ardoise, MACAM blanc, MECMA orange", () => {
   assert.equal(resolveProfessionColorTheme("MECAUTO").accent, "#1d4ed8");
   assert.equal(resolveProfessionColorTheme("CONDVL").foreground, "#334155");
-  assert.equal(resolveProfessionColorTheme("MACAM").foreground, "#b45309");
+  assert.equal(resolveProfessionColorTheme("MACAM").background, "#ffffff");
+  assert.equal(resolveProfessionColorTheme("MACAM").foreground, "#334155");
+  assert.notEqual(resolveProfessionColorTheme("MACAM").accent, "#d97706");
   assert.equal(resolveProfessionColorTheme("MECMA").accent, "#c2410c");
+  assert.equal(resolveProfessionColorTheme("MECMA").background, "#ffedd5");
   assert.equal(resolveProfessionColorTheme("AMA").accent, "#047857");
+});
+
+test("MACAM — fond blanc, halo conservé, distinct de MECMA", () => {
+  const macam = professionColorStyleVars(resolveProfessionColorTheme("MACAM"));
+  const mecma = professionColorStyleVars(resolveProfessionColorTheme("MECMA"));
+  assert.equal(macam["--profession-bg"], "#ffffff");
+  assert.equal(macam["--profession-wash"], "#ffffff");
+  assert.match(macam["--profession-halo"], /^rgba\(/);
+  assert.notEqual(macam["--profession-halo"], mecma["--profession-halo"]);
+  assert.notEqual(macam["--profession-bg"], mecma["--profession-bg"]);
 });
 
 test("inférence — MECAUTO3A → MECAUTO", () => {
