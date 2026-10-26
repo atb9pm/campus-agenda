@@ -100,6 +100,7 @@ export {
 } from "./class-delete-blockers.ts";
 export { loadClassDeleteUsage } from "./class-delete-service.ts";
 export {
+  compareClassCode,
   countClassesByStatus,
   filterClassesByStatus,
   groupSchoolClasses,

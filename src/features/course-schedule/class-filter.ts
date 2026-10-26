@@ -1,3 +1,4 @@
+import { compareClassCode } from "../school-catalog/class-grouping.ts";
 import {
   classLifecycleLabel,
   classLifecycleStatus,
@@ -48,10 +49,10 @@ export function listScheduleEditorClasses<T extends ScheduleEditorClass>(options
       if (isOperationalSchoolClass(entry, yearId)) return true;
       return options.includeInactiveOrArchived;
     })
-    .sort(
-      (left, right) =>
-        left.sortOrder - right.sortOrder || left.code.localeCompare(right.code, "fr-CH"),
-    );
+    .sort((left, right) => {
+      const byCode = compareClassCode(left.code, right.code);
+      return byCode !== 0 ? byCode : left.id.localeCompare(right.id);
+    });
 }
 
 /**

@@ -333,9 +333,22 @@ test("20 — aucune migration SQL", () => {
 });
 
 test("cas réel 2026-2027 — défaut vs historique", () => {
-  assert.deepEqual(visibleCodes(false), ["MMA1A", "MA3A", "MECAUTO3A"]);
+  assert.deepEqual(visibleCodes(false), ["MA3A", "MECAUTO3A", "MMA1A"]);
   const historical = visibleCodes(true);
-  assert.deepEqual(historical, ["MMA1A", "MA2", "MA3A", "MA3B", "MECAUTO3A"]);
+  assert.deepEqual(historical, ["MA2", "MA3A", "MA3B", "MECAUTO3A", "MMA1A"]);
   assert.equal(classScheduleOptionLabel(MA3B), "MA3B · désactivée");
   assert.equal(classScheduleOptionLabel(MA2), "MA2 · archivée");
+});
+
+test("liste Classe de l’horaire — alphabétique, pas sortOrder (AMA avant MECAUTO)", () => {
+  const ama = schoolClass("sc-ama2", "AMA2", { sortOrder: 90 });
+  const mecauto = schoolClass("sc-mecauto3b", "MECAUTO3B", { sortOrder: 1 });
+  const mecma = schoolClass("sc-mecma3a", "MECMA3A", { sortOrder: 2 });
+  const codes = listScheduleEditorClasses({
+    classes: [mecma, mecauto, ama],
+    schoolYearId: YEAR_ID,
+    includeInactiveOrArchived: false,
+  }).map((entry) => entry.code);
+  assert.deepEqual(codes, ["AMA2", "MECAUTO3B", "MECMA3A"]);
+  assert.equal(ama.sortOrder, 90, "sortOrder persisté inchangé");
 });
