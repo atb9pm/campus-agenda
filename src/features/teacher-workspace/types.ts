@@ -58,8 +58,13 @@ export interface TeacherCourseWorkspaceEntry {
   branchLabel: string;
   branchSortOrder: number;
   teachingType: TeachingType | null;
-  /** Absent ou vide : aucun plan officiel, repli sur la préférence d’affichage. */
+  /** Absent ou vide : aucun plan de cours officiel. */
   meetingDays?: TeacherCourseMeetingDay[];
+  /**
+   * Jours officiels de la classe (`ClassAttendanceDay`).
+   * Ignorés dès que `meetingDays` contient au moins un créneau.
+   */
+  classAttendanceDays?: TeacherCourseMeetingDay[];
 }
 
 export interface TeacherCourseWorkspaceResult {

@@ -25,24 +25,39 @@ export function meetingDayAppliesToWeek(
 
 type CourseWeekKindOfDay = TeacherCourseMeetingDay["weekKind"];
 
-/** Jours officiels applicables à la semaine consultée. Tableau vide = cours absent cette semaine. */
-export function officialDisplayDaysForCourse(
-  meetingDays: readonly TeacherCourseMeetingDay[] | undefined,
-  fallbackDay: WeekdayIndex,
+function applicableOfficialDays(
+  days: readonly TeacherCourseMeetingDay[],
   selectedWeekKind: SchoolWeekKind | null,
 ): WeekdayIndex[] {
-  if (!meetingDays?.length) return [fallbackDay];
-  const days = new Set<WeekdayIndex>();
-  for (const day of meetingDays) {
+  const unique = new Set<WeekdayIndex>();
+  for (const day of days) {
     if (!meetingDayAppliesToWeek(day.weekKind, selectedWeekKind)) continue;
-    days.add(day.dayOfWeek);
+    unique.add(day.dayOfWeek);
   }
-  return [...days].sort((left, right) => left - right);
+  return [...unique].sort((left, right) => left - right);
 }
 
 /**
- * « Ma semaine » : un cours va sous ses AnnualCourseMeetingDay.
- * Sans plan officiel, la préférence d’affichage (setup.dayOfWeek) reste le repli.
+ * Hiérarchie « Ma semaine » :
+ * 1. AnnualCourseMeetingDay s’il en existe au moins un (y compris si aucun n’est
+ *    applicable à la semaine consultée → cours absent, pas de repli).
+ * 2. Sinon ClassAttendanceDay de la classe (même règle A/B : plan présent = source).
+ * 3. Sinon préférence personnelle `fallbackDay`.
+ */
+export function officialDisplayDaysForCourse(
+  meetingDays: readonly TeacherCourseMeetingDay[] | undefined,
+  classAttendanceDays: readonly TeacherCourseMeetingDay[] | undefined,
+  fallbackDay: WeekdayIndex,
+  selectedWeekKind: SchoolWeekKind | null,
+): WeekdayIndex[] {
+  if (meetingDays?.length) return applicableOfficialDays(meetingDays, selectedWeekKind);
+  if (classAttendanceDays?.length) return applicableOfficialDays(classAttendanceDays, selectedWeekKind);
+  return [fallbackDay];
+}
+
+/**
+ * « Ma semaine » : MeetingDay de cours, sinon AttendanceDay de classe,
+ * sinon préférence d’affichage (setup.dayOfWeek).
  */
 export function groupMaSemaineByMeetingDays(
   setups: readonly TeacherClassSetup[],
@@ -55,7 +70,12 @@ export function groupMaSemaineByMeetingDays(
   for (const course of courses) {
     const setup = setupByClassId.get(course.classId);
     const fallbackDay = setup?.dayOfWeek ?? 1;
-    const days = officialDisplayDaysForCourse(course.meetingDays, fallbackDay, selectedWeekKind);
+    const days = officialDisplayDaysForCourse(
+      course.meetingDays,
+      course.classAttendanceDays,
+      fallbackDay,
+      selectedWeekKind,
+    );
     for (const dayOfWeek of days) {
       const byClass = coursesByDayAndClass.get(dayOfWeek) ?? new Map();
       const list = byClass.get(course.classId) ?? [];

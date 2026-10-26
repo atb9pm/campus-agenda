@@ -11,7 +11,8 @@ export interface TeacherCourseWorkspaceDeps {
   catalog: SchoolCatalogStore;
   years: SchoolYearStore;
   teachers?: TeacherAccountStore;
-  schedules?: Pick<CourseScheduleStore, "listMeetingDays">;
+  schedules?: Pick<CourseScheduleStore, "listMeetingDays"> &
+    Partial<Pick<CourseScheduleStore, "listAttendanceDays">>;
 }
 
 /**
@@ -46,7 +47,7 @@ export async function listTeacherCourses(
     adminConsult: options.adminConsult,
   });
 
-  const [workspace, meetingDays] = await Promise.all([
+  const [workspace, meetingDays, attendanceDays] = await Promise.all([
     Promise.resolve(
       buildTeacherCourseWorkspace({
         teacherId: options.teacherId,
@@ -64,8 +65,9 @@ export async function listTeacherCourses(
       }),
     ),
     deps.schedules ? deps.schedules.listMeetingDays() : Promise.resolve([]),
+    deps.schedules?.listAttendanceDays ? deps.schedules.listAttendanceDays() : Promise.resolve([]),
   ]);
-  if (meetingDays.length === 0) return workspace;
+  if (meetingDays.length === 0 && attendanceDays.length === 0) return workspace;
 
   const daysByCourse = new Map<string, TeacherCourseMeetingDay[]>();
   for (const day of meetingDays) {
@@ -73,11 +75,18 @@ export async function listTeacherCourses(
     list.push({ dayOfWeek: day.dayOfWeek, weekKind: day.weekKind, role: day.role });
     daysByCourse.set(day.annualCourseId, list);
   }
+  const attendanceByClass = new Map<string, TeacherCourseMeetingDay[]>();
+  for (const day of attendanceDays) {
+    const list = attendanceByClass.get(day.classId) ?? [];
+    list.push({ dayOfWeek: day.dayOfWeek, weekKind: day.weekKind, role: day.role });
+    attendanceByClass.set(day.classId, list);
+  }
   return {
     ...workspace,
     courses: workspace.courses.map((course) => ({
       ...course,
       meetingDays: daysByCourse.get(course.annualCourseId) ?? [],
+      classAttendanceDays: attendanceByClass.get(course.classId) ?? [],
     })),
   };
 }
