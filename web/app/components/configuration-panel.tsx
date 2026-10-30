@@ -1,116 +1,57 @@
 "use client";
 
-import { useMemo } from "react";
-
-import { resolveProfessionColorTheme } from "@campus/features/school-catalog";
-import { professionColorStyle } from "../../lib/profession-color-style.ts";
 import {
-  WEEKDAY_LABELS,
+  NOTEBOOK_WEEK_COUNT_OPTIONS,
+  notebookWeekCountPreference,
+  withNotebookWeekCount,
   type TeacherSetupConfig,
-  type WeekdayIndex,
 } from "@campus/features/teacher-setup";
-import {
-  matchSetupPreference,
-  TEACHER_COURSES_EMPTY_MESSAGE,
-  upsertSetupPreferenceForCourse,
-  WORKSPACE_ASSIGNMENT_ROLE_LABELS,
-  type TeacherCourseWorkspaceEntry,
-} from "@campus/features/teacher-workspace";
 
 interface ConfigurationPanelProps {
   config: TeacherSetupConfig;
-  courses: TeacherCourseWorkspaceEntry[];
   onChange: (config: TeacherSetupConfig) => void;
-  onReset: () => void;
-  onNotice: (message: string) => void;
 }
 
-export function ConfigurationPanel({
-  config,
-  courses,
-  onChange,
-  onReset,
-}: ConfigurationPanelProps) {
-  const preferenceCount = useMemo(() => {
-    return courses.filter((course) => matchSetupPreference(course, config)).length;
-  }, [config, courses]);
-
-  function patchCourse(course: TeacherCourseWorkspaceEntry, dayOfWeek: WeekdayIndex) {
-    onChange(upsertSetupPreferenceForCourse(config, course, { dayOfWeek }));
-  }
+export function ConfigurationPanel({ config, onChange }: ConfigurationPanelProps) {
+  const notebookWeekCount = notebookWeekCountPreference(config);
 
   return (
-    <section className="teacher-workspace" aria-label="Configuration">
+    <section className="teacher-workspace" aria-label="Préférences">
       <div className="workspace-intro">
         <p className="eyebrow">PARAMÈTRES PERSONNELS</p>
         <h2>Préférences</h2>
         <p>
-          Personnalisez le jour d’affichage de vos cours attribués dans Ma semaine. Vous ne pouvez
-          pas vous attribuer une classe ou une branche.
+          Réglages d’affichage qui ne concernent que vous. Les jours de cours et les attributions
+          sont gérés dans l’administration.
         </p>
-        <div className="config-summary-row">
-          <span>
-            <strong>{courses.length}</strong> cours attribué{courses.length > 1 ? "s" : ""}
-            {preferenceCount ? ` · ${preferenceCount} préférence${preferenceCount > 1 ? "s" : ""}` : ""}
-          </span>
-          <button type="button" className="workspace-action secondary" onClick={onReset}>
-            Réinitialiser les préférences
-          </button>
-        </div>
       </div>
 
-      <div className="config-classes-editor" aria-label="Préférences d’affichage">
+      <div className="config-classes-editor" aria-label="Préférences du carnet">
         <header className="config-section-header">
-          <h3>Afficher / masquer mes cours</h3>
+          <div>
+            <h3>Carnet</h3>
+            <p>
+              Nombre de semaines affichées à l’ouverture du carnet. Vous pouvez toujours changer
+              l’affichage dans le carnet. Sur smartphone, le carnet affiche une semaine.
+            </p>
+          </div>
         </header>
 
-        {!courses.length ? (
-          <p className="ma-semaine-empty">{TEACHER_COURSES_EMPTY_MESSAGE}</p>
-        ) : (
-          <div className="config-class-list">
-            {courses.map((course) => {
-              const preference = matchSetupPreference(course, config);
-              const theme = resolveProfessionColorTheme(
-                course.professionClassCodePrefix,
-                course.classCode,
-              );
-              return (
-                <article className="config-class-row config-class-row-simple" key={course.annualCourseId}>
-                  <div className="config-field">
-                    <span>Cours attribué</span>
-                    <strong
-                      className="config-class-code"
-                      style={professionColorStyle(theme)}
-                      title={course.professionLabel ?? theme.legendLabel}
-                    >
-                      {course.classCode}
-                    </strong>
-                    <span className="config-class-branch">{course.branchLabel}</span>
-                    <small className="mes-cours-role">
-                      {WORKSPACE_ASSIGNMENT_ROLE_LABELS[course.role]}
-                    </small>
-                  </div>
-
-                  <label className="config-field">
-                    <span>Jour d’affichage</span>
-                    <select
-                      value={preference?.dayOfWeek ?? 1}
-                      onChange={(event) =>
-                        patchCourse(course, Number(event.target.value) as WeekdayIndex)
-                      }
-                    >
-                      {(Object.entries(WEEKDAY_LABELS) as Array<[string, string]>).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </article>
-              );
-            })}
-          </div>
-        )}
+        <fieldset className="config-choice-group">
+          <legend>Semaines affichées par défaut</legend>
+          {NOTEBOOK_WEEK_COUNT_OPTIONS.map((count) => (
+            <label key={count}>
+              <input
+                type="radio"
+                name="notebook-week-count"
+                value={count}
+                checked={notebookWeekCount === count}
+                onChange={() => onChange(withNotebookWeekCount(config, count))}
+              />
+              {count} semaine{count > 1 ? "s" : ""}
+            </label>
+          ))}
+        </fieldset>
       </div>
     </section>
   );
