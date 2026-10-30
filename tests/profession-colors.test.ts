@@ -22,8 +22,7 @@ test("version 2.61.8 — halo et badge branche Ma semaine, pas de migration", as
   ]);
   assert.doesNotMatch(configPanel, /Icône/);
   assert.doesNotMatch(configPanel, /maxLength=\{4\}/);
-  assert.match(configPanel, /Jour d’affichage/);
-  assert.match(configPanel, /resolveProfessionColorTheme/);
+  assert.doesNotMatch(configPanel, /Jour d’affichage/);
   assert.doesNotMatch(maSemaine, /ma-semaine-class-icon/);
   assert.doesNotMatch(maSemaine, /ma-semaine-profession-legend/);
   assert.match(maSemaine, /ma-semaine-class-code/);

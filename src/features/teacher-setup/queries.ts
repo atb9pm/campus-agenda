@@ -1,6 +1,12 @@
 import type { SchoolWeek } from "../calendar/types.ts";
-import type { TeacherClassSetup, TeacherSetupConfig, WeekdayIndex } from "./types.ts";
-import { WEEKDAY_LABELS, WEEKDAY_SHORT_LABELS } from "./types.ts";
+import type {
+  NotebookWeekCountPreference,
+  TeacherClassSetup,
+  TeacherDisplayPreferences,
+  TeacherSetupConfig,
+  WeekdayIndex,
+} from "./types.ts";
+import { DEFAULT_NOTEBOOK_WEEK_COUNT, WEEKDAY_LABELS, WEEKDAY_SHORT_LABELS } from "./types.ts";
 
 export function sortClassesByWeekday(classes: TeacherClassSetup[]): TeacherClassSetup[] {
   return [...classes].sort((left, right) => {
@@ -79,6 +85,7 @@ export function buildSchoolWeekPlanRows(weeks: SchoolWeek[]): SchoolWeekPlanRow[
 }
 
 export function normalizeTeacherSetup(config: TeacherSetupConfig): TeacherSetupConfig {
+  const display = normalizeDisplayPreferences(config.display);
   return {
     version: 1,
     classes: config.classes.map((entry) => ({
@@ -87,6 +94,37 @@ export function normalizeTeacherSetup(config: TeacherSetupConfig): TeacherSetupC
       branchNames: entry.branchNames.map((branch) => branch.trim()).filter(Boolean),
       dayOfWeek: clampWeekday(entry.dayOfWeek),
     })),
+    ...(display ? { display } : {}),
+  };
+}
+
+export function clampNotebookWeekCount(value: number): NotebookWeekCountPreference {
+  if (!Number.isFinite(value)) return DEFAULT_NOTEBOOK_WEEK_COUNT;
+  if (value <= 1) return 1;
+  if (value >= 4) return 4;
+  return Math.round(value) as NotebookWeekCountPreference;
+}
+
+function normalizeDisplayPreferences(raw: unknown): TeacherDisplayPreferences | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const candidate = (raw as { notebookWeekCount?: unknown }).notebookWeekCount;
+  if (typeof candidate !== "number") return undefined;
+  return { notebookWeekCount: clampNotebookWeekCount(candidate) };
+}
+
+export function notebookWeekCountPreference(
+  config: TeacherSetupConfig | null | undefined,
+): NotebookWeekCountPreference {
+  return config?.display?.notebookWeekCount ?? DEFAULT_NOTEBOOK_WEEK_COUNT;
+}
+
+export function withNotebookWeekCount(
+  config: TeacherSetupConfig,
+  count: number,
+): TeacherSetupConfig {
+  return {
+    ...config,
+    display: { ...config.display, notebookWeekCount: clampNotebookWeekCount(count) },
   };
 }
 

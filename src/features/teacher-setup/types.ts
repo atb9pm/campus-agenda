@@ -20,7 +20,24 @@ export interface TeacherClassSetup {
  */
 export interface TeacherSetupConfig {
   version: 1;
+  /**
+   * Legacy : jour d’affichage par cours. N’est plus modifiable dans Préférences ;
+   * sert uniquement de repli à Ma semaine quand ni le cours ni la classe n’ont de jour officiel.
+   */
   classes: TeacherClassSetup[];
+  /** Absent dans les configurations enregistrées avant l’ajout des préférences d’affichage. */
+  display?: TeacherDisplayPreferences;
+}
+
+export type NotebookWeekCountPreference = 1 | 2 | 3 | 4;
+
+export const NOTEBOOK_WEEK_COUNT_OPTIONS: readonly NotebookWeekCountPreference[] = [1, 2, 3, 4];
+
+export const DEFAULT_NOTEBOOK_WEEK_COUNT: NotebookWeekCountPreference = 3;
+
+export interface TeacherDisplayPreferences {
+  /** Nombre de semaines affichées à l’ouverture du carnet (écran large uniquement). */
+  notebookWeekCount: NotebookWeekCountPreference;
 }
 
 export const WEEKDAY_LABELS: Record<WeekdayIndex, string> = {

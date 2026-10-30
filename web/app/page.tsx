@@ -85,6 +85,7 @@ import {
   clearTeacherSetupFromBrowser,
   emptyTeacherSetup,
   loadTeacherSetupFromBrowser,
+  notebookWeekCountPreference,
   type TeacherSetupConfig,
 } from "@campus/features/teacher-setup";
 import {
@@ -265,7 +266,7 @@ function sectionDescription(
   if (activeSection === "administration") {
     return "Référentiel école : classes, branches, accès et année scolaire.";
   }
-  return "Préférences d’affichage : jour visible dans Ma semaine. Ce n’est pas une attribution.";
+  return "Réglages d’affichage personnels.";
 }
 
 export default function Home() {
@@ -1397,14 +1398,6 @@ export default function Home() {
     window.setTimeout(() => setNotice(""), 3200);
   }
 
-  function resetTeacherSetup() {
-    setTeacherSetup({
-      version: 1,
-      classes: displaySetupsFromAssignedCourses(teacherCourses, null),
-    });
-    showNotice("Préférences d’affichage réinitialisées.");
-  }
-
   function applySchoolCalendarWeeks(weeks: SchoolCalendarWeek[]) {
     setSchoolWeeks(buildSchoolWeeksFromEntries(weeks));
   }
@@ -1969,6 +1962,7 @@ export default function Home() {
             onDeleteControl={notebookDeletePublication}
             onPreviewStudentAgenda={enterTeacherPreview}
             onPreviewBranch={enterTeacherBranchPreview}
+            defaultWeekDisplayCount={notebookWeekCountPreference(teacherSetup)}
           />
         )}
 
@@ -1984,13 +1978,7 @@ export default function Home() {
         )}
 
         {activeSection === "configuration" && (
-          <ConfigurationPanel
-            config={teacherSetup}
-            courses={teacherCourses}
-            onChange={setTeacherSetup}
-            onReset={resetTeacherSetup}
-            onNotice={showNotice}
-          />
+          <ConfigurationPanel config={teacherSetup} onChange={setTeacherSetup} />
         )}
 
         {activeSection === "administration" && teacherIsAdmin && (

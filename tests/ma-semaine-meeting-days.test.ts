@@ -150,7 +150,8 @@ test("Ma semaine — copy et groupement officiel, préférences inchangées", as
   assert.doesNotMatch(panel, /groupClassesByWeekday/);
   assert.match(page, /jours configurés dans l’horaire des classes/);
   const config = await readFile(new URL("../web/app/components/configuration-panel.tsx", import.meta.url), "utf8");
-  assert.match(config, /upsertSetupPreferenceForCourse/);
+  assert.doesNotMatch(config, /upsertSetupPreferenceForCourse/);
+  assert.doesNotMatch(config, /Jour d’affichage/);
   assert.match(service, /listAttendanceDays/);
   assert.match(service, /classAttendanceDays/);
 });

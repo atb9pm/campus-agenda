@@ -300,14 +300,14 @@ export function upsertSetupPreferenceForCourse(
   const matched = matchSetupPreference(entry, setup);
   if (matched) {
     return {
-      version: 1,
+      ...setup,
       classes: setup.classes.map((candidate) =>
         candidate.id === matched.id ? { ...candidate, ...patch } : candidate,
       ),
     };
   }
   return {
-    version: 1,
+    ...setup,
     classes: [
       ...setup.classes,
       {
@@ -329,7 +329,7 @@ export function removeSetupPreferenceForCourse(
   const matched = matchSetupPreference(entry, setup);
   if (!matched) return setup;
   return {
-    version: 1,
+    ...setup,
     classes: setup.classes.filter((candidate) => candidate.id !== matched.id),
   };
 }

@@ -166,6 +166,8 @@ interface ClassNotebookPanelProps {
     schoolWeekNumber?: number | null;
     dayOfWeek?: number | null;
   }) => void;
+  /** Préférence enseignant ; lue à l’ouverture, le choix dans le carnet reste local. */
+  defaultWeekDisplayCount?: WeekDisplayCount;
 }
 
 type LineSelection =
@@ -270,8 +272,9 @@ export function ClassNotebookPanel({
   onDeleteControl,
   onPreviewStudentAgenda,
   onPreviewBranch,
+  defaultWeekDisplayCount = 3,
 }: ClassNotebookPanelProps) {
-  const [weekDisplayCount, setWeekDisplayCount] = useState<WeekDisplayCount>(3);
+  const [weekDisplayCount, setWeekDisplayCount] = useState<WeekDisplayCount>(defaultWeekDisplayCount);
   const narrowViewport = useNotebookNarrowViewport();
   const effectiveWeekDisplayCount = notebookWeekDisplayCountForViewport(
     narrowViewport ? NOTEBOOK_NARROW_VIEWPORT_MAX_PX : NOTEBOOK_NARROW_VIEWPORT_MAX_PX + 1,
