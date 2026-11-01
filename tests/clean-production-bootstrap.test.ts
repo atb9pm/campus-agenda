@@ -119,7 +119,7 @@ async function bootstrapEmptyProduction(db: SqlDatabase) {
 
 test("version 2.48.0 — bootstrap production sans migration destructive", async () => {
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0034_annual_course_meeting_days.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0035_security_events.sql");
   assert.equal(SQL_MIGRATION_FILES.includes("0027_delete_demo_data.sql" as (typeof SQL_MIGRATION_FILES)[number]), false);
 
   const storeFactory = await readFile(new URL("../src/lib/persistence/store-factory.ts", import.meta.url), "utf8");
