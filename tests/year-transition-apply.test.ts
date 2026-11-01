@@ -321,7 +321,7 @@ test("1 — APP_VERSION 2.62.0", () => {
 });
 
 test("2 — dernière migration 0032", () => {
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0035_security_events.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0036_security_notifications.sql");
 });
 
 test("3-5 — migration crée tables APPLY, provenance, pas de CourseSession", async () => {

@@ -63,6 +63,10 @@ Seaux expirés nettoyés automatiquement (toutes les 32 opérations ou 15 s, et 
 
 Connexions, échecs MFA, blocages automatiques, accès admin refusés et opérations sensibles sont persistés dans `security_events` (append-only, 180 jours, hors sauvegarde) et consultables dans Administration → Sécurité → Activité de sécurité. Aucune IP brute : empreinte HMAC (`CAMPUS_SECURITY_FINGERPRINT_KEY`, sinon `AUTH_SECRET`). Détails : [SECURITY_ACTIVITY_LOG.md](./SECURITY_ACTIVITY_LOG.md).
 
+## Alertes SMS de sécurité
+
+Certains événements significatifs (CRITICAL, liste explicite de WARNING) peuvent déclencher un SMS à texte fixe, sans donnée sensible ni pédagogique, avec cooldown de 30 min et plafonds de 3 SMS/h et 10 SMS/24 h persistés dans `security_notifications` (hors sauvegarde). Le SMS est un canal d’alerte, jamais un facteur MFA. Configuration par variables serveur uniquement (`CAMPUS_SECURITY_SMS_*`, `CAMPUS_SMS_*`), production seulement. Détails : [SECURITY_SMS_ALERTS.md](./SECURITY_SMS_ALERTS.md).
+
 ## AUTH_SECRET
 
 En production : au moins **32 octets**, 48 ou 64 caractères aléatoires recommandés. Pas d’exigence artificielle majuscule/chiffre. Valeur jamais loguée. Hors production, valeur fictive interne si la variable est absente.

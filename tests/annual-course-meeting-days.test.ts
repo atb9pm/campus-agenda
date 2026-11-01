@@ -193,7 +193,7 @@ function testBoth(name: string, run: (world: World) => Promise<void>) {
 test("version — meeting days 0034, backup après annual_courses", async () => {
   assert.match(APP_VERSION, /^\d+\.\d+\.\d+$/);
   assert.ok(SQL_MIGRATION_FILES.includes("0034_annual_course_meeting_days.sql"));
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0035_security_events.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0036_security_notifications.sql");
   assert.ok(CAMPUS_BACKUP_INSERT_ORDER.includes("annual_course_meeting_days"));
   assert.ok(
     CAMPUS_BACKUP_INSERT_ORDER.indexOf("annual_courses") <

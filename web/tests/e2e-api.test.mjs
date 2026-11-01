@@ -2296,3 +2296,63 @@ test("journal de sécurité — /api/admin/security/activity : 401, 403, 200, sa
   const clamp = await request("/api/admin/security/activity?pageSize=100000", { headers: { cookie: adminCookie } });
   assert.equal((await clamp.json()).pagination.pageSize, 100);
 });
+
+test("alertes SMS — statut et test : anonyme 401, enseignant 403, apprenti refusé, admin sans secret", async () => {
+  const anonymousStatus = await request("/api/admin/security/sms");
+  assert.equal(anonymousStatus.status, 401);
+  const anonymousTest = await request("/api/admin/security/sms/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirm: true }),
+  });
+  assert.equal(anonymousTest.status, 401);
+
+  const teacherCookie = await loginTeacher("teacher-demo-current");
+  const teacherStatus = await request("/api/admin/security/sms", { headers: { cookie: teacherCookie } });
+  assert.equal(teacherStatus.status, 403);
+  const teacherTest = await request("/api/admin/security/sms/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({ confirm: true }),
+  });
+  assert.equal(teacherTest.status, 403);
+
+  const student = await loginGeneratedStudent();
+  const studentStatus = await request("/api/admin/security/sms", { headers: { cookie: student.cookie } });
+  assert.ok([401, 403].includes(studentStatus.status), `apprenti refusé (${studentStatus.status})`);
+  const studentTest = await request("/api/admin/security/sms/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: student.cookie },
+    body: JSON.stringify({ confirm: true }),
+  });
+  assert.ok([401, 403].includes(studentTest.status), `apprenti refusé (${studentTest.status})`);
+
+  const adminCookie = await loginAdmin();
+  const status = await request("/api/admin/security/sms", { headers: { cookie: adminCookie } });
+  assert.equal(status.status, 200);
+  assert.equal(status.headers.get("Cache-Control"), "no-store");
+  const raw = await status.text();
+  const payload = JSON.parse(raw);
+  assert.equal(payload.ok, true);
+  assert.ok(["not-configured", "disabled-environment"].includes(payload.state), "jamais actif hors production");
+  assert.equal(payload.destination, null);
+  assert.equal(payload.policy.cooldownMinutes, 30);
+  assert.equal(payload.policy.maxPerHour, 3);
+  assert.equal(payload.policy.maxPerDay, 10);
+  assert.doesNotMatch(raw, /AUTH_TOKEN|ACCOUNT_SID|authToken|accountSid|\+\d{9,}/);
+
+  const withoutConfirm = await request("/api/admin/security/sms/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: adminCookie },
+    body: JSON.stringify({}),
+  });
+  assert.equal(withoutConfirm.status, 400, "confirmation explicite requise");
+  const adminTest = await request("/api/admin/security/sms/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: adminCookie },
+    body: JSON.stringify({ confirm: true }),
+  });
+  assert.equal(adminTest.status, 409, "admin autorisé, mais aucun SMS hors production");
+  const adminGet = await request("/api/admin/security/sms/test", { headers: { cookie: adminCookie } });
+  assert.notEqual(adminGet.status, 200, "jamais d'envoi par GET");
+});

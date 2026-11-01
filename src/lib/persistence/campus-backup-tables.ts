@@ -50,8 +50,14 @@ export type CampusBackupTableName = (typeof CAMPUS_BACKUP_INSERT_ORDER)[number];
  * exporté dans une sauvegarde, jamais vidé ni remplacé par une restauration —
  * une restauration est justement un événement qu'il doit permettre d'investiguer.
  * Une clé `security_events` présente dans un fichier de sauvegarde est ignorée.
+ * `security_notifications` (cooldown et plafonds SMS) suit la même règle :
+ * restaurer une ancienne sauvegarde ne doit pas permettre de contourner les quotas.
  */
-export const CAMPUS_BACKUP_EXCLUDED_OPERATIONAL_TABLES = ["schema_migrations", "security_events"] as const;
+export const CAMPUS_BACKUP_EXCLUDED_OPERATIONAL_TABLES = [
+  "schema_migrations",
+  "security_events",
+  "security_notifications",
+] as const;
 
 export const CAMPUS_BACKUP_DELETE_ORDER = [...CAMPUS_BACKUP_INSERT_ORDER].reverse();
 

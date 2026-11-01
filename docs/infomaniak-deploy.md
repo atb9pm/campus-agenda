@@ -120,6 +120,10 @@ enseignants** (mot de passe provisoire affiché à l'écran, à transmettre de v
 | `CAMPUS_ADMIN_PASSWORD` | Mot de passe d'amorçage ; **obligatoire** si la table `teachers` est vide |
 | `CAMPUS_ALLOW_DEMO_PASSWORD` | Inopérant en production : un hash `demo:` est toujours refusé |
 | `CAMPUS_MFA_ENCRYPTION_KEY` | Clé AES-GCM 32 octets (hex 64) pour le secret TOTP admin — **obligatoire** |
+| `CAMPUS_SECURITY_SMS_ENABLED` | `true` pour activer les alertes SMS de sécurité (optionnel, défaut désactivé) |
+| `CAMPUS_SECURITY_SMS_TO` | Numéro destinataire E.164 — uniquement ici, jamais dans GitHub |
+| `CAMPUS_SMS_PROVIDER` | `twilio` |
+| `CAMPUS_SMS_TWILIO_ACCOUNT_SID` / `CAMPUS_SMS_TWILIO_AUTH_TOKEN` / `CAMPUS_SMS_TWILIO_FROM` | Identifiants et expéditeur Twilio — secrets, jamais dans GitHub. Voir [SECURITY_SMS_ALERTS.md](./SECURITY_SMS_ALERTS.md) |
 
 ## Déploiement manuel (première fois)
 
