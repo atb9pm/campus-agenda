@@ -47,6 +47,7 @@ import {
   isTrustedSensitiveRead,
   isTrustedWriteOrigin,
 } from "@campus/lib/security/csrf.ts";
+import { recordAdminAccessDenied, recordRejectedSession } from "./security-events.ts";
 
 export async function getRequestSession(request: Request): Promise<AppSession | null> {
   const parsed = await parseSessionToken(readSessionTokenFromRequest(request));
@@ -58,7 +59,7 @@ export async function getRequestSession(request: Request): Promise<AppSession | 
     getSchoolYearStore(),
     getRuntimeAgendaAdapterStore(),
   ]);
-  return revalidateLiveSession(parsed, {
+  const live = await revalidateLiveSession(parsed, {
     findAccount: (teacherId) => accounts.findAccount(teacherId),
     findMfaConfirmedAt: async (teacherId) => {
       const record = await (await getAdminMfaStore()).get(teacherId);
@@ -75,6 +76,8 @@ export async function getRequestSession(request: Request): Promise<AppSession | 
         findClassroomBySchoolClassId: (schoolClassId) => adapters.findClassroomBySchoolClassId(schoolClassId),
       }),
   });
+  if (!live) await recordRejectedSession(request, parsed);
+  return live;
 }
 
 export async function jsonWithSession(
@@ -680,6 +683,12 @@ export async function requireTeacherSessionAllowingPasswordChange(request: Reque
 }
 
 export async function requireAdminSession(request: Request): Promise<TeacherSessionAuth> {
+  const auth = await resolveAdminSession(request);
+  if (auth.error) await recordAdminAccessDenied(request, auth.error.status);
+  return auth;
+}
+
+async function resolveAdminSession(request: Request): Promise<TeacherSessionAuth> {
   const auth = await requireTeacherSession(request);
   if ("error" in auth && auth.error) return auth;
   const readGuard = rejectUntrustedAdminRead(request);
@@ -709,6 +718,12 @@ export async function requireAdminSession(request: Request): Promise<TeacherSess
 
 /** Identité enseignant + admin, y compris session MFA_PENDING (enrôlement / défi). */
 export async function requireAdminMfaPendingSession(request: Request): Promise<TeacherSessionAuth> {
+  const auth = await resolveAdminMfaPendingSession(request);
+  if (auth.error) await recordAdminAccessDenied(request, auth.error.status);
+  return auth;
+}
+
+async function resolveAdminMfaPendingSession(request: Request): Promise<TeacherSessionAuth> {
   const auth = await requireTeacherIdentity(request);
   if ("error" in auth && auth.error) return auth;
   const accounts = await getTeacherAccountsStore();

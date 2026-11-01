@@ -5,6 +5,7 @@ import { jsonResponse, requireAdminSession } from "../../../../../../lib/server/
 import { getTeacherAccountsStore } from "../../../../../../lib/server/api.ts";
 import { enforceAuthRateLimit } from "../../../../../../lib/server/rate-limit.ts";
 import { readBoundedJson } from "../../../../../../lib/server/read-bounded-json.ts";
+import { classifyMfaFailure, recordRequestSecurityEvent } from "../../../../../../lib/server/security-events.ts";
 
 export async function POST(request: Request) {
   const auth = await requireAdminSession(request);
@@ -29,7 +30,24 @@ export async function POST(request: Request) {
     String(body.totp ?? ""),
   );
   if (!result.ok) {
+    const failure = classifyMfaFailure(result.reason);
+    if (failure) {
+      await recordRequestSecurityEvent(request, {
+        type: "MFA_SENSITIVE_ACTION_DENIED",
+        actorType: "TEACHER",
+        actorId: auth.session!.teacherId,
+        httpStatus: result.status,
+        metadata: { step: "regenerate-recovery-codes", reason: failure },
+        aggregateWindowMinutes: 15,
+      });
+    }
     return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
   }
+  await recordRequestSecurityEvent(request, {
+    type: "MFA_RECOVERY_CODES_REGENERATED",
+    actorType: "TEACHER",
+    actorId: auth.session!.teacherId,
+    httpStatus: 200,
+  });
   return jsonResponse({ ok: true, recoveryCodes: result.recoveryCodes });
 }

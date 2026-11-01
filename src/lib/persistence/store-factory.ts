@@ -65,6 +65,9 @@ import type { StudentAccessStore } from "./student-access-types.ts";
 import type { AdminMfaStore } from "../../features/admin-mfa/types.ts";
 import { getMemoryAdminMfaStore } from "./memory-admin-mfa-store.ts";
 import { SqlAdminMfaStore } from "./sql/sql-admin-mfa-store.ts";
+import type { SecurityEventStore } from "../../features/security-events/types.ts";
+import { getMemorySecurityEventStore } from "./memory-security-event-store.ts";
+import { SqlSecurityEventStore } from "./sql/sql-security-event-store.ts";
 import { getMemoryStudentAccessStore } from "./memory-student-access-store.ts";
 import { SqlStudentAccessStore } from "./sql/sql-student-access-store.ts";
 import { setActiveSchoolWeekEntries } from "../../features/calendar/active-calendar.ts";
@@ -425,6 +428,13 @@ export async function getAdminMfaStore(): Promise<AdminMfaStore> {
   const resolved = await resolveAgendaStore();
   if (resolved.sqlDb) return new SqlAdminMfaStore(resolved.sqlDb);
   return getMemoryAdminMfaStore();
+}
+
+/** Journal de sécurité : hors snapshot métier, jamais touché par backup/restore. */
+export async function getSecurityEventStore(): Promise<SecurityEventStore> {
+  const resolved = await resolveAgendaStore();
+  if (resolved.sqlDb) return new SqlSecurityEventStore(resolved.sqlDb);
+  return getMemorySecurityEventStore();
 }
 
 export async function getStoreKind(): Promise<StoreKind> {

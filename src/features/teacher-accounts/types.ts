@@ -64,4 +64,8 @@ export interface TeacherAuthOutcome {
   teacherId?: string;
   reason?: string;
   mustChangePassword?: boolean;
+  /** Échec : `archived` / `disabled` seulement après un mot de passe correct. */
+  failure?: "invalid-credentials" | "archived" | "disabled";
+  /** Compte concerné par un échec `archived` / `disabled` (journal de sécurité). */
+  failedTeacherId?: string;
 }

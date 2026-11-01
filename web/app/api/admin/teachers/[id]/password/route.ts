@@ -4,6 +4,7 @@ import {
   requireAdminSession,
 } from "../../../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../../../lib/server/observability.ts";
+import { recordRequestSecurityEvent } from "../../../../../../lib/server/security-events.ts";
 
 async function handlePost(request: Request, context?: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminSession(request);
@@ -16,6 +17,15 @@ async function handlePost(request: Request, context?: { params: Promise<{ id: st
   if (!result.ok) {
     return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
   }
+  await recordRequestSecurityEvent(request, {
+    type: "TEACHER_PASSWORD_RESET",
+    actorType: "TEACHER",
+    actorId: auth.session!.teacherId,
+    targetType: "TEACHER",
+    targetId: id,
+    httpStatus: 200,
+    metadata: { via: "admin-ui" },
+  });
 
   return jsonResponse({
     ok: true,

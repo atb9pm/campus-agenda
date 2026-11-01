@@ -14,7 +14,8 @@ import {
   resetAdminPasswordWithConfirmation,
   resolveAdminAccountForServerReset,
 } from "../src/features/teacher-accounts/reset-admin-password.ts";
-import { getTeacherAccountStore } from "../src/lib/persistence/store-factory.ts";
+import { recordSecurityEvent } from "../src/features/security-events/recorder.ts";
+import { getSecurityEventStore, getTeacherAccountStore } from "../src/lib/persistence/store-factory.ts";
 
 const identifier = process.argv.slice(2).filter((value) => value !== "--").join(" ").trim();
 
@@ -49,6 +50,14 @@ if (!result.ok) {
   console.error(result.reason);
   process.exit(1);
 }
+
+await recordSecurityEvent({ store: await getSecurityEventStore() }, {
+  type: "TEACHER_PASSWORD_RESET",
+  actorType: "SYSTEM",
+  targetType: "TEACHER",
+  targetId: resolved.account.id,
+  metadata: { via: "server-script" },
+});
 
 console.log("Mot de passe réinitialisé.");
 console.log("Le changement de mot de passe est obligatoire à la prochaine connexion.");

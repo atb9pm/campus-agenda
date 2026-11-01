@@ -4,6 +4,7 @@ import {
   requireAdminSession,
 } from "../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../lib/server/observability.ts";
+import { recordRequestSecurityEvent } from "../../../../lib/server/security-events.ts";
 
 async function handleGet(request: Request) {
   const auth = await requireAdminSession(request);
@@ -40,6 +41,26 @@ async function handlePost(request: Request) {
   });
   if (!result.ok) {
     return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
+  }
+
+  await recordRequestSecurityEvent(request, {
+    type: "TEACHER_ACCOUNT_CREATED",
+    actorType: "TEACHER",
+    actorId: auth.session!.teacherId,
+    targetType: "TEACHER",
+    targetId: result.account.id,
+    httpStatus: 200,
+    metadata: { isAdmin: result.account.isAdmin, teachingType: body.teachingType },
+  });
+  if (result.account.isAdmin) {
+    await recordRequestSecurityEvent(request, {
+      type: "TEACHER_ADMIN_ROLE_GRANTED",
+      actorType: "TEACHER",
+      actorId: auth.session!.teacherId,
+      targetType: "TEACHER",
+      targetId: result.account.id,
+      httpStatus: 200,
+    });
   }
 
   // Le mot de passe provisoire n'est renvoyé qu'ici : l'administrateur le
