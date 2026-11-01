@@ -5,7 +5,7 @@ export function isE164PhoneNumber(value: unknown): value is string {
   return typeof value === "string" && E164_PATTERN.test(value);
 }
 
-/** `+41791234512` → `+41 •• ••• •• 12`. Seuls l'indicatif et les deux derniers chiffres restent visibles. */
+/** `+41000000012` → `+41 •• ••• •• 12`. Seuls l'indicatif et les deux derniers chiffres restent visibles. */
 export function maskPhoneNumber(value: string | null | undefined): string | null {
   if (!isE164PhoneNumber(value)) return null;
   const digits = value.slice(1);

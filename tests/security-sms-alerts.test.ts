@@ -57,7 +57,7 @@ import {
 } from "../src/lib/persistence/sql/sql-campus-backup.ts";
 import { SqlSecurityNotificationStore } from "../src/lib/persistence/sql/sql-security-notification-store.ts";
 
-const PHONE = "+41791234512";
+const PHONE = "+41000000012";
 const ACCOUNT_SID = `AC${"a1".repeat(16)}`;
 const AUTH_TOKEN = "f0e1d2c3b4a5968778695a4b3c2d1e0f";
 const FINGERPRINT = "7F2A1B3C4D5E91C4";
@@ -407,7 +407,7 @@ test("configuration — environnements, variables incomplètes et numéro invali
   ]);
   assert.equal(createSecuritySmsProvider(incomplete), null);
 
-  for (const invalidNumber of ["0791234512", "+41 79 123 45 12", "41791234512", "+0791234512", "+41"]) {
+  for (const invalidNumber of ["0000000012", "+41 00 000 00 12", "41000000012", "+0000000012", "+41"]) {
     assert.equal(isE164PhoneNumber(invalidNumber), false, invalidNumber);
     const config = readSecuritySmsConfig({ ...ENABLED_ENV, [SECURITY_SMS_ENV.to]: invalidNumber });
     assert.equal(config.status, "misconfigured", invalidNumber);
