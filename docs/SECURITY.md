@@ -67,6 +67,10 @@ Connexions, échecs MFA, blocages automatiques, accès admin refusés et opérat
 
 Certains événements significatifs (CRITICAL, liste explicite de WARNING) peuvent déclencher un SMS à texte fixe, sans donnée sensible ni pédagogique, avec cooldown de 30 min et plafonds de 3 SMS/h et 10 SMS/24 h persistés dans `security_notifications` (hors sauvegarde). Le SMS est un canal d’alerte, jamais un facteur MFA. Configuration par variables serveur uniquement (`CAMPUS_SECURITY_SMS_*`, `CAMPUS_SMS_*`), production seulement. Détails : [SECURITY_SMS_ALERTS.md](./SECURITY_SMS_ALERTS.md).
 
+## Alertes e-mail de sécurité
+
+Les événements WARNING (À surveiller) et CRITICAL (Critique) peuvent déclencher un e-mail via SMTP Infomaniak (Nodemailer, port 587 + STARTTLS). INFO : journal uniquement. Cooldown 30 min (WARNING) / 15 min (CRITICAL), persisté dans `security_notifications` (hors sauvegarde). Configuration `CAMPUS_SECURITY_EMAIL_*` / `CAMPUS_SMTP_*`, production seulement. Une panne SMTP ne bloque jamais l’application. Détails : [SECURITY_EMAIL_ALERTS.md](./SECURITY_EMAIL_ALERTS.md).
+
 ## AUTH_SECRET
 
 En production : au moins **32 octets**, 48 ou 64 caractères aléatoires recommandés. Pas d’exigence artificielle majuscule/chiffre. Valeur jamais loguée. Hors production, valeur fictive interne si la variable est absente.

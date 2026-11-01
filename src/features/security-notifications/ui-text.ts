@@ -32,3 +32,20 @@ export const SECURITY_SMS_FORBIDDEN_CLAIMS = [
   /aucune attaque ne passera/i,
   /détecte toutes les attaques/i,
 ] as const;
+
+export const SECURITY_EMAIL_TITLE = "Alertes e-mail";
+export const SECURITY_EMAIL_DESCRIPTION =
+  "Campus Agenda peut envoyer automatiquement une notification lorsqu'un événement À surveiller ou Critique est détecté.";
+export const SECURITY_EMAIL_STATE_ACTIVE = "Alertes activées pour À surveiller et Critique.";
+export const SECURITY_EMAIL_STATE_INACTIVE = "Alertes e-mail désactivées.";
+export const SECURITY_EMAIL_STATE_MISCONFIGURED =
+  "La configuration serveur des alertes e-mail est incomplète : aucun e-mail n’est envoyé.";
+export const SECURITY_EMAIL_STATE_ENVIRONMENT =
+  "Les alertes e-mail sont désactivées dans cet environnement : elles ne fonctionnent qu’en production.";
+export const SECURITY_EMAIL_DETAIL = "Notifications envoyées pour les niveaux À surveiller et Critique.";
+export const SECURITY_EMAIL_PRIVACY =
+  "Les e-mails ne contiennent aucune donnée pédagogique ni secret (mot de passe, code MFA, adresse IP).";
+export const SECURITY_EMAIL_TEST_BUTTON = "Envoyer un e-mail de test";
+export const SECURITY_EMAIL_TEST_CONFIRM_TITLE = "Envoyer un e-mail de test ?";
+export const SECURITY_EMAIL_TEST_CONFIRM_BODY =
+  "Un e-mail de test sera envoyé à l’adresse configurée sur le serveur. Un seul test est possible toutes les 10 minutes.";

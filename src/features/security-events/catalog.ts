@@ -242,6 +242,13 @@ export const SECURITY_EVENT_CATALOG = define({
     bucket: "sensitive",
     metadata: { outcome: ["sent", "failed", "suppressed-cooldown", "suppressed-quota", "disabled"] },
   },
+  SECURITY_EMAIL_TEST_REQUESTED: {
+    category: "ADMIN",
+    severity: "INFO",
+    label: "E-mail de test des alertes de sécurité",
+    bucket: "sensitive",
+    metadata: { outcome: ["sent", "failed", "suppressed-cooldown", "disabled"] },
+  },
   BACKUP_DOWNLOADED: {
     category: "BACKUP",
     severity: "INFO",

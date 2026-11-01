@@ -66,6 +66,7 @@ export const SQL_MIGRATION_FILES = [
   "0034_annual_course_meeting_days.sql",
   "0035_security_events.sql",
   "0036_security_notifications.sql",
+  "0037_security_notification_email.sql",
 ] as const;
 
 const SCHEMA_MIGRATIONS_DDL = `CREATE TABLE IF NOT EXISTS schema_migrations (

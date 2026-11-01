@@ -166,7 +166,8 @@ async function sqlStore(path = ":memory:") {
 }
 
 test("migration 0036 — table opérationnelle hors sauvegarde, sans numéro ni texte", async () => {
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0036_security_notifications.sql");
+  assert.ok(SQL_MIGRATION_FILES.includes("0036_security_notifications.sql"));
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0037_security_notification_email.sql");
   const sql = await readFile(new URL("../migrations/0036_security_notifications.sql", import.meta.url), "utf8");
   assert.match(sql, /CREATE TABLE IF NOT EXISTS security_notifications/);
   assert.match(sql, /security_notifications_append_only/);

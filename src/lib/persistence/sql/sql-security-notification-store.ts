@@ -1,6 +1,7 @@
 import type {
   NewSecurityNotification,
   SecurityNotification,
+  SecurityNotificationChannel,
   SecurityNotificationCompletion,
   SecurityNotificationKind,
   SecurityNotificationStatusCount,
@@ -9,6 +10,7 @@ import type {
 } from "../../../features/security-notifications/types.ts";
 import {
   SECURITY_NOTIFICATION_ATTEMPT_STATUSES,
+  isSecurityNotificationChannel,
   isSecurityNotificationStatus,
   isSecuritySmsFailureCategory,
 } from "../../../features/security-notifications/types.ts";
@@ -52,13 +54,14 @@ const ATTEMPT_PLACEHOLDERS = SECURITY_NOTIFICATION_ATTEMPT_STATUSES.map(() => "?
 
 function toNotification(row: SecurityNotificationRow): SecurityNotification | null {
   if (!isSecurityNotificationStatus(row.status)) return null;
+  if (!isSecurityNotificationChannel(row.channel)) return null;
   if (row.kind !== "ALERT" && row.kind !== "TEST") return null;
   if (row.level !== "WARNING" && row.level !== "CRITICAL" && row.level !== "TEST") return null;
   return {
     id: row.id,
     securityEventId: row.security_event_id,
     eventType: row.event_type,
-    channel: "SMS",
+    channel: row.channel,
     kind: row.kind,
     level: row.level,
     status: row.status,
@@ -128,25 +131,31 @@ export class SqlSecurityNotificationStore implements SecurityNotificationStore {
       .run();
   }
 
-  async lastAttempt(deduplicationKey: string, since: string): Promise<SecurityNotification | null> {
+  async lastAttempt(
+    deduplicationKey: string,
+    since: string,
+    channel?: SecurityNotificationChannel,
+  ): Promise<SecurityNotification | null> {
+    const channelClause = channel ? " AND channel = ?" : "";
     const row = await this.db
       .prepare(
         `SELECT ${COLUMNS} FROM security_notifications
-         WHERE deduplication_key = ? AND status IN (${ATTEMPT_PLACEHOLDERS}) AND created_at >= ?
+         WHERE deduplication_key = ? AND status IN (${ATTEMPT_PLACEHOLDERS}) AND created_at >= ?${channelClause}
          ORDER BY created_at DESC LIMIT 1`,
       )
-      .bind(deduplicationKey, ...SECURITY_NOTIFICATION_ATTEMPT_STATUSES, since)
+      .bind(deduplicationKey, ...SECURITY_NOTIFICATION_ATTEMPT_STATUSES, since, ...(channel ? [channel] : []))
       .first<SecurityNotificationRow>();
     return row ? toNotification(row) : null;
   }
 
-  async countAttempts(since: string): Promise<number> {
+  async countAttempts(since: string, channel?: SecurityNotificationChannel): Promise<number> {
+    const channelClause = channel ? " AND channel = ?" : "";
     const row = await this.db
       .prepare(
         `SELECT COUNT(*) AS total FROM security_notifications
-         WHERE status IN (${ATTEMPT_PLACEHOLDERS}) AND created_at >= ?`,
+         WHERE status IN (${ATTEMPT_PLACEHOLDERS}) AND created_at >= ?${channelClause}`,
       )
-      .bind(...SECURITY_NOTIFICATION_ATTEMPT_STATUSES, since)
+      .bind(...SECURITY_NOTIFICATION_ATTEMPT_STATUSES, since, ...(channel ? [channel] : []))
       .first<{ total: number }>();
     return Number(row?.total ?? 0);
   }
@@ -158,10 +167,10 @@ export class SqlSecurityNotificationStore implements SecurityNotificationStore {
     const existing = await this.db
       .prepare(
         `SELECT ${COLUMNS} FROM security_notifications
-         WHERE deduplication_key = ? AND status = ? AND last_seen_at >= ?
+         WHERE deduplication_key = ? AND status = ? AND channel = ? AND last_seen_at >= ?
          ORDER BY last_seen_at DESC LIMIT 1`,
       )
-      .bind(notification.deduplicationKey, notification.status, since)
+      .bind(notification.deduplicationKey, notification.status, notification.channel, since)
       .first<SecurityNotificationRow>();
     if (!existing) return this.insert(notification);
     await this.db
@@ -180,26 +189,28 @@ export class SqlSecurityNotificationStore implements SecurityNotificationStore {
     return updated ?? this.insert(notification);
   }
 
-  async latestSent(kind: SecurityNotificationKind): Promise<SecurityNotification | null> {
+  async latestSent(kind: SecurityNotificationKind, channel?: SecurityNotificationChannel): Promise<SecurityNotification | null> {
+    const channelClause = channel ? " AND channel = ?" : "";
     const row = await this.db
       .prepare(
         `SELECT ${COLUMNS} FROM security_notifications
-         WHERE kind = ? AND status = 'SENT'
+         WHERE kind = ? AND status = 'SENT'${channelClause}
          ORDER BY sent_at DESC LIMIT 1`,
       )
-      .bind(kind)
+      .bind(kind, ...(channel ? [channel] : []))
       .first<SecurityNotificationRow>();
     return row ? toNotification(row) : null;
   }
 
-  async countByStatus(since: string): Promise<SecurityNotificationStatusCount[]> {
+  async countByStatus(since: string, channel?: SecurityNotificationChannel): Promise<SecurityNotificationStatusCount[]> {
+    const channelClause = channel ? " AND channel = ?" : "";
     const { results } = await this.db
       .prepare(
         `SELECT status, COUNT(*) AS rows_count, COALESCE(SUM(occurrence_count), 0) AS occurrences
-         FROM security_notifications WHERE last_seen_at >= ?
+         FROM security_notifications WHERE last_seen_at >= ?${channelClause}
          GROUP BY status`,
       )
-      .bind(since)
+      .bind(since, ...(channel ? [channel] : []))
       .all<{ status: string; rows_count: number; occurrences: number }>();
     return (results ?? []).flatMap((row) =>
       isSecurityNotificationStatus(row.status)

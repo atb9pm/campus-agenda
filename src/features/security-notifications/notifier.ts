@@ -152,9 +152,11 @@ async function reserve(deps: SecuritySmsDeps, request: DispatchRequest, now: Dat
   });
 
   if (deps.config.status !== "enabled" || !deps.provider) return suppress("DISABLED", cooldownSince);
-  if (await store.lastAttempt(request.deduplicationKey, cooldownSince)) return suppress("SUPPRESSED_COOLDOWN", cooldownSince);
-  const lastHour = await store.countAttempts(minutesAgo(now, 60));
-  const lastDay = await store.countAttempts(minutesAgo(now, DAY_MINUTES));
+  if (await store.lastAttempt(request.deduplicationKey, cooldownSince, "SMS")) {
+    return suppress("SUPPRESSED_COOLDOWN", cooldownSince);
+  }
+  const lastHour = await store.countAttempts(minutesAgo(now, 60), "SMS");
+  const lastDay = await store.countAttempts(minutesAgo(now, DAY_MINUTES), "SMS");
   if (lastHour >= SECURITY_SMS_MAX_PER_HOUR || lastDay >= SECURITY_SMS_MAX_PER_DAY) {
     return suppress("SUPPRESSED_RATE_LIMIT", minutesAgo(now, 60));
   }
@@ -247,10 +249,10 @@ export interface SecuritySmsActivity {
 export async function readSecuritySmsActivity(store: SecurityNotificationStore, now: Date): Promise<SecuritySmsActivity> {
   const testKey = await hashSecuritySmsKey(SECURITY_SMS_TEST_KEY);
   const [lastAlert, lastTest, lastTestAttempt, counts] = await Promise.all([
-    store.latestSent("ALERT"),
-    store.latestSent("TEST"),
-    store.lastAttempt(testKey, minutesAgo(now, SECURITY_SMS_TEST_COOLDOWN_MINUTES)),
-    store.countByStatus(minutesAgo(now, DAY_MINUTES)),
+    store.latestSent("ALERT", "SMS"),
+    store.latestSent("TEST", "SMS"),
+    store.lastAttempt(testKey, minutesAgo(now, SECURITY_SMS_TEST_COOLDOWN_MINUTES), "SMS"),
+    store.countByStatus(minutesAgo(now, DAY_MINUTES), "SMS"),
   ]);
   const last24h = { sent: 0, failed: 0, suppressed: 0 };
   for (const entry of counts) {

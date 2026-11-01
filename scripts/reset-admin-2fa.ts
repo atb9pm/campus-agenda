@@ -13,8 +13,11 @@ import { RESET_2FA_CONFIRM_TOKEN, isReset2faConfirmToken } from "../src/features
 import { resetAdminMfa } from "../src/features/admin-mfa/reset.ts";
 import { recordSecurityEvent } from "../src/features/security-events/recorder.ts";
 import {
+  createSecurityEmailTransport,
   createSecuritySmsProvider,
+  notifySecurityEmail,
   notifySecurityEvent,
+  readSecurityEmailConfig,
   readSecuritySmsConfig,
 } from "../src/features/security-notifications/index.ts";
 import {
@@ -78,9 +81,15 @@ const resetEvent = await recordSecurityEvent({ store: await getSecurityEventStor
 });
 
 if (resetEvent) {
+  const store = await getSecurityNotificationStore();
   const smsConfig = readSecuritySmsConfig(process.env);
   await notifySecurityEvent(
-    { store: await getSecurityNotificationStore(), config: smsConfig, provider: createSecuritySmsProvider(smsConfig) },
+    { store, config: smsConfig, provider: createSecuritySmsProvider(smsConfig) },
+    resetEvent,
+  );
+  const emailConfig = readSecurityEmailConfig(process.env);
+  await notifySecurityEmail(
+    { store, config: emailConfig, transport: createSecurityEmailTransport(emailConfig) },
     resetEvent,
   );
 }
