@@ -21,6 +21,7 @@ import { YearTransitionPreparePanel } from "./year-transition-prepare-panel.tsx"
 import { TeacherAccountsPanel } from "./teacher-accounts-panel.tsx";
 import { AdminSecurityPanel } from "./admin-security-panel.tsx";
 import { SecurityActivityPanel } from "./security-activity-panel.tsx";
+import { SecuritySmsPanel } from "./security-sms-panel.tsx";
 import { DestructiveConfirmDialog } from "./destructive-confirm-dialog.tsx";
 import { TrainingPlansAdminPanel } from "./training-plans-admin-panel.tsx";
 import {
@@ -35,6 +36,7 @@ import {
   writeAdminWorkingYearId,
 } from "@campus/features/school-year/admin-working-year.ts";
 import { SECURITY_ACTIVITY_TITLE, SECURITY_PROTECTION_TAB } from "@campus/features/security-events/ui-text.ts";
+import { SECURITY_SMS_TITLE } from "@campus/features/security-notifications/ui-text.ts";
 
 type AdminTab =
   | "classes"
@@ -84,11 +86,12 @@ const TAB_LABELS: Record<AdminTab, string> = {
   security: "Sécurité",
 };
 
-type SecuritySubTab = "protection" | "activity";
+type SecuritySubTab = "protection" | "activity" | "sms";
 
 const SECURITY_SUBTAB_LABELS: Record<SecuritySubTab, string> = {
   protection: SECURITY_PROTECTION_TAB,
   activity: SECURITY_ACTIVITY_TITLE,
+  sms: SECURITY_SMS_TITLE,
 };
 
 function branchCardClass(entry: SchoolBranchRecord): string {
@@ -408,7 +411,9 @@ export function AdministrationPanel({
               </button>
             ))}
           </div>
-          {securityTab === "protection" ? <AdminSecurityPanel onNotice={onNotice} /> : <SecurityActivityPanel />}
+          {securityTab === "protection" ? <AdminSecurityPanel onNotice={onNotice} /> : null}
+          {securityTab === "activity" ? <SecurityActivityPanel /> : null}
+          {securityTab === "sms" ? <SecuritySmsPanel onNotice={onNotice} /> : null}
         </>
       ) : null}
 

@@ -3136,3 +3136,24 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   .security-events-table td::before { content: attr(data-label); color: #5c6b82; font-weight: 700; text-align: left; }
   .security-event-detail > div { grid-template-columns: 1fr; gap: 2px; }
 }
+
+.security-sms { display: grid; gap: 14px; }
+.security-sms-state { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 8px; background: var(--pale); color: #445a7c; font-size: 13px; line-height: 1.45; }
+.security-sms-state > div { display: grid; gap: 2px; }
+.security-sms-state strong { color: var(--navy); }
+.security-sms-dot { flex: 0 0 auto; width: 12px; height: 12px; border: 2px solid #b8c3d4; border-radius: 50%; background: #fff; }
+.security-sms-state.is-active { background: #eaf7ef; color: #1c5b34; }
+.security-sms-state.is-active .security-sms-dot { border-color: #1f9d55; background: #1f9d55; }
+.security-sms-state.is-misconfigured { background: #fff6e8; color: #6a4b12; }
+.security-sms-state.is-misconfigured .security-sms-dot { border-color: #d08a00; background: #f5c25b; }
+.security-sms-facts { display: grid; gap: 0; margin: 0; }
+.security-sms-facts > div { display: grid; grid-template-columns: 170px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+.security-sms-facts dt { color: #5c6b82; font-weight: 700; }
+.security-sms-facts dd { margin: 0; color: var(--ink); font-variant-numeric: tabular-nums; }
+.security-sms-test { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: #5c6b82; font-size: 12px; }
+.security-sms-test button { padding: 8px 12px; border: 1px solid var(--navy); border-radius: 6px; background: var(--navy); color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; }
+.security-sms-test button:disabled { opacity: .5; cursor: default; }
+.security-sms-note { margin: 0; color: #6d7f9b; font-size: 11px; line-height: 1.45; }
+@media (max-width: 720px) {
+  .security-sms-facts > div { grid-template-columns: 1fr; gap: 2px; }
+}
