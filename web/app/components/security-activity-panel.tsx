@@ -131,13 +131,12 @@ function SecurityEventDetail({ event, onClose }: { event: SecurityEventView; onC
   }
 
   return (
-    <div className="technical-modal-backdrop" role="presentation" onClick={onClose}>
+    <div className="technical-modal-backdrop" role="presentation">
       <section
         className="technical-modal security-event-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="security-event-detail-title"
-        onClick={(clickEvent) => clickEvent.stopPropagation()}
       >
         <header>
           <h2 id="security-event-detail-title">{event.label}</h2>
