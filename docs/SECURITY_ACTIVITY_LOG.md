@@ -99,7 +99,8 @@ d’agrégation.
 
 - Stockage local au serveur applicatif, sans copie indépendante.
 - Compteurs de volume de lectures et rate limiter en mémoire : remis à zéro au redémarrage, mono-instance.
-- Pas de notification : l’administrateur doit consulter l’écran.
+- Notification limitée : seules certaines alertes significatives peuvent déclencher un SMS
+  (voir [SECURITY_SMS_ALERTS.md](./SECURITY_SMS_ALERTS.md)) ; le reste doit être consulté à l’écran.
 - Les règles sont des seuils simples, sans apprentissage ni corrélation avancée.
 
 ## Évolutions futures (non implémentées)
