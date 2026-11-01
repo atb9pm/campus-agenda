@@ -68,6 +68,9 @@ import { SqlAdminMfaStore } from "./sql/sql-admin-mfa-store.ts";
 import type { SecurityEventStore } from "../../features/security-events/types.ts";
 import { getMemorySecurityEventStore } from "./memory-security-event-store.ts";
 import { SqlSecurityEventStore } from "./sql/sql-security-event-store.ts";
+import type { SecurityNotificationStore } from "../../features/security-notifications/types.ts";
+import { getMemorySecurityNotificationStore } from "./memory-security-notification-store.ts";
+import { SqlSecurityNotificationStore } from "./sql/sql-security-notification-store.ts";
 import { getMemoryStudentAccessStore } from "./memory-student-access-store.ts";
 import { SqlStudentAccessStore } from "./sql/sql-student-access-store.ts";
 import { setActiveSchoolWeekEntries } from "../../features/calendar/active-calendar.ts";
@@ -435,6 +438,13 @@ export async function getSecurityEventStore(): Promise<SecurityEventStore> {
   const resolved = await resolveAgendaStore();
   if (resolved.sqlDb) return new SqlSecurityEventStore(resolved.sqlDb);
   return getMemorySecurityEventStore();
+}
+
+/** Cooldown et plafonds des alertes SMS : persistants, hors snapshot métier. */
+export async function getSecurityNotificationStore(): Promise<SecurityNotificationStore> {
+  const resolved = await resolveAgendaStore();
+  if (resolved.sqlDb) return new SqlSecurityNotificationStore(resolved.sqlDb);
+  return getMemorySecurityNotificationStore();
 }
 
 export async function getStoreKind(): Promise<StoreKind> {

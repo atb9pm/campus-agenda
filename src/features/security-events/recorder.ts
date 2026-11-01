@@ -50,6 +50,20 @@ export interface SecurityRecorderDeps {
   log?: (event: SecurityEvent) => void;
   onError?: (error: unknown, type: string) => void;
   onPurge?: (purged: number) => void;
+  /**
+   * Appelé après chaque écriture (événement ou alerte d'anomalie), pour la
+   * politique de notification. Synchrone et sans attente : il ne doit ni lever
+   * ni retarder la requête d'origine.
+   */
+  notify?: (event: SecurityEvent) => void;
+}
+
+function safeNotify(deps: SecurityRecorderDeps, event: SecurityEvent) {
+  try {
+    deps.notify?.(event);
+  } catch (error) {
+    deps.onError?.(error, event.eventType);
+  }
 }
 
 export function buildSecurityEvent(input: SecurityEventInput, now: Date): NewSecurityEvent | null {
@@ -147,6 +161,7 @@ export async function recordSecurityEvent(
     }
     const saved = await persist(deps.store, built, now, input.aggregateWindowMinutes);
     deps.log?.(saved);
+    safeNotify(deps, saved);
 
     if (saved.category !== "ANOMALY") {
       for (const finding of await evaluateAnomalies(deps.store, saved, now)) {
@@ -158,6 +173,7 @@ export async function recordSecurityEvent(
           [finding.scope, finding.subjectId],
         );
         deps.log?.(anomaly);
+        safeNotify(deps, anomaly);
       }
     }
 
@@ -181,6 +197,7 @@ export async function recordSecurityAnomaly(
     if (!built || built.category !== "ANOMALY") return null;
     const saved = await persist(deps.store, built, now, input.windowMinutes, [input.scope, input.subjectId]);
     deps.log?.(saved);
+    safeNotify(deps, saved);
     return saved;
   } catch (error) {
     deps.onError?.(error, String(input.type));

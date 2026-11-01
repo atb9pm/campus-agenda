@@ -235,6 +235,13 @@ export const SECURITY_EVENT_CATALOG = define({
     bucket: "sensitive",
     metadata: {},
   },
+  SECURITY_SMS_TEST_REQUESTED: {
+    category: "ADMIN",
+    severity: "INFO",
+    label: "SMS de test des alertes de sécurité",
+    bucket: "sensitive",
+    metadata: { outcome: ["sent", "failed", "suppressed-cooldown", "suppressed-quota", "disabled"] },
+  },
   BACKUP_DOWNLOADED: {
     category: "BACKUP",
     severity: "INFO",
