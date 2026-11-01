@@ -9,6 +9,11 @@ import {
   SECURITY_SMS_PRIVACY,
   SECURITY_SMS_SCOPE,
   SECURITY_SMS_SERVER_CONFIG,
+  SECURITY_SMS_SETUP_ENVIRONMENT_NOTE,
+  SECURITY_SMS_SETUP_INTRO,
+  SECURITY_SMS_SETUP_STEPS,
+  SECURITY_SMS_SETUP_TITLE,
+  SECURITY_SMS_SETUP_VARIABLES,
   SECURITY_SMS_STATE_ACTIVE,
   SECURITY_SMS_STATE_ACTIVE_LABEL,
   SECURITY_SMS_STATE_ENVIRONMENT,
@@ -196,6 +201,25 @@ export function SecuritySmsPanel({ onNotice }: { onNotice: (message: string) => 
               ) : null}
               {testMessage ? <span role="status">{testMessage}</span> : null}
             </div>
+          ) : null}
+
+          {state !== "active" ? (
+            <section className="security-sms-setup" aria-labelledby="security-sms-setup-title">
+              <h4 id="security-sms-setup-title">{SECURITY_SMS_SETUP_TITLE}</h4>
+              <p>{SECURITY_SMS_SETUP_INTRO}</p>
+              {state === "disabled-environment" ? <p>{SECURITY_SMS_SETUP_ENVIRONMENT_NOTE}</p> : null}
+              <ol>
+                {SECURITY_SMS_SETUP_STEPS.map((step) => <li key={step}>{step}</li>)}
+              </ol>
+              <dl className="security-sms-setup-vars">
+                {SECURITY_SMS_SETUP_VARIABLES.map((variable) => (
+                  <div key={variable.name}>
+                    <dt><code>{variable.name}</code></dt>
+                    <dd>{variable.example}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
           ) : null}
 
           <p className="security-sms-note">{SECURITY_SMS_PRIVACY}</p>

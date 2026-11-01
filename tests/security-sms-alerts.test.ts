@@ -636,6 +636,18 @@ test("routes et interface — admin seulement, POST confirmé, aucun secret côt
   assert.equal(smsUi.SECURITY_SMS_PRIVACY, "Les SMS ne contiennent aucune donnée pédagogique ni information sensible.");
   assert.equal(smsUi.SECURITY_SMS_TEST_CONFIRM_TITLE, "Envoyer un SMS de test ?");
 
+  assert.deepEqual(
+    smsUi.SECURITY_SMS_SETUP_VARIABLES.map((variable) => variable.name),
+    Object.values(SECURITY_SMS_ENV),
+    "le guide d'activation liste exactement les variables lues par le serveur",
+  );
+  for (const variable of smsUi.SECURITY_SMS_SETUP_VARIABLES) {
+    assert.doesNotMatch(variable.example, /\+\d{6,}|AC[0-9a-f]{8,}|[0-9a-f]{16,}/i, "exemples factices uniquement");
+  }
+  assert.match(panel, /state !== "active" \? \(\s*<section className="security-sms-setup"/);
+  assert.match(smsUi.SECURITY_SMS_SETUP_STEPS.join(" "), /commande de lancement/);
+  assert.doesNotMatch(panel, /<input|<form/, "aucune saisie du numéro ou des identifiants dans l'interface");
+
   for (const name of Object.values(SECURITY_SMS_ENV)) {
     assert.match(env, new RegExp(`^${name}=(false)?$`, "m"), `${name} sans valeur dans .env.example`);
   }

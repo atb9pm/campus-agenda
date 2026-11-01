@@ -112,8 +112,29 @@ ne peut pas remettre les quotas à zéro.
 | `CAMPUS_SMS_TWILIO_AUTH_TOKEN` | Auth Token Twilio |
 | `CAMPUS_SMS_TWILIO_FROM` | expéditeur : numéro E.164, identifiant alphanumérique (≤ 11) ou Messaging Service SID (`MG…`) |
 
-- Les vraies valeurs se configurent **uniquement** dans les variables d’environnement Infomaniak.
-  Jamais dans GitHub, jamais en base, jamais de préfixe `NEXT_PUBLIC_`.
+- Les vraies valeurs se configurent **uniquement** sur le serveur. Jamais dans GitHub, jamais en
+  base, jamais de préfixe `NEXT_PUBLIC_`. L’écran Administration n’édite pas cette configuration.
+
+### Activation sur Infomaniak
+
+Infomaniak n’a pas d’écran « Variables d’environnement » pour Node.js : les variables se placent
+dans la **commande de lancement** du site, comme `AUTH_SECRET`
+(voir [infomaniak-deploy.md](./infomaniak-deploy.md)).
+
+1. Créer un compte Twilio ; relever l’Account SID, l’Auth Token et un expéditeur.
+2. Manager Infomaniak → site Node.js → commande de lancement : ajouter les variables avant
+   `npm run start:infomaniak` (valeurs factices ci-dessous) :
+
+   ```bash
+   cd web && AUTH_SECRET=… CAMPUS_MFA_ENCRYPTION_KEY=… CAMPUS_STORE=sqlite \
+     CAMPUS_SECURITY_SMS_ENABLED=true CAMPUS_SECURITY_SMS_TO=+41… CAMPUS_SMS_PROVIDER=twilio \
+     CAMPUS_SMS_TWILIO_ACCOUNT_SID=AC… CAMPUS_SMS_TWILIO_AUTH_TOKEN=… CAMPUS_SMS_TWILIO_FROM=CampusAg \
+     npm run start:infomaniak
+   ```
+
+3. Enregistrer puis **Redémarrer**. Administration → Sécurité → Alertes SMS doit afficher « Actives »
+   (sinon « Configuration incomplète » indique le nom des variables à corriger).
+4. « Envoyer un SMS de test ».
 - Les SMS ne partent qu’en production (`NODE_ENV=production`, hors `CI`) **et** avec
   `CAMPUS_SECURITY_SMS_ENABLED=true`. Local, tests, CI et aperçu restent désactivés.
 - Configuration incomplète ou invalide : aucun crash ; l’écran indique « Configuration incomplète »
