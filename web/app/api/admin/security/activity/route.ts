@@ -13,8 +13,8 @@ import { getSecurityEventStore } from "@campus/lib/persistence/store-factory.ts"
 import { getTeacherAccountsStore, jsonResponse, requireAdminSession } from "../../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../../lib/server/observability.ts";
 
-export const SECURITY_ACTIVITY_DEFAULT_PAGE_SIZE = 25;
-export const SECURITY_ACTIVITY_MAX_PAGE_SIZE = 100;
+const SECURITY_ACTIVITY_DEFAULT_PAGE_SIZE = 25;
+const SECURITY_ACTIVITY_MAX_PAGE_SIZE = 100;
 
 function readPositiveInt(value: string | null, fallback: number, max: number): number {
   const parsed = Number(value);

@@ -20,6 +20,7 @@ import { SchoolYearAdminPanel } from "./school-year-admin-panel.tsx";
 import { YearTransitionPreparePanel } from "./year-transition-prepare-panel.tsx";
 import { TeacherAccountsPanel } from "./teacher-accounts-panel.tsx";
 import { AdminSecurityPanel } from "./admin-security-panel.tsx";
+import { SecurityActivityPanel } from "./security-activity-panel.tsx";
 import { DestructiveConfirmDialog } from "./destructive-confirm-dialog.tsx";
 import { TrainingPlansAdminPanel } from "./training-plans-admin-panel.tsx";
 import {
@@ -33,6 +34,7 @@ import {
   sortSchoolYearsChronologically,
   writeAdminWorkingYearId,
 } from "@campus/features/school-year/admin-working-year.ts";
+import { SECURITY_ACTIVITY_TITLE, SECURITY_PROTECTION_TAB } from "@campus/features/security-events/ui-text.ts";
 
 type AdminTab =
   | "classes"
@@ -80,6 +82,13 @@ const TAB_LABELS: Record<AdminTab, string> = {
   backup: "Sauvegarde des données",
   restore: "Restaurer une sauvegarde",
   security: "Sécurité",
+};
+
+type SecuritySubTab = "protection" | "activity";
+
+const SECURITY_SUBTAB_LABELS: Record<SecuritySubTab, string> = {
+  protection: SECURITY_PROTECTION_TAB,
+  activity: SECURITY_ACTIVITY_TITLE,
 };
 
 function branchCardClass(entry: SchoolBranchRecord): string {
@@ -141,6 +150,7 @@ export function AdministrationPanel({
   onConsultPreparedYear,
 }: AdministrationPanelProps) {
   const [tab, setTab] = useState<AdminTab>("classes");
+  const [securityTab, setSecurityTab] = useState<SecuritySubTab>("protection");
   const [classes, setClasses] = useState<SchoolClassRecord[]>([]);
   const [branches, setBranches] = useState<SchoolBranchRecord[]>([]);
   const [professions, setProfessions] = useState<SchoolProfessionRecord[]>([]);
@@ -382,7 +392,25 @@ export function AdministrationPanel({
 
       {tab === "backup" ? <AdminBackupPanel mode="download" /> : null}
       {tab === "restore" ? <AdminBackupPanel mode="restore" /> : null}
-      {tab === "security" ? <AdminSecurityPanel onNotice={onNotice} /> : null}
+      {tab === "security" ? (
+        <>
+          <div className="admin-subtabs" role="tablist" aria-label="Sections sécurité">
+            {(Object.keys(SECURITY_SUBTAB_LABELS) as SecuritySubTab[]).map((entry) => (
+              <button
+                key={entry}
+                type="button"
+                role="tab"
+                aria-selected={securityTab === entry}
+                className={securityTab === entry ? "active" : ""}
+                onClick={() => setSecurityTab(entry)}
+              >
+                {SECURITY_SUBTAB_LABELS[entry]}
+              </button>
+            ))}
+          </div>
+          {securityTab === "protection" ? <AdminSecurityPanel onNotice={onNotice} /> : <SecurityActivityPanel />}
+        </>
+      ) : null}
 
       {tab === "classes" && !loading ? (
         <ClassesAdminPanel
