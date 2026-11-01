@@ -124,6 +124,9 @@ enseignants** (mot de passe provisoire affiché à l'écran, à transmettre de v
 | `CAMPUS_SECURITY_SMS_TO` | Numéro destinataire E.164 — uniquement ici, jamais dans GitHub |
 | `CAMPUS_SMS_PROVIDER` | `twilio` |
 | `CAMPUS_SMS_TWILIO_ACCOUNT_SID` / `CAMPUS_SMS_TWILIO_AUTH_TOKEN` / `CAMPUS_SMS_TWILIO_FROM` | Identifiants et expéditeur Twilio — secrets, jamais dans GitHub. Voir [SECURITY_SMS_ALERTS.md](./SECURITY_SMS_ALERTS.md) |
+| `CAMPUS_SECURITY_EMAIL_ENABLED` | `true` pour activer les alertes e-mail de sécurité (optionnel, défaut désactivé) |
+| `CAMPUS_SECURITY_EMAIL_TO` / `CAMPUS_SECURITY_EMAIL_FROM` | Destinataire et expéditeur — uniquement ici, jamais dans GitHub |
+| `CAMPUS_SMTP_HOST` / `CAMPUS_SMTP_PORT` / `CAMPUS_SMTP_USER` / `CAMPUS_SMTP_PASSWORD` | SMTP Infomaniak (`mail.infomaniak.com`, port 587 STARTTLS). Secrets, jamais dans GitHub. Voir [SECURITY_EMAIL_ALERTS.md](./SECURITY_EMAIL_ALERTS.md) |
 
 ## Déploiement manuel (première fois)
 

@@ -1,6 +1,5 @@
 import {
   createSecuritySmsProvider,
-  notifySecurityEvent,
   readSecuritySmsConfig,
   type SecuritySmsConfig,
   type SecuritySmsDeps,
@@ -8,7 +7,6 @@ import {
   type SecuritySmsLogName,
   type SecuritySmsProvider,
 } from "@campus/features/security-notifications/index.ts";
-import type { SecurityEvent } from "@campus/features/security-events/index.ts";
 import { logOperationalError, logOperationalEvent, logOperationalWarning } from "@campus/lib/observability/index.ts";
 import { getSecurityNotificationStore } from "@campus/lib/persistence/store-factory.ts";
 
@@ -44,14 +42,3 @@ export async function securitySmsDeps(): Promise<SecuritySmsDeps> {
   return { store: await getSecurityNotificationStore(), config, provider, log: logSecuritySms };
 }
 
-/**
- * Branché sur `SecurityRecorderDeps.notify` : lancé sans attente, la requête
- * d'origine (connexion, MFA, sauvegarde…) ne dépend jamais du fournisseur SMS.
- */
-export function notifySecurityEventInBackground(event: SecurityEvent): void {
-  void (async () => {
-    await notifySecurityEvent(await securitySmsDeps(), event);
-  })().catch(() => {
-    logOperationalError("security_sms_failed", { kind: "ALERT", eventType: event.eventType, failureCategory: "unexpected" });
-  });
-}

@@ -64,6 +64,9 @@ export default defineConfig(async () => {
         "pdfjs-dist": path.resolve(webRoot, "node_modules/pdfjs-dist"),
       },
     },
+    ssr: {
+      external: ["nodemailer"],
+    },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,

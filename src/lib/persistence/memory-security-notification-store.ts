@@ -2,6 +2,7 @@ import {
   SECURITY_NOTIFICATION_ATTEMPT_STATUSES,
   type NewSecurityNotification,
   type SecurityNotification,
+  type SecurityNotificationChannel,
   type SecurityNotificationCompletion,
   type SecurityNotificationKind,
   type SecurityNotificationStatusCount,
@@ -43,16 +44,24 @@ export class MemorySecurityNotificationStore implements SecurityNotificationStor
     row.failureCategory = completion.failureCategory ?? null;
   }
 
-  async lastAttempt(deduplicationKey: string, since: string): Promise<SecurityNotification | null> {
+  async lastAttempt(
+    deduplicationKey: string,
+    since: string,
+    channel?: SecurityNotificationChannel,
+  ): Promise<SecurityNotification | null> {
     const row = newest(this.rows.filter((entry) =>
       entry.deduplicationKey === deduplicationKey
       && ATTEMPT_STATUSES.includes(entry.status)
-      && entry.createdAt >= since));
+      && entry.createdAt >= since
+      && (!channel || entry.channel === channel)));
     return row ? { ...row } : null;
   }
 
-  async countAttempts(since: string): Promise<number> {
-    return this.rows.filter((entry) => ATTEMPT_STATUSES.includes(entry.status) && entry.createdAt >= since).length;
+  async countAttempts(since: string, channel?: SecurityNotificationChannel): Promise<number> {
+    return this.rows.filter((entry) =>
+      ATTEMPT_STATUSES.includes(entry.status)
+      && entry.createdAt >= since
+      && (!channel || entry.channel === channel)).length;
   }
 
   async recordSuppressed(
@@ -63,6 +72,7 @@ export class MemorySecurityNotificationStore implements SecurityNotificationStor
       .filter((entry) =>
         entry.deduplicationKey === notification.deduplicationKey
         && entry.status === notification.status
+        && entry.channel === notification.channel
         && entry.lastSeenAt >= since)
       .sort((left, right) => right.lastSeenAt.localeCompare(left.lastSeenAt))[0];
     if (!existing) return this.insert(notification);
@@ -71,17 +81,22 @@ export class MemorySecurityNotificationStore implements SecurityNotificationStor
     return { ...existing };
   }
 
-  async latestSent(kind: SecurityNotificationKind): Promise<SecurityNotification | null> {
+  async latestSent(kind: SecurityNotificationKind, channel?: SecurityNotificationChannel): Promise<SecurityNotification | null> {
     const row = [...this.rows]
-      .filter((entry) => entry.kind === kind && entry.status === "SENT" && entry.sentAt)
+      .filter((entry) =>
+        entry.kind === kind
+        && entry.status === "SENT"
+        && entry.sentAt
+        && (!channel || entry.channel === channel))
       .sort((left, right) => (right.sentAt ?? "").localeCompare(left.sentAt ?? ""))[0];
     return row ? { ...row } : null;
   }
 
-  async countByStatus(since: string): Promise<SecurityNotificationStatusCount[]> {
+  async countByStatus(since: string, channel?: SecurityNotificationChannel): Promise<SecurityNotificationStatusCount[]> {
     const counts = new Map<SecurityNotificationStatusCount["status"], SecurityNotificationStatusCount>();
     for (const row of this.rows) {
       if (row.lastSeenAt < since) continue;
+      if (channel && row.channel !== channel) continue;
       const entry = counts.get(row.status) ?? { status: row.status, rows: 0, occurrences: 0 };
       entry.rows += 1;
       entry.occurrences += row.occurrenceCount;

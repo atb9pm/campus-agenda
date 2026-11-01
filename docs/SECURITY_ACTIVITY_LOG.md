@@ -99,13 +99,15 @@ d’agrégation.
 
 - Stockage local au serveur applicatif, sans copie indépendante.
 - Compteurs de volume de lectures et rate limiter en mémoire : remis à zéro au redémarrage, mono-instance.
-- Notification limitée : seules certaines alertes significatives peuvent déclencher un SMS
-  (voir [SECURITY_SMS_ALERTS.md](./SECURITY_SMS_ALERTS.md)) ; le reste doit être consulté à l’écran.
+- Notifications : WARNING et CRITICAL peuvent déclencher un e-mail
+  (voir [SECURITY_EMAIL_ALERTS.md](./SECURITY_EMAIL_ALERTS.md)) ; certaines alertes significatives
+  peuvent aussi déclencher un SMS (voir [SECURITY_SMS_ALERTS.md](./SECURITY_SMS_ALERTS.md)).
+  Consulter l’écran reste nécessaire.
 - Les règles sont des seuils simples, sans apprentissage ni corrélation avancée.
 
 ## Évolutions futures (non implémentées)
 
-- Alertes e-mail pour les événements CRITICAL.
+- Canal SMS plus restrictif ou configurable indépendamment de l’e-mail.
 - Export sécurisé du journal.
 - Stockage externe / centralisé et copie indépendante hors serveur applicatif.
 - Intégration SIEM.

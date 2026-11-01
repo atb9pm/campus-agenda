@@ -3091,6 +3091,17 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .security-activity h4 { margin: 0 0 10px; color: var(--navy); font-size: 13px; }
 .security-refresh, .security-detail-button, .security-pagination button { padding: 7px 11px; border: 1px solid var(--line-strong); border-radius: 6px; background: #fff; color: #4b5f7e; font-size: 11px; font-weight: 700; cursor: pointer; }
 .security-refresh:disabled, .security-pagination button:disabled { opacity: .5; cursor: default; }
+.security-email-status { display: grid; gap: 8px; margin: 0 0 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; color: #445a7c; font-size: 12px; line-height: 1.5; }
+.security-email-status h4 { margin: 0; color: var(--navy); font-size: 13px; }
+.security-email-status p { margin: 0; }
+.security-email-state { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; }
+.security-email-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: #9aa8bd; }
+.security-email-state.is-active .security-email-dot { background: #1f9d55; }
+.security-email-state.is-misconfigured .security-email-dot { background: #d08a00; }
+.security-email-meta { color: #6d7f9b; font-size: 11px; }
+.security-email-test { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.security-email-test button { padding: 8px 12px; border: 1px solid var(--navy); border-radius: 6px; background: var(--navy); color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; }
+.security-email-test button:disabled { opacity: .5; cursor: default; }
 .security-status { display: grid; gap: 4px; margin: 0 0 12px; padding: 12px 14px; border-radius: 8px; font-size: 13px; line-height: 1.45; }
 .security-status.is-normal { background: #eaf7ef; color: #1c5b34; }
 .security-status.is-warning { background: #fff6e8; color: #6a4b12; }

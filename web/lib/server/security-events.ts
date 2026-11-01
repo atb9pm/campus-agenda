@@ -9,7 +9,7 @@ import {
 import { getSecurityEventStore, getTeacherAccountStore } from "@campus/lib/persistence/store-factory.ts";
 import { isTrustedSensitiveRead, isTrustedWriteOrigin } from "@campus/lib/security/csrf.ts";
 import { readClientKey } from "@campus/lib/security/rate-limit.ts";
-import { notifySecurityEventInBackground } from "./security-sms.ts";
+import { notifySecurityEventInBackground } from "./security-notifications.ts";
 import {
   computeSourceFingerprint,
   formatSourceFingerprint,

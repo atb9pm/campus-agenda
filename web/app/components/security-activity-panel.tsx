@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { SecurityEmailStatus } from "./security-email-status.tsx";
 import type { SecurityEventView } from "@campus/features/security-events/present.ts";
 import type { SecuritySummary } from "@campus/features/security-events/summary.ts";
 import {
@@ -158,7 +159,7 @@ function SecurityEventDetail({ event, onClose }: { event: SecurityEventView; onC
   );
 }
 
-export function SecurityActivityPanel() {
+export function SecurityActivityPanel({ onNotice }: { onNotice?: (message: string) => void }) {
   const [period, setPeriod] = useState<PeriodFilter>("24h");
   const [severity, setSeverity] = useState<SeverityFilter>("ALL");
   const [page, setPage] = useState(1);
@@ -213,6 +214,8 @@ export function SecurityActivityPanel() {
       </header>
 
       {error ? <p className="admin-error" role="alert">{error}</p> : null}
+
+      <SecurityEmailStatus onNotice={onNotice} />
 
       <section className="security-summary" aria-labelledby="security-summary-title">
         <h4 id="security-summary-title">{SECURITY_ACTIVITY_SUMMARY_TITLE}</h4>

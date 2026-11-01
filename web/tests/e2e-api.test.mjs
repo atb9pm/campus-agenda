@@ -10,10 +10,10 @@ if (process.env.NODE_ENV === "production") {
 process.env.CAMPUS_ALLOW_DEMO_PASSWORD ??= "1";
 // Les tests E2E enchaînent plusieurs connexions enseignant ; le plafond 10/min
 // ferait échouer les scénarios ajoutés en fin de fichier.
-process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER ??= "50";
+process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER ??= "80";
 process.env.CAMPUS_AUTH_RATE_LIMIT_STUDENT ??= "50";
 process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA ??= "80";
-process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET ??= "50";
+process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_TARGET ??= "80";
 process.env.CAMPUS_AUTH_RATE_LIMIT_STUDENT_TARGET ??= "50";
 process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_MFA_TARGET ??= "80";
 process.env.CAMPUS_AUTH_RATE_LIMIT_TEACHER_PASSWORD ??= "50";
@@ -2354,5 +2354,64 @@ test("alertes SMS — statut et test : anonyme 401, enseignant 403, apprenti ref
   });
   assert.equal(adminTest.status, 409, "admin autorisé, mais aucun SMS hors production");
   const adminGet = await request("/api/admin/security/sms/test", { headers: { cookie: adminCookie } });
+  assert.notEqual(adminGet.status, 200, "jamais d'envoi par GET");
+});
+
+test("alertes e-mail — statut et test : anonyme 401, enseignant 403, apprenti refusé, admin sans secret", async () => {
+  const anonymousStatus = await request("/api/admin/security/email");
+  assert.equal(anonymousStatus.status, 401);
+  const anonymousTest = await request("/api/admin/security/email/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirm: true }),
+  });
+  assert.equal(anonymousTest.status, 401);
+
+  const teacherCookie = await loginTeacher("teacher-demo-current");
+  const teacherStatus = await request("/api/admin/security/email", { headers: { cookie: teacherCookie } });
+  assert.equal(teacherStatus.status, 403);
+  const teacherTest = await request("/api/admin/security/email/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: teacherCookie },
+    body: JSON.stringify({ confirm: true }),
+  });
+  assert.equal(teacherTest.status, 403);
+
+  const student = await loginGeneratedStudent();
+  const studentStatus = await request("/api/admin/security/email", { headers: { cookie: student.cookie } });
+  assert.ok([401, 403].includes(studentStatus.status), `apprenti refusé (${studentStatus.status})`);
+  const studentTest = await request("/api/admin/security/email/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: student.cookie },
+    body: JSON.stringify({ confirm: true }),
+  });
+  assert.ok([401, 403].includes(studentTest.status), `apprenti refusé (${studentTest.status})`);
+
+  const adminCookie = await loginAdmin();
+  const status = await request("/api/admin/security/email", { headers: { cookie: adminCookie } });
+  assert.equal(status.status, 200);
+  assert.equal(status.headers.get("Cache-Control"), "no-store");
+  const raw = await status.text();
+  const payload = JSON.parse(raw);
+  assert.equal(payload.ok, true);
+  assert.ok(["not-configured", "disabled-environment"].includes(payload.state), "jamais actif hors production");
+  assert.equal(payload.destination, null);
+  assert.equal(payload.policy.warningCooldownMinutes, 30);
+  assert.equal(payload.policy.criticalCooldownMinutes, 15);
+  assert.doesNotMatch(raw, /CAMPUS_SMTP_PASSWORD|device-password|AUTH_SECRET|smtp\.infomaniak/);
+
+  const withoutConfirm = await request("/api/admin/security/email/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: adminCookie },
+    body: JSON.stringify({}),
+  });
+  assert.equal(withoutConfirm.status, 400, "confirmation explicite requise");
+  const adminTest = await request("/api/admin/security/email/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie: adminCookie },
+    body: JSON.stringify({ confirm: true }),
+  });
+  assert.equal(adminTest.status, 409, "admin autorisé, mais aucun e-mail hors production");
+  const adminGet = await request("/api/admin/security/email/test", { headers: { cookie: adminCookie } });
   assert.notEqual(adminGet.status, 200, "jamais d'envoi par GET");
 });

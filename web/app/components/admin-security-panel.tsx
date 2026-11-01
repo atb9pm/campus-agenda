@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { SecurityEmailStatus } from "./security-email-status.tsx";
 import {
   ADMIN_SECURITY_ACK_CODES,
   ADMIN_SECURITY_APP_CONFIGURED,
@@ -422,6 +423,8 @@ export function AdminSecurityPanel({ onNotice }: { onNotice: (message: string) =
         <h4>{ADMIN_SECURITY_HELP_TITLE}</h4>
         <p>{ADMIN_SECURITY_HELP_TEXT}</p>
       </aside>
+
+      <SecurityEmailStatus onNotice={onNotice} />
 
       {error ? <p className="admin-error" role="alert">{error}</p> : null}
     </div>

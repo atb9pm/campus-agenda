@@ -1,4 +1,4 @@
-export const SECURITY_NOTIFICATION_CHANNELS = ["SMS"] as const;
+export const SECURITY_NOTIFICATION_CHANNELS = ["SMS", "EMAIL"] as const;
 export type SecurityNotificationChannel = (typeof SECURITY_NOTIFICATION_CHANNELS)[number];
 
 export const SECURITY_NOTIFICATION_KINDS = ["ALERT", "TEST"] as const;
@@ -10,7 +10,7 @@ export type SecurityNotificationLevel = (typeof SECURITY_NOTIFICATION_LEVELS)[nu
 /**
  * `PENDING` : envoi réservé (compte déjà dans les quotas) puis remplacé par
  * `SENT` ou `FAILED`. Les statuts `SUPPRESSED_*` et `DISABLED` expliquent
- * pourquoi un événement éligible n'a pas produit de SMS.
+ * pourquoi un événement éligible n'a pas produit de notification.
  */
 export const SECURITY_NOTIFICATION_STATUSES = [
   "PENDING",
@@ -37,6 +37,7 @@ export const SECURITY_SMS_FAILURE_CATEGORIES = [
   "unexpected",
 ] as const;
 export type SecuritySmsFailureCategory = (typeof SECURITY_SMS_FAILURE_CATEGORIES)[number];
+export type SecurityNotificationFailureCategory = SecuritySmsFailureCategory;
 
 /**
  * Trace d'une notification. Ne contient ni numéro, ni texte du SMS, ni réponse
@@ -82,16 +83,20 @@ export interface SecurityNotificationStore {
   insert(notification: NewSecurityNotification): Promise<SecurityNotification>;
   complete(id: string, completion: SecurityNotificationCompletion): Promise<void>;
   /** Dernière tentative (PENDING / SENT / FAILED) pour cette clé depuis `since`. */
-  lastAttempt(deduplicationKey: string, since: string): Promise<SecurityNotification | null>;
-  /** Tentatives toutes clés confondues depuis `since` (quota global). */
-  countAttempts(since: string): Promise<number>;
+  lastAttempt(
+    deduplicationKey: string,
+    since: string,
+    channel?: SecurityNotificationChannel,
+  ): Promise<SecurityNotification | null>;
+  /** Tentatives toutes clés confondues depuis `since` (quota global, filtrable par canal). */
+  countAttempts(since: string, channel?: SecurityNotificationChannel): Promise<number>;
   /** Agrège les suppressions identiques (même clé + statut) vues depuis `since`. */
   recordSuppressed(
     notification: NewSecurityNotification & { status: SecurityNotificationSuppressedStatus },
     since: string,
   ): Promise<SecurityNotification>;
-  latestSent(kind: SecurityNotificationKind): Promise<SecurityNotification | null>;
-  countByStatus(since: string): Promise<SecurityNotificationStatusCount[]>;
+  latestSent(kind: SecurityNotificationKind, channel?: SecurityNotificationChannel): Promise<SecurityNotification | null>;
+  countByStatus(since: string, channel?: SecurityNotificationChannel): Promise<SecurityNotificationStatusCount[]>;
   purgeOlderThan(cutoff: string): Promise<number>;
 }
 
@@ -101,4 +106,8 @@ export function isSecurityNotificationStatus(value: unknown): value is SecurityN
 
 export function isSecuritySmsFailureCategory(value: unknown): value is SecuritySmsFailureCategory {
   return typeof value === "string" && (SECURITY_SMS_FAILURE_CATEGORIES as readonly string[]).includes(value);
+}
+
+export function isSecurityNotificationChannel(value: unknown): value is SecurityNotificationChannel {
+  return typeof value === "string" && (SECURITY_NOTIFICATION_CHANNELS as readonly string[]).includes(value);
 }

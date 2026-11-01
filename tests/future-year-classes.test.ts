@@ -132,7 +132,7 @@ async function memoryWorld() {
 
 test("version 2.50.0 — préparation classes/cours année future, sans migration", () => {
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0036_security_notifications.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0037_security_notification_email.sql");
 });
 
 test("A — 2026-2027 ACTIVE contient MA1", async () => {
