@@ -205,7 +205,7 @@ test("carnet — UI une carte = une CourseSession, Planifier sans picker", async
 });
 
 test("carnet — aucune table SQL CourseSession", () => {
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0034_annual_course_meeting_days.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0035_security_events.sql");
   assert.equal(
     SQL_MIGRATION_FILES.some((file) => file.toLowerCase().includes("course_session")),
     false,

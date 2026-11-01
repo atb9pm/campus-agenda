@@ -3,6 +3,7 @@ import { backupDownloadFilename } from "@campus/lib/persistence/backup.ts";
 import { logOperationalEvent } from "@campus/lib/observability/index.ts";
 import { jsonResponse, requireAdminSession } from "../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../lib/server/observability.ts";
+import { recordRequestSecurityEvent } from "../../../../lib/server/security-events.ts";
 
 async function handleGet(request: Request) {
   const auth = await requireAdminSession(request);
@@ -19,6 +20,13 @@ async function handleGet(request: Request) {
     teacherAccountCount: snapshot.teacherAccountCount,
     tableCount: Object.keys(snapshot.tables ?? {}).length,
     adminId: auth.session!.teacherId,
+  });
+  await recordRequestSecurityEvent(request, {
+    type: "BACKUP_DOWNLOADED",
+    actorType: "TEACHER",
+    actorId: auth.session!.teacherId,
+    httpStatus: 200,
+    metadata: { formatVersion: snapshot.version, tableCount: Object.keys(snapshot.tables ?? {}).length },
   });
 
   return jsonResponse(

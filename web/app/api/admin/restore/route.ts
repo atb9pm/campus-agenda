@@ -6,6 +6,7 @@ import {
 } from "@campus/features/admin-backup/index.ts";
 import { jsonResponse, requireAdminSession } from "../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../lib/server/observability.ts";
+import { recordRequestSecurityEvent } from "../../../../lib/server/security-events.ts";
 
 async function handlePost(request: Request) {
   const auth = await requireAdminSession(request);
@@ -18,16 +19,54 @@ async function handlePost(request: Request) {
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
-  const result = await restoreStoreSnapshot(body.snapshot);
-
-  if (!result.ok) {
-    logOperationalWarning("agenda_backup_restore_rejected", { reason: result.reason, adminId: auth.session!.teacherId });
-    return jsonResponse({ ok: false, reason: result.reason }, { status: 400, headers: { "Cache-Control": "no-store" } });
-  }
-
+  const adminId = auth.session!.teacherId;
   const rawVersion = body.snapshot && typeof body.snapshot === "object" && "version" in body.snapshot
     ? (body.snapshot as { version?: number }).version
     : undefined;
+  // Écrit avant la restauration : la trace survit même si la restauration échoue.
+  await recordRequestSecurityEvent(request, {
+    type: "BACKUP_RESTORE_STARTED",
+    actorType: "TEACHER",
+    actorId: adminId,
+  });
+
+  let result: Awaited<ReturnType<typeof restoreStoreSnapshot>>;
+  try {
+    result = await restoreStoreSnapshot(body.snapshot);
+  } catch (error) {
+    await recordRequestSecurityEvent(request, {
+      type: "BACKUP_RESTORE_FAILED",
+      severity: "CRITICAL",
+      actorType: "TEACHER",
+      actorId: adminId,
+      httpStatus: 500,
+      metadata: { failure: "unexpected-error" },
+    });
+    throw error;
+  }
+
+  if (!result.ok) {
+    logOperationalWarning("agenda_backup_restore_rejected", { reason: result.reason, adminId });
+    await recordRequestSecurityEvent(request, {
+      type: "BACKUP_RESTORE_FAILED",
+      actorType: "TEACHER",
+      actorId: adminId,
+      httpStatus: 400,
+      metadata: { failure: "validation" },
+    });
+    return jsonResponse({ ok: false, reason: result.reason }, { status: 400, headers: { "Cache-Control": "no-store" } });
+  }
+
+  await recordRequestSecurityEvent(request, {
+    type: "BACKUP_RESTORE_SUCCEEDED",
+    actorType: "TEACHER",
+    actorId: adminId,
+    httpStatus: 200,
+    metadata: {
+      ...(typeof rawVersion === "number" ? { formatVersion: rawVersion } : {}),
+      restoredTables: result.restoredTables,
+    },
+  });
 
   logOperationalEvent("agenda_backup_restore", {
     version: rawVersion ?? 0,

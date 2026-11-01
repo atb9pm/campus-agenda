@@ -2,6 +2,7 @@ import { exportSchoolYearSnapshot, schoolYearExportToCsv } from "@campus/lib/per
 import { getAgendaStore, getSchoolYearStore } from "@campus/lib/persistence/store-factory.ts";
 import { jsonResponse, requireAdminSession } from "../../../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../../../lib/server/observability.ts";
+import { recordRequestSecurityEvent } from "../../../../../../lib/server/security-events.ts";
 
 async function handleGet(
   request: Request,
@@ -22,6 +23,13 @@ async function handleGet(
 
   const store = await getAgendaStore();
   const snapshot = await exportSchoolYearSnapshot(store, id, year.label, year.weeks);
+  await recordRequestSecurityEvent(request, {
+    type: "DATA_EXPORTED",
+    actorType: "TEACHER",
+    actorId: auth.session!.teacherId,
+    httpStatus: 200,
+    metadata: { exportKind: "school-year", format: format === "csv" ? "csv" : "json", itemCount: snapshot.items.length },
+  });
 
   if (format === "csv") {
     const csv = schoolYearExportToCsv(snapshot);

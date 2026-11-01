@@ -260,15 +260,25 @@ export class MemoryTeacherAccountStore implements TeacherAccountStore {
     const account =
       this.accounts.find((entry) => initialsKey(entry.initials) === initialsKey(candidate)) ??
       this.accounts.find((entry) => entry.id === candidate);
-    if (!account) return { ok: false, reason: "Initiales ou mot de passe incorrect." };
+    if (!account) return { ok: false, reason: "Initiales ou mot de passe incorrect.", failure: "invalid-credentials" };
     if (!(await verifyPassword(password, account.passwordHash))) {
-      return { ok: false, reason: "Initiales ou mot de passe incorrect." };
+      return { ok: false, reason: "Initiales ou mot de passe incorrect.", failure: "invalid-credentials" };
     }
     if (account.archivedAt !== null) {
-      return { ok: false, reason: "Ce compte est archivé. Contactez l'administrateur." };
+      return {
+        ok: false,
+        reason: "Ce compte est archivé. Contactez l'administrateur.",
+        failure: "archived",
+        failedTeacherId: account.id,
+      };
     }
     if (!account.isActive) {
-      return { ok: false, reason: "Ce compte est désactivé. Contactez l'administrateur." };
+      return {
+        ok: false,
+        reason: "Ce compte est désactivé. Contactez l'administrateur.",
+        failure: "disabled",
+        failedTeacherId: account.id,
+      };
     }
     account.lastLoginAt = new Date().toISOString();
     return { ok: true, teacherId: account.id, mustChangePassword: account.mustChangePassword };

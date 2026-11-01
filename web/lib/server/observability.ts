@@ -2,6 +2,7 @@ import { attachRequestId, logApiEvent, readRequestId } from "@campus/lib/observa
 import { applySecurityHeaders } from "@campus/lib/security/http-headers.ts";
 
 import { jsonResponse } from "./api.ts";
+import { trackRequestReadVolume } from "./security-events.ts";
 
 export interface RouteHandlerContext {
   params?: Promise<Record<string, string>>;
@@ -24,6 +25,7 @@ export function withApiObservability<H extends ObservabilityHandler>(route: stri
       status: response.status,
       durationMs: performance.now() - startedAt,
     });
+    await trackRequestReadVolume(request);
     return new Response(response.body, {
       status: response.status,
       statusText: response.statusText,

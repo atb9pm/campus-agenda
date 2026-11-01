@@ -44,6 +44,15 @@ export const CAMPUS_BACKUP_INSERT_ORDER = [
 
 export type CampusBackupTableName = (typeof CAMPUS_BACKUP_INSERT_ORDER)[number];
 
+/**
+ * Tables persistantes volontairement HORS snapshot métier (pas un oubli).
+ * `security_events` est le journal opérationnel de sécurité : il n'est jamais
+ * exporté dans une sauvegarde, jamais vidé ni remplacé par une restauration —
+ * une restauration est justement un événement qu'il doit permettre d'investiguer.
+ * Une clé `security_events` présente dans un fichier de sauvegarde est ignorée.
+ */
+export const CAMPUS_BACKUP_EXCLUDED_OPERATIONAL_TABLES = ["schema_migrations", "security_events"] as const;
+
 export const CAMPUS_BACKUP_DELETE_ORDER = [...CAMPUS_BACKUP_INSERT_ORDER].reverse();
 
 export const BACKUP_FORMAT_VERSION_V4 = 4 as const;

@@ -11,7 +11,8 @@ import { stdin, stdout } from "node:process";
 
 import { RESET_2FA_CONFIRM_TOKEN, isReset2faConfirmToken } from "../src/features/admin-mfa/types.ts";
 import { resetAdminMfa } from "../src/features/admin-mfa/reset.ts";
-import { getAdminMfaStore, getTeacherAccountStore } from "../src/lib/persistence/store-factory.ts";
+import { recordSecurityEvent } from "../src/features/security-events/recorder.ts";
+import { getAdminMfaStore, getSecurityEventStore, getTeacherAccountStore } from "../src/lib/persistence/store-factory.ts";
 
 const identifier = process.argv.slice(2).filter((value) => value !== "--").join(" ").trim();
 
@@ -57,6 +58,14 @@ if (!result.ok) {
   console.error(result.reason);
   process.exit(1);
 }
+
+await recordSecurityEvent({ store: await getSecurityEventStore() }, {
+  type: "MFA_RESET",
+  actorType: "SYSTEM",
+  targetType: "TEACHER",
+  targetId: account.id,
+  metadata: { via: "server-script" },
+});
 
 console.log("Double authentification réinitialisée.");
 console.log("État : MFA_RESET_REQUIRED — une nouvelle configuration TOTP est obligatoire à la prochaine connexion.");

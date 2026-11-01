@@ -2230,3 +2230,69 @@ test("Carnet — consultation admin : agenda de classe en lecture seule sans att
   });
   assert.equal(teacherConsult.status, 401, "consult réservé aux administrateurs");
 });
+
+test("journal de sécurité — /api/admin/security/activity : 401, 403, 200, sans secret ni IP brute", async () => {
+  const clientIp = "198.51.100.77";
+  const wrongPassword = "mauvais-mot-de-passe-e2e";
+  const failed = await request("/api/auth/teacher", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-real-ip": clientIp, "x-request-id": "req-e2e-security-1" },
+    body: JSON.stringify({ teacherId: "teacher-demo-current", password: wrongPassword }),
+  });
+  assert.equal(failed.status, 401);
+  const success = await request("/api/auth/teacher", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-real-ip": clientIp },
+    body: JSON.stringify({ teacherId: "teacher-demo-current", password: "campus-demo" }),
+  });
+  assert.equal(success.status, 200);
+  const teacherCookie = extractCookie(success);
+
+  const anonymous = await request("/api/admin/security/activity");
+  assert.equal(anonymous.status, 401);
+  const staff = await request("/api/admin/security/activity", { headers: { cookie: teacherCookie } });
+  assert.equal(staff.status, 403);
+
+  const adminCookie = await loginAdmin();
+  const response = await request("/api/admin/security/activity?period=24h&pageSize=100", {
+    headers: { cookie: adminCookie },
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  const raw = await response.text();
+  const payload = JSON.parse(raw);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.retentionDays, 180);
+  assert.ok(payload.summary.cards.loginFailed >= 1);
+  assert.ok(payload.summary.cards.loginSucceeded >= 1);
+  assert.ok(payload.summary.cards.denied >= 1, "le 403 enseignant est journalisé");
+  assert.ok(payload.pagination.total >= payload.events.length);
+  assert.ok(payload.events.length <= 100);
+
+  const loginFailed = payload.events.find((event) => event.requestId === "req-e2e-security-1");
+  assert.ok(loginFailed, "échec de connexion corrélé par requestId");
+  assert.equal(loginFailed.eventType, "TEACHER_LOGIN_FAILED");
+  assert.match(loginFailed.source, /^[0-9A-F]{4}…[0-9A-F]{4}$/);
+  assert.ok(payload.events.some((event) => event.eventType === "TEACHER_LOGIN_SUCCEEDED"));
+  const denied = payload.events.find(
+    (event) => event.eventType === "ADMIN_ACCESS_DENIED" && event.metadata.reason === "not-admin",
+  );
+  assert.ok(denied, "accès admin refusé pour un enseignant");
+  assert.equal(denied.severity, "WARNING");
+
+  assert.doesNotMatch(raw, new RegExp(wrongPassword));
+  assert.doesNotMatch(raw, /campus-demo/);
+  assert.doesNotMatch(raw, /198\.51\.100\.77/);
+  assert.doesNotMatch(raw, /campus_session|aggregationKey/);
+
+  const page2 = await request("/api/admin/security/activity?pageSize=1&page=2&severity=INFO", {
+    headers: { cookie: adminCookie },
+  });
+  const page2Body = await page2.json();
+  assert.equal(page2.status, 200);
+  assert.equal(page2Body.pagination.pageSize, 1);
+  assert.equal(page2Body.pagination.page, 2);
+  assert.ok(page2Body.events.every((event) => event.severity === "INFO"));
+  const clamp = await request("/api/admin/security/activity?pageSize=100000", { headers: { cookie: adminCookie } });
+  assert.equal((await clamp.json()).pagination.pageSize, 100);
+});

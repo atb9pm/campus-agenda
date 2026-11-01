@@ -4,6 +4,7 @@ import { getAdminMfaStore } from "@campus/lib/persistence/store-factory.ts";
 import { jsonResponse, requireAdminSession } from "../../../../../../../lib/server/api.ts";
 import { enforceAuthRateLimit } from "../../../../../../../lib/server/rate-limit.ts";
 import { readBoundedJson } from "../../../../../../../lib/server/read-bounded-json.ts";
+import { classifyMfaFailure, recordRequestSecurityEvent } from "../../../../../../../lib/server/security-events.ts";
 
 export async function POST(request: Request) {
   const auth = await requireAdminSession(request);
@@ -26,7 +27,23 @@ export async function POST(request: Request) {
     String(body.code ?? ""),
   );
   if (!result.ok) {
+    if (classifyMfaFailure(result.reason) === "wrong-code") {
+      await recordRequestSecurityEvent(request, {
+        type: "MFA_VERIFY_FAILED",
+        actorType: "TEACHER",
+        actorId: auth.session!.teacherId,
+        httpStatus: result.status,
+        metadata: { step: "reconfigure" },
+        aggregateWindowMinutes: 15,
+      });
+    }
     return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
   }
+  await recordRequestSecurityEvent(request, {
+    type: "MFA_RECONFIGURED",
+    actorType: "TEACHER",
+    actorId: auth.session!.teacherId,
+    httpStatus: 200,
+  });
   return jsonResponse({ ok: true, recoveryCodes: result.recoveryCodes });
 }

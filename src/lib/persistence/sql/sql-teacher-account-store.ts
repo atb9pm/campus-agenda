@@ -277,15 +277,25 @@ export class SqlTeacherAccountStore implements TeacherAccountStore {
   async authenticate(initialsOrId: string, password: string): Promise<TeacherAuthOutcome> {
     const candidate = initialsOrId.trim();
     const row = (await this.rowByInitials(candidate)) ?? (await this.row(candidate));
-    if (!row) return { ok: false, reason: "Initiales ou mot de passe incorrect." };
+    if (!row) return { ok: false, reason: "Initiales ou mot de passe incorrect.", failure: "invalid-credentials" };
     if (!(await verifyPassword(password, row.password_hash))) {
-      return { ok: false, reason: "Initiales ou mot de passe incorrect." };
+      return { ok: false, reason: "Initiales ou mot de passe incorrect.", failure: "invalid-credentials" };
     }
     if (row.archived_at !== null) {
-      return { ok: false, reason: "Ce compte est archivé. Contactez l'administrateur." };
+      return {
+        ok: false,
+        reason: "Ce compte est archivé. Contactez l'administrateur.",
+        failure: "archived",
+        failedTeacherId: row.id,
+      };
     }
     if (row.is_active !== null && !row.is_active) {
-      return { ok: false, reason: "Ce compte est désactivé. Contactez l'administrateur." };
+      return {
+        ok: false,
+        reason: "Ce compte est désactivé. Contactez l'administrateur.",
+        failure: "disabled",
+        failedTeacherId: row.id,
+      };
     }
     // ISO 8601 UTC explicite (…Z), comme le store mémoire — évite datetime('now')
     // sans fuseau, mal interprété par new Date() côté front (fr-CH).

@@ -47,7 +47,7 @@ const RAW_V3 = {
 
 test("version 2.44.0 — restauration admin sécurisée", async () => {
   assert.equal(APP_VERSION, "2.62.0");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0034_annual_course_meeting_days.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0035_security_events.sql");
   assert.deepEqual([...COMPATIBLE_BACKUP_VERSIONS], [1, 2, 3, 4]);
 
   const panel = await readFile(new URL("../web/app/components/admin-backup-panel.tsx", import.meta.url), "utf8");

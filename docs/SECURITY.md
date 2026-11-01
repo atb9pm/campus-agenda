@@ -59,6 +59,10 @@ Deux seaux indépendants (IP **et** cible). Concaténer `IP:compte` permettrait 
 
 Seaux expirés nettoyés automatiquement (toutes les 32 opérations ou 15 s, et avant décision de saturation). Plafond **8000** seaux **fail closed** : aucun seau actif n’est évincé ; une nouvelle clé est refusée tant que la Map est pleine de seaux encore valides. Pas de vidage global, pas de tri. Les clés ne sont pas journalisées. Redis n’est pas utilisé dans cette version.
 
+## Journal d’activité de sécurité
+
+Connexions, échecs MFA, blocages automatiques, accès admin refusés et opérations sensibles sont persistés dans `security_events` (append-only, 180 jours, hors sauvegarde) et consultables dans Administration → Sécurité → Activité de sécurité. Aucune IP brute : empreinte HMAC (`CAMPUS_SECURITY_FINGERPRINT_KEY`, sinon `AUTH_SECRET`). Détails : [SECURITY_ACTIVITY_LOG.md](./SECURITY_ACTIVITY_LOG.md).
+
 ## AUTH_SECRET
 
 En production : au moins **32 octets**, 48 ou 64 caractères aléatoires recommandés. Pas d’exigence artificielle majuscule/chiffre. Valeur jamais loguée. Hors production, valeur fictive interne si la variable est absente.

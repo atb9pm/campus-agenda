@@ -12,6 +12,7 @@ import {
 } from "@campus/lib/persistence/store-factory.ts";
 import { jsonResponse, requireAdminSession } from "../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../lib/server/observability.ts";
+import { recordRequestSecurityEvent } from "../../../../lib/server/security-events.ts";
 
 async function adminDeps(): Promise<StudentAccessAdminDeps> {
   const [accesses, adapters, catalog, years] = await Promise.all([
@@ -82,6 +83,14 @@ async function handlePost(request: Request) {
     }
     const payload = { ok: true, access: result.access, code: result.code };
     assertNoSecretLeak(payload);
+    await recordRequestSecurityEvent(request, {
+      type: "STUDENT_ACCESS_ROTATED",
+      actorType: "TEACHER",
+      actorId: auth.session!.teacherId,
+      targetType: "SCHOOL_CLASS",
+      targetId: schoolClassId,
+      httpStatus: 200,
+    });
     return jsonResponse(payload);
   } catch {
     return jsonResponse({ ok: false, reason: "Génération impossible. Réessayez." }, { status: 500 });
@@ -104,6 +113,14 @@ async function handleDelete(request: Request) {
     }
     const payload = { ok: true, access: result.access };
     assertNoSecretLeak(payload);
+    await recordRequestSecurityEvent(request, {
+      type: "STUDENT_ACCESS_REVOKED",
+      actorType: "TEACHER",
+      actorId: auth.session!.teacherId,
+      targetType: "SCHOOL_CLASS",
+      targetId: schoolClassId,
+      httpStatus: 200,
+    });
     return jsonResponse(payload);
   } catch {
     return jsonResponse({ ok: false, reason: "Désactivation impossible. Réessayez." }, { status: 500 });

@@ -9,6 +9,7 @@ import {
 import { buildTeacherClientSession } from "../../../../../../lib/server/teacher-session.ts";
 import { enforceAuthRateLimit } from "../../../../../../lib/server/rate-limit.ts";
 import { readBoundedJson } from "../../../../../../lib/server/read-bounded-json.ts";
+import { classifyMfaFailure, recordRequestSecurityEvent } from "../../../../../../lib/server/security-events.ts";
 
 export async function POST(request: Request) {
   const auth = await requireAdminMfaPendingSession(request);
@@ -31,6 +32,16 @@ export async function POST(request: Request) {
     String(body.code ?? ""),
   );
   if (!result.ok) {
+    if (classifyMfaFailure(result.reason) === "wrong-code") {
+      await recordRequestSecurityEvent(request, {
+        type: "MFA_VERIFY_FAILED",
+        actorType: "TEACHER",
+        actorId: auth.session!.teacherId,
+        httpStatus: result.status,
+        metadata: { step: "login-challenge" },
+        aggregateWindowMinutes: 15,
+      });
+    }
     return jsonResponse(
       {
         ok: false,
@@ -39,6 +50,24 @@ export async function POST(request: Request) {
       },
       { status: result.status },
     );
+  }
+
+  await recordRequestSecurityEvent(request, {
+    type: "MFA_VERIFY_SUCCEEDED",
+    actorType: "TEACHER",
+    actorId: auth.session!.teacherId,
+    httpStatus: 200,
+    metadata: { usedRecovery: result.usedRecovery },
+  });
+  if (result.usedRecovery) {
+    const remaining = (await (await getAdminMfaStore()).get(auth.session!.teacherId))?.recoveryHashes.length;
+    await recordRequestSecurityEvent(request, {
+      type: "MFA_RECOVERY_CODE_USED",
+      actorType: "TEACHER",
+      actorId: auth.session!.teacherId,
+      httpStatus: 200,
+      metadata: { context: "login-challenge", ...(remaining === undefined ? {} : { recoveryRemaining: remaining }) },
+    });
   }
 
   const now = Date.now();

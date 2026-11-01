@@ -6,6 +6,7 @@ import {
 } from "../../../../../lib/server/api.ts";
 import { enforceAuthRateLimit } from "../../../../../lib/server/rate-limit.ts";
 import { readBoundedJson } from "../../../../../lib/server/read-bounded-json.ts";
+import { recordRequestSecurityEvent } from "../../../../../lib/server/security-events.ts";
 
 export async function POST(request: Request) {
   const ipLimited = await enforceAuthRateLimit(request, "teacher-password", { layer: "ip" });
@@ -40,8 +41,22 @@ export async function POST(request: Request) {
     String(body.nextPassword ?? ""),
   );
   if (!result.ok) {
+    await recordRequestSecurityEvent(request, {
+      type: "TEACHER_PASSWORD_CHANGE_FAILED",
+      actorType: "TEACHER",
+      actorId: previous.teacherId,
+      httpStatus: result.status,
+      metadata: { reason: result.status === 401 ? "wrong-current-password" : "rejected" },
+      aggregateWindowMinutes: 15,
+    });
     return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
   }
+  await recordRequestSecurityEvent(request, {
+    type: "TEACHER_PASSWORD_CHANGED",
+    actorType: "TEACHER",
+    actorId: previous.teacherId,
+    httpStatus: 200,
+  });
 
   // Nouveau cookie : les sessions émises avant ce changement sont mortes.
   const session = {

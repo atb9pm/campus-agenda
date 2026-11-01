@@ -6,6 +6,8 @@ import {
   requireAdminSession,
 } from "../../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../../lib/server/observability.ts";
+import { recordRequestSecurityEvent } from "../../../../../lib/server/security-events.ts";
+import { accountSecurityChanges } from "@campus/features/security-events/index.ts";
 
 async function handlePatch(request: Request, context?: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminSession(request);
@@ -35,6 +37,7 @@ async function handlePatch(request: Request, context?: { params: Promise<{ id: s
   }
 
   const accounts = await getTeacherAccountsStore();
+  const before = await accounts.findAccount(id);
   const result = await accounts.updateAccount(id, {
     displayName: body.displayName,
     initials: body.initials,
@@ -45,6 +48,18 @@ async function handlePatch(request: Request, context?: { params: Promise<{ id: s
   });
   if (!result.ok) {
     return jsonResponse({ ok: false, reason: result.reason }, { status: result.status });
+  }
+  if (before) {
+    for (const type of accountSecurityChanges(before, result.account)) {
+      await recordRequestSecurityEvent(request, {
+        type,
+        actorType: "TEACHER",
+        actorId: selfId,
+        targetType: "TEACHER",
+        targetId: id,
+        httpStatus: 200,
+      });
+    }
   }
   return jsonResponse({ ok: true, teacher: result.account });
 }
@@ -77,6 +92,14 @@ async function handleDelete(request: Request, context?: { params: Promise<{ id: 
   logOperationalEvent(`Admin ${auth.session!.teacherId} deleted teacher ${id}`, {
     adminId: auth.session!.teacherId,
     targetId: id,
+  });
+  await recordRequestSecurityEvent(request, {
+    type: "TEACHER_ACCOUNT_DELETED",
+    actorType: "TEACHER",
+    actorId: auth.session!.teacherId,
+    targetType: "TEACHER",
+    targetId: id,
+    httpStatus: 200,
   });
   return jsonResponse({ ok: true, id, preview: result.preview ?? null });
 }

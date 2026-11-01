@@ -12,9 +12,26 @@ import {
   authenticateStudentAccessCode,
   STUDENT_LOGIN_INVALID_REASON,
 } from "@campus/features/student-access/index.ts";
-import { authRateLimitTargetFromStudentCode } from "@campus/lib/security/rate-limit.ts";
+import {
+  STUDENT_UNPARSED_RATE_LIMIT_TARGET,
+  authRateLimitTargetFromStudentCode,
+} from "@campus/lib/security/rate-limit.ts";
 import { enforceAuthRateLimit } from "../../../../lib/server/rate-limit.ts";
 import { readBoundedJson } from "../../../../lib/server/read-bounded-json.ts";
+import { recordRequestSecurityEvent } from "../../../../lib/server/security-events.ts";
+
+/** Seul le préfixe de classe (public) est conservé, jamais la partie secrète du code. */
+async function recordStudentLoginFailure(request: Request, rawCode: string) {
+  const classPrefix = authRateLimitTargetFromStudentCode(rawCode);
+  const codeFormatValid = classPrefix !== STUDENT_UNPARSED_RATE_LIMIT_TARGET;
+  await recordRequestSecurityEvent(request, {
+    type: "STUDENT_LOGIN_FAILED",
+    actorType: "ANONYMOUS",
+    httpStatus: 401,
+    metadata: { codeFormatValid, ...(codeFormatValid ? { classPrefix } : {}) },
+    aggregateWindowMinutes: 15,
+  });
+}
 
 export async function POST(request: Request) {
   const ipLimited = await enforceAuthRateLimit(request, "student", { layer: "ip" });
@@ -30,6 +47,7 @@ export async function POST(request: Request) {
       layer: "target",
     });
     if (targetLimited) return targetLimited;
+    await recordStudentLoginFailure(request, "");
     return jsonResponse({ ok: false, reason: STUDENT_LOGIN_INVALID_REASON }, { status: 401 });
   }
 
@@ -56,6 +74,7 @@ export async function POST(request: Request) {
   });
 
   if (!result.ok) {
+    await recordStudentLoginFailure(request, code);
     return jsonResponse({ ok: false, reason: STUDENT_LOGIN_INVALID_REASON }, { status: 401 });
   }
 
