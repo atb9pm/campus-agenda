@@ -99,7 +99,7 @@ function shuffleSlots(slots: CourseScheduleSlot[]): CourseScheduleSlot[] {
 
 test("version — CourseSession calculée, dernière migration 0024, aucune table CourseSession", () => {
   assert.match(APP_VERSION, /^\d+\.\d+\.\d+$/);
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0035_security_events.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0036_security_notifications.sql");
 });
 
 test("CourseSession n’a pas de trainingYear — l’identité reste contextId", () => {

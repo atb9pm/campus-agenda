@@ -42,6 +42,11 @@ export class TwilioSecuritySmsProvider implements SecuritySmsProvider {
     const body = new URLSearchParams({ To: message.to, Body: message.text });
     if (TWILIO_MESSAGING_SERVICE_SID_PATTERN.test(this.config.from)) body.set("MessagingServiceSid", this.config.from);
     else body.set("From", this.config.from);
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(new DOMException("SMS provider timeout", "TimeoutError")),
+      options.timeoutMs,
+    );
     try {
       const response = await this.fetchImpl(
         `${TWILIO_API_BASE}/Accounts/${encodeURIComponent(this.config.accountSid)}/Messages.json`,
@@ -54,7 +59,7 @@ export class TwilioSecuritySmsProvider implements SecuritySmsProvider {
           },
           body: body.toString(),
           redirect: "error",
-          signal: AbortSignal.timeout(options.timeoutMs),
+          signal: controller.signal,
         },
       );
       if (!response.ok) {
@@ -73,6 +78,8 @@ export class TwilioSecuritySmsProvider implements SecuritySmsProvider {
       return { ok: true, providerMessageId };
     } catch (error) {
       return { ok: false, failure: classifyProviderError(error) };
+    } finally {
+      clearTimeout(timer);
     }
   }
 }

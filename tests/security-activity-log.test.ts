@@ -91,8 +91,8 @@ function loginFailure(sourceFingerprint: string | null, targetId: string | null 
   };
 }
 
-test("migration 0035 — dernière migration, table append-only hors sauvegarde", async () => {
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0035_security_events.sql");
+test("migration 0035 — table append-only hors sauvegarde", async () => {
+  assert.ok(SQL_MIGRATION_FILES.includes("0035_security_events.sql"));
   const sql = await readFile(new URL("../migrations/0035_security_events.sql", import.meta.url), "utf8");
   assert.match(sql, /CREATE TABLE IF NOT EXISTS security_events/);
   assert.match(sql, /CREATE TRIGGER IF NOT EXISTS security_events_append_only/);
