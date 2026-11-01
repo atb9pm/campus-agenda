@@ -26,6 +26,27 @@ export const SECURITY_SMS_TEST_CONFIRM_TITLE = "Envoyer un SMS de test ?";
 export const SECURITY_SMS_TEST_CONFIRM_BODY =
   "Un SMS de test sera envoyé au numéro configuré. Il compte dans la limite d’envoi et un seul test est possible toutes les 10 minutes.";
 
+export const SECURITY_SMS_SETUP_TITLE = "Comment activer les alertes SMS";
+export const SECURITY_SMS_SETUP_INTRO =
+  "L’activation se fait sur le serveur, pas depuis cet écran : le numéro et les identifiants du fournisseur ne sont jamais enregistrés dans Campus Agenda ni dans GitHub.";
+export const SECURITY_SMS_SETUP_STEPS = [
+  "Créer un compte Twilio et relever l’Account SID, l’Auth Token et un expéditeur (numéro Twilio ou nom court, par exemple CampusAg).",
+  "Dans le Manager Infomaniak, ajouter les variables ci-dessous au début de la commande de lancement du site Node.js, avant npm run start:infomaniak.",
+  "Enregistrer puis cliquer sur « Redémarrer ». En revenant ici, l’état doit indiquer « Actives ».",
+  "Cliquer sur « Envoyer un SMS de test » pour vérifier la réception.",
+] as const;
+/** Noms et exemples factices : aucune vraie valeur. */
+export const SECURITY_SMS_SETUP_VARIABLES = [
+  { name: "CAMPUS_SECURITY_SMS_ENABLED", example: "true" },
+  { name: "CAMPUS_SECURITY_SMS_TO", example: "+41… (votre numéro, format international)" },
+  { name: "CAMPUS_SMS_PROVIDER", example: "twilio" },
+  { name: "CAMPUS_SMS_TWILIO_ACCOUNT_SID", example: "AC… (Twilio)" },
+  { name: "CAMPUS_SMS_TWILIO_AUTH_TOKEN", example: "… (Twilio, secret)" },
+  { name: "CAMPUS_SMS_TWILIO_FROM", example: "CampusAg ou numéro Twilio" },
+] as const;
+export const SECURITY_SMS_SETUP_ENVIRONMENT_NOTE =
+  "Cet environnement n’est pas la production : les SMS y restent désactivés même si les variables sont présentes.";
+
 /** Formulations interdites : l'écran ne garantit jamais une détection exhaustive. */
 export const SECURITY_SMS_FORBIDDEN_CLAIMS = [
   /toutes les attaques vous seront signalées/i,
