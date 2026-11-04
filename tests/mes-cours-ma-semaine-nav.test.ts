@@ -585,8 +585,9 @@ test("Ma semaine — badge de branche sans signal, clic ouvre le carnet, publica
   assert.doesNotMatch(semaine, /weekSignals/);
   assert.doesNotMatch(semaine, /signalLine/);
   assert.doesNotMatch(semaine, /ma-semaine-branch-badge[\s\S]{0,200}<small/);
-  assert.match(semaine, /\{course\.branchLabel\}/);
-  assert.match(semaine, /aria-label=\{`Ouvrir \$\{course\.branchLabel\} dans le carnet`\}/);
+  assert.match(semaine, /maSemaineBranchBadgeLabel\(course\.branchLabel, course\.weekSuffix\)/);
+  assert.match(semaine, /\{badgeLabel\}/);
+  assert.match(semaine, /aria-label=\{`Ouvrir \$\{badgeLabel\} dans le carnet`\}/);
   assert.doesNotMatch(semaine, /Devoir · Contrôle/);
   assert.doesNotMatch(semaine, /summarizeMaSemaineCourseWeek/);
   assert.doesNotMatch(semaine, /listComputedCourseSessions/);

@@ -211,7 +211,8 @@ test("Export visible, retour Ma semaine conserve la semaine, mobile inchangé", 
   assert.match(page, /function closeClassNotebook\(\) \{\s*setOpenNotebookClassId\(null\);\s*setOpenNotebookCourse\(null\);/);
   assert.doesNotMatch(page, /function closeClassNotebook\([\s\S]{0,220}setSelectedSchoolWeekNumber/);
   assert.doesNotMatch(semaine, /weekSignals/);
-  assert.match(semaine, /\{course\.branchLabel\}/);
+  assert.match(semaine, /maSemaineBranchBadgeLabel\(course\.branchLabel, course\.weekSuffix\)/);
+  assert.match(semaine, /\{badgeLabel\}/);
   assert.equal(notebookWeekDisplayCountForViewport(390, 3), 1);
   assert.equal(NOTEBOOK_NARROW_VIEWPORT_MAX_PX, 760);
   assert.match(css, /class-notebook-display-count \{ display: none; \}/);

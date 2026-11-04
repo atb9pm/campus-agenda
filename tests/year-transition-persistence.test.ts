@@ -761,7 +761,7 @@ test("29 — les tests PR1 restent dans year-transition-preview.test.ts", async 
   assert.ok(count >= 46, `expected at least 46 preview tests, got ${count}`);
 });
 
-test("30 — APP_VERSION inchangée dans app-version.ts", async () => {
+test("30 — APP_VERSION 2.62.1 dans app-version.ts", async () => {
   const source = await readFile(join(ROOT, "src/lib/app-version.ts"), "utf8");
-  assert.match(source, /export const APP_VERSION = "2\.62\.0"/);
+  assert.match(source, /export const APP_VERSION = "2\.62\.1"/);
 });
