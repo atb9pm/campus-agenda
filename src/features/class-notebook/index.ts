@@ -10,9 +10,14 @@ export {
   type NotebookRuntimeSubject,
 } from "./resolve.ts";
 export {
+  courseOpeningWeekMissingReason,
   filterNotebookItemsForSubject,
   notebookContextFromCourse,
   openCourseInWeekTarget,
+  resolveCourseOpeningWeek,
+  type CourseOpeningWeek,
+  type CourseOpeningWeekResult,
+  type CourseWeekSuffix,
   type NotebookCourseContext,
 } from "./open-course.ts";
 export {

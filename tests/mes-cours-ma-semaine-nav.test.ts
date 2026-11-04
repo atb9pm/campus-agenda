@@ -596,7 +596,9 @@ test("Ma semaine — badge de branche sans signal, clic ouvre le carnet, publica
   assert.doesNotMatch(page, /weekSignals=\{maSemaineWeekSignals\}/);
   assert.doesNotMatch(page, /weekSignals=/);
   assert.doesNotMatch(workspaceIndex, /week-signals/);
-  assert.match(page, /function openCourseInWeek\(course: TeacherCourseWorkspaceEntry\)/);
+  assert.match(page, /function openCourseInWeek\(course: TeacherCourseWorkspaceEntry & \{ weekSuffix\?: "A" \| "B" \| null \}\)/);
+  assert.match(page, /resolveCourseOpeningWeek\(schoolWeeksMemo, selectedSchoolWeekNumber, course\.weekSuffix\)/);
+  assert.doesNotMatch(page, /function openCourseInWeek[\s\S]{0,500}setSelectedSchoolWeekNumber/);
   assert.doesNotMatch(page, /listComputedCourseSessions/);
   assert.match(page, /function closeClassNotebook\(\) \{\s*setOpenNotebookClassId\(null\);\s*setOpenNotebookCourse\(null\);/);
   assert.doesNotMatch(page, /function closeClassNotebook\([\s\S]{0,220}setSelectedSchoolWeekNumber/);
