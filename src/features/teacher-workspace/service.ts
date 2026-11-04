@@ -4,7 +4,11 @@ import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-ty
 import type { SchoolYearStore } from "../../lib/persistence/school-year-types.ts";
 import type { TeacherAccountStore } from "../../lib/persistence/teacher-account-types.ts";
 import { buildTeacherCourseWorkspace, resolveTeacherWorkspaceYearRequest } from "./queries.ts";
-import type { TeacherCourseMeetingDay, TeacherCourseWorkspaceResult } from "./types.ts";
+import type {
+  TeacherCourseMeetingDay,
+  TeacherCourseScheduleSlotView,
+  TeacherCourseWorkspaceResult,
+} from "./types.ts";
 
 export interface TeacherCourseWorkspaceDeps {
   courses: AnnualCourseStore;
@@ -12,7 +16,7 @@ export interface TeacherCourseWorkspaceDeps {
   years: SchoolYearStore;
   teachers?: TeacherAccountStore;
   schedules?: Pick<CourseScheduleStore, "listMeetingDays"> &
-    Partial<Pick<CourseScheduleStore, "listAttendanceDays">>;
+    Partial<Pick<CourseScheduleStore, "listAttendanceDays" | "listSlots">>;
 }
 
 /**
@@ -47,7 +51,7 @@ export async function listTeacherCourses(
     adminConsult: options.adminConsult,
   });
 
-  const [workspace, meetingDays, attendanceDays] = await Promise.all([
+  const [workspace, meetingDays, attendanceDays, slots] = await Promise.all([
     Promise.resolve(
       buildTeacherCourseWorkspace({
         teacherId: options.teacherId,
@@ -66,8 +70,9 @@ export async function listTeacherCourses(
     ),
     deps.schedules ? deps.schedules.listMeetingDays() : Promise.resolve([]),
     deps.schedules?.listAttendanceDays ? deps.schedules.listAttendanceDays() : Promise.resolve([]),
+    deps.schedules?.listSlots ? deps.schedules.listSlots() : Promise.resolve([]),
   ]);
-  if (meetingDays.length === 0 && attendanceDays.length === 0) return workspace;
+  if (meetingDays.length === 0 && attendanceDays.length === 0 && slots.length === 0) return workspace;
 
   const daysByCourse = new Map<string, TeacherCourseMeetingDay[]>();
   for (const day of meetingDays) {
@@ -81,12 +86,19 @@ export async function listTeacherCourses(
     list.push({ dayOfWeek: day.dayOfWeek, weekKind: day.weekKind, role: day.role });
     attendanceByClass.set(day.classId, list);
   }
+  const slotsByCourse = new Map<string, TeacherCourseScheduleSlotView[]>();
+  for (const slot of slots) {
+    const list = slotsByCourse.get(slot.annualCourseId) ?? [];
+    list.push({ dayOfWeek: slot.dayOfWeek, weekKind: slot.weekKind });
+    slotsByCourse.set(slot.annualCourseId, list);
+  }
   return {
     ...workspace,
     courses: workspace.courses.map((course) => ({
       ...course,
       meetingDays: daysByCourse.get(course.annualCourseId) ?? [],
       classAttendanceDays: attendanceByClass.get(course.classId) ?? [],
+      scheduleSlots: slotsByCourse.get(course.annualCourseId) ?? [],
     })),
   };
 }

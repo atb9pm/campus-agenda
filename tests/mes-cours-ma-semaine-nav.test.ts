@@ -180,7 +180,7 @@ function subjectFor(course: TeacherCourseWorkspaceEntry): string {
 }
 
 test("PR80 — version 2.44.1 sans nouvelle migration SQL", () => {
-  assert.equal(APP_VERSION, "2.62.0");
+  assert.equal(APP_VERSION, "2.62.1");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0037_security_notification_email.sql");
 });
 
@@ -585,8 +585,9 @@ test("Ma semaine — badge de branche sans signal, clic ouvre le carnet, publica
   assert.doesNotMatch(semaine, /weekSignals/);
   assert.doesNotMatch(semaine, /signalLine/);
   assert.doesNotMatch(semaine, /ma-semaine-branch-badge[\s\S]{0,200}<small/);
-  assert.match(semaine, /\{course\.branchLabel\}/);
-  assert.match(semaine, /aria-label=\{`Ouvrir \$\{course\.branchLabel\} dans le carnet`\}/);
+  assert.match(semaine, /maSemaineBranchBadgeLabel\(course\.branchLabel, course\.weekSuffix\)/);
+  assert.match(semaine, /\{badgeLabel\}/);
+  assert.match(semaine, /aria-label=\{`Ouvrir \$\{badgeLabel\} dans le carnet`\}/);
   assert.doesNotMatch(semaine, /Devoir · Contrôle/);
   assert.doesNotMatch(semaine, /summarizeMaSemaineCourseWeek/);
   assert.doesNotMatch(semaine, /listComputedCourseSessions/);
@@ -595,7 +596,9 @@ test("Ma semaine — badge de branche sans signal, clic ouvre le carnet, publica
   assert.doesNotMatch(page, /weekSignals=\{maSemaineWeekSignals\}/);
   assert.doesNotMatch(page, /weekSignals=/);
   assert.doesNotMatch(workspaceIndex, /week-signals/);
-  assert.match(page, /function openCourseInWeek\(course: TeacherCourseWorkspaceEntry\)/);
+  assert.match(page, /function openCourseInWeek\(course: TeacherCourseWorkspaceEntry & \{ weekSuffix\?: "A" \| "B" \| null \}\)/);
+  assert.match(page, /resolveCourseOpeningWeek\(schoolWeeksMemo, selectedSchoolWeekNumber, course\.weekSuffix\)/);
+  assert.doesNotMatch(page, /function openCourseInWeek[\s\S]{0,500}setSelectedSchoolWeekNumber/);
   assert.doesNotMatch(page, /listComputedCourseSessions/);
   assert.match(page, /function closeClassNotebook\(\) \{\s*setOpenNotebookClassId\(null\);\s*setOpenNotebookCourse\(null\);/);
   assert.doesNotMatch(page, /function closeClassNotebook\([\s\S]{0,220}setSelectedSchoolWeekNumber/);

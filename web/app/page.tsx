@@ -102,6 +102,7 @@ import {
   NOTEBOOK_PUBLISH_SELECT_COURSE,
   notebookPublishBlockedReason,
   openCourseInWeekTarget,
+  resolveCourseOpeningWeek,
   peekNotesFromBrowser,
   resolveNotebookClassroomId,
   resolveNotebookSubjectId,
@@ -1484,8 +1485,13 @@ export default function Home() {
     setActiveSection("mes-cours");
   }
 
-  function openCourseInWeek(course: TeacherCourseWorkspaceEntry) {
-    const target = openCourseInWeekTarget(course, selectedSchoolWeekNumber);
+  function openCourseInWeek(course: TeacherCourseWorkspaceEntry & { weekSuffix?: "A" | "B" | null }) {
+    const opening = resolveCourseOpeningWeek(schoolWeeksMemo, selectedSchoolWeekNumber, course.weekSuffix);
+    if (!opening.ok) {
+      showNotice(opening.reason);
+      return;
+    }
+    const target = openCourseInWeekTarget(course, opening.schoolWeekNumber);
     setOpenNotebookCourse(notebookContextFromCourse(course));
     setOpenNotebookClassId(target.classId);
     setActiveSection(target.section);

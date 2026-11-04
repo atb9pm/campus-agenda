@@ -27,11 +27,13 @@ export {
 export { matchSetupPreference, workspaceEntryClassMeta } from "./setup-match.ts";
 export {
   groupMaSemaineByMeetingDays,
+  maSemaineBranchBadgeLabel,
   officialDisplayDaysForCourse,
   type MaSemaineDayClass,
   type MaSemaineDayGroup,
+  type MaSemainePlacedCourse,
 } from "./ma-semaine-days.ts";
-export type { TeacherCourseMeetingDay } from "./types.ts";
+export type { TeacherCourseMeetingDay, TeacherCourseScheduleSlotView } from "./types.ts";
 export {
   listTeacherCourses,
   schoolYearIdFromSearchParams,

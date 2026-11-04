@@ -1,11 +1,23 @@
 import type { SchoolWeekKind } from "../calendar/types.ts";
 import type { TeacherClassSetup, WeekdayIndex } from "../teacher-setup/types.ts";
 import { WEEKDAY_LABELS } from "../teacher-setup/types.ts";
-import type { TeacherCourseMeetingDay, TeacherCourseWorkspaceEntry } from "./types.ts";
+import type {
+  TeacherCourseMeetingDay,
+  TeacherCourseScheduleSlotView,
+  TeacherCourseWorkspaceEntry,
+} from "./types.ts";
+
+export interface MaSemainePlacedCourse extends TeacherCourseWorkspaceEntry {
+  /**
+   * `A` ou `B` quand le créneau est en alternance.
+   * `null` : toutes les semaines, ou placement sans créneau.
+   */
+  weekSuffix: "A" | "B" | null;
+}
 
 export interface MaSemaineDayClass {
   setup: TeacherClassSetup;
-  courses: TeacherCourseWorkspaceEntry[];
+  courses: MaSemainePlacedCourse[];
 }
 
 export interface MaSemaineDayGroup {
@@ -25,6 +37,13 @@ export function meetingDayAppliesToWeek(
 
 type CourseWeekKindOfDay = TeacherCourseMeetingDay["weekKind"];
 
+export function maSemaineBranchBadgeLabel(
+  branchLabel: string,
+  weekSuffix: "A" | "B" | null | undefined,
+): string {
+  return weekSuffix === "A" || weekSuffix === "B" ? `${branchLabel}-${weekSuffix}` : branchLabel;
+}
+
 function applicableOfficialDays(
   days: readonly TeacherCourseMeetingDay[],
   selectedWeekKind: SchoolWeekKind | null,
@@ -37,12 +56,75 @@ function applicableOfficialDays(
   return [...unique].sort((left, right) => left - right);
 }
 
+function isWeekday(value: number): value is WeekdayIndex {
+  return value === 1 || value === 2 || value === 3 || value === 4 || value === 5;
+}
+
+/**
+ * Un créneau `all` couvre les deux rythmes : un seul badge, sans suffixe.
+ * Sinon un badge par rythme présent (A puis B), quelle que soit la semaine consultée.
+ * Plusieurs périodes le même jour et le même rythme ne produisent qu’un badge.
+ */
+function placementsFromScheduleSlots(
+  slots: readonly TeacherCourseScheduleSlotView[],
+): MaSemainePlacement[] {
+  const byDay = new Map<WeekdayIndex, Set<TeacherCourseScheduleSlotView["weekKind"]>>();
+  for (const slot of slots) {
+    if (!isWeekday(slot.dayOfWeek)) continue;
+    if (slot.weekKind !== "all" && slot.weekKind !== "A" && slot.weekKind !== "B") continue;
+    const kinds = byDay.get(slot.dayOfWeek) ?? new Set();
+    kinds.add(slot.weekKind);
+    byDay.set(slot.dayOfWeek, kinds);
+  }
+  const placements: MaSemainePlacement[] = [];
+  for (const dayOfWeek of [1, 2, 3, 4, 5] as const) {
+    const kinds = byDay.get(dayOfWeek);
+    if (!kinds?.size) continue;
+    if (kinds.has("all")) {
+      placements.push({ dayOfWeek, weekSuffix: null });
+      continue;
+    }
+    if (kinds.has("A")) placements.push({ dayOfWeek, weekSuffix: "A" });
+    if (kinds.has("B")) placements.push({ dayOfWeek, weekSuffix: "B" });
+  }
+  return placements;
+}
+
+interface MaSemainePlacement {
+  dayOfWeek: WeekdayIndex;
+  weekSuffix: "A" | "B" | null;
+}
+
+function placementsFromDays(days: readonly WeekdayIndex[]): MaSemainePlacement[] {
+  return days.map((dayOfWeek) => ({ dayOfWeek, weekSuffix: null }));
+}
+
 /**
  * Hiérarchie « Ma semaine » :
  * 1. AnnualCourseMeetingDay s’il en existe au moins un (y compris si aucun n’est
  *    applicable à la semaine consultée → cours absent, pas de repli).
- * 2. Sinon ClassAttendanceDay de la classe (même règle A/B : plan présent = source).
- * 3. Sinon préférence personnelle `fallbackDay`.
+ * 2. Sinon créneaux d’horaire : A et B restent visibles ensemble, avec suffixe.
+ * 3. Sinon ClassAttendanceDay de la classe (règle A/B de la semaine consultée).
+ * 4. Sinon préférence personnelle `fallbackDay`.
+ */
+function placementsForCourse(
+  meetingDays: readonly TeacherCourseMeetingDay[] | undefined,
+  scheduleSlots: readonly TeacherCourseScheduleSlotView[] | undefined,
+  classAttendanceDays: readonly TeacherCourseMeetingDay[] | undefined,
+  fallbackDay: WeekdayIndex,
+  selectedWeekKind: SchoolWeekKind | null,
+): MaSemainePlacement[] {
+  if (meetingDays?.length) return placementsFromDays(applicableOfficialDays(meetingDays, selectedWeekKind));
+  if (scheduleSlots?.length) return placementsFromScheduleSlots(scheduleSlots);
+  if (classAttendanceDays?.length) {
+    return placementsFromDays(applicableOfficialDays(classAttendanceDays, selectedWeekKind));
+  }
+  return [{ dayOfWeek: fallbackDay, weekSuffix: null }];
+}
+
+/**
+ * Jours d’affichage hors créneaux (MeetingDay, puis présence de classe, puis préférence).
+ * Les créneaux sont appliqués par `groupMaSemaineByMeetingDays`.
  */
 export function officialDisplayDaysForCourse(
   meetingDays: readonly TeacherCourseMeetingDay[] | undefined,
@@ -50,14 +132,14 @@ export function officialDisplayDaysForCourse(
   fallbackDay: WeekdayIndex,
   selectedWeekKind: SchoolWeekKind | null,
 ): WeekdayIndex[] {
-  if (meetingDays?.length) return applicableOfficialDays(meetingDays, selectedWeekKind);
-  if (classAttendanceDays?.length) return applicableOfficialDays(classAttendanceDays, selectedWeekKind);
-  return [fallbackDay];
+  return placementsForCourse(meetingDays, undefined, classAttendanceDays, fallbackDay, selectedWeekKind).map(
+    (placement) => placement.dayOfWeek,
+  );
 }
 
 /**
- * « Ma semaine » : MeetingDay de cours, sinon AttendanceDay de classe,
- * sinon préférence d’affichage (setup.dayOfWeek).
+ * « Ma semaine » : MeetingDay de cours, sinon créneau d’horaire,
+ * sinon AttendanceDay de classe, sinon préférence d’affichage (setup.dayOfWeek).
  */
 export function groupMaSemaineByMeetingDays(
   setups: readonly TeacherClassSetup[],
@@ -65,23 +147,24 @@ export function groupMaSemaineByMeetingDays(
   selectedWeekKind: SchoolWeekKind | null,
 ): MaSemaineDayGroup[] {
   const setupByClassId = new Map(setups.map((setup) => [setup.id, setup]));
-  const coursesByDayAndClass = new Map<WeekdayIndex, Map<string, TeacherCourseWorkspaceEntry[]>>();
+  const coursesByDayAndClass = new Map<WeekdayIndex, Map<string, MaSemainePlacedCourse[]>>();
 
   for (const course of courses) {
     const setup = setupByClassId.get(course.classId);
     const fallbackDay = setup?.dayOfWeek ?? 1;
-    const days = officialDisplayDaysForCourse(
+    const placements = placementsForCourse(
       course.meetingDays,
+      course.scheduleSlots,
       course.classAttendanceDays,
       fallbackDay,
       selectedWeekKind,
     );
-    for (const dayOfWeek of days) {
-      const byClass = coursesByDayAndClass.get(dayOfWeek) ?? new Map();
+    for (const placement of placements) {
+      const byClass = coursesByDayAndClass.get(placement.dayOfWeek) ?? new Map();
       const list = byClass.get(course.classId) ?? [];
-      list.push(course);
+      list.push({ ...course, weekSuffix: placement.weekSuffix });
       byClass.set(course.classId, list);
-      coursesByDayAndClass.set(dayOfWeek, byClass);
+      coursesByDayAndClass.set(placement.dayOfWeek, byClass);
     }
   }
 
