@@ -2,6 +2,14 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.1] — Ma semaine suit les créneaux A/B
+
+### Corrigé
+
+- **Ma semaine** place chaque branche sur le jour de son créneau d’horaire, au lieu de recopier tous les cours sur chaque jour de présence de la classe.
+- Un créneau en alternance reste visible en semaine A et en semaine B. Le badge porte le suffixe `-A` ou `-B` (par exemple `CP 3 Châssis-A`).
+- Un créneau « toutes les semaines » n’a pas de suffixe. Sans créneau, l’affichage reste celui des jours de séance, puis des jours de la classe.
+
 ## [2.62.0] — Baseline stable avant transition N → N+1
 
 **Baseline stable avant développement du passage annuel N → N+1.**

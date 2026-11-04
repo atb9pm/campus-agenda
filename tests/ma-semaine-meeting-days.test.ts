@@ -5,8 +5,10 @@ import test from "node:test";
 import type { TeacherClassSetup } from "../src/features/teacher-setup/index.ts";
 import {
   groupMaSemaineByMeetingDays,
+  maSemaineBranchBadgeLabel,
   officialDisplayDaysForCourse,
   type TeacherCourseMeetingDay,
+  type TeacherCourseScheduleSlotView,
   type TeacherCourseWorkspaceEntry,
 } from "../src/features/teacher-workspace/index.ts";
 
@@ -154,6 +156,10 @@ test("Ma semaine — copy et groupement officiel, préférences inchangées", as
   assert.doesNotMatch(config, /Jour d’affichage/);
   assert.match(service, /listAttendanceDays/);
   assert.match(service, /classAttendanceDays/);
+  assert.match(service, /listSlots/);
+  assert.match(service, /scheduleSlots/);
+  assert.match(panel, /maSemaineBranchBadgeLabel/);
+  assert.match(panel, /suffixe -A ou -B/);
 });
 
 const TUESDAY_ALL: TeacherCourseMeetingDay[] = [{ dayOfWeek: 2, weekKind: "all", role: "PRIMARY" }];
@@ -243,4 +249,126 @@ test("attendance 7 — aucun MeetingDay + aucun ClassAttendanceDay + préférenc
   const groups = groupMaSemaineByMeetingDays([setup(1)], [assigned], "B");
   assert.deepEqual(daysOn(groups), [1]);
   assert.deepEqual(courseIdsOn(groups, 1), ["ac-legacy"]);
+});
+
+function classSetup(
+  id: string,
+  name: string,
+  dayOfWeek: TeacherClassSetup["dayOfWeek"] = 1,
+): TeacherClassSetup {
+  return {
+    id,
+    name,
+    programLabel: "Mécanicien",
+    dayOfWeek,
+    branchNames: ["Branche"],
+    icon: "",
+    professionPrefix: "MECAUTO",
+  };
+}
+
+function badgesOn(
+  groups: ReturnType<typeof groupMaSemaineByMeetingDays>,
+  dayOfWeek: number,
+  classId: string,
+): string[] {
+  const group = groups.find((entry) => entry.dayOfWeek === dayOfWeek);
+  const card = group?.classes.find((entry) => entry.setup.id === classId);
+  return card?.courses.map((item) => maSemaineBranchBadgeLabel(item.branchLabel, item.weekSuffix)) ?? [];
+}
+
+test("créneau — Châssis jeudi A/B : les deux classes restent le jeudi, suffixe sur la branche", () => {
+  const setups = [classSetup("class-3a", "MECAUTO3A", 1), classSetup("class-3b", "MECAUTO3B", 1)];
+  const injectionA = course({
+    annualCourseId: "ac-injection-a",
+    classId: "class-3a",
+    classCode: "MECAUTO3A",
+    branchLabel: "CP VL Injection - Dépollution",
+    scheduleSlots: [{ dayOfWeek: 1, weekKind: "all" }],
+    classAttendanceDays: [
+      { dayOfWeek: 1, weekKind: "all", role: "PRIMARY" },
+      { dayOfWeek: 4, weekKind: "all", role: "ADDITIONAL" },
+    ],
+  });
+  const chassisA = course({
+    annualCourseId: "ac-chassis-a",
+    classId: "class-3a",
+    classCode: "MECAUTO3A",
+    branchId: "br-chassis",
+    branchCode: "chassis",
+    branchLabel: "CP 3 Châssis",
+    scheduleSlots: [{ dayOfWeek: 4, weekKind: "A" }],
+    classAttendanceDays: injectionA.classAttendanceDays,
+  });
+  const injectionB = course({
+    ...injectionA,
+    annualCourseId: "ac-injection-b",
+    classId: "class-3b",
+    classCode: "MECAUTO3B",
+    assignmentId: "ac-injection-b-as",
+  });
+  const chassisB = course({
+    ...chassisA,
+    annualCourseId: "ac-chassis-b",
+    classId: "class-3b",
+    classCode: "MECAUTO3B",
+    assignmentId: "ac-chassis-b-as",
+    scheduleSlots: [{ dayOfWeek: 4, weekKind: "B" }],
+  });
+  const courses = [injectionA, chassisA, injectionB, chassisB];
+
+  for (const week of ["A", "B"] as const) {
+    const groups = groupMaSemaineByMeetingDays(setups, courses, week);
+    assert.deepEqual(daysOn(groups), [1, 4], `semaine ${week}`);
+    assert.deepEqual(badgesOn(groups, 1, "class-3a"), ["CP VL Injection - Dépollution"]);
+    assert.deepEqual(badgesOn(groups, 1, "class-3b"), ["CP VL Injection - Dépollution"]);
+    assert.deepEqual(badgesOn(groups, 4, "class-3a"), ["CP 3 Châssis-A"]);
+    assert.deepEqual(badgesOn(groups, 4, "class-3b"), ["CP 3 Châssis-B"]);
+    assert.deepEqual(courseIdsOn(groups, 4), ["ac-chassis-a", "ac-chassis-b"]);
+  }
+});
+
+test("créneau — même classe jeudi A et jeudi B : deux badges, visibles dans les deux semaines", () => {
+  const slots: TeacherCourseScheduleSlotView[] = [
+    { dayOfWeek: 4, weekKind: "A" },
+    { dayOfWeek: 4, weekKind: "A" },
+    { dayOfWeek: 4, weekKind: "B" },
+  ];
+  const assigned = course({
+    annualCourseId: "ac-chassis",
+    branchLabel: "CP 3 Châssis",
+    scheduleSlots: slots,
+    classAttendanceDays: [{ dayOfWeek: 1, weekKind: "all", role: "PRIMARY" }],
+  });
+  const weekA = groupMaSemaineByMeetingDays([setup(1)], [assigned], "A");
+  const weekB = groupMaSemaineByMeetingDays([setup(1)], [assigned], "B");
+  assert.deepEqual(badgesOn(weekA, 4, "class-mecma3a"), ["CP 3 Châssis-A", "CP 3 Châssis-B"]);
+  assert.deepEqual(badgesOn(weekB, 4, "class-mecma3a"), ["CP 3 Châssis-A", "CP 3 Châssis-B"]);
+  assert.deepEqual(daysOn(weekA), [4]);
+  assert.deepEqual(courseIdsOn(weekA, 1), []);
+});
+
+test("créneau — jeudi toutes les semaines : un badge sans suffixe", () => {
+  const assigned = course({
+    annualCourseId: "ac-chassis",
+    branchLabel: "CP 3 Châssis",
+    scheduleSlots: [{ dayOfWeek: 4, weekKind: "all" }],
+  });
+  const groups = groupMaSemaineByMeetingDays([setup(1)], [assigned], "B");
+  assert.deepEqual(badgesOn(groups, 4, "class-mecma3a"), ["CP 3 Châssis"]);
+  assert.equal(groups[0]?.classes[0]?.courses[0]?.weekSuffix, null);
+});
+
+test("créneau — MeetingDay jeudi B prime sur un créneau lundi, sans repli en semaine A", () => {
+  const assigned = course({
+    annualCourseId: "ac-mecma",
+    meetingDays: [{ dayOfWeek: 4, weekKind: "B", role: "PRIMARY" }],
+    scheduleSlots: [{ dayOfWeek: 1, weekKind: "all" }],
+    classAttendanceDays: [{ dayOfWeek: 2, weekKind: "all", role: "PRIMARY" }],
+  });
+  const weekA = groupMaSemaineByMeetingDays([setup(1)], [assigned], "A");
+  const weekB = groupMaSemaineByMeetingDays([setup(1)], [assigned], "B");
+  assert.deepEqual(daysOn(weekA), []);
+  assert.deepEqual(badgesOn(weekB, 4, "class-mecma3a"), ["Branche"]);
+  assert.equal(weekB[0]?.classes[0]?.courses[0]?.weekSuffix, null);
 });

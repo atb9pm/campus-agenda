@@ -13,6 +13,7 @@ import {
 import {
   TEACHER_WEEK_EMPTY_CLASSES_MESSAGE,
   groupMaSemaineByMeetingDays,
+  maSemaineBranchBadgeLabel,
   type TeacherCourseWorkspaceEntry,
 } from "@campus/features/teacher-workspace";
 
@@ -107,10 +108,12 @@ export function MaSemainePanel({
                   const branches = classCourses.length ? (
                     <span className="ma-semaine-class-branches">
                       {classCourses.map((course) => {
+                        const badgeLabel = maSemaineBranchBadgeLabel(course.branchLabel, course.weekSuffix);
+                        const badgeKey = `${course.annualCourseId}:${course.weekSuffix ?? "all"}`;
                         if (uniqueCourse) {
                           return (
-                            <span className="ma-semaine-branch-badge" key={course.annualCourseId}>
-                              {course.branchLabel}
+                            <span className="ma-semaine-branch-badge" key={badgeKey}>
+                              {badgeLabel}
                             </span>
                           );
                         }
@@ -118,11 +121,11 @@ export function MaSemainePanel({
                           <button
                             type="button"
                             className="ma-semaine-branch-badge"
-                            key={course.annualCourseId}
-                            aria-label={`Ouvrir ${course.branchLabel} dans le carnet`}
+                            key={badgeKey}
+                            aria-label={`Ouvrir ${badgeLabel} dans le carnet`}
                             onClick={() => onOpenCourse(course)}
                           >
-                            {course.branchLabel}
+                            {badgeLabel}
                           </button>
                         );
                       })}
@@ -170,6 +173,7 @@ export function MaSemainePanel({
               ? <>Cette semaine est une semaine <strong>{selectedWeek.kind}</strong>. </>
               : null}
             Les cours sont affichés selon les jours configurés dans l’horaire des classes.
+            Un créneau en alternance reste visible en semaine A et en semaine B : la branche porte alors le suffixe -A ou -B.
           </p>
         </aside>
       )}

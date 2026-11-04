@@ -240,8 +240,8 @@ async function sqliteWorld(): Promise<{ db: NodeSqliteDatabase; store: SqlYearTr
   return { db, store: new SqlYearTransitionPreviewStore(db) };
 }
 
-test("1 — APP_VERSION toujours 2.62.0", () => {
-  assert.equal(APP_VERSION, "2.62.0");
+test("1 — APP_VERSION 2.62.1", () => {
+  assert.equal(APP_VERSION, "2.62.1");
 });
 
 test("2 — dernière migration listée après 0031 (PR3 ajoute 0032)", () => {
@@ -360,7 +360,7 @@ test("11 — création memory", async () => {
   const created = await persist(store, baseInput(), { id: "mem-1", now: "2027-01-01T00:00:00.000Z" });
   assert.equal(created.id, "mem-1");
   assert.equal(created.engineVersion, 5);
-  assert.equal(created.appVersion, "2.62.0");
+  assert.equal(created.appVersion, "2.62.1");
   assert.equal(created.entries.length, 1);
 });
 
