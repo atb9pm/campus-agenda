@@ -131,7 +131,7 @@ async function memoryWorld() {
 }
 
 test("version 2.50.0 — préparation classes/cours année future, sans migration", () => {
-  assert.equal(APP_VERSION, "2.62.1");
+  assert.equal(APP_VERSION, "2.62.2");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0037_security_notification_email.sql");
 });
 
@@ -454,7 +454,7 @@ test("affectation professeur autorisée sur une année DRAFT, qui reste en prép
 });
 
 test("version 2.61.8 — liste mémoire des années en ordre chronologique", async () => {
-  assert.equal(APP_VERSION, "2.62.1");
+  assert.equal(APP_VERSION, "2.62.2");
   const world = await memoryWorld();
   const years = await world.years.listSchoolYears();
   assert.deepEqual(years.map((year) => year.label), ["2025-2026", "2026-2027", "2028-2029"]);

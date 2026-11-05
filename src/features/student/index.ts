@@ -45,6 +45,12 @@ export {
   type StudentCourseDaySection,
 } from "./upcoming-controls.ts";
 export {
+  STUDENT_NEXT_SESSION_HORIZON_DAYS,
+  formatNextSessionLabel,
+  nextSessionPublicationsByBranch,
+  type StudentNextSessionPublications,
+} from "./next-session-publications.ts";
+export {
   msUntilNextLocalMidnight,
   studentCalendarDateNeedsRefresh,
 } from "./student-today.ts";

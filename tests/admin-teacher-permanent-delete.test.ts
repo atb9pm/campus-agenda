@@ -230,7 +230,7 @@ async function publish(
 }
 
 test("version 2.48.0 — auteur nullable, confirmation exacte", () => {
-  assert.equal(APP_VERSION, "2.62.1");
+  assert.equal(APP_VERSION, "2.62.2");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0037_security_notification_email.sql");
   assert.equal(confirmationMatches("ChF", "ChF"), true);
   assert.equal(confirmationMatches("ChF", "chf"), false);
@@ -806,7 +806,7 @@ test("UI — modal danger, publications conservées, confirmation serveur", asyn
 });
 
 test("version 2.61.1 — création enseignant : Nom et Initiales vides", async () => {
-  assert.equal(APP_VERSION, "2.62.1");
+  assert.equal(APP_VERSION, "2.62.2");
   const panel = await readFile(
     new URL("../web/app/components/teacher-accounts-panel.tsx", import.meta.url),
     "utf8",

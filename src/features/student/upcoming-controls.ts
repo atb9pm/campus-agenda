@@ -10,7 +10,15 @@ import {
   type UpcomingTestEntry,
 } from "../evaluations/coordination.ts";
 import type { Subject } from "../../types/classroom.ts";
-import { groupItemsBySubject, type SubjectAgendaGroup } from "./course-day-view.ts";
+import {
+  groupItemsBySubject,
+  subjectForPublicationGroup,
+  type SubjectAgendaGroup,
+} from "./course-day-view.ts";
+import {
+  nextSessionPublicationsByBranch,
+  type StudentNextSessionPublications,
+} from "./next-session-publications.ts";
 import {
   orderByDaySchedule,
   type StudentDayScheduleSlot,
@@ -29,6 +37,7 @@ export interface StudentCourseDaySection {
   subject: Subject;
   nextControls: UpcomingTestEntry[];
   publications: PrototypeAgendaItem[];
+  nextSession?: StudentNextSessionPublications | null;
 }
 
 export interface ControlPlanningDay {
@@ -159,6 +168,8 @@ export function buildStudentCourseDaySections(
     includeNextControls?: boolean;
     scheduleSlots?: readonly StudentDayScheduleSlot[];
     courseDay?: CourseDaySlot;
+    /** Publications de la prochaine séance de chaque branche, après `courseDay`. */
+    nextSession?: { items: readonly PrototypeAgendaItem[]; weeks: readonly SchoolWeek[] };
   } = {},
 ): StudentCourseDaySection[] {
   const includeNextControls = options.includeNextControls !== false;
@@ -198,9 +209,39 @@ export function buildStudentCourseDaySections(
     }
   }
 
+  if (options.nextSession && options.courseDay) {
+    const upcoming = nextSessionPublicationsByBranch(
+      options.nextSession.items,
+      options.nextSession.weeks,
+      options.courseDay,
+    );
+    for (const [key, entry] of upcoming) {
+      const sample = entry.publications[0]!;
+      const subject = subjectForPublicationGroup(key, sample, subjects);
+      const nextSession = {
+        slot: entry.slot,
+        publications: entry.publications.slice().sort(compareStudentPublications),
+      };
+      const existing = sections.get(subject.id);
+      if (existing) {
+        existing.nextSession = nextSession;
+        continue;
+      }
+      sections.set(subject.id, {
+        subject: { ...subject, name: displayBranchLabel(subject.name) },
+        nextControls: [],
+        publications: [],
+        nextSession,
+      });
+    }
+  }
+
   return orderByDaySchedule(
     [...sections.values()].filter(
-      (section) => section.publications.length > 0 || section.nextControls.length > 0,
+      (section) =>
+        section.publications.length > 0 ||
+        section.nextControls.length > 0 ||
+        (section.nextSession?.publications.length ?? 0) > 0,
     ),
     subjects,
     options.scheduleSlots,
@@ -223,8 +264,9 @@ export function studentTodoSections(sections: StudentCourseDaySection[]): Studen
       ...section,
       nextControls: [] as UpcomingTestEntry[],
       publications: section.publications.filter((item) => item.type !== "TEST"),
+      nextSession: filterNextSession(section.nextSession, (item) => item.type !== "TEST"),
     }))
-    .filter((section) => section.publications.length > 0);
+    .filter(hasStudentPublications);
 }
 
 export function studentHomeworkOnlySections(
@@ -235,8 +277,22 @@ export function studentHomeworkOnlySections(
       ...section,
       nextControls: [] as UpcomingTestEntry[],
       publications: section.publications.filter((item) => item.type === "HOMEWORK"),
+      nextSession: filterNextSession(section.nextSession, (item) => item.type === "HOMEWORK"),
     }))
-    .filter((section) => section.publications.length > 0);
+    .filter(hasStudentPublications);
+}
+
+function filterNextSession(
+  nextSession: StudentNextSessionPublications | null | undefined,
+  keep: (item: PrototypeAgendaItem) => boolean,
+): StudentNextSessionPublications | null {
+  if (!nextSession) return null;
+  const publications = nextSession.publications.filter(keep);
+  return publications.length ? { slot: nextSession.slot, publications } : null;
+}
+
+function hasStudentPublications(section: StudentCourseDaySection): boolean {
+  return section.publications.length > 0 || (section.nextSession?.publications.length ?? 0) > 0;
 }
 
 export function formatCompactControlDate(date: Date): string {

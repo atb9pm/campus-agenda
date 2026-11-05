@@ -1065,11 +1065,15 @@ export default function Home() {
         includeNextControls: studentFollowingCourseDay,
         scheduleSlots: studentPreviewScheduleSlots,
         courseDay: studentDisplayCourseDay,
+        nextSession: studentFollowingCourseDay
+          ? { items: studentAgendaItems, weeks: schoolWeeksMemo }
+          : undefined,
       },
     );
   }, [
     studentSession,
     studentAgendaItems,
+    schoolWeeksMemo,
     studentDisplayCourseDay,
     studentPreviewSubjects,
     studentFutureTests,
