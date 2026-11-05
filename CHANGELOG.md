@@ -2,6 +2,15 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.2] — Vue élève : publications de la prochaine séance
+
+### Ajouté
+
+- **Vue élève** : dans chaque branche, sous le cours du jour, une ligne « Pour le jeudi 12 novembre » affiche les devoirs et informations **publiés** de la prochaine séance publiée de cette branche. Un devoir saisi dans la séance du 12 novembre est donc visible dès le 5 novembre.
+- La date vient de la séance du Carnet : l’alternance A/B et les vacances sont respectées, sans fenêtre fixe de 7 jours. L’anticipation est limitée à 35 jours.
+- Les brouillons restent masqués et les contrôles restent dans « Contrôles à venir ». L’anticipation n’apparaît que sur le jour de cours suivi automatiquement, pas en naviguant dans les jours passés ou suivants.
+- Aucun changement du Carnet, des exports ni de la base (pas de migration).
+
 ## [2.62.1] — Ma semaine suit les créneaux A/B
 
 ### Corrigé

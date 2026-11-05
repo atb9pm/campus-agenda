@@ -21,11 +21,11 @@ export function filterItemsForCourseDay(
   );
 }
 
-function publicationGroupKey(item: PrototypeAgendaItem): string {
+export function publicationGroupKey(item: PrototypeAgendaItem): string {
   return item.annualCourseId?.trim() || item.subjectId;
 }
 
-function subjectForPublicationGroup(
+export function subjectForPublicationGroup(
   key: string,
   sample: PrototypeAgendaItem,
   subjects: Subject[],

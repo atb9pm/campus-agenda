@@ -242,7 +242,7 @@ function slotTimestamp(slot: CourseDaySlot): number {
   return slot.date.getTime();
 }
 
-function slotFromWeekAndDay(week: SchoolWeek, dayIndex: number): CourseDaySlot {
+export function slotFromWeekAndDay(week: SchoolWeek, dayIndex: number): CourseDaySlot {
   const monday = week.monday;
   const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + dayIndex, 12);
   return {

@@ -1,5 +1,7 @@
 import type { PrototypeAgendaItem } from "@campus/features/agenda";
+import { calendarDateKey } from "@campus/features/evaluations";
 import {
+  formatNextSessionLabel,
   studentHomeworkOnlySections,
   studentTodoSections,
   type StudentCourseDaySection,
@@ -75,6 +77,26 @@ export function StudentHomeworkPanel({
                   {studentPublicationBody(item)}
                 </div>
               ))}
+              {section.nextSession ? (
+                <div className="student-next-session" data-next-session="">
+                  <p className="student-next-session-label">
+                    <time dateTime={calendarDateKey(section.nextSession.slot.date)}>
+                      {formatNextSessionLabel(section.nextSession.slot.date)}
+                    </time>
+                  </p>
+                  {section.nextSession.publications.map((item, index, list) => (
+                    <div
+                      key={item.id}
+                      className={`student-branch-item student-course-pub${
+                        index < list.length - 1 ? " has-divider" : ""
+                      }`}
+                      data-item-type={item.type}
+                    >
+                      {studentPublicationBody(item)}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </section>
           ))}
         </div>
