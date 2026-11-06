@@ -138,6 +138,7 @@ import { MesCoursPanel } from "./components/mes-cours-panel.tsx";
 import { ControlPlanningPanel } from "./components/control-planning-panel.tsx";
 import { StudentDashboard, type StudentDashboardTab } from "./components/student-dashboard.tsx";
 import type { StudentHomeworkDoneControl } from "./components/student-homework-panel.tsx";
+import { startInstallPromptCapture } from "./components/student-install-prompt.tsx";
 
 type AppMode = "teacher" | "student";
 type StudentEntry = "code" | "teacher-preview" | "teacher-branch-preview";
@@ -911,6 +912,10 @@ export default function Home() {
   }, [adminYearConsult, notebookClassroomId, teacherAuthenticated, viewedSchoolYearId]);
 
   const [studentToday, setStudentToday] = useState(() => new Date());
+
+  useEffect(() => {
+    startInstallPromptCapture();
+  }, []);
 
   useEffect(() => {
     if (studentEntry === "teacher-branch-preview") return;
@@ -1921,6 +1926,7 @@ export default function Home() {
           tab={studentMobileTab}
           sections={studentCourseDaySections}
           doneControl={studentDoneControl}
+          offerInstall={studentEntry === "code"}
           futureTests={studentFutureTests}
           planning={studentControlPlanning}
           today={studentToday}

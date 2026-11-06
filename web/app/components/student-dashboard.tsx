@@ -8,6 +8,7 @@ import type {
 import { BrandLogo } from "./brand-logo.tsx";
 import { StudentControlsPanel } from "./student-controls-panel.tsx";
 import { StudentHomeworkPanel, type StudentHomeworkDoneControl } from "./student-homework-panel.tsx";
+import { StudentInstallPrompt } from "./student-install-prompt.tsx";
 
 export type StudentDashboardTab = "tout" | "devoirs" | "controles" | "historique";
 
@@ -27,6 +28,7 @@ export function StudentDashboard({
   tab,
   sections,
   doneControl,
+  offerInstall = false,
   futureTests,
   planning,
   today,
@@ -48,6 +50,8 @@ export function StudentDashboard({
   sections: StudentCourseDaySection[];
   /** Absent en aperçu enseignant : pas de coche « fait ». */
   doneControl?: StudentHomeworkDoneControl;
+  /** Invitation « écran d’accueil » : élève connecté par code uniquement. */
+  offerInstall?: boolean;
   futureTests: UpcomingTestEntry[];
   planning: ControlPlanningWeek[];
   today: Date;
@@ -141,6 +145,8 @@ export function StudentDashboard({
             })}
           </div>
         </section>
+
+        {offerInstall ? <StudentInstallPrompt /> : null}
 
         {displayCourseDay ? (
           <>

@@ -76,7 +76,7 @@ function lineText(doc: CampusRichDoc, blockIndex: number, itemIndex: number | nu
 
 test("version 2.56.0 — éditeur Carnet reconstruit sur le modèle, sans execCommand", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.62.4");
+  assert.equal(APP_VERSION, "2.62.5");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(editor, /execCommand/);
   assert.doesNotMatch(editor, /window\.prompt/);
@@ -368,7 +368,7 @@ test("vue compacte — résumé lisible, sans cases décalées ni cadres", async
 
 test("version 2.57.0 — curseur, menus notes, déplacement d’une ligne", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.62.4");
+  assert.equal(APP_VERSION, "2.62.5");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.match(editor, /Le DOM n'est réécrit que sur syncToken/);
   assert.match(editor, /snapCaretToClick/);
@@ -570,7 +570,7 @@ test("copier une ligne à un emplacement précis", () => {
 
 test("version 2.58.0 — couleur sur la sélection, Annuler / Rétablir", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.62.4");
+  assert.equal(APP_VERSION, "2.62.5");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(editor, /Annuler \(Ctrl\+Z\)/);
   assert.doesNotMatch(editor, /Rétablir \(Ctrl\+Y\)/);
@@ -743,7 +743,7 @@ test("couper / supprimer — retire n’importe quelle ligne, y compris la premi
 
 test("version 2.59.1 — souligné ≠ lien, Lien visible sur le mot", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.62.4");
+  assert.equal(APP_VERSION, "2.62.5");
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
   const view = await readFile(new URL("../web/app/components/rich-doc-view.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
@@ -799,7 +799,7 @@ test("Lien — adresse normalisée, plage au mot si curseur seul", () => {
 
 test("version 2.60.0 — cartes sans trait, barres d’insertion au survol", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.62.4");
+  assert.equal(APP_VERSION, "2.62.5");
   const view = await readFile(new URL("../web/app/components/rich-doc-view.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
   const panel = await readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8");
@@ -818,7 +818,7 @@ test("version 2.60.0 — cartes sans trait, barres d’insertion au survol", asy
 
 test("version 2.61.0 — cadre semaine trait plein, plus de tiretés", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
-  assert.equal(APP_VERSION, "2.62.4");
+  assert.equal(APP_VERSION, "2.62.5");
   const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
   assert.match(css, /\.class-notebook-column \{[^}]*border: 1px solid var\(--line\)/);
   assert.match(css, /\.class-notebook-column \{[^}]*box-shadow: 0 8px 24px rgba\(6, 24, 61, \.06\)/);
@@ -835,7 +835,7 @@ test("version 2.61.0 — cadre semaine trait plein, plus de tiretés", async () 
 test("éditeur 2.62.0 — structures génériques, callouts hérités neutres, listes compactes", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
   const { SQL_MIGRATION_FILES } = await import("../src/lib/persistence/sql/migrate.ts");
-  assert.equal(APP_VERSION, "2.62.4");
+  assert.equal(APP_VERSION, "2.62.5");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0037_security_notification_email.sql");
 
   const editor = await readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8");
@@ -914,7 +914,7 @@ test("éditeur 2.62.0 — structures génériques, callouts hérités neutres, l
 test("éditeur — puces, numéros et cases dans la zone de saisie commune", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
   const { SQL_MIGRATION_FILES } = await import("../src/lib/persistence/sql/migrate.ts");
-  assert.equal(APP_VERSION, "2.62.4");
+  assert.equal(APP_VERSION, "2.62.5");
   assert.equal(CAMPUS_RICH_FORMAT, "campus-rich-v1");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0037_security_notification_email.sql");
 
@@ -1567,7 +1567,7 @@ test("splitLine — liste déjà à 40 items ne perd aucun contenu", () => {
 test("surface continue — canvas unique, pas de carte au focus, campus-rich-v1", async () => {
   const { APP_VERSION } = await import("../src/lib/app-version.ts");
   const { SQL_MIGRATION_FILES } = await import("../src/lib/persistence/sql/migrate.ts");
-  assert.equal(APP_VERSION, "2.62.4");
+  assert.equal(APP_VERSION, "2.62.5");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0037_security_notification_email.sql");
   assert.equal(CAMPUS_RICH_FORMAT, "campus-rich-v1");
 

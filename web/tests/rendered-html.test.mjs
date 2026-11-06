@@ -122,3 +122,28 @@ test("keeps the validated teacher essentials and social preview", async () => {
   await access(new URL("../public/branding/campus-agenda-logo-transparent.png", import.meta.url));
   await access(new URL("../public/campus-agenda-access-bg.jpg", import.meta.url));
 });
+
+test("installation écran d’accueil : manifest servi et balises d’icônes, sans service worker", async () => {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}-manifest`);
+  const { default: worker } = await import(workerUrl.href);
+  const env = { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } };
+  const ctx = { waitUntil() {}, passThroughOnException() {} };
+
+  const manifestResponse = await worker.fetch(new Request("http://localhost/manifest.webmanifest"), env, ctx);
+  assert.equal(manifestResponse.status, 200);
+  assert.match(manifestResponse.headers.get("content-type") ?? "", /application\/manifest\+json/);
+  const manifest = await manifestResponse.json();
+  assert.equal(manifest.name, "Campus Agenda");
+  assert.equal(manifest.short_name, "Campus Agenda");
+  assert.equal(manifest.display, "standalone");
+  assert.equal(manifest.start_url, "/");
+  assert.equal(manifest.scope, "/");
+
+  const html = await (await render()).text();
+  assert.match(html, /<link rel="manifest" href="\/manifest\.webmanifest"/);
+  assert.match(html, /<link rel="apple-touch-icon" href="\/icons\/apple-touch-icon\.png"/);
+  assert.match(html, /<meta name="apple-mobile-web-app-title" content="Campus Agenda"/);
+  assert.match(html, /<meta name="theme-color" content="#ffffff"/);
+  assert.doesNotMatch(html, /serviceWorker/);
+});
