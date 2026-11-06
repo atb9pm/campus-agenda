@@ -20,6 +20,13 @@ import {
   nextControlDatePerSubject,
   STUDENT_AGENDA_REFRESH_INTERVAL_MS,
   studentAgendaRefreshDue,
+  isPublicationDone,
+  pruneHomeworkDoneStore,
+  readHomeworkDoneStore,
+  sameHomeworkDoneStore,
+  toggleHomeworkDone,
+  writeHomeworkDoneStore,
+  type StudentHomeworkDoneStore,
   studentAccessFromApiSession,
   upcomingTestsForAnnualCourse,
   studentCalendarDateNeedsRefresh,
@@ -130,6 +137,7 @@ import { MaSemainePanel } from "./components/ma-semaine-panel.tsx";
 import { MesCoursPanel } from "./components/mes-cours-panel.tsx";
 import { ControlPlanningPanel } from "./components/control-planning-panel.tsx";
 import { StudentDashboard, type StudentDashboardTab } from "./components/student-dashboard.tsx";
+import type { StudentHomeworkDoneControl } from "./components/student-homework-panel.tsx";
 
 type AppMode = "teacher" | "student";
 type StudentEntry = "code" | "teacher-preview" | "teacher-branch-preview";
@@ -969,6 +977,22 @@ export default function Home() {
     };
   }, [studentRefreshClassroomId]);
 
+  const studentDoneClassroomId = studentEntry === "code" ? studentSession?.classroomId ?? null : null;
+  const [studentDoneState, setStudentDoneState] = useState<{
+    classroomId: string | null;
+    store: StudentHomeworkDoneStore;
+  }>({ classroomId: null, store: {} });
+  if (studentDoneState.classroomId !== studentDoneClassroomId) {
+    setStudentDoneState({
+      classroomId: studentDoneClassroomId,
+      store:
+        studentDoneClassroomId && typeof window !== "undefined"
+          ? readHomeworkDoneStore(window.localStorage, studentDoneClassroomId)
+          : {},
+    });
+  }
+  const studentDoneStore = studentDoneState.store;
+
   const studentAutoCourseDay = useMemo(() => {
     if (!schoolWeeksMemo.length) return null;
     return (
@@ -1056,6 +1080,27 @@ export default function Home() {
     }
     return visible;
   }, [studentSession, items, studentEntry, previewAnnualCourseId]);
+
+  const studentDoneControl = useMemo<StudentHomeworkDoneControl | undefined>(() => {
+    if (!studentDoneClassroomId) return undefined;
+    const classroomId = studentDoneClassroomId;
+    return {
+      isDone: (item) => isPublicationDone(studentDoneStore, item),
+      setDone: (publications, done) =>
+        setStudentDoneState((current) => {
+          if (current.classroomId !== classroomId) return current;
+          const now = Date.now();
+          let next = current.store;
+          for (const publication of publications) {
+            if (isPublicationDone(next, publication) !== done) next = toggleHomeworkDone(next, publication, now);
+          }
+          next = pruneHomeworkDoneStore(next, studentAgendaItems, now);
+          if (sameHomeworkDoneStore(current.store, next)) return current;
+          writeHomeworkDoneStore(window.localStorage, classroomId, next);
+          return { classroomId, store: next };
+        }),
+    };
+  }, [studentDoneClassroomId, studentDoneStore, studentAgendaItems]);
 
   const studentPreviewSubjects = useMemo(() => {
     if (studentEntry !== "teacher-branch-preview" || !previewAnnualCourseId) return studentClassroomSubjects;
@@ -1875,6 +1920,7 @@ export default function Home() {
           previousCourseDays={studentPreviousCourseDays}
           tab={studentMobileTab}
           sections={studentCourseDaySections}
+          doneControl={studentDoneControl}
           futureTests={studentFutureTests}
           planning={studentControlPlanning}
           today={studentToday}

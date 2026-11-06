@@ -38,14 +38,62 @@ function CourseDayIcon() {
   );
 }
 
-function BranchBlock({ subject, publications }: { subject: Subject; publications: PrototypeAgendaItem[] }) {
+export interface StudentHomeworkDoneControl {
+  isDone: (item: PrototypeAgendaItem) => boolean;
+  setDone: (items: readonly PrototypeAgendaItem[], done: boolean) => void;
+}
+
+function DoneToggle({ done, onToggle }: { done: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      className="student-done-toggle"
+      aria-pressed={done}
+      aria-label={done ? "Devoir fait — annuler" : "Marquer comme fait"}
+      title={done ? "Fait" : "Marquer comme fait"}
+      onClick={onToggle}
+    >
+      <span className="student-done-ring" aria-hidden="true">
+        {done ? (
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path
+              d="M2.5 6.2 5 8.5 9.5 3.5"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        ) : null}
+      </span>
+    </button>
+  );
+}
+
+function BranchBlock({
+  subject,
+  publications,
+  doneControl,
+}: {
+  subject: Subject;
+  publications: PrototypeAgendaItem[];
+  doneControl?: StudentHomeworkDoneControl;
+}) {
+  const done = Boolean(doneControl && publications.length && publications.every(doneControl.isDone));
   return (
     <section
-      className="student-branch-block"
+      className={`student-branch-block${done ? " is-done" : ""}`}
       aria-label={subject.name || undefined}
       data-annual-course={subject.annualCourseId ?? subject.id}
     >
-      {subject.name ? <p className="student-course-chip">{subject.name}</p> : null}
+      {subject.name || doneControl ? (
+        <div className="student-branch-head">
+          {subject.name ? <p className="student-course-chip">{subject.name}</p> : <span />}
+          {doneControl ? (
+            <DoneToggle done={done} onToggle={() => doneControl.setDone(publications, !done)} />
+          ) : null}
+        </div>
+      ) : null}
       {publications.map((item, index) => (
         <div
           key={item.id}
@@ -64,9 +112,11 @@ function BranchBlock({ subject, publications }: { subject: Subject; publications
 export function StudentHomeworkPanel({
   sections,
   mode,
+  doneControl,
 }: {
   sections: StudentCourseDaySection[];
   mode: "todo" | "homework";
+  doneControl?: StudentHomeworkDoneControl;
 }) {
   const visible = mode === "homework" ? studentHomeworkOnlySections(sections) : studentTodoSections(sections);
   const today = visible.filter((section) => section.publications.length > 0);
@@ -87,7 +137,12 @@ export function StudentHomeworkPanel({
       {today.length ? (
         <div className="student-branch-list">
           {today.map((section) => (
-            <BranchBlock key={section.subject.id} subject={section.subject} publications={section.publications} />
+            <BranchBlock
+              key={section.subject.id}
+              subject={section.subject}
+              publications={section.publications}
+              doneControl={doneControl}
+            />
           ))}
         </div>
       ) : (
@@ -101,7 +156,12 @@ export function StudentHomeworkPanel({
           </h3>
           <div className="student-branch-list">
             {group.branches.map((branch) => (
-              <BranchBlock key={branch.subject.id} subject={branch.subject} publications={branch.publications} />
+              <BranchBlock
+                key={branch.subject.id}
+                subject={branch.subject}
+                publications={branch.publications}
+                doneControl={doneControl}
+              />
             ))}
           </div>
         </section>

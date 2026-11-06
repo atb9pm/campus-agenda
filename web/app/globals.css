@@ -559,6 +559,51 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   padding-bottom: 14px;
   border-bottom: 1px solid var(--line);
 }
+.student-branch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 10px;
+}
+.student-branch-head > .student-course-chip { margin: 0; }
+.student-done-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: -7px -7px -7px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.student-done-ring {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid #c8d1df;
+  border-radius: 999px;
+  color: var(--blue);
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.student-done-toggle:hover .student-done-ring { border-color: #94a3b8; }
+.student-done-toggle:focus-visible { outline: 2px solid var(--blue); outline-offset: 0; }
+.student-done-toggle[aria-pressed="true"] .student-done-ring {
+  border-color: var(--blue);
+  background: #eef3fb;
+}
+.student-branch-block.is-done .student-branch-item {
+  opacity: .55;
+  text-decoration: line-through;
+  text-decoration-color: currentColor;
+}
 .student-next-session { margin-top: 28px; }
 .student-todo-panel h3.student-next-session-heading {
   display: flex;

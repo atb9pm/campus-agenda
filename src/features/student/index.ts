@@ -53,6 +53,21 @@ export {
   type StudentNextSessionPublications,
 } from "./next-session-publications.ts";
 export {
+  STUDENT_HOMEWORK_DONE_MAX_AGE_DAYS,
+  STUDENT_HOMEWORK_DONE_STORAGE_PREFIX,
+  isPublicationDone,
+  parseHomeworkDoneStore,
+  pruneHomeworkDoneStore,
+  publicationFingerprint,
+  readHomeworkDoneStore,
+  sameHomeworkDoneStore,
+  studentHomeworkDoneStorageKey,
+  toggleHomeworkDone,
+  writeHomeworkDoneStore,
+  type StudentHomeworkDoneEntry,
+  type StudentHomeworkDoneStore,
+} from "./homework-done.ts";
+export {
   STUDENT_AGENDA_REFRESH_INTERVAL_MS,
   STUDENT_AGENDA_REFRESH_MIN_GAP_MS,
   msUntilNextLocalMidnight,
