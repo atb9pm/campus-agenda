@@ -331,6 +331,8 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .student-course-day-app .student-week-label,
 .student-course-day-app h1,
 .student-course-day-app h2,
+.student-course-day-app h3,
+.student-course-day-app time,
 .student-course-day-app p,
 .student-course-day-app strong,
 .student-course-day-app small,
@@ -557,17 +559,21 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   padding-bottom: 14px;
   border-bottom: 1px solid var(--line);
 }
-.student-course-pub + .student-next-session {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px dashed var(--line);
+.student-next-session { margin-top: 28px; }
+.student-todo-panel h3.student-next-session-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--blue);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
 }
-.student-next-session-label {
-  margin: 0 0 8px;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 600;
-}
+.student-next-session-heading .student-zone-icon { color: var(--blue); }
 .student-item-type { display: inline-block; margin-bottom: 6px; color: #64748b; font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .student-pub-legacy > strong { display: block; color: var(--navy); font-size: 16px; font-weight: 700; }
 .student-pub-legacy p { margin: 6px 0 0; color: var(--navy); font-family: var(--carnet-font); font-size: 16px; font-weight: 400; }

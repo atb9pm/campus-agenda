@@ -6,9 +6,12 @@ import type { PrototypeAgendaItem } from "../src/features/agenda/demo-items.ts";
 import type { CourseDaySlot, SchoolWeek } from "../src/features/calendar/types.ts";
 import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 import {
+  STUDENT_AGENDA_REFRESH_INTERVAL_MS,
   STUDENT_NEXT_SESSION_HORIZON_DAYS,
   buildStudentCourseDaySections,
   formatNextSessionLabel,
+  groupNextSessionsByDate,
+  studentAgendaRefreshDue,
   nextSessionPublicationsByBranch,
   studentHomeworkOnlySections,
   studentTodoSections,
@@ -156,13 +159,72 @@ test("onglet Devoirs : seule l’anticipation de type devoir reste", () => {
   assert.equal(studentHomeworkOnlySections(infoOnly).length, 0);
 });
 
-test("rendu : bloc dans la branche, sans section « À venir » ni case à cocher, sans migration", async () => {
+test("une rubrique « Pour le … » par date, chronologique, branches regroupées", () => {
+  const chassis19 = item({
+    id: 20,
+    type: "HOMEWORK",
+    title: "Châssis",
+    subjectId: "subject-chassis",
+    annualCourseId: CHASSIS_COURSE,
+    schoolWeekNumber: 12,
+    day: 3,
+  });
+  const moteur12 = item({ id: 21, type: "HOMEWORK", title: "Moteur", schoolWeekNumber: 11, day: 3 });
+  const sections = buildStudentCourseDaySections([], SUBJECTS, [], {
+    courseDay: slot(11, 0),
+    nextSession: { items: [chassis19, moteur12], weeks: WEEKS },
+  });
+  const groups = groupNextSessionsByDate(sections);
+  assert.deepEqual(groups.map((group) => group.dateKey), ["2026-11-12", "2026-11-19"]);
+  assert.deepEqual(groups[1]!.branches.map((branch) => branch.subject.name), ["CP 3 Châssis"]);
+  assert.equal(formatNextSessionLabel(groups[1]!.slot.date), "Pour le jeudi 19 novembre");
+
+  const sameDate = buildStudentCourseDaySections([], SUBJECTS, [], {
+    courseDay: slot(11, 0),
+    nextSession: { items: [{ ...chassis19, schoolWeekNumber: 11 }, moteur12], weeks: WEEKS },
+  });
+  const merged = groupNextSessionsByDate(sameDate);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0]!.branches.length, 2);
+});
+
+test("le jour de la séance, ses publications passent dans Cours du jour et quittent « Pour le … »", () => {
+  const chassis19 = item({
+    id: 22,
+    type: "HOMEWORK",
+    title: "Châssis",
+    subjectId: "subject-chassis",
+    annualCourseId: CHASSIS_COURSE,
+    schoolWeekNumber: 12,
+    day: 3,
+  });
+  const thursday19 = slot(12, 3);
+  const sections = buildStudentCourseDaySections([chassis19], SUBJECTS, [], {
+    courseDay: thursday19,
+    nextSession: { items: [chassis19], weeks: WEEKS },
+  });
+  assert.deepEqual(sections[0]!.publications.map((pub) => pub.id), [22]);
+  assert.equal(groupNextSessionsByDate(sections).length, 0);
+});
+
+test("rechargement automatique : pas plus d’une fois toutes les 30 secondes", () => {
+  assert.equal(STUDENT_AGENDA_REFRESH_INTERVAL_MS, 5 * 60_000);
+  assert.equal(studentAgendaRefreshDue(0, 29_999), false);
+  assert.equal(studentAgendaRefreshDue(0, 30_000), true);
+});
+
+test("rendu : rubriques par date comme Cours du jour, sans « À venir » ni case à cocher, sans migration", async () => {
   const panel = await readFile(new URL("../web/app/components/student-homework-panel.tsx", import.meta.url), "utf8");
-  assert.match(panel, /student-next-session/);
+  assert.match(panel, /groupNextSessionsByDate/);
+  assert.match(panel, /student-next-session-heading/);
   assert.match(panel, /formatNextSessionLabel/);
   assert.doesNotMatch(panel, />À venir</);
   assert.doesNotMatch(panel, /checkbox/);
+  const css = await readFile(new URL("../web/app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /h3\.student-next-session-heading \{[^}]*color: var\(--blue\)/);
   const page = await readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /nextSession: studentFollowingCourseDay/);
+  assert.match(page, /studentAgendaRefreshDue/);
+  assert.match(page, /STUDENT_AGENDA_REFRESH_INTERVAL_MS/);
   assert.equal(SQL_MIGRATION_FILES.some((file) => /next.?session/i.test(file)), false);
 });
