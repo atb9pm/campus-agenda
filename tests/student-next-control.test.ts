@@ -144,7 +144,7 @@ function future(from: Date, extra: PrototypeAgendaItem[] = []) {
 }
 
 test("version 2.61.8 — prochain contrôle élève, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.62.4");
+  assert.equal(APP_VERSION, "2.62.5");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0037_security_notification_email.sql");
 });
 

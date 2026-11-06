@@ -2,6 +2,17 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.5] — Installation sur l’écran d’accueil (iPhone et Android)
+
+### Ajouté
+
+- **Invitation élève** « Ajoute Campus Agenda à ton téléphone », sous forme de petit panneau (pas de fenêtre bloquante), affichée uniquement dans l’espace élève connecté par code, sur smartphone, hors mode application. Jamais dans l’espace enseignant, l’administration ni les aperçus enseignants.
+- **Android** : bouton « Installer » seulement si le navigateur a émis `beforeinstallprompt` ; la demande n’est ouverte qu’au clic. Acceptation, refus et `appinstalled` sont gérés. Sinon : « Voir comment installer » avec les étapes Chrome (menu ⋮). Navigateur intégré à une app : ouvrir dans Chrome.
+- **iPhone** : « Voir comment installer » avec les étapes Safari (Partager, « Sur l’écran d’accueil », « Ouvrir comme app web », « Ajouter »). Autre navigateur ou navigateur intégré : ouvrir dans Safari, avec un bouton « Copier le lien ». Aucune fausse installation automatique.
+- **Mémorisation locale** de la préférence : « Plus tard » (et la croix) masquent l’invitation 30 jours, « Ne plus afficher » et l’installation confirmée la masquent définitivement. Stockage indisponible : sans erreur.
+- **Manifest** (`/manifest.webmanifest`) : nom « Campus Agenda », mode `standalone`, `start_url` et `scope` à `/`, couleurs blanches, icônes 192, 512 et maskable 512 tirées de l’emblème du logo. Icône Apple 180 px, favicon, balises `apple-mobile-web-app-*` et `theme-color`.
+- **Pas de service worker** ni de cache hors ligne : chaque ouverture recharge l’agenda depuis le serveur. CSP, cookies et durée des sessions inchangés.
+
 ## [2.62.4] — Vue élève : marquer un devoir comme fait
 
 ### Ajouté

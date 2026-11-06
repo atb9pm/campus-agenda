@@ -406,6 +406,73 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   outline: 2px solid var(--blue);
   outline-offset: 2px;
 }
+.student-install-prompt {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 0 0 18px;
+  padding: 14px 14px 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #f5f8ff;
+}
+.student-install-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.student-install-body { flex: 1; min-width: 0; }
+.student-install-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.student-install-prompt h2 { margin: 2px 0 4px; color: var(--navy); font-size: 15px; font-weight: 700; line-height: 1.3; }
+.student-install-prompt p { margin: 0; color: #475569; font-size: 13px; line-height: 1.45; }
+.student-install-close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: -6px -6px 0 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #7b879c;
+  cursor: pointer;
+}
+.student-install-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 12px; }
+.student-install-primary,
+.student-install-secondary {
+  min-height: 36px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.student-install-primary { border: 1px solid var(--blue); background: var(--blue); color: #fff; }
+.student-install-secondary { border: 1px solid var(--line-strong); background: #fff; color: var(--navy); }
+.student-install-never {
+  margin-left: auto;
+  padding: 6px 2px;
+  border: 0;
+  background: transparent;
+  color: #7b879c;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.student-install-close:focus-visible,
+.student-install-primary:focus-visible,
+.student-install-secondary:focus-visible,
+.student-install-never:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.student-install-steps { margin: 10px 0 0; padding-left: 22px; list-style: decimal; color: var(--navy); font-size: 13px; line-height: 1.6; }
+.student-install-steps + .student-install-secondary { margin-top: 10px; }
+.student-install-prompt p.student-install-note { margin-top: 10px; }
+.student-install-inline-icon { display: inline-block; vertical-align: -3px; color: var(--blue); }
 .student-dashboard-grid {
   display: grid;
   gap: 18px;

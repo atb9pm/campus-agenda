@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
 
@@ -11,6 +11,16 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "Campus Agenda — Agenda scolaire partagé",
     description: "Une démonstration de l’agenda scolaire multi-professeurs et multi-classes Campus Agenda.",
+    applicationName: "Campus Agenda",
+    icons: {
+      icon: [{ url: "/icons/favicon-32.png", sizes: "32x32", type: "image/png" }],
+      apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    },
+    appleWebApp: {
+      capable: true,
+      title: "Campus Agenda",
+      statusBarStyle: "default",
+    },
     openGraph: {
       title: "Campus Agenda",
       description: "L’agenda partagé qui donne à toute la classe une vision claire de la semaine.",
@@ -25,6 +35,10 @@ export async function generateMetadata(): Promise<Metadata> {
     },
   };
 }
+
+export const viewport: Viewport = {
+  themeColor: "#ffffff",
+};
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

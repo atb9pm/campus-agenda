@@ -53,6 +53,19 @@ export {
   type StudentNextSessionPublications,
 } from "./next-session-publications.ts";
 export {
+  INSTALL_PROMPT_LATER_DAYS,
+  INSTALL_PROMPT_STORAGE_KEY,
+  detectInstallPlatform,
+  isStandaloneDisplay,
+  laterInstallPromptPreference,
+  parseInstallPromptPreference,
+  readInstallPromptPreference,
+  shouldOfferInstallPrompt,
+  writeInstallPromptPreference,
+  type InstallPlatform,
+  type InstallPromptPreference,
+} from "./install-prompt.ts";
+export {
   STUDENT_HOMEWORK_DONE_MAX_AGE_DAYS,
   STUDENT_HOMEWORK_DONE_STORAGE_PREFIX,
   isPublicationDone,
