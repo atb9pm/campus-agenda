@@ -282,6 +282,26 @@ export function studentHomeworkOnlySections(
     .filter(hasStudentPublications);
 }
 
+export interface StudentNextSessionDateGroup {
+  dateKey: string;
+  slot: CourseDaySlot;
+  branches: { subject: Subject; publications: PrototypeAgendaItem[] }[];
+}
+
+/** Une rubrique « Pour le … » par date, dans l’ordre chronologique ; branches dans l’ordre des sections. */
+export function groupNextSessionsByDate(sections: StudentCourseDaySection[]): StudentNextSessionDateGroup[] {
+  const groups = new Map<string, StudentNextSessionDateGroup>();
+  for (const section of sections) {
+    const next = section.nextSession;
+    if (!next?.publications.length) continue;
+    const dateKey = calendarDateKey(next.slot.date);
+    const group = groups.get(dateKey) ?? { dateKey, slot: next.slot, branches: [] };
+    group.branches.push({ subject: section.subject, publications: next.publications });
+    groups.set(dateKey, group);
+  }
+  return [...groups.values()].sort((left, right) => left.dateKey.localeCompare(right.dateKey));
+}
+
 function filterNextSession(
   nextSession: StudentNextSessionPublications | null | undefined,
   keep: (item: PrototypeAgendaItem) => boolean,

@@ -18,6 +18,8 @@ import {
   itemsForAnnualCourse,
   msUntilNextLocalMidnight,
   nextControlDatePerSubject,
+  STUDENT_AGENDA_REFRESH_INTERVAL_MS,
+  studentAgendaRefreshDue,
   studentAccessFromApiSession,
   upcomingTestsForAnnualCourse,
   studentCalendarDateNeedsRefresh,
@@ -925,6 +927,47 @@ export default function Home() {
       window.clearTimeout(timeoutId);
     };
   }, [studentEntry]);
+
+  const studentRefreshClassroomId =
+    appMode === "student" && studentEntry === "code" ? studentSession?.classroomId ?? null : null;
+
+  useEffect(() => {
+    if (!studentRefreshClassroomId) return;
+    const classroomId = studentRefreshClassroomId;
+    let cancelled = false;
+    let inFlight = false;
+    let lastLoadedAt = Date.now();
+
+    function reloadIfDue() {
+      if (inFlight || document.visibilityState === "hidden") return;
+      if (!studentAgendaRefreshDue(lastLoadedAt, Date.now())) return;
+      inFlight = true;
+      void fetchAgendaView(classroomId)
+        .then((view) => {
+          if (cancelled) return;
+          setItems(view.items);
+          setAgendaSubjects(view.subjects);
+          setAttendanceDays(attendanceDaysFromAgendaView(view.attendanceDays));
+          setStudentScheduleSlots(scheduleSlotsFromAgendaView(view.scheduleSlots));
+        })
+        // Échec silencieux : l’élève garde l’affichage déjà chargé, nouvel essai au prochain déclencheur.
+        .catch(() => undefined)
+        .finally(() => {
+          inFlight = false;
+          lastLoadedAt = Date.now();
+        });
+    }
+
+    window.addEventListener("focus", reloadIfDue);
+    document.addEventListener("visibilitychange", reloadIfDue);
+    const intervalId = window.setInterval(reloadIfDue, STUDENT_AGENDA_REFRESH_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", reloadIfDue);
+      document.removeEventListener("visibilitychange", reloadIfDue);
+      window.clearInterval(intervalId);
+    };
+  }, [studentRefreshClassroomId]);
 
   const studentAutoCourseDay = useMemo(() => {
     if (!schoolWeeksMemo.length) return null;

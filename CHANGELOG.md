@@ -2,6 +2,19 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.3] — Vue élève : rubriques « Pour le … » et rechargement automatique
+
+### Modifié
+
+- **Vue élève** : les publications de la prochaine séance ne sont plus glissées dans « Cours du jour ». Chaque date a sa propre rubrique, présentée comme « Cours du jour » (pictogramme, intitulé, trait de séparation) : « Pour le jeudi 19 novembre », en bleu comme la semaine scolaire, puis la ou les branches concernées.
+- Les branches qui ont la même prochaine date sont regroupées sous une seule rubrique ; les rubriques suivent l’ordre chronologique. L’onglet Devoirs suit la même présentation.
+- Le jour de la séance, ses publications passent automatiquement dans « Cours du jour » et quittent la rubrique « Pour le … ».
+
+### Ajouté
+
+- **Rechargement automatique** des publications élèves quand l’élève revient sur la page (onglet, application rouverte) et toutes les 5 minutes tant que la page est visible, au plus une fois toutes les 30 secondes. Un devoir publié en cours de journée apparaît sans recharger la page. En cas d’échec réseau, l’affichage déjà chargé est conservé.
+- Aucun changement du Carnet, des exports ni de la base (pas de migration).
+
 ## [2.62.2] — Vue élève : publications de la prochaine séance
 
 ### Ajouté

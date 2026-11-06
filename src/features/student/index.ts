@@ -29,6 +29,7 @@ export {
   formatCompactControlDate,
   formatNextControlHeadline,
   groupControlPlanning,
+  groupNextSessionsByDate,
   listStudentControlPlanning,
   nextControlDatePerSubject,
   nextControlHeadlineForEntries,
@@ -42,6 +43,7 @@ export {
   type ControlPlanningWeek,
   type ControlUrgency,
   type NextControlHeadline,
+  type StudentNextSessionDateGroup,
   type StudentCourseDaySection,
 } from "./upcoming-controls.ts";
 export {
@@ -51,7 +53,10 @@ export {
   type StudentNextSessionPublications,
 } from "./next-session-publications.ts";
 export {
+  STUDENT_AGENDA_REFRESH_INTERVAL_MS,
+  STUDENT_AGENDA_REFRESH_MIN_GAP_MS,
   msUntilNextLocalMidnight,
+  studentAgendaRefreshDue,
   studentCalendarDateNeedsRefresh,
 } from "./student-today.ts";
 export {
