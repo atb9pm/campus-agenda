@@ -7,7 +7,7 @@ import type {
 } from "@campus/features/student";
 import { BrandLogo } from "./brand-logo.tsx";
 import { StudentControlsPanel } from "./student-controls-panel.tsx";
-import { StudentHomeworkPanel } from "./student-homework-panel.tsx";
+import { StudentHomeworkPanel, type StudentHomeworkDoneControl } from "./student-homework-panel.tsx";
 
 export type StudentDashboardTab = "tout" | "devoirs" | "controles" | "historique";
 
@@ -26,6 +26,7 @@ export function StudentDashboard({
   previousCourseDays,
   tab,
   sections,
+  doneControl,
   futureTests,
   planning,
   today,
@@ -45,6 +46,8 @@ export function StudentDashboard({
   previousCourseDays: CourseDaySlot[];
   tab: StudentDashboardTab;
   sections: StudentCourseDaySection[];
+  /** Absent en aperçu enseignant : pas de coche « fait ». */
+  doneControl?: StudentHomeworkDoneControl;
   futureTests: UpcomingTestEntry[];
   planning: ControlPlanningWeek[];
   today: Date;
@@ -147,7 +150,7 @@ export function StudentDashboard({
                 data-layout="tout"
                 id="student-panel-tout"
               >
-                <StudentHomeworkPanel sections={sections} mode="todo" />
+                <StudentHomeworkPanel sections={sections} mode="todo" doneControl={doneControl} />
                 {showControlsPreview ? (
                   <StudentControlsPanel
                     mode="preview"
@@ -161,7 +164,7 @@ export function StudentDashboard({
 
             {tab === "devoirs" ? (
               <div id="student-panel-devoirs">
-                <StudentHomeworkPanel sections={sections} mode="homework" />
+                <StudentHomeworkPanel sections={sections} mode="homework" doneControl={doneControl} />
               </div>
             ) : null}
 

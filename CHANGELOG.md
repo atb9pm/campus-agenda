@@ -2,6 +2,17 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.4] — Vue élève : marquer un devoir comme fait
+
+### Ajouté
+
+- **Vue élève** : un petit cercle, à droite de la pastille de la branche, permet de marquer comme fait le contenu d’une branche pour une séance. Le texte est alors barré et grisé, et le cercle affiche une coche bleue. Un second appui annule.
+- Une coche par branche et par séance (une publication du Carnet), indépendante des autres branches et des autres dates. Disponible dans « Cours du jour », dans les rubriques « Pour le … », dans l’onglet Devoirs et dans « Cours précédents ».
+- L’état est mémorisé **uniquement dans le navigateur de l’appareil** (localStorage), par classe. Rien n’est envoyé au serveur ; l’enseignant ne voit pas les coches.
+- Si l’enseignant modifie le texte de la publication, la coche revient à « non fait ». Un déplacement de séance ou un masquage temporaire la conserve. Les coches de plus de 120 jours sont nettoyées.
+- Pas de coche dans l’« Aperçu branche » enseignant, ni sur les contrôles.
+- Aucun changement du Carnet, des exports ni de la base (pas de migration).
+
 ## [2.62.3] — Vue élève : rubriques « Pour le … » et rechargement automatique
 
 ### Modifié
