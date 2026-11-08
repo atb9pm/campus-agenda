@@ -11,16 +11,6 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "Campus Agenda — Agenda scolaire partagé",
     description: "Une démonstration de l’agenda scolaire multi-professeurs et multi-classes Campus Agenda.",
-    applicationName: "Campus Agenda",
-    icons: {
-      icon: [{ url: "/icons/favicon-32.png", sizes: "32x32", type: "image/png" }],
-      apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
-    },
-    appleWebApp: {
-      capable: true,
-      title: "Campus Agenda",
-      statusBarStyle: "default",
-    },
     openGraph: {
       title: "Campus Agenda",
       description: "L’agenda partagé qui donne à toute la classe une vision claire de la semaine.",
@@ -43,6 +33,17 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="fr">
+      {/* Dynamic metadata is streamed into <body> for browsers; iOS Safari only reads home-screen icons from <head>. */}
+      <head>
+        <meta name="application-name" content="Campus Agenda" />
+        <meta name="apple-mobile-web-app-title" content="Campus Agenda" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <link rel="icon" href="/icons/favicon-32.png" type="image/png" sizes="32x32" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" sizes="180x180" />
+        <link rel="manifest" href="/manifest.webmanifest" />
+      </head>
       <body>
         <a className="skip-to-content" href="#main-content">Aller au contenu principal</a>
         {children}

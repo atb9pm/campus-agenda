@@ -145,5 +145,9 @@ test("installation écran d’accueil : manifest servi et balises d’icônes, s
   assert.match(html, /<link rel="apple-touch-icon" href="\/icons\/apple-touch-icon\.png"/);
   assert.match(html, /<meta name="apple-mobile-web-app-title" content="Campus Agenda"/);
   assert.match(html, /<meta name="theme-color" content="#ffffff"/);
+  const head = html.slice(0, html.indexOf("</head>"));
+  assert.match(head, /<link rel="apple-touch-icon" href="\/icons\/apple-touch-icon\.png"/);
+  assert.match(head, /<meta name="apple-mobile-web-app-title" content="Campus Agenda"/);
+  assert.match(head, /<link rel="manifest" href="\/manifest\.webmanifest"/);
   assert.doesNotMatch(html, /serviceWorker/);
 });
