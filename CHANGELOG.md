@@ -2,6 +2,14 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.6] — Icône de l’écran d’accueil sur iPhone
+
+### Corrigé
+
+- **iPhone (Safari)** : l’ajout à l’écran d’accueil affichait une lettre « C » générique au lieu de l’emblème du logo. Les métadonnées générées dynamiquement sont envoyées dans le `<body>` aux navigateurs (seuls les robots les reçoivent dans le `<head>`), or Safari ne lit `apple-touch-icon` que dans le `<head>`. L’icône Apple, le favicon, le manifest et les balises `apple-mobile-web-app-*` sont désormais écrits directement dans le `<head>` de la mise en page racine.
+- **Icône aux adresses de repli** : `/apple-touch-icon.png` et `/apple-touch-icon-precomposed.png` sont servies à la racine (même image 180 px), pour les appareils qui les demandent sans lire la page.
+- Une icône « C » déjà ajoutée ne se met pas à jour : la supprimer puis refaire l’ajout depuis Safari.
+
 ## [2.62.5] — Installation sur l’écran d’accueil (iPhone et Android)
 
 ### Ajouté

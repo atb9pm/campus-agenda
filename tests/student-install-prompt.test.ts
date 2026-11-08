@@ -144,7 +144,7 @@ test("manifest : nom, mode standalone, portée et icônes 192 / 512 / maskable",
   assert.ok(icons.some((icon) => icon.sizes === "512x512" && icon.purpose === "any"));
   assert.ok(icons.some((icon) => icon.sizes === "512x512" && icon.purpose === "maskable"));
 
-  for (const icon of [...icons, { src: "/icons/apple-touch-icon.png", sizes: "180x180" }, { src: "/icons/favicon-32.png", sizes: "32x32" }]) {
+  for (const icon of [...icons, { src: "/icons/apple-touch-icon.png", sizes: "180x180" }, { src: "/icons/favicon-32.png", sizes: "32x32" }, { src: "/apple-touch-icon.png", sizes: "180x180" }, { src: "/apple-touch-icon-precomposed.png", sizes: "180x180" }]) {
     const bytes = await readFile(new URL(`../web/public${icon.src}`, import.meta.url));
     assert.equal(bytes.subarray(1, 4).toString("ascii"), "PNG", icon.src);
     const width = bytes.readUInt32BE(16);
@@ -200,6 +200,7 @@ test("affichage réservé à l’élève connecté par code : ni enseignant, ni 
   assert.doesNotMatch(prompt, /fetch\(|sendBeacon|analytics/i);
   assert.doesNotMatch(prompt, /document\.cookie/);
 
-  assert.match(layout, /appleWebApp/);
+  assert.match(layout, /<head>[\s\S]*rel="apple-touch-icon"[\s\S]*<\/head>/);
+  assert.doesNotMatch(layout, /appleWebApp|icons:/);
   assert.match(layout, /apple-touch-icon\.png/);
 });
