@@ -10,11 +10,12 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Campus Agenda",
     short_name: "Campus Agenda",
     description: "Tes devoirs et tes prochains contrôles, directement depuis ton écran d’accueil.",
-    lang: "fr",
+    lang: "fr-CH",
     dir: "ltr",
     start_url: "/",
     scope: "/",
     display: "standalone",
+    categories: ["education"],
     background_color: "#ffffff",
     theme_color: "#ffffff",
     icons: [

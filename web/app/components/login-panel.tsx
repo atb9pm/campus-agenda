@@ -166,6 +166,9 @@ export function LoginPanel({
           )}
         </section>
 
+        <p className="login-about-link">
+          <a href="/a-propos">À propos de Campus Agenda</a>
+        </p>
         <p className="prototype-label">CAMPUS AGENDA {appVersion}</p>
       </main>
     </div>

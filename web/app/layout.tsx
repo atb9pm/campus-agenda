@@ -1,30 +1,40 @@
 import type { Metadata, Viewport } from "next";
-import { headers } from "next/headers";
+import {
+  PUBLIC_SITE_DESCRIPTION,
+  PUBLIC_SITE_KEYWORDS,
+  PUBLIC_SITE_NAME,
+  PUBLIC_SITE_OG_LOCALE,
+  PUBLIC_SITE_ORIGIN,
+  PUBLIC_SITE_TITLE,
+} from "@campus/lib/public-site";
 import "./globals.css";
 
-export async function generateMetadata(): Promise<Metadata> {
-  const incomingHeaders = await headers();
-  const host = incomingHeaders.get("host") ?? "localhost:3000";
-  const protocol = incomingHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  const socialImage = `${protocol}://${host}/og-v3.png`;
-
-  return {
-    title: "Campus Agenda — Agenda scolaire partagé",
-    description: "Une démonstration de l’agenda scolaire multi-professeurs et multi-classes Campus Agenda.",
-    openGraph: {
-      title: "Campus Agenda",
-      description: "L’agenda partagé qui donne à toute la classe une vision claire de la semaine.",
-      type: "website",
-      images: [{ url: socialImage, width: 1536, height: 1024, alt: "Campus Agenda, l’agenda scolaire des passionnés de mécanique" }],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: "Campus Agenda",
-      description: "L’agenda partagé qui donne à toute la classe une vision claire de la semaine.",
-      images: [socialImage],
-    },
-  };
-}
+// Static on purpose: vinext streams `generateMetadata` into <body> for browsers and unknown crawlers.
+export const metadata: Metadata = {
+  metadataBase: new URL(PUBLIC_SITE_ORIGIN),
+  title: PUBLIC_SITE_TITLE,
+  description: PUBLIC_SITE_DESCRIPTION,
+  keywords: [...PUBLIC_SITE_KEYWORDS],
+  authors: [{ name: PUBLIC_SITE_NAME }],
+  alternates: { canonical: "/" },
+  robots: { index: true, follow: true },
+  formatDetection: { telephone: false, email: false, address: false },
+  openGraph: {
+    type: "website",
+    siteName: PUBLIC_SITE_NAME,
+    locale: PUBLIC_SITE_OG_LOCALE,
+    url: "/",
+    title: PUBLIC_SITE_TITLE,
+    description: PUBLIC_SITE_DESCRIPTION,
+    images: [{ url: "/og-v3.png", width: 1536, height: 1024, alt: "Campus Agenda, agenda scolaire numérique pour les écoles" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: PUBLIC_SITE_TITLE,
+    description: PUBLIC_SITE_DESCRIPTION,
+    images: ["/og-v3.png"],
+  },
+};
 
 export const viewport: Viewport = {
   themeColor: "#ffffff",
@@ -32,8 +42,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="fr">
-      {/* Dynamic metadata is streamed into <body> for browsers; iOS Safari only reads home-screen icons from <head>. */}
+    <html lang="fr-CH">
+      {/* iOS Safari only reads home-screen icons from <head>; keep them out of the metadata object. */}
       <head>
         <meta name="application-name" content="Campus Agenda" />
         <meta name="apple-mobile-web-app-title" content="Campus Agenda" />
