@@ -15,6 +15,7 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 ### Modifié
 
 - **Métadonnées** : titre « Campus Agenda – Agenda scolaire numérique pour les écoles », nouvelle description, mots-clés, `lang="fr-CH"`, lien canonique, Open Graph `fr_CH` et `site_name`. Le layout passe de `generateMetadata` à des métadonnées statiques avec `metadataBase` `https://campusagenda.ch` : vinext ne les diffuse plus dans le `<body>`, elles sont dans le `<head>` pour tout visiteur, y compris les robots de classification inconnus.
+- **Champ « Code de classe »** (connexion et fenêtre de saisie) : l’exemple `MECAUTO3A-K7M4-R2P8` est retiré, pour ne plus afficher de nom de classe réel sur une page indexable.
 - Icônes iPhone et Android, CSP, HSTS, cookies, sessions et données : inchangés.
 
 ## [2.62.6] — Icône de l’écran d’accueil sur iPhone

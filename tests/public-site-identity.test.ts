@@ -77,6 +77,10 @@ test("page /a-propos : serveur, statique, sans appel API ni donnée scolaire", a
   assert.match(about, /<BrandLogo \/>/);
   assert.match(about, /href="\/">← Retour à l’accueil<\/Link>/);
   assert.match(loginPanel, /href="\/a-propos"/);
+  const page = await read("../web/app/page.tsx");
+  for (const source of [loginPanel, page]) {
+    assert.doesNotMatch(source, /placeholder="[A-Z0-9]+-[A-Z0-9]{4}-[A-Z0-9]{4}"/);
+  }
 
   assert.match(robots, /isProductionSiteHost\(host\)/);
   assert.match(robots, /disallow: "\/"/);

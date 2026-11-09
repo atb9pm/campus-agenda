@@ -178,6 +178,7 @@ test("identité publique : titre, description, langue et canonique dans le <head
     assert.match(head, /<link rel="apple-touch-icon" href="\/icons\/apple-touch-icon\.png"/, userAgent);
     assert.match(head, /<link rel="manifest" href="\/manifest\.webmanifest"/, userAgent);
     assert.equal(html.match(/<title>/g)?.length, 1, userAgent);
+    assert.doesNotMatch(html, /MECAUTO|K7M4/, userAgent);
   }
 });
 

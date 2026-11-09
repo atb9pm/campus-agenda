@@ -2129,7 +2129,7 @@ export default function Home() {
           <section className="technical-modal" role="dialog" aria-modal="true" aria-labelledby="student-code-title">
             <header><div><span className="eyebrow">ESPACE ÉLÈVE</span><h2 id="student-code-title">Connexion anonyme</h2></div><button onClick={() => setStudentCodeModalOpen(false)}>×</button></header>
             <form onSubmit={(event) => { event.preventDefault(); enterStudentWithCode(String(new FormData(event.currentTarget).get("code") || "")); }}>
-              <label>Code de classe<input name="code" placeholder="MECAUTO3A-K7M4-R2P8" required autoComplete="off" /></label>
+              <label>Code de classe<input name="code" required autoComplete="off" /></label>
               {process.env.NODE_ENV === "development" ? (
                 <p className="modal-hint">Les codes apprentis se génèrent dans Administration → Classes.</p>
               ) : (

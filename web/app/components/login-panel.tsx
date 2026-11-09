@@ -98,7 +98,6 @@ export function LoginPanel({
                     name="code"
                     value={studentCode}
                     onChange={(event) => setStudentCode(event.target.value)}
-                    placeholder="MECAUTO3A-K7M4-R2P8"
                     autoComplete="off"
                     autoCapitalize="none"
                     spellCheck={false}
