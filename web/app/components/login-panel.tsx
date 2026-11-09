@@ -98,7 +98,6 @@ export function LoginPanel({
                     name="code"
                     value={studentCode}
                     onChange={(event) => setStudentCode(event.target.value)}
-                    placeholder="MECAUTO3A-K7M4-R2P8"
                     autoComplete="off"
                     autoCapitalize="none"
                     spellCheck={false}
@@ -166,6 +165,9 @@ export function LoginPanel({
           )}
         </section>
 
+        <p className="login-about-link">
+          <a href="/a-propos">À propos de Campus Agenda</a>
+        </p>
         <p className="prototype-label">CAMPUS AGENDA {appVersion}</p>
       </main>
     </div>

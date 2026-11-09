@@ -102,7 +102,7 @@ function v2Doc(
 }
 
 test("PR3.4 — version et migration 0033", async () => {
-  assert.equal(APP_VERSION, "2.62.6");
+  assert.equal(APP_VERSION, "2.62.7");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0037_security_notification_email.sql");
   const sql = await readFile(new URL("../migrations/0033_annual_private_notes_storage.sql", import.meta.url), "utf8");
   assert.match(sql, /body_json/);

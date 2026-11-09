@@ -12,7 +12,7 @@ test("phase 0.8 — structure d'accessibilité de base", async () => {
     readFile(new URL("../web/app/components/password-change-panel.tsx", import.meta.url), "utf8"),
   ]);
 
-  assert.match(layout, /lang="fr"/);
+  assert.match(layout, /lang="fr-CH"/);
   assert.match(layout, /skip-to-content/);
   assert.match(page, /id="main-content"/);
   assert.match(page, /aria-modal="true"/);

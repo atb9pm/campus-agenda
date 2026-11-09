@@ -294,6 +294,36 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   .login-tabs { margin-bottom: 12px; }
   .mfa-qr img { width: min(220px, 100%); height: auto; }
 }
+.login-about-link { margin: 0; text-align: center; }
+.login-about-link a { color: var(--navy); font-size: 10px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; text-shadow: 0 1px 10px rgba(255,255,255,.95); }
+.login-about-link a:hover { color: var(--blue); }
+
+.about-shell { min-height: 100vh; padding: 32px 24px 40px; background: #f4f7fb; }
+.about-page { width: min(720px, 100%); margin: 0 auto; display: grid; gap: 20px; }
+.about-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.about-brand { display: inline-flex; }
+.about-brand .brand-logo { width: min(240px, 60vw); }
+.about-back { color: var(--navy); font-size: 13px; font-weight: 700; text-decoration: none; }
+.about-back:hover { color: var(--blue); text-decoration: underline; text-underline-offset: 3px; }
+.about-card { padding: 32px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: var(--shadow); color: #33445f; font-size: 15px; line-height: 1.6; }
+.about-card .eyebrow { font-size: 10px; color: var(--blue); }
+.about-card h1 { margin: 4px 0 4px; color: var(--navy); font-size: clamp(28px, 4vw, 36px); letter-spacing: -.04em; line-height: 1.1; }
+.about-lead { margin: 0 0 8px; color: var(--muted); font-size: 16px; }
+.about-card section { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.about-card h2 { margin: 0 0 8px; color: var(--navy); font-size: 18px; letter-spacing: -.02em; }
+.about-card section p { margin: 0; }
+.about-features { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.about-features li::marker { color: var(--blue); }
+.about-actions { margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--line); }
+.about-primary { display: inline-block; padding: 11px 18px; border-radius: 6px; color: #fff; background: var(--navy); font-size: 13px; font-weight: 800; text-decoration: none; }
+.about-primary:hover { background: var(--navy-2); }
+.about-shell .prototype-label { margin: 0; text-align: center; color: #687b9b; }
+@media (max-width: 760px) {
+  .about-shell { padding: 20px 16px 32px; }
+  .about-card { padding: 22px 18px; font-size: 14px; }
+  .about-header { justify-content: center; }
+}
+
 .mfa-qr { display: grid; justify-items: center; gap: 10px; margin-bottom: 16px; }
 .mfa-qr img { width: 220px; height: 220px; border: 1px solid var(--line); border-radius: 8px; }
 .mfa-manual-key { margin: 0; word-break: break-all; }

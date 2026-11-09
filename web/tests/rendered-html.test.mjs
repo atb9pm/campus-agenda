@@ -34,7 +34,8 @@ test("server-renders the single entry page, student tab first", async () => {
   for (const attrs of scriptTags) {
     assert.match(attrs, new RegExp(`nonce="${nonce}"`));
   }
-  assert.match(html, /Campus Agenda — Agenda scolaire partagé/);
+  assert.match(html, /Campus Agenda – Agenda scolaire numérique pour les écoles/);
+  assert.match(html, /<a href="\/a-propos">À propos de Campus Agenda<\/a>/);
   assert.match(html, /id="main-content"/);
   assert.match(html, /Mon agenda de classe/);
   assert.match(html, /Code de classe/);
@@ -150,4 +151,79 @@ test("installation écran d’accueil : manifest servi et balises d’icônes, s
   assert.match(head, /<meta name="apple-mobile-web-app-title" content="Campus Agenda"/);
   assert.match(head, /<link rel="manifest" href="\/manifest\.webmanifest"/);
   assert.doesNotMatch(html, /serviceWorker/);
+});
+
+async function fetchBuilt(url, init) {
+  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}-${Math.random()}`);
+  const { default: worker } = await import(workerUrl.href);
+  return worker.fetch(
+    new Request(url, init),
+    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+    { waitUntil() {}, passThroughOnException() {} },
+  );
+}
+
+test("identité publique : titre, description, langue et canonique dans le <head> pour tout visiteur", async () => {
+  for (const userAgent of ["Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) Safari/604.1", "WebFilterClassifier/1.0", ""]) {
+    const html = await (await fetchBuilt("https://campusagenda.ch/", { headers: { accept: "text/html", "user-agent": userAgent } })).text();
+    const head = html.slice(0, html.indexOf("</head>"));
+    assert.match(html, /<html lang="fr-CH"/, userAgent);
+    assert.match(head, /<title>Campus Agenda – Agenda scolaire numérique pour les écoles<\/title>/, userAgent);
+    assert.match(head, /<meta name="description" content="Campus Agenda est une plateforme pédagogique suisse destinée aux établissements de formation\./, userAgent);
+    assert.match(head, /<meta name="keywords" content="agenda scolaire numérique,plateforme pédagogique,/, userAgent);
+    assert.match(head, /<link rel="canonical" href="https:\/\/campusagenda\.ch"/, userAgent);
+    assert.match(head, /<meta property="og:locale" content="fr_CH"/, userAgent);
+    assert.match(head, /<meta property="og:image" content="https:\/\/campusagenda\.ch\/og-v3\.png"/, userAgent);
+    assert.match(head, /<link rel="apple-touch-icon" href="\/icons\/apple-touch-icon\.png"/, userAgent);
+    assert.match(head, /<link rel="manifest" href="\/manifest\.webmanifest"/, userAgent);
+    assert.equal(html.match(/<title>/g)?.length, 1, userAgent);
+    assert.doesNotMatch(html, /MECAUTO|K7M4/, userAgent);
+  }
+});
+
+test("page /a-propos publique, sans connexion ni donnée scolaire", async () => {
+  const response = await fetchBuilt("https://campusagenda.ch/a-propos", { headers: { accept: "text/html" } });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-security-policy") ?? "", /frame-ancestors 'none'/);
+  assert.match(response.headers.get("strict-transport-security") ?? "", /max-age=31536000/);
+  const html = await response.text();
+  const head = html.slice(0, html.indexOf("</head>"));
+  assert.match(head, /<title>À propos de Campus Agenda – Plateforme suisse d’agenda scolaire numérique<\/title>/);
+  assert.match(head, /<link rel="canonical" href="https:\/\/campusagenda\.ch\/a-propos"/);
+  assert.match(head, /<link rel="apple-touch-icon" href="\/icons\/apple-touch-icon\.png"/);
+  for (const text of ["Plateforme suisse d’agenda scolaire numérique.", "Présentation", "Fonctionnalités", "Publication des devoirs.", "Organisation par classes et branches.", "Utilisation", "code fourni par leur établissement", "Sécurité", "connexion HTTPS"]) {
+    assert.ok(html.includes(text), text);
+  }
+  assert.match(html, /<a [^>]*href="\/"[^>]*>← Retour à l’accueil<\/a>/);
+  assert.match(html, /campus-agenda-logo-transparent\.png/);
+  assert.match(html, /"applicationCategory":"EducationalApplication"/);
+  assert.doesNotMatch(html, /MECAUTO|Code de classe|password|mot de passe|sqlite|Infomaniak|\/api\//i);
+});
+
+test("robots.txt : indexation publique en production, refus total ailleurs", async () => {
+  const prod = await fetchBuilt("https://campusagenda.ch/robots.txt", { headers: { host: "campusagenda.ch" } });
+  assert.equal(prod.status, 200);
+  assert.match(prod.headers.get("content-type") ?? "", /^text\/plain/);
+  const prodText = await prod.text();
+  assert.match(prodText, /User-Agent: \*/);
+  assert.match(prodText, /^Allow: \/$/m);
+  assert.match(prodText, /^Allow: \/a-propos$/m);
+  assert.match(prodText, /^Disallow: \/api\/$/m);
+  assert.match(prodText, /^Sitemap: https:\/\/campusagenda\.ch\/sitemap\.xml$/m);
+
+  for (const host of ["test.campusagenda.ch", "localhost"]) {
+    const text = await (await fetchBuilt(`https://${host}/robots.txt`, { headers: { host } })).text();
+    assert.match(text, /^Disallow: \/$/m, host);
+    assert.doesNotMatch(text, /Allow: |Sitemap:/, host);
+  }
+});
+
+test("sitemap.xml : uniquement l’accueil et la présentation", async () => {
+  const response = await fetchBuilt("https://campusagenda.ch/sitemap.xml");
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /application\/xml/);
+  const xml = await response.text();
+  const locations = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
+  assert.deepEqual(locations, ["https://campusagenda.ch/", "https://campusagenda.ch/a-propos"]);
 });
