@@ -58,9 +58,17 @@ import {
   sessionNotesKey,
   setSessionRichNote,
   setWeekRichNote,
+  msUntilNextSchoolMidnight,
+  notebookAutoFollowAllowed,
+  notebookReferenceButtonLabel,
+  notebookReferenceSession,
+  notebookReferenceTag,
+  notebookSchoolTodayIso,
+  notebookTodayUpdate,
+  resolveNotebookStartSession,
   shiftCourseSession,
-  snapToCourseSession,
   snapToEligibleCourseWeek,
+  type NotebookFollowMode,
   visibleCourseSessions,
   visibleCourseWeeks,
   visibleRichDocLines,
@@ -168,6 +176,11 @@ interface ClassNotebookPanelProps {
   }) => void;
   /** Préférence enseignant ; lue à l’ouverture, le choix dans le carnet reste local. */
   defaultWeekDisplayCount?: WeekDisplayCount;
+  /** `auto` : séance du jour ou prochaine séance réelle ; `manual` : semaine ou séance choisie. */
+  initialFollowMode?: NotebookFollowMode;
+  initialCenterSessionKey?: string | null;
+  /** Conserve le choix de l’enseignant quand le Carnet est démonté (aperçu élève). */
+  onFollowSelectionChange?: (selection: { followMode: NotebookFollowMode; sessionKey: string | null }) => void;
 }
 
 type LineSelection =
@@ -273,6 +286,9 @@ export function ClassNotebookPanel({
   onPreviewStudentAgenda,
   onPreviewBranch,
   defaultWeekDisplayCount = 3,
+  initialFollowMode = "manual",
+  initialCenterSessionKey = null,
+  onFollowSelectionChange,
 }: ClassNotebookPanelProps) {
   const [weekDisplayCount, setWeekDisplayCount] = useState<WeekDisplayCount>(defaultWeekDisplayCount);
   const narrowViewport = useNotebookNarrowViewport();
@@ -302,7 +318,10 @@ export function ClassNotebookPanel({
   const [courseSessions, setCourseSessions] = useState<CourseSession[] | null>(null);
   const [loadedCourseId, setLoadedCourseId] = useState<string | null>(null);
   const [sessionsError, setSessionsError] = useState("");
-  const [centerSessionKey, setCenterSessionKey] = useState<string | null>(null);
+  const [centerSessionKey, setCenterSessionKey] = useState<string | null>(initialCenterSessionKey);
+  const [followMode, setFollowMode] = useState<NotebookFollowMode>(initialFollowMode);
+  const [observedTodayIso, setObservedTodayIso] = useState(() => notebookSchoolTodayIso(new Date()));
+  const [todayIso, setTodayIso] = useState(observedTodayIso);
   const [controlEditor, setControlEditor] = useState<
     | { mode: "create"; session: CourseSession }
     | { mode: "edit"; item: PrototypeAgendaItem; session: CourseSession | null }
@@ -369,10 +388,69 @@ export function ClassNotebookPanel({
     [courseSessions],
   );
 
+  const autoFollowAllowed = structuredCourse && notebookAutoFollowAllowed(schoolYearStatus);
+  const editingInProgress = editor != null || controlEditor != null || dragPayload != null;
+  // Un changement de date pendant une édition attend sa fermeture : la colonne éditée ne doit pas disparaître.
+  if (notebookTodayUpdate(todayIso, observedTodayIso, editingInProgress) === "apply") {
+    setTodayIso(observedTodayIso);
+  }
+
+  useEffect(() => {
+    if (!autoFollowAllowed) return;
+    let timer: number | undefined;
+    const sync = () => setObservedTodayIso(notebookSchoolTodayIso(new Date()));
+    const arm = () => {
+      timer = window.setTimeout(() => {
+        sync();
+        arm();
+      }, msUntilNextSchoolMidnight(new Date()));
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") sync();
+    };
+    arm();
+    window.addEventListener("focus", sync);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", sync);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [autoFollowAllowed]);
+
+  const referenceSession = useMemo(
+    () => (autoFollowAllowed && !sessionsLoading ? notebookReferenceSession(orderedSessions, todayIso) : null),
+    [autoFollowAllowed, orderedSessions, sessionsLoading, todayIso],
+  );
+
   const displayStartSession = useMemo(() => {
     if (!structuredCourse || sessionsLoading || !orderedSessions.length) return null;
-    return snapToCourseSession(orderedSessions, centerSessionKey, centerWeekNumber);
-  }, [centerSessionKey, centerWeekNumber, orderedSessions, sessionsLoading, structuredCourse]);
+    return resolveNotebookStartSession({
+      sessions: orderedSessions,
+      followMode: autoFollowAllowed ? followMode : "manual",
+      todayIso,
+      centerSessionKey,
+      centerWeekNumber,
+    });
+  }, [autoFollowAllowed, centerSessionKey, centerWeekNumber, followMode, orderedSessions, sessionsLoading, structuredCourse, todayIso]);
+
+  function selectSessionManually(session: CourseSession) {
+    setFollowMode("manual");
+    setCenterSessionKey(session.key);
+    onCenterWeekChange(session.schoolWeekNumber);
+    onFollowSelectionChange?.({ followMode: "manual", sessionKey: session.key });
+  }
+
+  function followReferenceSession() {
+    const now = notebookSchoolTodayIso(new Date());
+    setObservedTodayIso(now);
+    setTodayIso(now);
+    const reference = notebookReferenceSession(orderedSessions, now);
+    setFollowMode("auto");
+    setCenterSessionKey(reference?.session.key ?? null);
+    if (reference) onCenterWeekChange(reference.session.schoolWeekNumber);
+    onFollowSelectionChange?.({ followMode: "auto", sessionKey: null });
+  }
 
   const displayStartWeek =
     structuredCourse && displayStartSession
@@ -478,8 +556,7 @@ export function ClassNotebookPanel({
     if (structuredCourse) {
       const next = shiftCourseSession(orderedSessions, displayStartSession?.key ?? null, direction);
       if (!next) return;
-      setCenterSessionKey(next.key);
-      onCenterWeekChange(next.schoolWeekNumber);
+      selectSessionManually(next);
       return;
     }
     onShiftWeeks(direction);
@@ -1526,6 +1603,17 @@ export function ClassNotebookPanel({
             <button type="button" onClick={() => shiftVisibleWeeks(1)} aria-label="Séquences suivantes">
               ▶
             </button>
+            {autoFollowAllowed ? (
+              <button
+                type="button"
+                className="class-notebook-today"
+                onClick={followReferenceSession}
+                disabled={sessionsLoading || !referenceSession}
+                aria-pressed={followMode === "auto"}
+              >
+                {notebookReferenceButtonLabel(referenceSession)}
+              </button>
+            ) : null}
           </div>
           <div className="class-notebook-preview-actions">
             {onPreviewBranch && annualCourseId?.trim() ? (
@@ -1631,6 +1719,7 @@ export function ClassNotebookPanel({
               isStructuredPublication(item),
           );
           const isActive = card.id === (displayStartSession?.key ?? `week:${displayStartWeek}`);
+          const referenceTag = session ? notebookReferenceTag(session, referenceSession) : null;
           const visibility = weekCarnetVisibility(weekCarnetPublications);
           const publicationSlots = lineSlotState("publication", weekNumber, canPublish, session);
           const notesSlots = lineSlotState("notes", weekNumber, true, session);
@@ -1660,13 +1749,17 @@ export function ClassNotebookPanel({
                   type="button"
                   onClick={() => {
                     if (session) {
-                      setCenterSessionKey(session.key);
-                      onCenterWeekChange(session.schoolWeekNumber);
+                      selectSessionManually(session);
                       return;
                     }
                     onCenterWeekChange(weekNumber);
                   }}
                 >
+                  {referenceTag ? (
+                    <em className="class-notebook-reference-tag" data-reference-tag="">
+                      {referenceTag}
+                    </em>
+                  ) : null}
                   <strong>
                     {session
                       ? formatCourseSessionCardWeekLabel(session, week)

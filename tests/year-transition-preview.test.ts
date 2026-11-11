@@ -166,8 +166,8 @@ function projectable(input: YearTransitionPreviewInput = baseInput()) {
   return preview.entries[0]!;
 }
 
-test("APP_VERSION 2.62.7 — moteur PREVIEW", () => {
-  assert.equal(APP_VERSION, "2.62.7");
+test("APP_VERSION 2.62.8 — moteur PREVIEW", () => {
+  assert.equal(APP_VERSION, "2.62.8");
   assert.equal(YEAR_TRANSITION_AGENDA_COMPAT_HOUR, STRUCTURED_AGENDA_COMPAT_HOUR);
   assert.ok(YEAR_TRANSITION_PREVIEW_REASONS.includes("PROJECTABLE"));
 });

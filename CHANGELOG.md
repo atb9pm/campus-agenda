@@ -2,6 +2,20 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.8] — Carnet : séance du jour ou prochaine séance mise en évidence
+
+### Modifié
+
+- **Ouverture du Carnet** (Mes cours, ou Ma semaine sur la semaine en cours) : le cadre bleu se place sur la première séance réelle du cours dont la date est ≥ aujourd’hui, à l’heure de Zurich. La séance du jour reste sélectionnée toute la journée ; dès 00 h 00 le lendemain, la prochaine séance devient la référence. Les `CourseSession` calculées sont réutilisées telles quelles (A/B, vacances, fériés, exceptions, plusieurs séances par semaine) : aucun décalage de 7 ou 14 jours. Sans séance future : dernière séance réelle.
+- Auparavant, la sélection suivait la **semaine** : la première séance de la semaine en cours restait encadrée même une fois passée (lundi encadré le mercredi).
+- **Navigation manuelle prioritaire** : flèches ◀ ▶ ou clic sur l’en-tête d’une séance figent la sélection. Ni l’enregistrement, ni un changement de date ne la déplacent. Ouvrir Ma semaine sur une autre semaine respecte aussi ce choix.
+- **Bouton « Prochain cours »** (« Aujourd’hui » si une séance a lieu ce jour) à côté des flèches : rétablit le suivi automatique sans recharger.
+- **Indication discrète** « Aujourd’hui » ou « Prochain cours » dans l’en-tête de la colonne concernée, sans augmenter sa hauteur.
+- **Date actualisée** à minuit, au retour sur l’onglet et au retour du focus, sans requête réseau ; jamais pendant une édition, un contrôle ou un glisser-déposer en cours.
+- **Changement de cours** : le Carnet repart de zéro à chaque ouverture ; le choix manuel est conservé pendant un aperçu élève.
+- **Années archivées et en préparation** : pas de suivi de la date réelle, navigation inchangée.
+- Smartphone : la colonne affichée reste la colonne sélectionnée (`active`). Aucune donnée du Carnet, publication, note ni contrôle n’est modifiée.
+
 ## [2.62.7] — Identification publique et page « À propos »
 
 ### Ajouté

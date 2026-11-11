@@ -412,7 +412,7 @@ async function publishTest(
 }
 
 test("version 2.38.0 — déplacement structuré, pas de migration 0025", async () => {
-  assert.equal(APP_VERSION, "2.62.7");
+  assert.equal(APP_VERSION, "2.62.8");
   assert.equal(TEST_ALERT_THRESHOLD, 3);
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0037_security_notification_email.sql");
 

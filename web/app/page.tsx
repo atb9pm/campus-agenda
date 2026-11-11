@@ -110,8 +110,11 @@ import {
   notebookContextFromCourse,
   NOTEBOOK_PUBLISH_SELECT_COURSE,
   notebookPublishBlockedReason,
+  notebookOpeningFollowMode,
   openCourseInWeekTarget,
   resolveCourseOpeningWeek,
+  type NotebookFollowMode,
+  type NotebookOpeningSource,
   peekNotesFromBrowser,
   resolveNotebookClassroomId,
   resolveNotebookSubjectId,
@@ -354,6 +357,12 @@ export default function Home() {
   const [openNotebookClassId, setOpenNotebookClassId] = useState<string | null>(null);
   const [openNotebookCourse, setOpenNotebookCourse] = useState<NotebookCourseContext | null>(null);
   const [notebookCenterWeek, setNotebookCenterWeek] = useState(selectedSchoolWeekNumber);
+  /** Chaque ouverture remonte le Carnet : aucune sélection ne passe d’un cours à l’autre. */
+  const [notebookOpening, setNotebookOpening] = useState<{
+    id: number;
+    followMode: NotebookFollowMode;
+    sessionKey: string | null;
+  }>({ id: 0, followMode: "manual", sessionKey: null });
   const [classNotesDocument, setClassNotesDocument] = useState<ClassNotesDocument>(() =>
     createEmptyNotesDocument(),
   );
@@ -600,7 +609,7 @@ export default function Home() {
       setNotice("Ce cours cible ne vous est pas attribué ; le Carnet n’est ouvert qu’aux enseignants du cours.");
       return;
     }
-    openCourseInWeek(course);
+    openCourseInWeek(course, "mes-cours");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teacherCourses, teacherCoursesReady, viewedSchoolYearId, adminYearConsult]);
 
@@ -1582,13 +1591,23 @@ export default function Home() {
     setActiveSection("mes-cours");
   }
 
-  function openCourseInWeek(course: TeacherCourseWorkspaceEntry & { weekSuffix?: "A" | "B" | null }) {
+  function openCourseInWeek(
+    course: TeacherCourseWorkspaceEntry & { weekSuffix?: "A" | "B" | null },
+    source: NotebookOpeningSource = "ma-semaine",
+  ) {
     const opening = resolveCourseOpeningWeek(schoolWeeksMemo, selectedSchoolWeekNumber, course.weekSuffix);
     if (!opening.ok) {
       showNotice(opening.reason);
       return;
     }
     const target = openCourseInWeekTarget(course, opening.schoolWeekNumber);
+    const followMode = notebookOpeningFollowMode({
+      source,
+      schoolYearStatus: viewedSchoolYearStatus,
+      selectedSchoolWeekNumber,
+      todaySchoolWeekNumber: schoolWeeksMemo.length ? findSchoolWeekForDate(new Date(), schoolWeeksMemo).number : null,
+    });
+    setNotebookOpening((previous) => ({ id: previous.id + 1, followMode, sessionKey: null }));
     setOpenNotebookCourse(notebookContextFromCourse(course));
     setOpenNotebookClassId(target.classId);
     setActiveSection(target.section);
@@ -2023,7 +2042,7 @@ export default function Home() {
             schoolYearLabel={teacherCoursesYearLabel}
             loading={!teacherCoursesReady}
             error={teacherCoursesError || null}
-            onOpenCourse={openCourseInWeek}
+            onOpenCourse={(course) => openCourseInWeek(course, "mes-cours")}
           />
         )}
 
@@ -2037,6 +2056,10 @@ export default function Home() {
 
         {activeSection === "ma-semaine" && openNotebookClass && openNotebookCourse && (
           <ClassNotebookPanel
+            key={`${openNotebookCourse.annualCourseId}:${notebookOpening.id}`}
+            initialFollowMode={notebookOpening.followMode}
+            initialCenterSessionKey={notebookOpening.sessionKey}
+            onFollowSelectionChange={(selection) => setNotebookOpening((previous) => ({ ...previous, ...selection }))}
             classSetup={openNotebookClass}
             branchLabel={openNotebookCourse.branchLabel}
             annualCourseId={openNotebookCourse.annualCourseId}

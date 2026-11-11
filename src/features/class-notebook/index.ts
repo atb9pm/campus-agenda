@@ -279,6 +279,22 @@ export {
   type ReclassifyPlacementKind,
 } from "./reclassify.ts";
 export {
+  msUntilNextSchoolMidnight,
+  NOTEBOOK_SCHOOL_TIME_ZONE,
+  notebookAutoFollowAllowed,
+  notebookOpeningFollowMode,
+  notebookReferenceButtonLabel,
+  notebookReferenceSession,
+  notebookReferenceTag,
+  notebookSchoolTodayIso,
+  notebookTodayUpdate,
+  resolveNotebookStartSession,
+  type NotebookFollowMode,
+  type NotebookOpeningSource,
+  type NotebookReferenceRelation,
+  type NotebookReferenceSession,
+} from "./notebook-focus.ts";
+export {
   formatCourseSessionCardSubtitle,
   formatCourseSessionCardWeekLabel,
   itemsForCourseSession,

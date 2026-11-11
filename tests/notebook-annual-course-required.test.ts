@@ -113,7 +113,7 @@ test("page.tsx — openCourseInWeek est l’unique ouverture, openClassNotebook 
   assert.doesNotMatch(page, /openClassNotebook/);
   assert.doesNotMatch(page, /onOpenClass/);
   assert.doesNotMatch(mesCours, /onOpenClass/);
-  assert.match(page, /function openCourseInWeek\(course: TeacherCourseWorkspaceEntry & \{ weekSuffix\?: "A" \| "B" \| null \}\)/);
+  assert.match(page, /function openCourseInWeek\(\s*course: TeacherCourseWorkspaceEntry & \{ weekSuffix\?: "A" \| "B" \| null \},\s*source: NotebookOpeningSource = "ma-semaine",\s*\)/);
   assert.match(page, /resolveCourseOpeningWeek\(schoolWeeksMemo, selectedSchoolWeekNumber, course\.weekSuffix\)/);
   assert.match(page, /<MesCoursPanel[\s\S]*onOpenCourse=\{openCourseInWeek\}/);
   assert.match(page, /<MaSemainePanel[\s\S]*onOpenCourse=\{openCourseInWeek\}/);
