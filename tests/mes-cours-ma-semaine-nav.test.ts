@@ -180,7 +180,7 @@ function subjectFor(course: TeacherCourseWorkspaceEntry): string {
 }
 
 test("PR80 — version 2.44.1 sans nouvelle migration SQL", () => {
-  assert.equal(APP_VERSION, "2.62.7");
+  assert.equal(APP_VERSION, "2.62.8");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0037_security_notification_email.sql");
 });
 
@@ -596,7 +596,7 @@ test("Ma semaine — badge de branche sans signal, clic ouvre le carnet, publica
   assert.doesNotMatch(page, /weekSignals=\{maSemaineWeekSignals\}/);
   assert.doesNotMatch(page, /weekSignals=/);
   assert.doesNotMatch(workspaceIndex, /week-signals/);
-  assert.match(page, /function openCourseInWeek\(course: TeacherCourseWorkspaceEntry & \{ weekSuffix\?: "A" \| "B" \| null \}\)/);
+  assert.match(page, /function openCourseInWeek\(\s*course: TeacherCourseWorkspaceEntry & \{ weekSuffix\?: "A" \| "B" \| null \},\s*source: NotebookOpeningSource = "ma-semaine",\s*\)/);
   assert.match(page, /resolveCourseOpeningWeek\(schoolWeeksMemo, selectedSchoolWeekNumber, course\.weekSuffix\)/);
   assert.doesNotMatch(page, /function openCourseInWeek[\s\S]{0,500}setSelectedSchoolWeekNumber/);
   assert.doesNotMatch(page, /listComputedCourseSessions/);
