@@ -2,6 +2,20 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.9] — Statistiques anonymes de fréquentation des élèves
+
+### Ajouté
+
+- **Administration → Statistiques**, réservé aux administrateurs (même session et même MFA que les autres écrans sensibles), séparé de Sécurité.
+- Quatre indicateurs : consultations aujourd’hui, sur 7 jours, moyenne de la période, classes actives. Graphique en colonnes sur 7, 30 ou 90 jours, y compris les jours sans consultation. Comparaison avec la période précédente, avec un pourcentage seulement lorsqu’il a un sens. Filtre par classe, libellés repris du référentiel.
+- **Comptage** : à l’ouverture réelle de l’espace élève (session déjà ouverte comprise), une consultation par jour, par classe et par année, mémorisée dans le navigateur. Le serveur confirme l’écriture avant que le navigateur la considère enregistrée. L’aperçu enseignant n’est pas compté. L’agenda n’est pas bloqué si le compteur est indisponible.
+- Table SQLite `student_daily_visits` (date, année, classe, compteur). Incrément atomique. Aucune donnée individuelle. Conservation 24 mois, purge légère. Hors sauvegarde pédagogique : une restauration ne réécrit pas ces compteurs.
+- La page À propos mentionne cette mesure agrégée et ses limites.
+
+### Limites
+
+- Il s’agit de consultations quotidiennes estimées par navigateur, pas d’un nombre d’élèves. Deux appareils comptent deux fois ; un navigateur partagé compte une fois.
+
 ## [2.62.8] — Carnet : séance du jour ou prochaine séance mise en évidence
 
 ### Modifié

@@ -24,8 +24,8 @@ const DELEZE = {
 };
 
 test("version 2.41.0 — identité enseignant depuis la session, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.62.8");
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0037_security_notification_email.sql");
+  assert.equal(APP_VERSION, "2.62.9");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0038_student_daily_visits.sql");
   const page = await readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /authenticatedTeacherFromSession/);
   assert.match(page, /profileDiscInitials\(authenticatedTeacher\)/);

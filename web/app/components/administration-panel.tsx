@@ -20,6 +20,7 @@ import { SchoolYearAdminPanel } from "./school-year-admin-panel.tsx";
 import { YearTransitionPreparePanel } from "./year-transition-prepare-panel.tsx";
 import { TeacherAccountsPanel } from "./teacher-accounts-panel.tsx";
 import { AdminSecurityPanel } from "./admin-security-panel.tsx";
+import { StudentUsagePanel } from "./student-usage-panel.tsx";
 import { SecurityActivityPanel } from "./security-activity-panel.tsx";
 import { SecuritySmsPanel } from "./security-sms-panel.tsx";
 import { DestructiveConfirmDialog } from "./destructive-confirm-dialog.tsx";
@@ -50,6 +51,7 @@ type AdminTab =
   | "transition"
   | "backup"
   | "restore"
+  | "statistics"
   | "security";
 
 interface AdministrationPanelProps {
@@ -83,6 +85,7 @@ const TAB_LABELS: Record<AdminTab, string> = {
   transition: "Préparer l’année suivante",
   backup: "Sauvegarde des données",
   restore: "Restaurer une sauvegarde",
+  statistics: "Statistiques",
   security: "Sécurité",
 };
 
@@ -362,6 +365,7 @@ export function AdministrationPanel({
     && tab !== "schedules"
     && tab !== "backup"
     && tab !== "restore"
+    && tab !== "statistics"
     && tab !== "security"
     && tab !== "transition";
 
@@ -395,6 +399,7 @@ export function AdministrationPanel({
 
       {tab === "backup" ? <AdminBackupPanel mode="download" /> : null}
       {tab === "restore" ? <AdminBackupPanel mode="restore" /> : null}
+      {tab === "statistics" ? <StudentUsagePanel /> : null}
       {tab === "security" ? (
         <>
           <div className="admin-subtabs" role="tablist" aria-label="Sections sécurité">

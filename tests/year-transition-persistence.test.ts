@@ -240,13 +240,13 @@ async function sqliteWorld(): Promise<{ db: NodeSqliteDatabase; store: SqlYearTr
   return { db, store: new SqlYearTransitionPreviewStore(db) };
 }
 
-test("1 — APP_VERSION 2.62.8", () => {
-  assert.equal(APP_VERSION, "2.62.8");
+test("1 — APP_VERSION 2.62.9", () => {
+  assert.equal(APP_VERSION, "2.62.9");
 });
 
 test("2 — dernière migration listée après 0031 (PR3 ajoute 0032)", () => {
   assert.ok(SQL_MIGRATION_FILES.includes("0031_year_transition_preview.sql"));
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0037_security_notification_email.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0038_student_daily_visits.sql");
 });
 
 test("3 — migration crée les deux tables", async () => {
@@ -360,7 +360,7 @@ test("11 — création memory", async () => {
   const created = await persist(store, baseInput(), { id: "mem-1", now: "2027-01-01T00:00:00.000Z" });
   assert.equal(created.id, "mem-1");
   assert.equal(created.engineVersion, 5);
-  assert.equal(created.appVersion, "2.62.8");
+  assert.equal(created.appVersion, "2.62.9");
   assert.equal(created.entries.length, 1);
 });
 
@@ -761,7 +761,7 @@ test("29 — les tests PR1 restent dans year-transition-preview.test.ts", async 
   assert.ok(count >= 46, `expected at least 46 preview tests, got ${count}`);
 });
 
-test("30 — APP_VERSION 2.62.8 dans app-version.ts", async () => {
+test("30 — APP_VERSION 2.62.9 dans app-version.ts", async () => {
   const source = await readFile(join(ROOT, "src/lib/app-version.ts"), "utf8");
-  assert.match(source, /export const APP_VERSION = "2\.62\.8"/);
+  assert.match(source, /export const APP_VERSION = "2\.62\.9"/);
 });

@@ -1,3 +1,4 @@
+import { schoolCalendarDateIso } from "@campus/features/student-usage/index.ts";
 import { UNTRUSTED_ORIGIN_REASON, isTrustedWriteOrigin } from "@campus/lib/security/csrf.ts";
 import {
   getRequestSession,
@@ -30,6 +31,9 @@ export async function GET(request: Request) {
       label: session.label,
       classroomId: session.classroomId,
       classroomName: classroom?.name ?? "Classe",
+      schoolClassId: session.schoolClassId,
+      schoolYearId: session.schoolYearId,
+      usageDate: schoolCalendarDateIso(new Date()),
     },
   });
 }

@@ -72,6 +72,9 @@ import type { SecurityNotificationStore } from "../../features/security-notifica
 import { getMemorySecurityNotificationStore } from "./memory-security-notification-store.ts";
 import { SqlSecurityNotificationStore } from "./sql/sql-security-notification-store.ts";
 import { getMemoryStudentAccessStore } from "./memory-student-access-store.ts";
+import { getMemoryStudentUsageStore } from "./memory-student-usage-store.ts";
+import { SqlStudentUsageStore } from "./sql/sql-student-usage-store.ts";
+import type { StudentUsageStore } from "../../features/student-usage/types.ts";
 import { SqlStudentAccessStore } from "./sql/sql-student-access-store.ts";
 import { setActiveSchoolWeekEntries } from "../../features/calendar/active-calendar.ts";
 
@@ -438,6 +441,13 @@ export async function getSecurityEventStore(): Promise<SecurityEventStore> {
   const resolved = await resolveAgendaStore();
   if (resolved.sqlDb) return new SqlSecurityEventStore(resolved.sqlDb);
   return getMemorySecurityEventStore();
+}
+
+/** Fréquentation élève agrégée : hors snapshot métier, jamais touchée par backup/restore. */
+export async function getStudentUsageStore(): Promise<StudentUsageStore> {
+  const resolved = await resolveAgendaStore();
+  if (resolved.sqlDb) return new SqlStudentUsageStore(resolved.sqlDb);
+  return getMemoryStudentUsageStore();
 }
 
 /** Cooldown et plafonds des alertes SMS : persistants, hors snapshot métier. */
