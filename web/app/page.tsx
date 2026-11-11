@@ -140,6 +140,7 @@ import { MaSemainePanel } from "./components/ma-semaine-panel.tsx";
 import { MesCoursPanel } from "./components/mes-cours-panel.tsx";
 import { ControlPlanningPanel } from "./components/control-planning-panel.tsx";
 import { StudentDashboard, type StudentDashboardTab } from "./components/student-dashboard.tsx";
+import { StudentUsageRecorder } from "./components/student-usage-recorder.tsx";
 import type { StudentHomeworkDoneControl } from "./components/student-homework-panel.tsx";
 import { startInstallPromptCapture } from "./components/student-install-prompt.tsx";
 
@@ -1934,6 +1935,7 @@ export default function Home() {
   if (isStudentView && studentSession) {
     return (
       <>
+        {studentEntry === "code" ? <StudentUsageRecorder /> : null}
         <StudentDashboard
           appVersion={APP_VERSION}
           classroomName={selectedClassroom?.name ?? studentClassroomName}

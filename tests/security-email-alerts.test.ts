@@ -164,7 +164,7 @@ async function sqlStore(path = ":memory:") {
 }
 
 test("migration 0037 — canal EMAIL, hors sauvegarde, sans adresse ni corps", async () => {
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0037_security_notification_email.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0038_student_daily_visits.sql");
   const sql = await readFile(new URL("../migrations/0037_security_notification_email.sql", import.meta.url), "utf8");
   assert.match(sql, /channel IN \('SMS', 'EMAIL'\)/);
   const schema = sql.replace(/--.*$/gm, "");

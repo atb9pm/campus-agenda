@@ -98,6 +98,15 @@ export default function AboutPage() {
             </p>
           </section>
 
+          <section aria-labelledby="about-audience">
+            <h2 id="about-audience">Fréquentation</h2>
+            <p>
+              Les consultations de l’espace élève sont comptées de façon agrégée, par classe et par jour, pour
+              mesurer l’usage général de la plateforme. Cette mesure ne permet pas d’identifier un élève, ni de
+              connaître le nombre exact de personnes différentes. Aucun outil d’analyse externe n’est utilisé.
+            </p>
+          </section>
+
           <footer className="about-actions">
             <Link className="about-primary" href="/">Accéder à Campus Agenda</Link>
           </footer>

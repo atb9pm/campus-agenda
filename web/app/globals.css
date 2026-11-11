@@ -3270,6 +3270,19 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .security-status.is-normal { background: #eaf7ef; color: #1c5b34; }
 .security-status.is-warning { background: #fff6e8; color: #6a4b12; }
 .security-status.is-critical { background: #fdecec; color: #8a1f1f; }
+.student-usage-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 0 0 14px; }
+.student-usage-toolbar .security-filters { display: flex; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 6px; }
+.student-usage-class-filter { display: grid; gap: 4px; color: #8793a9; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.student-usage-class-filter select { min-width: 180px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); background: #fff; font-size: 12px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+.student-usage-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 0 18px; padding: 0; list-style: none; }
+.student-usage-cards li { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #f7f8fb; }
+.student-usage-cards li span { color: #5c6b82; font-size: 11px; font-weight: 700; }
+.student-usage-cards li strong { color: var(--navy); font-size: 22px; font-variant-numeric: tabular-nums; }
+.student-usage-chart-section h4, .student-usage h4 { margin: 0 0 8px; color: var(--navy); font-size: 14px; }
+.student-usage-chart { display: block; width: 100%; height: auto; }
+.student-usage-comparison { margin: 8px 0 18px; color: #516582; font-size: 12px; line-height: 1.45; }
+.student-usage-table-wrap { overflow-x: auto; }
+.student-usage-table { min-width: 280px; }
 .security-cards { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
 .security-cards li { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #f7f8fb; }
 .security-cards li span { color: #5c6b82; font-size: 11px; font-weight: 700; }
@@ -3304,6 +3317,8 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 @media (max-width: 720px) {
   .admin-workspace .admin-subtabs { margin-right: 16px; margin-left: 16px; }
   .security-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .student-usage-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .student-usage-class-filter, .student-usage-class-filter select { width: 100%; }
   .security-events-table thead { display: none; }
   .security-events-table, .security-events-table tbody, .security-events-table tr, .security-events-table td { display: block; width: 100%; }
   .security-events-table tr { margin-bottom: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
