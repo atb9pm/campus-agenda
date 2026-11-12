@@ -52,4 +52,9 @@ test("aperçu branche — menu en haut, logo en bas, bandeau, agenda élève inc
   assert.match(controls, /function ControlRow/);
   assert.match(css, /\.branch-preview \{[\s\S]*--course-day-size: 46px/);
   assert.match(css, /grid-template-columns: minmax\(0, 1\.62fr\) minmax\(0, 1fr\)/);
+  assert.match(dashboard, /professionColorStyle\(resolveProfessionColorTheme/);
+  assert.match(css, /\.branch-preview-pill \{[\s\S]*background: transparent/);
+  assert.match(css, /\.branch-preview \.student-view-tabs button\.active[\s\S]*#5b8def/);
+  assert.match(css, /box-shadow: 0 8px 28px var\(--profession-halo/);
+  assert.match(css, /\.student-view-tabs button\.active,\s*\.student-view-tabs button\[aria-selected="true"\] \{\s*background: var\(--navy\)/);
 });
