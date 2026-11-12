@@ -3356,3 +3356,231 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   .security-sms-facts > div { grid-template-columns: 1fr; gap: 2px; }
   .security-sms-setup-vars > div { grid-template-columns: 1fr; gap: 2px; }
 }
+
+/* Aperçu branche enseignant — présentation validée, sans changer l’agenda élève. */
+.branch-preview {
+  --course-day-size: 46px;
+  --branch-dock: 64px;
+  padding-bottom: calc(var(--branch-dock) + env(safe-area-inset-bottom, 0px));
+}
+.branch-preview .student-course-day-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  padding: 26px 36px 12px;
+}
+.branch-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px 28px;
+}
+.branch-preview-identity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+.branch-preview-head h1 {
+  margin: 0;
+  color: var(--navy);
+  font-size: var(--course-day-size);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+.branch-preview-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.branch-preview-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #c5cedb;
+}
+.branch-preview-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+}
+.branch-preview-pill.is-class { background: #f3f4f6; color: #66758c; }
+.branch-preview-pill.is-branch { background: #fff; border: 1px solid #e6ebf2; color: #24324d; }
+.branch-preview-pill.is-week { background: #e8f0fb; color: #2f6fe0; }
+.branch-preview-menu {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+.branch-preview .student-view-tabs { margin: 0; }
+.branch-preview .student-view-tabs button {
+  flex: 0 0 auto;
+  min-width: 104px;
+  min-height: 42px;
+  border-radius: 999px;
+}
+.branch-preview-quit {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 4px 0 8px;
+  border: 0;
+  background: transparent;
+  color: #24324d;
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.branch-preview-quit span { color: #66758c; font-size: 18px; line-height: 1; }
+.branch-preview-quit:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.branch-preview-card {
+  overflow: hidden;
+  border: 1px solid #e4ebf5;
+  border-radius: 16px;
+  background: #fff;
+}
+.branch-preview-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 72px;
+  padding: 14px 20px;
+  background: #5e83c2;
+  color: #fff;
+}
+.branch-preview-banner h2 {
+  margin: 0;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.branch-preview-banner .student-zone-icon { color: #fff; }
+.branch-preview-banner-sep {
+  width: 1px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.7);
+}
+.branch-preview-banner-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: #fff;
+  color: #24324d;
+  font-size: 15px;
+  font-weight: 600;
+}
+.branch-preview-body { padding: 20px 26px 24px; }
+.branch-preview-stack { display: flex; flex-direction: column; gap: 16px; }
+.branch-preview .student-control-row { padding: 0; border-bottom: 0; }
+.branch-preview .student-control-row + .student-control-row {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #e4ebf5;
+}
+.branch-preview .student-control-main {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.branch-preview .student-control-date {
+  justify-items: center;
+  min-width: 4.2ch;
+  color: #ad0000;
+  line-height: 1;
+}
+.branch-preview .student-control-card-body {
+  min-width: 0;
+  padding-left: 18px;
+  border-left: 1px solid #d7deea;
+}
+.branch-preview .student-control-row .student-control-day,
+.branch-preview .student-control-row .student-control-month,
+.branch-preview .student-control-row .student-control-card-body > strong {
+  color: #ad0000;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.branch-preview .student-control-day,
+.branch-preview .student-control-month,
+.branch-preview .student-control-card-body > strong,
+.branch-preview .student-branch-item,
+.branch-preview .student-branch-item .rich-doc-view,
+.branch-preview .student-branch-item .rich-doc-view p,
+.branch-preview .student-branch-item .rich-doc-view li,
+.branch-preview .student-pub-legacy > strong,
+.branch-preview .student-pub-legacy p {
+  font-size: var(--course-day-size);
+  line-height: 1.25;
+}
+.branch-preview .student-branch-item { color: #1c2a44; }
+.branch-preview .student-control-month { margin-top: 2px; text-transform: none; letter-spacing: -0.03em; }
+.branch-preview .student-control-remark {
+  display: block;
+  margin-top: 6px;
+  color: #66748f;
+  font-size: var(--course-day-size);
+  font-weight: 400;
+  line-height: 1.2;
+}
+.branch-preview-dock {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  min-height: var(--branch-dock);
+  padding: 8px 36px calc(8px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid #e7edf5;
+  background: rgba(255, 255, 255, 0.98);
+}
+.branch-preview-brand { display: flex; align-items: center; gap: 12px; }
+.branch-preview .branch-preview-logo { width: auto; height: 48px; }
+.branch-preview-brand span { color: #8b97ab; font-size: 14px; font-weight: 500; }
+@media (max-width: 1080px) {
+  .branch-preview-head { flex-wrap: wrap; }
+  .branch-preview-identity { flex-wrap: wrap; }
+  .branch-preview-menu { margin-left: auto; }
+}
+@media (max-width: 760px) {
+  .branch-preview {
+    --course-day-size: 32px;
+    --branch-dock: 62px;
+  }
+  .branch-preview .student-course-day-main { padding: 16px 14px 8px; }
+  .branch-preview-head {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .branch-preview-identity { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .branch-preview-menu { margin-left: 0; width: 100%; flex-wrap: wrap; row-gap: 8px; }
+  .branch-preview .student-view-tabs { flex: 1 1 100%; }
+  .branch-preview .student-view-tabs button { flex: 1 1 0; min-width: 0; }
+  .branch-preview-quit { margin-left: auto; height: 40px; font-size: 14px; }
+  .branch-preview-banner { gap: 10px; min-height: 56px; padding: 10px 12px; flex-wrap: wrap; }
+  .branch-preview-banner h2 { font-size: 18px; }
+  .branch-preview-banner-chip { min-height: 28px; padding: 0 12px; font-size: 13px; }
+  .branch-preview-body { padding: 16px 14px 18px; }
+  .branch-preview-dock { padding: 8px 14px calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .branch-preview .branch-preview-logo { height: 34px; }
+  .branch-preview-brand span { font-size: 12px; }
+  .branch-preview-pill { min-height: 30px; padding: 0 12px; font-size: 13px; }
+}

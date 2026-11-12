@@ -79,7 +79,7 @@ function yearsStub(): SchoolYearStore {
 }
 
 test("version 2.40.0 — attributions : enseignants compatibles uniquement, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.62.9");
+  assert.equal(APP_VERSION, "2.62.10");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0038_student_daily_visits.sql");
   const [panel, css, helper] = await Promise.all([
     readFile(new URL("../web/app/components/annual-courses-admin-panel.tsx", import.meta.url), "utf8"),

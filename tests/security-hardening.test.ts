@@ -32,7 +32,7 @@ test("déconnexion — DELETE /api/auth/session applique Origin / Sec-Fetch-Site
 });
 
 test("version 2.61.8 — durcissement MFA, sessions, restore, en-têtes, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.62.9");
+  assert.equal(APP_VERSION, "2.62.10");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0038_student_daily_visits.sql");
 
   const api = await readFile(new URL("../web/lib/server/api.ts", import.meta.url), "utf8");

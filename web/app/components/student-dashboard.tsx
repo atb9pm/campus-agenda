@@ -18,6 +18,19 @@ const TABS: { id: Exclude<StudentDashboardTab, "historique">; label: string }[] 
   { id: "controles", label: "Contrôles" },
 ];
 
+function shortWeekBadge(slot: CourseDaySlot): string {
+  const padded = String(slot.schoolWeekNumber).padStart(2, "0");
+  if (slot.weekKind === "A" || slot.weekKind === "B") return `Sem ${padded}-${slot.weekKind}`;
+  return `Sem ${padded}`;
+}
+
+function classBadgeName(classroomName: string, branchLabel: string): string {
+  const branch = branchLabel.trim();
+  const suffix = ` · ${branch}`;
+  if (branch && classroomName.endsWith(suffix)) return classroomName.slice(0, -suffix.length);
+  return classroomName;
+}
+
 export function StudentDashboard({
   appVersion,
   classroomName,
@@ -33,6 +46,8 @@ export function StudentDashboard({
   planning,
   today,
   signOutLabel,
+  branchPreview = false,
+  branchLabel = "",
   onToggleHistory,
   onSelectCourseDay,
   onBackToCurrent,
@@ -56,6 +71,9 @@ export function StudentDashboard({
   planning: ControlPlanningWeek[];
   today: Date;
   signOutLabel: string;
+  /** Présentation validée de l’aperçu branche enseignant. */
+  branchPreview?: boolean;
+  branchLabel?: string;
   onToggleHistory: () => void;
   onSelectCourseDay: (key: string) => void;
   onBackToCurrent: () => void;
@@ -64,14 +82,64 @@ export function StudentDashboard({
 }) {
   const contentTab = tab === "historique" ? "tout" : tab;
   const showControlsPreview = contentTab === "tout";
+  const presentation = branchPreview ? "banner" : "default";
+  const classBadge = classBadgeName(classroomName, branchLabel);
 
   return (
     <div
-      className="mechanical-app student-app student-course-day-app has-mobile-tabs"
+      className={`mechanical-app student-app student-course-day-app${branchPreview ? " branch-preview" : " has-mobile-tabs"}`}
       data-student-tab={tab}
       data-student-dashboard=""
+      data-branch-preview={branchPreview ? "" : undefined}
     >
       <main className="student-course-day-main" id="main-content">
+        {branchPreview ? (
+          <header className="branch-preview-head">
+            <div className="branch-preview-identity">
+              <h1 id="student-course-day-title">
+                {displayCourseDay ? formatCourseDayHeading(displayCourseDay) : "Agenda élève"}
+              </h1>
+              <div className="branch-preview-meta" aria-label="Classe, branche et semaine">
+                {classBadge ? <span className="branch-preview-pill is-class">{classBadge}</span> : null}
+                {branchLabel.trim() ? (
+                  <>
+                    <span className="branch-preview-dot" aria-hidden="true" />
+                    <span className="branch-preview-pill is-branch">{branchLabel.trim()}</span>
+                  </>
+                ) : null}
+                {displayCourseDay ? (
+                  <>
+                    <span className="branch-preview-dot" aria-hidden="true" />
+                    <span className="branch-preview-pill is-week">{shortWeekBadge(displayCourseDay)}</span>
+                  </>
+                ) : null}
+              </div>
+            </div>
+            <div className="branch-preview-menu">
+              <div className="student-view-tabs" aria-label="Vue élève">
+                {TABS.map((entry) => {
+                  const selected = contentTab === entry.id;
+                  return (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      aria-pressed={selected}
+                      className={selected ? "active" : ""}
+                      onClick={() => onTabChange(entry.id)}
+                    >
+                      {entry.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <button className="branch-preview-quit" type="button" onClick={onSignOut}>
+                <span aria-hidden="true">×</span>
+                {signOutLabel}
+              </button>
+            </div>
+          </header>
+        ) : null}
+        {branchPreview ? null : (
         <header className="student-course-day-header">
           <div className="student-course-day-brand">
             <BrandLogo />
@@ -111,7 +179,9 @@ export function StudentDashboard({
             </button>
           </div>
         </header>
+        )}
 
+        {branchPreview ? null : (
         <section className="student-course-day-card student-dashboard-hero" aria-labelledby="student-course-day-title">
           <div className="student-dashboard-hero-copy">
             <p className="eyebrow">{classroomName}</p>
@@ -145,12 +215,35 @@ export function StudentDashboard({
             })}
           </div>
         </section>
+        )}
 
         {offerInstall ? <StudentInstallPrompt /> : null}
 
         {displayCourseDay ? (
           <>
-            {tab !== "historique" && contentTab === "tout" ? (
+            {branchPreview && (contentTab === "tout" || tab === "controles") ? (
+              <StudentControlsPanel
+                mode={tab === "controles" ? "planning" : "preview"}
+                futureTests={futureTests}
+                planning={planning}
+                today={today}
+                presentation={presentation}
+                branchLabel={branchLabel}
+              />
+            ) : null}
+
+            {branchPreview && (contentTab === "tout" || tab === "devoirs") ? (
+              <div id={tab === "devoirs" ? "student-panel-devoirs" : "student-panel-tout"}>
+                <StudentHomeworkPanel
+                  sections={sections}
+                  mode={tab === "devoirs" ? "homework" : "todo"}
+                  doneControl={doneControl}
+                  presentation={presentation}
+                />
+              </div>
+            ) : null}
+
+            {!branchPreview && tab !== "historique" && contentTab === "tout" ? (
               <div
                 className="student-dashboard-grid"
                 data-layout="tout"
@@ -168,13 +261,13 @@ export function StudentDashboard({
               </div>
             ) : null}
 
-            {tab === "devoirs" ? (
+            {!branchPreview && tab === "devoirs" ? (
               <div id="student-panel-devoirs">
                 <StudentHomeworkPanel sections={sections} mode="homework" doneControl={doneControl} />
               </div>
             ) : null}
 
-            {tab === "controles" ? (
+            {!branchPreview && tab === "controles" ? (
               <div id="student-panel-controles">
                 <StudentControlsPanel
                   mode="planning"
@@ -192,6 +285,7 @@ export function StudentDashboard({
           </div>
         )}
 
+        {branchPreview ? null : (
         <section
           className="student-history-panel student-mobile-panel"
           data-panel="historique"
@@ -218,10 +312,23 @@ export function StudentDashboard({
             <p className="student-history-empty">Aucun cours précédent disponible.</p>
           )}
         </section>
+        )}
 
+        {branchPreview ? null : (
         <p className="prototype-label">CONSULTATION ÉLÈVE · CAMPUS AGENDA {appVersion}</p>
+        )}
       </main>
 
+      {branchPreview ? (
+        <footer className="branch-preview-dock">
+          <div className="branch-preview-brand">
+            <BrandLogo className="branch-preview-logo" />
+            <span>Aperçu branche – Élève</span>
+          </div>
+        </footer>
+      ) : null}
+
+      {branchPreview ? null : (
       <nav className="mobile-tab-bar" aria-label="Navigation élève">
         <button
           type="button"
@@ -236,6 +343,7 @@ export function StudentDashboard({
           {signOutLabel === "Se déconnecter" ? "Sortir" : "Quitter"}
         </button>
       </nav>
+      )}
     </div>
   );
 }

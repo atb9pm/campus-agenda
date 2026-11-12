@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from "react";
 import type { PrototypeAgendaItem } from "@campus/features/agenda";
 import { formatCourseDayHeading } from "@campus/features/calendar";
 import {
@@ -6,6 +7,7 @@ import {
 } from "@campus/features/evaluations";
 import {
   controlAgendaDateParts,
+  fitRemarkFontSize,
   type ControlPlanningWeek,
 } from "@campus/features/student";
 import { decodeRichDetail, isPlaceholderDetail } from "@campus/features/class-notebook";
@@ -19,9 +21,11 @@ export function studentUpcomingPlainDetail(item: PrototypeAgendaItem): string | 
 function ControlRow({
   entry,
   today,
+  showChip,
 }: {
   entry: UpcomingTestEntry;
   today: Date;
+  showChip: boolean;
 }) {
   const daysUntil = calendarDaysBetween(today, entry.slot.date);
   const parts = controlAgendaDateParts(entry.slot.date);
@@ -35,7 +39,7 @@ function ControlRow({
       data-next-control=""
       data-control-id={entry.item.id}
     >
-      {entry.subjectName ? (
+      {showChip && entry.subjectName ? (
         <p className="student-course-chip student-upcoming-tests-branch">{entry.subjectName}</p>
       ) : null}
       <div className="student-control-main">
@@ -53,11 +57,51 @@ function ControlRow({
         </time>
         <div className="student-control-card-body">
           <strong>{entry.item.title}</strong>
-          {detail ? <span className="student-next-control-detail student-upcoming-tests-detail">{detail}</span> : null}
+          {detail ? (
+            <span className="student-next-control-detail student-upcoming-tests-detail student-control-remark">
+              {detail}
+            </span>
+          ) : null}
         </div>
       </div>
     </article>
   );
+}
+
+function sharedSubjectName(entries: UpcomingTestEntry[]): string {
+  const names = [...new Set(entries.map((entry) => entry.subjectName.trim()).filter(Boolean))];
+  return names.length === 1 ? names[0] : "";
+}
+
+function useFitControlRemarks(active: boolean, signature: string) {
+  const rootRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    if (!active) return;
+    const root = rootRef.current;
+    if (!root) return;
+    const fit = () => {
+      const max = parseFloat(getComputedStyle(root).getPropertyValue("--course-day-size")) || 46;
+      root.querySelectorAll<HTMLElement>(".student-control-remark").forEach((el) => {
+        if (el.clientWidth < 40) return;
+        const chosen = fitRemarkFontSize(max, (size, singleLine) => {
+          el.style.fontSize = `${size}px`;
+          el.style.lineHeight = "1.2";
+          el.style.whiteSpace = singleLine ? "nowrap" : "normal";
+          if (singleLine) return el.scrollWidth <= el.clientWidth + 1;
+          return el.scrollHeight <= size * 1.2 * 2 + 1;
+        });
+        el.style.fontSize = `${chosen.size}px`;
+        el.style.whiteSpace = chosen.singleLine ? "nowrap" : "normal";
+      });
+    };
+    fit();
+    const observer = new ResizeObserver(() => fit());
+    observer.observe(root);
+    const fonts = document.fonts;
+    if (fonts) void fonts.ready.then(fit);
+    return () => observer.disconnect();
+  }, [active, signature]);
+  return rootRef;
 }
 
 export function StudentControlsPanel({
@@ -65,16 +109,71 @@ export function StudentControlsPanel({
   futureTests,
   planning,
   today,
+  presentation = "default",
+  branchLabel = "",
 }: {
   mode: "preview" | "planning";
   futureTests: UpcomingTestEntry[];
   planning: ControlPlanningWeek[];
   today: Date;
   onSeeAll?: () => void;
+  /** Aperçu branche : bandeau bleu et remarque à taille variable. */
+  presentation?: "default" | "banner";
+  branchLabel?: string;
 }) {
   const title = mode === "preview" ? "Contrôles à venir" : "Contrôles";
   const headingId = mode === "preview" ? "student-next-controls-title" : "student-upcoming-tests-title";
+  const banner = presentation === "banner";
+  const bannerBadge = branchLabel.trim() || sharedSubjectName(futureTests);
+  const rootRef = useFitControlRemarks(banner, `${futureTests.map((entry) => entry.item.id).join(",")}:${bannerBadge}`);
   void planning;
+
+  const rows = futureTests.length ? (
+    <div className="student-control-preview-list">
+      {futureTests.map((entry) => (
+        <ControlRow
+          key={entry.item.id}
+          entry={entry}
+          today={today}
+          showChip={!banner || !bannerBadge}
+        />
+      ))}
+    </div>
+  ) : (
+    <p className="student-upcoming-tests-empty">Aucun contrôle planifié.</p>
+  );
+
+  if (banner) {
+    return (
+      <section
+        ref={rootRef}
+        className="branch-preview-card"
+        data-panel={mode === "preview" ? "prochains-controles" : "controles"}
+        aria-labelledby={headingId}
+      >
+        <div className="branch-preview-banner">
+          <span className="student-zone-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M7 3.5v3M17 3.5v3M4.5 8h15M6 5.5h12A1.5 1.5 0 0 1 19.5 7v12A1.5 1.5 0 0 1 18 20.5H6A1.5 1.5 0 0 1 4.5 19V7A1.5 1.5 0 0 1 6 5.5Z"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
+          <h2 id={headingId}>{title}</h2>
+          {bannerBadge ? (
+            <>
+              <span className="branch-preview-banner-sep" aria-hidden="true" />
+              <span className="branch-preview-banner-chip">{bannerBadge}</span>
+            </>
+          ) : null}
+        </div>
+        <div className="branch-preview-body">{rows}</div>
+      </section>
+    );
+  }
 
   return (
     <section
@@ -100,7 +199,7 @@ export function StudentControlsPanel({
       {futureTests.length ? (
         <div className="student-control-preview-list">
           {futureTests.map((entry) => (
-            <ControlRow key={entry.item.id} entry={entry} today={today} />
+            <ControlRow key={entry.item.id} entry={entry} today={today} showChip />
           ))}
         </div>
       ) : (

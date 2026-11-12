@@ -81,6 +81,11 @@ export {
   type StudentHomeworkDoneStore,
 } from "./homework-done.ts";
 export {
+  REMARK_FONT_MIN,
+  REMARK_SINGLE_LINE_FLOOR,
+  fitRemarkFontSize,
+} from "./fit-remark-size.ts";
+export {
   STUDENT_AGENDA_REFRESH_INTERVAL_MS,
   STUDENT_AGENDA_REFRESH_MIN_GAP_MS,
   msUntilNextLocalMidnight,
