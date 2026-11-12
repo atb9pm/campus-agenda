@@ -2,6 +2,14 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.11] — Aperçu branche : halo de Ma semaine
+
+### Modifié
+
+- **Aperçu branche** : les blocs reprennent le fond clair, le liseré et le halo coloré des cartes de Ma semaine, selon la profession de la classe. La pastille de branche suit le badge de Ma semaine.
+- Les onglets inactifs et « Quitter l’aperçu » utilisent ce même bleu de profession. L’onglet actif est un bleu plus clair. Classe, branche et semaine ont le même fond transparent.
+- L’agenda élève ouvert par code reste inchangé.
+
 ## [2.62.10] — Aperçu branche : plus de place pour le cours
 
 ### Modifié

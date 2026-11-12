@@ -1,6 +1,6 @@
 {
   "name": "campus-agenda-web",
-  "version": "2.62.10",
+  "version": "2.62.11",
   "private": true,
   "engines": {
     "node": ">=22.13.0"

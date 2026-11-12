@@ -1,10 +1,12 @@
 import type { CourseDaySlot } from "@campus/features/calendar";
 import { courseDayKey, formatCourseDayHeading, formatCourseDayMenuLabel, formatSchoolWeekLabel } from "@campus/features/calendar";
 import type { UpcomingTestEntry } from "@campus/features/evaluations";
+import { resolveProfessionColorTheme } from "@campus/features/school-catalog";
 import type {
   ControlPlanningWeek,
   StudentCourseDaySection,
 } from "@campus/features/student";
+import { professionColorStyle } from "../../lib/profession-color-style.ts";
 import { BrandLogo } from "./brand-logo.tsx";
 import { StudentControlsPanel } from "./student-controls-panel.tsx";
 import { StudentHomeworkPanel, type StudentHomeworkDoneControl } from "./student-homework-panel.tsx";
@@ -84,10 +86,14 @@ export function StudentDashboard({
   const showControlsPreview = contentTab === "tout";
   const presentation = branchPreview ? "banner" : "default";
   const classBadge = classBadgeName(classroomName, branchLabel);
+  const professionStyle = branchPreview
+    ? professionColorStyle(resolveProfessionColorTheme(null, classBadge || classroomName))
+    : undefined;
 
   return (
     <div
       className={`mechanical-app student-app student-course-day-app${branchPreview ? " branch-preview" : " has-mobile-tabs"}`}
+      style={professionStyle}
       data-student-tab={tab}
       data-student-dashboard=""
       data-branch-preview={branchPreview ? "" : undefined}
