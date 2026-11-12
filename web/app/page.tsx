@@ -1951,6 +1951,10 @@ export default function Home() {
           futureTests={studentFutureTests}
           planning={studentControlPlanning}
           today={studentToday}
+          branchPreview={studentEntry === "teacher-branch-preview"}
+          branchLabel={
+            studentEntry === "teacher-branch-preview" ? openNotebookCourse?.branchLabel ?? "" : ""
+          }
           signOutLabel={
             studentEntry === "teacher-branch-preview"
               ? "Quitter l’aperçu"

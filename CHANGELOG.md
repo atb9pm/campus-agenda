@@ -2,6 +2,14 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.10] — Aperçu branche : plus de place pour le cours
+
+### Modifié
+
+- **Aperçu branche** (Carnet) : la date du cours, la classe, la branche et la semaine sont sur une même ligne. Les onglets Tout, Devoirs et Contrôles, ainsi que « Quitter l’aperçu », sont en haut à droite. Le logo et la mention « Aperçu branche – Élève » passent en bas.
+- Les blocs « Contrôles à venir » et « Cours du jour » occupent toute la largeur. Le bandeau bleu contient le titre et la pastille de branche. Le contenu du cours et le titre du contrôle ont la même taille que le jour. La remarque d’un contrôle rétrécit pour tenir dans la largeur de la fenêtre, sans dépasser cette taille.
+- L’agenda élève ouvert par code, l’aperçu « Agenda élève » et « Cours précédents » restent inchangés. Aucune donnée, permission ni règle de publication n’est modifiée.
+
 ## [2.62.9] — Statistiques anonymes de fréquentation des élèves
 
 ### Ajouté

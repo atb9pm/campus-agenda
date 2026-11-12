@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { PrototypeAgendaItem } from "@campus/features/agenda";
 import { calendarDateKey } from "@campus/features/evaluations";
 import {
@@ -74,21 +75,25 @@ function BranchBlock({
   subject,
   publications,
   doneControl,
+  hideChip = false,
 }: {
   subject: Subject;
   publications: PrototypeAgendaItem[];
   doneControl?: StudentHomeworkDoneControl;
+  /** Aperçu branche : la branche est déjà dans le bandeau bleu. */
+  hideChip?: boolean;
 }) {
   const done = Boolean(doneControl && publications.length && publications.every(doneControl.isDone));
+  const showName = !hideChip && Boolean(subject.name);
   return (
     <section
       className={`student-branch-block${done ? " is-done" : ""}`}
       aria-label={subject.name || undefined}
       data-annual-course={subject.annualCourseId ?? subject.id}
     >
-      {subject.name || doneControl ? (
+      {showName || doneControl ? (
         <div className="student-branch-head">
-          {subject.name ? <p className="student-course-chip">{subject.name}</p> : <span />}
+          {showName ? <p className="student-course-chip">{subject.name}</p> : <span />}
           {doneControl ? (
             <DoneToggle done={done} onToggle={() => doneControl.setDone(publications, !done)} />
           ) : null}
@@ -109,20 +114,96 @@ function BranchBlock({
   );
 }
 
+function PreviewCard({
+  title,
+  titleId,
+  badge,
+  children,
+}: {
+  title: string;
+  titleId: string;
+  badge: string;
+  children: ReactNode;
+}) {
+  return (
+    <article className="branch-preview-card" aria-labelledby={titleId}>
+      <div className="branch-preview-banner">
+        <CourseDayIcon />
+        <h2 id={titleId}>{title}</h2>
+        {badge ? (
+          <>
+            <span className="branch-preview-banner-sep" aria-hidden="true" />
+            <span className="branch-preview-banner-chip">{badge}</span>
+          </>
+        ) : null}
+      </div>
+      <div className="branch-preview-body">{children}</div>
+    </article>
+  );
+}
+
 export function StudentHomeworkPanel({
   sections,
   mode,
   doneControl,
+  presentation = "default",
 }: {
   sections: StudentCourseDaySection[];
   mode: "todo" | "homework";
   doneControl?: StudentHomeworkDoneControl;
+  /** Aperçu branche : bandeau bleu, pastille de branche dans le bandeau. */
+  presentation?: "default" | "banner";
 }) {
   const visible = mode === "homework" ? studentHomeworkOnlySections(sections) : studentTodoSections(sections);
   const today = visible.filter((section) => section.publications.length > 0);
   const nextSessions = groupNextSessionsByDate(visible);
   const title = mode === "homework" ? "Devoirs" : "Cours du jour";
   const empty = "Aucune publication pour aujourd’hui.";
+
+  if (presentation === "banner") {
+    return (
+      <div className="branch-preview-stack" data-panel={mode === "homework" ? "devoirs" : "todo"}>
+        {today.length ? (
+          today.map((section) => (
+            <PreviewCard
+              key={section.subject.id}
+              title={title}
+              titleId={`student-${mode}-title-${section.subject.id}`}
+              badge={section.subject.name}
+            >
+              <BranchBlock
+                subject={section.subject}
+                publications={section.publications}
+                doneControl={doneControl}
+                hideChip
+              />
+            </PreviewCard>
+          ))
+        ) : (
+          <PreviewCard title={title} titleId={`student-${mode}-title`} badge="">
+            <p className="student-panel-empty">{empty}</p>
+          </PreviewCard>
+        )}
+        {nextSessions.map((group) =>
+          group.branches.map((branch) => (
+            <PreviewCard
+              key={`${group.dateKey}-${branch.subject.id}`}
+              title={formatNextSessionLabel(group.slot.date)}
+              titleId={`student-next-${group.dateKey}-${branch.subject.id}`}
+              badge={branch.subject.name}
+            >
+              <BranchBlock
+                subject={branch.subject}
+                publications={branch.publications}
+                doneControl={doneControl}
+                hideChip
+              />
+            </PreviewCard>
+          )),
+        )}
+      </div>
+    );
+  }
 
   return (
     <section
