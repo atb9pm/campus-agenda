@@ -316,8 +316,8 @@ async function sourceDump(agenda: MemoryAgendaStore) {
   return (await agenda.exportAllItems()).filter((item) => item.schoolYearId === SOURCE_YEAR);
 }
 
-test("1 — APP_VERSION 2.62.11", () => {
-  assert.equal(APP_VERSION, "2.62.11");
+test("1 — APP_VERSION 2.62.12", () => {
+  assert.equal(APP_VERSION, "2.62.12");
 });
 
 test("2 — dernière migration 0032", () => {
@@ -438,7 +438,7 @@ test("11-45 — PROJECTABLE crée 1 item N+1, N immuable, champs cibles", async 
   const apply = await world.applyStore.getByTransitionId("transition-1");
   assert.equal(apply?.fingerprint, result.fingerprint);
   assert.equal(apply?.engineVersion, YEAR_TRANSITION_PREVIEW_ENGINE_VERSION);
-  assert.equal(apply?.appVersion, "2.62.11");
+  assert.equal(apply?.appVersion, "2.62.12");
   const ledger = await world.applyStore.listEntries("transition-1");
   assert.equal(ledger[0]?.applyResult, "CREATED");
   assert.equal(ledger[0]?.previewReason, "PROJECTABLE");
@@ -1365,7 +1365,7 @@ test("backup/restore roundtrip APPLY memory", async () => {
   assert.equal(validated.ok, true, validated.ok ? "" : validated.reason);
   const clone = new MemoryYearTransitionApplyStore(new MemoryAgendaStore([]));
   clone.importBackupTables(applyDump);
-  assert.equal((await clone.getByTransitionId("transition-1"))?.appVersion, "2.62.11");
+  assert.equal((await clone.getByTransitionId("transition-1"))?.appVersion, "2.62.12");
   assert.equal((await clone.listEntries("transition-1")).length, 1);
 });
 

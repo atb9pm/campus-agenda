@@ -85,7 +85,7 @@ function sampleDoc(): CampusRichDoc {
 }
 
 test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async () => {
-  assert.equal(APP_VERSION, "2.62.11");
+  assert.equal(APP_VERSION, "2.62.12");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0038_student_daily_visits.sql");
   const [panel, notesApi, studentPage, homeworkPanel] = await Promise.all([
     readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8"),

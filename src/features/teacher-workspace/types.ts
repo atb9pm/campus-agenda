@@ -61,9 +61,10 @@ export interface TeacherCourseWorkspaceEntry {
   /** Absent ou vide : aucun plan de cours officiel. */
   meetingDays?: TeacherCourseMeetingDay[];
   /**
-   * Créneaux d’horaire du cours (`CourseScheduleSlot`), jour et rythme seulement.
-   * Ignorés si `meetingDays` contient au moins un jour.
+   * Créneaux d’horaire du cours (`CourseScheduleSlot`).
+   * Ignorés pour le placement si `meetingDays` contient au moins un jour.
    * Un rythme A ou B reste affiché quelle que soit la semaine consultée.
+   * `periodStart` sert uniquement à classer les cartes du jour.
    */
   scheduleSlots?: TeacherCourseScheduleSlotView[];
   /**
@@ -73,10 +74,12 @@ export interface TeacherCourseWorkspaceEntry {
   classAttendanceDays?: TeacherCourseMeetingDay[];
 }
 
-/** Créneau réduit pour « Ma semaine » : pas de périodes, pas d’identifiant. */
+/** Créneau réduit pour « Ma semaine » : pas d’identifiant. `periodStart` ne sert qu’au tri. */
 export interface TeacherCourseScheduleSlotView {
   dayOfWeek: CourseWeekday;
   weekKind: CourseWeekKind;
+  /** Première période du créneau. Absente : la classe reste visible, après celles qui ont une période. */
+  periodStart?: number;
 }
 
 export interface TeacherCourseWorkspaceResult {

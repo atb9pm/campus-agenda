@@ -12,7 +12,7 @@ import { APP_VERSION } from "../src/lib/app-version.ts";
 import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 
 test("version 2.61.8 — halo et badge branche Ma semaine, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.62.11");
+  assert.equal(APP_VERSION, "2.62.12");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0038_student_daily_visits.sql");
   const [configPanel, maSemaine, css, professionsPanel] = await Promise.all([
     readFile(new URL("../web/app/components/configuration-panel.tsx", import.meta.url), "utf8"),
