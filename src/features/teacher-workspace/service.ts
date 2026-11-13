@@ -89,7 +89,11 @@ export async function listTeacherCourses(
   const slotsByCourse = new Map<string, TeacherCourseScheduleSlotView[]>();
   for (const slot of slots) {
     const list = slotsByCourse.get(slot.annualCourseId) ?? [];
-    list.push({ dayOfWeek: slot.dayOfWeek, weekKind: slot.weekKind });
+    list.push({
+      dayOfWeek: slot.dayOfWeek,
+      weekKind: slot.weekKind,
+      periodStart: slot.periodStart,
+    });
     slotsByCourse.set(slot.annualCourseId, list);
   }
   return {

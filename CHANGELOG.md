@@ -2,6 +2,14 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.12] — Ma semaine : classes dans l’ordre de l’horaire
+
+### Modifié
+
+- **Ma semaine** : dans chaque journée, les classes sont classées selon la première période de cours de la semaine consultée. P2 précède P10. Une classe avec plusieurs branches prend la place de sa période la plus tôt, sans être dupliquée. Les semaines A et B peuvent donc présenter un ordre différent.
+- Une classe sans période reste affichée, après celles dont l’horaire est connu. À période égale, l’ordre suit le code de classe.
+- Les cartes, les couleurs, les badges et l’ouverture du Carnet restent les mêmes. Les horaires enregistrés ne sont pas modifiés.
+
 ## [2.62.11] — Aperçu branche : halo de Ma semaine
 
 ### Modifié
