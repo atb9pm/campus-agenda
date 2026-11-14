@@ -4,6 +4,10 @@ import {
   type AdminCodeKind,
 } from "../../../features/school-catalog/admin-codes.ts";
 import {
+  readMaxUpcomingControlDates,
+  requireMaxUpcomingControlDates,
+} from "../../../features/school-catalog/control-dates.ts";
+import {
   buildDefaultSchoolBranches,
   buildDefaultSchoolClasses,
   normalizeClassCode,
@@ -95,6 +99,7 @@ function mapBranch(row: {
   admin_code: string | null;
   archived_at: string | null;
   teaching_type?: string | null;
+  max_upcoming_control_dates?: number | null;
 }): SchoolBranchRecord {
   return {
     id: row.id,
@@ -108,6 +113,7 @@ function mapBranch(row: {
     teachingType: row.teaching_type === "TECHNICAL" || row.teaching_type === "GENERAL"
       ? row.teaching_type
       : null,
+    maxUpcomingControlDates: readMaxUpcomingControlDates(row.max_upcoming_control_dates),
   };
 }
 
@@ -162,6 +168,15 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
 
   constructor(db: SqlDatabase) {
     this.db = db;
+  }
+
+  /** Les tests d’une migration ancienne ouvrent le catalogue avant 0039. */
+  private async hasUpcomingControlDatesColumn(): Promise<boolean> {
+    const info = await this.db
+      .prepare("PRAGMA table_info(school_branches)")
+      .bind()
+      .all<{ name: string }>();
+    return (info.results ?? []).some((row) => row.name === "max_upcoming_control_dates");
   }
 
   private async ensureCounterRow(kind: AdminCodeKind): Promise<void> {
@@ -281,22 +296,41 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       .bind()
       .first<{ count: number }>();
     if (Number(branchCount?.count ?? 0) === 0) {
+      const withDates = await this.hasUpcomingControlDatesColumn();
       for (const entry of buildDefaultSchoolBranches()) {
         await this.db
           .prepare(
-            `INSERT INTO school_branches
-               (id, code, label, sort_order, is_active, admin_code, archived_at, teaching_type)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            withDates
+              ? `INSERT INTO school_branches
+                   (id, code, label, sort_order, is_active, admin_code, archived_at, teaching_type, max_upcoming_control_dates)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              : `INSERT INTO school_branches
+                   (id, code, label, sort_order, is_active, admin_code, archived_at, teaching_type)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
-            entry.id,
-            entry.code,
-            entry.label,
-            entry.sortOrder,
-            entry.isActive ? 1 : 0,
-            entry.adminCode,
-            entry.archivedAt,
-            entry.teachingType,
+            ...(withDates
+              ? [
+                entry.id,
+                entry.code,
+                entry.label,
+                entry.sortOrder,
+                entry.isActive ? 1 : 0,
+                entry.adminCode,
+                entry.archivedAt,
+                entry.teachingType,
+                readMaxUpcomingControlDates(entry.maxUpcomingControlDates),
+              ]
+              : [
+                entry.id,
+                entry.code,
+                entry.label,
+                entry.sortOrder,
+                entry.isActive ? 1 : 0,
+                entry.adminCode,
+                entry.archivedAt,
+                entry.teachingType,
+              ]),
           )
           .run();
       }
@@ -362,10 +396,15 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
 
   async listBranches(): Promise<SchoolBranchRecord[]> {
     await this.ensureSeeded();
+    const withDates = await this.hasUpcomingControlDatesColumn();
     const rows = await this.db
       .prepare(
-        `SELECT id, code, label, sort_order, is_active, admin_code, archived_at, teaching_type
-         FROM school_branches ORDER BY sort_order ASC, label ASC`,
+        withDates
+          ? `SELECT id, code, label, sort_order, is_active, admin_code, archived_at, teaching_type,
+                    max_upcoming_control_dates
+             FROM school_branches ORDER BY sort_order ASC, label ASC`
+          : `SELECT id, code, label, sort_order, is_active, admin_code, archived_at, teaching_type
+             FROM school_branches ORDER BY sort_order ASC, label ASC`,
       )
       .bind()
       .all<{
@@ -377,6 +416,7 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         admin_code: string | null;
         archived_at: string | null;
         teaching_type: string | null;
+        max_upcoming_control_dates: number | null;
       }>();
     return (rows.results ?? []).map(mapBranch);
   }
@@ -592,22 +632,44 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
       isArchived: archivedAt !== null,
       archivedAt,
       teachingType: parseStoredTeachingType(input.teachingType),
+      maxUpcomingControlDates: input.maxUpcomingControlDates === undefined
+        ? 1
+        : requireMaxUpcomingControlDates(input.maxUpcomingControlDates),
     };
+    const withDates = await this.hasUpcomingControlDatesColumn();
     await this.db
       .prepare(
-        `INSERT INTO school_branches
-           (id, code, label, sort_order, is_active, admin_code, archived_at, teaching_type)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        withDates
+          ? `INSERT INTO school_branches
+               (id, code, label, sort_order, is_active, admin_code, archived_at, teaching_type, max_upcoming_control_dates)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          : `INSERT INTO school_branches
+               (id, code, label, sort_order, is_active, admin_code, archived_at, teaching_type)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
-        record.id,
-        record.code,
-        record.label,
-        record.sortOrder,
-        record.isActive ? 1 : 0,
-        record.adminCode,
-        record.archivedAt,
-        record.teachingType,
+        ...(withDates
+          ? [
+            record.id,
+            record.code,
+            record.label,
+            record.sortOrder,
+            record.isActive ? 1 : 0,
+            record.adminCode,
+            record.archivedAt,
+            record.teachingType,
+            record.maxUpcomingControlDates,
+          ]
+          : [
+            record.id,
+            record.code,
+            record.label,
+            record.sortOrder,
+            record.isActive ? 1 : 0,
+            record.adminCode,
+            record.archivedAt,
+            record.teachingType,
+          ]),
       )
       .run();
     return record;
@@ -635,21 +697,43 @@ export class SqlSchoolCatalogStore implements SchoolCatalogStore {
         patch.teachingType !== undefined
           ? parseStoredTeachingType(patch.teachingType)
           : current.teachingType,
+      maxUpcomingControlDates: patch.maxUpcomingControlDates === undefined
+        ? readMaxUpcomingControlDates(current.maxUpcomingControlDates)
+        : requireMaxUpcomingControlDates(patch.maxUpcomingControlDates),
     };
+    const withDates = await this.hasUpcomingControlDatesColumn();
     await this.db
       .prepare(
-        `UPDATE school_branches
-         SET code = ?, label = ?, sort_order = ?, is_active = ?, archived_at = ?, teaching_type = ?
-         WHERE id = ?`,
+        withDates
+          ? `UPDATE school_branches
+             SET code = ?, label = ?, sort_order = ?, is_active = ?, archived_at = ?, teaching_type = ?,
+                 max_upcoming_control_dates = ?
+             WHERE id = ?`
+          : `UPDATE school_branches
+             SET code = ?, label = ?, sort_order = ?, is_active = ?, archived_at = ?, teaching_type = ?
+             WHERE id = ?`,
       )
       .bind(
-        next.code,
-        next.label,
-        next.sortOrder,
-        next.isActive ? 1 : 0,
-        next.archivedAt,
-        next.teachingType,
-        id,
+        ...(withDates
+          ? [
+            next.code,
+            next.label,
+            next.sortOrder,
+            next.isActive ? 1 : 0,
+            next.archivedAt,
+            next.teachingType,
+            next.maxUpcomingControlDates,
+            id,
+          ]
+          : [
+            next.code,
+            next.label,
+            next.sortOrder,
+            next.isActive ? 1 : 0,
+            next.archivedAt,
+            next.teachingType,
+            id,
+          ]),
       )
       .run();
     return next;

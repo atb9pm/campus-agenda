@@ -19,6 +19,8 @@ import {
   nextSessionPublicationsByBranch,
   type StudentNextSessionPublications,
 } from "./next-session-publications.ts";
+export type { UpcomingControlBranchLink } from "../agenda-bridge/control-links.ts";
+import type { UpcomingControlBranchLink } from "../agenda-bridge/control-links.ts";
 import {
   orderByDaySchedule,
   type StudentDayScheduleSlot,
@@ -86,21 +88,87 @@ export function upcomingTestsForAnnualCourse(
   return futureTests.filter((entry) => (entry.item.annualCourseId ?? "").trim() === id);
 }
 
-/**
- * Vue élève : seule la prochaine date de contrôle de chaque branche est affichée
- * (plusieurs contrôles à cette même date restent visibles). Les contrôles suivants
- * apparaissent d’eux-mêmes une fois cette date passée.
- */
-export function nextControlDatePerSubject(futureTests: UpcomingTestEntry[]): UpcomingTestEntry[] {
-  const nextDateBySubject = new Map<string, string>();
-  for (const entry of futureTests) {
-    const dateKey = calendarDateKey(entry.slot.date);
-    const current = nextDateBySubject.get(entry.item.subjectId);
-    if (current === undefined || dateKey < current) nextDateBySubject.set(entry.item.subjectId, dateKey);
+interface ControlDateGroup {
+  maxDates: number;
+  dates: Set<string>;
+}
+
+function controlDateGroupKey(
+  entry: UpcomingTestEntry,
+  linksByCourse: ReadonlyMap<string, UpcomingControlBranchLink | "ambiguous">,
+): { key: string; maxDates: number } {
+  const courseId = entry.item.annualCourseId?.trim() ?? "";
+  const link = courseId ? linksByCourse.get(courseId) : undefined;
+  if (link && link !== "ambiguous") {
+    return { key: `branch:${link.branchId}`, maxDates: link.maxUpcomingControlDates === 2 ? 2 : 1 };
   }
-  return futureTests.filter(
-    (entry) => nextDateBySubject.get(entry.item.subjectId) === calendarDateKey(entry.slot.date),
-  );
+  return { key: `subject:${entry.item.subjectId}`, maxDates: 1 };
+}
+
+function linksByAnnualCourse(
+  links: readonly UpcomingControlBranchLink[],
+): Map<string, UpcomingControlBranchLink | "ambiguous"> {
+  const byCourse = new Map<string, UpcomingControlBranchLink | "ambiguous">();
+  for (const link of links) {
+    const courseId = link.annualCourseId.trim();
+    const branchId = link.branchId.trim();
+    if (!courseId || !branchId) continue;
+    const maxDates = link.maxUpcomingControlDates === 2 ? 2 : 1;
+    const normalized: UpcomingControlBranchLink = {
+      annualCourseId: courseId,
+      branchId,
+      maxUpcomingControlDates: maxDates,
+    };
+    const current = byCourse.get(courseId);
+    if (!current) {
+      byCourse.set(courseId, normalized);
+      continue;
+    }
+    if (
+      current === "ambiguous"
+      || current.branchId !== normalized.branchId
+      || current.maxUpcomingControlDates !== normalized.maxUpcomingControlDates
+    ) {
+      byCourse.set(courseId, "ambiguous");
+    }
+  }
+  return byCourse;
+}
+
+/**
+ * Vue élève : pour chaque branche officielle, seules les N prochaines dates
+ * distinctes restent visibles. N vaut 1 sans réglage, ou 2 si le catalogue
+ * de cette branche le demande. Plusieurs contrôles d’une même date restent
+ * affichés. Sans lien fiable vers la branche, une seule date est conservée.
+ */
+export function nextControlDatePerSubject(
+  futureTests: UpcomingTestEntry[],
+  links: readonly UpcomingControlBranchLink[] = [],
+): UpcomingTestEntry[] {
+  const linksByCourse = linksByAnnualCourse(links);
+  const ordered = futureTests
+    .map((entry, index) => ({ entry, index }))
+    .sort((left, right) =>
+      calendarDateKey(left.entry.slot.date).localeCompare(calendarDateKey(right.entry.slot.date))
+      || left.index - right.index,
+    );
+  const groups = new Map<string, ControlDateGroup>();
+  for (const { entry } of ordered) {
+    const { key, maxDates } = controlDateGroupKey(entry, linksByCourse);
+    const dateKey = calendarDateKey(entry.slot.date);
+    const group = groups.get(key) ?? { maxDates, dates: new Set<string>() };
+    if (group.dates.size < group.maxDates || group.dates.has(dateKey)) group.dates.add(dateKey);
+    groups.set(key, group);
+  }
+  const seen = new Set<number>();
+  return futureTests.filter((entry) => {
+    if (seen.has(entry.item.id)) return false;
+    const { key } = controlDateGroupKey(entry, linksByCourse);
+    const group = groups.get(key);
+    if (!group?.dates.has(calendarDateKey(entry.slot.date))) return false;
+    seen.add(entry.item.id);
+    return true;
+  });
 }
 
 export function formatNextControlHeadline(
@@ -170,6 +238,8 @@ export function buildStudentCourseDaySections(
     courseDay?: CourseDaySlot;
     /** Publications de la prochaine séance de chaque branche, après `courseDay`. */
     nextSession?: { items: readonly PrototypeAgendaItem[]; weeks: readonly SchoolWeek[] };
+    /** Réglage catalogue déjà résolu. Absent : une date par branche affichée. */
+    controlLinks?: readonly UpcomingControlBranchLink[];
   } = {},
 ): StudentCourseDaySection[] {
   const includeNextControls = options.includeNextControls !== false;
@@ -181,11 +251,11 @@ export function buildStudentCourseDaySections(
   const nextBySubject = new Map<string, UpcomingTestEntry[]>();
 
   if (includeNextControls) {
-    for (const entry of futureTests) {
+    for (const entry of nextControlDatePerSubject(futureTests, options.controlLinks)) {
       const subjectId = entry.item.subjectId;
-      if (nextBySubject.has(subjectId)) continue;
-      const next = nextControlsForSubject(futureTests, subjectId);
-      if (next.length) nextBySubject.set(subjectId, next);
+      const current = nextBySubject.get(subjectId);
+      if (current) current.push(entry);
+      else nextBySubject.set(subjectId, [entry]);
     }
   }
 
@@ -400,8 +470,9 @@ export function listStudentControlPlanning(
   classroomId: string,
   fromDate: Date,
   weeks: SchoolWeek[],
+  links: readonly UpcomingControlBranchLink[] = [],
 ): ControlPlanningWeek[] {
   return groupControlPlanning(
-    nextControlDatePerSubject(listFutureTestsForClass(items, catalog, classroomId, fromDate, weeks)),
+    nextControlDatePerSubject(listFutureTestsForClass(items, catalog, classroomId, fromDate, weeks), links),
   );
 }

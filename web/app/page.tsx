@@ -30,6 +30,7 @@ import {
   studentAccessFromApiSession,
   upcomingTestsForAnnualCourse,
   studentCalendarDateNeedsRefresh,
+  type UpcomingControlBranchLink,
   type StudentDayScheduleSlot,
 } from "@campus/features/student";
 import type { StudentAccess, TeacherClassAccessView } from "@campus/types/student-access";
@@ -316,6 +317,7 @@ export default function Home() {
   const [items, setItems] = useState<PrototypeAgendaItem[]>([]);
   const [agendaSubjects, setAgendaSubjects] = useState<AgendaSubjectLabel[]>([]);
   const [studentScheduleSlots, setStudentScheduleSlots] = useState<StudentDayScheduleSlot[]>([]);
+  const [studentControlLinks, setStudentControlLinks] = useState<UpcomingControlBranchLink[]>([]);
   const [notice, setNotice] = useState("");
   const [notebookAgendaLoadError, setNotebookAgendaLoadError] = useState("");
   const [notebookNotesLoadError, setNotebookNotesLoadError] = useState("");
@@ -764,6 +766,7 @@ export default function Home() {
                 setAgendaSubjects(view.subjects);
                 setAttendanceDays(attendanceDaysFromAgendaView(view.attendanceDays));
                 setStudentScheduleSlots(scheduleSlotsFromAgendaView(view.scheduleSlots));
+                setStudentControlLinks(view.upcomingControlLinks);
               }
             })
             .catch((error) => {
@@ -972,6 +975,7 @@ export default function Home() {
           setAgendaSubjects(view.subjects);
           setAttendanceDays(attendanceDaysFromAgendaView(view.attendanceDays));
           setStudentScheduleSlots(scheduleSlotsFromAgendaView(view.scheduleSlots));
+          setStudentControlLinks(view.upcomingControlLinks);
         })
         // Échec silencieux : l’élève garde l’affichage déjà chargé, nouvel essai au prochain déclencheur.
         .catch(() => undefined)
@@ -1137,6 +1141,7 @@ export default function Home() {
         studentToday,
         schoolWeeksMemo,
       ),
+      studentControlLinks,
     );
     if (studentEntry === "teacher-branch-preview" && previewAnnualCourseId) {
       return upcomingTestsForAnnualCourse(tests, previewAnnualCourseId);
@@ -1150,6 +1155,7 @@ export default function Home() {
     schoolWeeksMemo,
     studentEntry,
     previewAnnualCourseId,
+    studentControlLinks,
   ]);
 
   const studentFollowingCourseDay = useMemo(() => {
@@ -1171,6 +1177,7 @@ export default function Home() {
         nextSession: studentFollowingCourseDay
           ? { items: studentAgendaItems, weeks: schoolWeeksMemo }
           : undefined,
+        controlLinks: studentControlLinks,
       },
     );
   }, [
@@ -1182,6 +1189,7 @@ export default function Home() {
     studentFutureTests,
     studentFollowingCourseDay,
     studentPreviewScheduleSlots,
+    studentControlLinks,
   ]);
 
   const studentControlPlanning = useMemo(
@@ -1269,6 +1277,7 @@ export default function Home() {
         setAgendaSubjects(view.subjects);
         setAttendanceDays(attendanceDaysFromAgendaView(view.attendanceDays));
         setStudentScheduleSlots(scheduleSlotsFromAgendaView(view.scheduleSlots));
+        setStudentControlLinks(view.upcomingControlLinks);
       })
       .catch(() => undefined);
   }
@@ -1320,6 +1329,7 @@ export default function Home() {
         setAgendaSubjects(view.subjects);
         setAttendanceDays(attendanceDaysFromAgendaView(view.attendanceDays));
         setStudentScheduleSlots(scheduleSlotsFromAgendaView(view.scheduleSlots));
+        setStudentControlLinks(view.upcomingControlLinks);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Connexion élève impossible.";
         setStudentLoginError(message);

@@ -2,6 +2,18 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.13] — Catalogue : nombre de dates de contrôle par branche
+
+### Ajouté
+
+- **Catalogue des branches** : chaque branche officielle peut afficher les contrôles des 1 ou 2 prochaines dates dans l’agenda des élèves. La valeur par défaut est 1. Aucune branche existante ne passe à 2.
+- Le réglage se modifie avec « Modifier », puis « Enregistrer ». La liste indique discrètement « 1 date » ou « 2 dates ».
+
+### Modifié
+
+- L’agenda élève (Tout et Contrôles) et l’aperçu branche enseignant utilisent ce nombre de dates distinctes. Plusieurs contrôles le même jour restent visibles. Les semaines A et B, les contrôles passés et les brouillons suivent les règles déjà en place.
+- Sans lien fiable vers la branche officielle, Campus Agenda conserve une seule date. Le type « branche générale » ne change rien à lui seul.
+
 ## [2.62.12] — Ma semaine : classes dans l’ordre de l’horaire
 
 ### Modifié

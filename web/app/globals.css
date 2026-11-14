@@ -1532,6 +1532,13 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .admin-teacher-edit-form label { display: grid; gap: 4px; color: #8793a9; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .admin-teacher-edit-form input { padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--navy); font-size: 11px; }
 .admin-teacher-edit-actions { display: flex; gap: 6px; }
+.admin-control-dates { display: grid; gap: 6px; margin: 0; padding: 0; border: 0; }
+.admin-control-dates legend,
+.admin-control-dates > span { color: #8793a9; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.admin-control-dates-choices { display: flex; gap: 6px; }
+.admin-control-dates-choices button { min-width: 36px; padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: #fff; color: #516582; font-size: 11px; font-weight: 700; cursor: pointer; }
+.admin-control-dates-choices button.is-selected { color: #fff; background: var(--navy); border-color: var(--navy); }
+.admin-control-dates p { margin: 0; color: #667085; font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; line-height: 1.4; }
 
 .admin-secret { margin-bottom: 18px; padding: 16px 18px; border: 1px solid var(--navy); border-radius: 10px; background: #f8fbff; }
 .admin-secret-title { margin: 0 0 8px; color: #516582; font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }

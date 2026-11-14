@@ -32,6 +32,7 @@ export {
   groupNextSessionsByDate,
   listStudentControlPlanning,
   nextControlDatePerSubject,
+  type UpcomingControlBranchLink,
   nextControlHeadlineForEntries,
   nextControlsForSubject,
   planningDayParts,

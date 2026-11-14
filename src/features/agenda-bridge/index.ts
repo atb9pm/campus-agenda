@@ -21,6 +21,10 @@ export {
   subjectNameMatchesBranchLabel,
 } from "./match.ts";
 export {
+  upcomingControlLinksForAnnualCourses,
+  type UpcomingControlBranchLink,
+} from "./control-links.ts";
+export {
   STRUCTURED_SUBJECT_UNLINKED_REASON,
   UNSAFE_AGENDA_BRIDGE_REASON,
   candidateAnnualCourseIdsForSubject,

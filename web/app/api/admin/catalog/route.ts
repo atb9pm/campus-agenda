@@ -11,6 +11,7 @@ import {
   listBranchesForClass,
 } from "@campus/features/school-catalog/index.ts";
 import { filterBySchoolYearId } from "@campus/features/school-year/index.ts";
+import { parseMaxUpcomingControlDates } from "@campus/features/school-catalog/control-dates.ts";
 import { requireTeachingType } from "@campus/features/teaching-types/index.ts";
 import { jsonResponse, requireAdminSession, requireTeacherSession } from "../../../../lib/server/api.ts";
 import { withApiObservability } from "../../../../lib/server/observability.ts";
@@ -87,6 +88,7 @@ async function handlePost(request: Request) {
     classCodePrefix?: string | null;
     branchId?: string;
     teachingType?: string | null;
+    maxUpcomingControlDates?: unknown;
     organization?: "unique" | "parallel";
     parallelCodes?: string[];
   };
@@ -201,12 +203,19 @@ async function handlePost(request: Request) {
   if (!teachingType.ok) {
     return jsonResponse({ ok: false, reason: teachingType.reason }, { status: 400 });
   }
+  let maxUpcomingControlDates: 1 | 2 | undefined;
+  if (body.maxUpcomingControlDates !== undefined) {
+    const parsed = parseMaxUpcomingControlDates(body.maxUpcomingControlDates);
+    if (!parsed.ok) return jsonResponse({ ok: false, reason: parsed.reason }, { status: 400 });
+    maxUpcomingControlDates = parsed.value;
+  }
   const created = await catalog.createBranch({
     code: body.code,
     label: body.label,
     sortOrder: body.sortOrder,
     isActive: body.isActive,
     teachingType: teachingType.value,
+    maxUpcomingControlDates,
   });
   return jsonResponse({ ok: true, branch: created });
 }

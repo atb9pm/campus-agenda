@@ -22,7 +22,10 @@ import {
   authorizeTeacherAgendaPublish,
 } from "../../../lib/server/api.ts";
 import { isoDateForSchoolWeekDay, resolveAgendaItemDate } from "@campus/features/school-days/index.ts";
-import { listResolvedAgendaSubjects } from "@campus/features/agenda-bridge/index.ts";
+import {
+  listResolvedAgendaSubjects,
+  upcomingControlLinksForAnnualCourses,
+} from "@campus/features/agenda-bridge/index.ts";
 import {
   getAnnualCourseStore,
   getCourseScheduleStore,
@@ -82,8 +85,27 @@ export async function GET(request: Request) {
     contexts,
     branches,
   });
+  const upcomingControlLinks = upcomingControlLinksForAnnualCourses({
+    annualCourseIds: [
+      ...runtimeSubjects.map((subject) => subject.annualCourseId ?? ""),
+      ...items.map((item) => item.annualCourseId ?? ""),
+      ...subjects.map((subject) => subject.annualCourseId ?? ""),
+    ],
+    courses,
+    contexts,
+    branches,
+  });
 
-  return jsonResponse({ ok: true, items, subjects, readOnly, schoolYearId, attendanceDays, scheduleSlots });
+  return jsonResponse({
+    ok: true,
+    items,
+    subjects,
+    readOnly,
+    schoolYearId,
+    attendanceDays,
+    scheduleSlots,
+    upcomingControlLinks,
+  });
 }
 
 export async function POST(request: Request) {
