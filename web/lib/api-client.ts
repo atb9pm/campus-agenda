@@ -1,5 +1,6 @@
 import { NotebookAutosave } from "./notebook-autosave.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
+import type { UpcomingControlBranchLink } from "@campus/features/student";
 import type { TeacherDeletePreview } from "@campus/features/admin-teacher-delete/index.ts";
 import type { TeacherAccountRecord } from "@campus/features/teacher-accounts";
 import type { TeacherSetupConfig } from "@campus/features/teacher-setup";
@@ -748,6 +749,7 @@ export async function fetchAgendaView(
   subjects: AgendaSubjectLabel[];
   attendanceDays: Array<{ dayOfWeek: number; weekKind: "all" | "A" | "B"; role: string }>;
   scheduleSlots: StudentAgendaScheduleSlot[];
+  upcomingControlLinks: UpcomingControlBranchLink[];
 }> {
   const params = new URLSearchParams({ classroomId });
   if (schoolYearId?.trim()) params.set("schoolYearId", schoolYearId.trim());
@@ -761,6 +763,7 @@ export async function fetchAgendaView(
     subjects?: AgendaSubjectLabel[];
     attendanceDays?: Array<{ dayOfWeek: number; weekKind: "all" | "A" | "B"; role: string }>;
     scheduleSlots?: StudentAgendaScheduleSlot[];
+    upcomingControlLinks?: UpcomingControlBranchLink[];
     reason?: string;
   }>(response);
   if (!response.ok || !payload.ok || !payload.items) {
@@ -771,6 +774,7 @@ export async function fetchAgendaView(
     subjects: payload.subjects ?? [],
     attendanceDays: payload.attendanceDays ?? [],
     scheduleSlots: payload.scheduleSlots ?? [],
+    upcomingControlLinks: payload.upcomingControlLinks ?? [],
   };
 }
 

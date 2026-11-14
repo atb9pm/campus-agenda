@@ -71,6 +71,7 @@ interface AdministrationPanelProps {
 interface BranchEditDraft {
   branchId: string;
   label: string;
+  maxUpcomingControlDates: 1 | 2;
 }
 
 const TAB_LABELS: Record<AdminTab, string> = {
@@ -272,6 +273,7 @@ export function AdministrationPanel({
       isActive?: boolean;
       isArchived?: boolean;
       teachingType?: TeachingType | null;
+      maxUpcomingControlDates?: 1 | 2;
     },
   ) {
     succeed();
@@ -303,6 +305,7 @@ export function AdministrationPanel({
     await patchBranch(entry, {
       label: nextLabel,
       code: branchCodeFromLabel(nextLabel),
+      maxUpcomingControlDates: branchEditDraft.maxUpcomingControlDates,
     });
     onNotice(`Branche « ${nextLabel} » mise à jour.`);
     setBranchEditDraft(null);
@@ -525,6 +528,35 @@ export function AdministrationPanel({
                               required
                             />
                           </label>
+                          <fieldset className="admin-control-dates">
+                            <legend>Affichage des contrôles à venir</legend>
+                            <span id={`control-dates-${entry.id}`}>Nombre de prochaines dates visibles</span>
+                            <div
+                              className="admin-control-dates-choices"
+                              role="group"
+                              aria-labelledby={`control-dates-${entry.id}`}
+                            >
+                              {([1, 2] as const).map((value) => (
+                                <button
+                                  key={value}
+                                  type="button"
+                                  className={branchEditDraft.maxUpcomingControlDates === value ? "is-selected" : undefined}
+                                  aria-pressed={branchEditDraft.maxUpcomingControlDates === value}
+                                  onClick={() =>
+                                    setBranchEditDraft({
+                                      ...branchEditDraft,
+                                      maxUpcomingControlDates: value,
+                                    })
+                                  }
+                                >
+                                  {value}
+                                </button>
+                              ))}
+                            </div>
+                            <p>
+                              Définit le nombre de prochaines dates de contrôle visibles dans l’agenda des élèves.
+                            </p>
+                          </fieldset>
                           <div className="admin-teacher-edit-actions">
                             <button type="submit">Enregistrer</button>
                             <button type="button" onClick={() => setBranchEditDraft(null)}>
@@ -541,6 +573,9 @@ export function AdministrationPanel({
                             </p>
                           ) : null}
                               <p className="admin-teacher-login-meta">{branchTypeLabel(entry.teachingType)}</p>
+                              <p className="admin-teacher-login-meta">
+                                {entry.maxUpcomingControlDates === 2 ? "2 dates" : "1 date"}
+                              </p>
                           <p className="admin-branch-usage">
                             {branchUsageText(entry.id, professions, contexts)}
                           </p>
@@ -569,7 +604,11 @@ export function AdministrationPanel({
                           <button
                             type="button"
                             onClick={() =>
-                              setBranchEditDraft({ branchId: entry.id, label: entry.label })
+                              setBranchEditDraft({
+                                branchId: entry.id,
+                                label: entry.label,
+                                maxUpcomingControlDates: entry.maxUpcomingControlDates === 2 ? 2 : 1,
+                              })
                             }
                           >
                             Modifier

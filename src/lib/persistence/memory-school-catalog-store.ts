@@ -1,5 +1,9 @@
 import { formatAdminCode, type AdminCodeKind } from "../../features/school-catalog/admin-codes.ts";
 import {
+  readMaxUpcomingControlDates,
+  requireMaxUpcomingControlDates,
+} from "../../features/school-catalog/control-dates.ts";
+import {
   buildDefaultSchoolBranches,
   buildDefaultSchoolClasses,
   normalizeClassCode,
@@ -138,7 +142,10 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
     counters?: Record<AdminCodeKind, number>;
   }): void {
     this.classes = options.classes.map((entry) => ({ ...entry }));
-    this.branches = options.branches.map((entry) => ({ ...entry }));
+    this.branches = options.branches.map((entry) => ({
+      ...entry,
+      maxUpcomingControlDates: readMaxUpcomingControlDates(entry.maxUpcomingControlDates),
+    }));
     this.professions = options.professions.map((entry) => ({ ...entry }));
     this.contexts = options.contexts.map((entry) => ({ ...entry }));
     if (options.counters) this.counters = { ...options.counters };
@@ -244,6 +251,9 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
       isArchived: archivedAt !== null,
       archivedAt,
       teachingType: parseStoredTeachingType(input.teachingType),
+      maxUpcomingControlDates: input.maxUpcomingControlDates === undefined
+        ? 1
+        : requireMaxUpcomingControlDates(input.maxUpcomingControlDates),
     };
     this.branches.push(record);
     return record;
@@ -267,6 +277,9 @@ export class MemorySchoolCatalogStore implements SchoolCatalogStore {
       archivedAt,
       teachingType:
         patch.teachingType !== undefined ? parseStoredTeachingType(patch.teachingType) : current.teachingType,
+      maxUpcomingControlDates: patch.maxUpcomingControlDates === undefined
+        ? readMaxUpcomingControlDates(current.maxUpcomingControlDates)
+        : requireMaxUpcomingControlDates(patch.maxUpcomingControlDates),
     };
     this.branches[index] = next;
     return next;

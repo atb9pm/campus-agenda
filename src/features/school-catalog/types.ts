@@ -31,6 +31,11 @@ export interface SchoolBranchRecord {
   label: string;
   sortOrder: number;
   isActive: boolean;
+  /**
+   * Nombre de prochaines dates de contrôle distinctes visibles dans l’agenda élève.
+   * 1 par défaut. Ne dépend pas du type général ou technique.
+   */
+  maxUpcomingControlDates: 1 | 2;
   /** Code administratif immuable, ex. BR-0001. */
   adminCode: string;
   /** Dérivé de `archivedAt` : true si la branche est hors liste courante. */
@@ -63,4 +68,6 @@ export interface SchoolBranchInput {
   isActive?: boolean;
   isArchived?: boolean;
   teachingType?: "TECHNICAL" | "GENERAL" | null;
+  /** Omise à la création : 1. Une autre valeur que 1 ou 2 est refusée. */
+  maxUpcomingControlDates?: 1 | 2;
 }

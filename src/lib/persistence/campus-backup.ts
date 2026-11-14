@@ -278,6 +278,7 @@ async function buildMemoryTables(deps: CampusBackupDeps): Promise<CampusTableDum
     admin_code: entry.adminCode,
     archived_at: entry.archivedAt,
     teaching_type: entry.teachingType,
+    max_upcoming_control_dates: entry.maxUpcomingControlDates === 2 ? 2 : 1,
   }));
   dump.school_professions = professions.map((entry) => ({
     id: entry.id,
@@ -513,6 +514,7 @@ function mapBranch(row: Record<string, unknown>): SchoolBranchRecord {
     isArchived: Boolean(row.archived_at ?? row.archivedAt ?? row.isArchived),
     archivedAt: asNullableString(row.archived_at ?? row.archivedAt),
     teachingType: teachingType === "TECHNICAL" || teachingType === "GENERAL" ? teachingType : null,
+    maxUpcomingControlDates: row.max_upcoming_control_dates === 2 || row.maxUpcomingControlDates === 2 ? 2 : 1,
   };
 }
 

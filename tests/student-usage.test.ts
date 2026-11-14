@@ -104,7 +104,7 @@ async function studentToken(): Promise<{ token: string; schoolClassId: string; s
 }
 
 test("migration 0038 — compteurs agrégés, hors sauvegarde, sans donnée individuelle", async () => {
-  assert.equal(SQL_MIGRATION_FILES.at(-1), "0038_student_daily_visits.sql");
+  assert.equal(SQL_MIGRATION_FILES.at(-1), "0039_branch_upcoming_control_dates.sql");
   const sql = await readFile(new URL("../migrations/0038_student_daily_visits.sql", import.meta.url), "utf8");
   assert.match(sql, /CREATE TABLE IF NOT EXISTS student_daily_visits/);
   assert.match(sql, /PRIMARY KEY \(visit_date, school_year_id, school_class_id\)/);

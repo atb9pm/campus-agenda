@@ -1,6 +1,7 @@
 import { getSchoolCatalogStore, getSchoolYearStore } from "@campus/lib/persistence/store-factory.ts";
 import { deleteCatalogItemPermanently } from "@campus/features/admin-catalog-delete/index.ts";
 import { loadCatalogDeleteDeps } from "@campus/features/admin-catalog-delete/deps.ts";
+import { parseMaxUpcomingControlDates } from "@campus/features/school-catalog/control-dates.ts";
 import {
   assertClassStaysInSchoolYear,
   assertSchoolYearWritable,
@@ -43,6 +44,7 @@ async function handlePatch(request: Request, context?: { params: Promise<{ id: s
     classCodePrefix?: string | null;
     parallelCode?: string | null;
     teachingType?: "TECHNICAL" | "GENERAL" | null;
+    maxUpcomingControlDates?: unknown;
   };
 
   if (
@@ -115,7 +117,21 @@ async function handlePatch(request: Request, context?: { params: Promise<{ id: s
   }
 
   if (body.kind === "branch") {
-    const updated = await catalog.updateBranch(id, body);
+    let maxUpcomingControlDates: 1 | 2 | undefined;
+    if (body.maxUpcomingControlDates !== undefined) {
+      const parsed = parseMaxUpcomingControlDates(body.maxUpcomingControlDates);
+      if (!parsed.ok) return jsonResponse({ ok: false, reason: parsed.reason }, { status: 400 });
+      maxUpcomingControlDates = parsed.value;
+    }
+    const updated = await catalog.updateBranch(id, {
+      code: body.code,
+      label: body.label,
+      sortOrder: body.sortOrder,
+      isActive: body.isActive,
+      isArchived: body.isArchived,
+      teachingType: body.teachingType,
+      maxUpcomingControlDates,
+    });
     if (!updated) return jsonResponse({ ok: false, reason: "Branche introuvable." }, { status: 404 });
     return jsonResponse({ ok: true, branch: updated });
   }

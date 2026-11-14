@@ -247,6 +247,7 @@ export const CAMPUS_BACKUP_COLUMNS: Record<CampusBackupTableName, BackupColumnSp
     { name: "archived_at", type: "text" },
     { name: "admin_code", type: "text" },
     { name: "teaching_type", type: "text" },
+    { name: "max_upcoming_control_dates", type: "integer" },
   ),
   school_professions: cols(
     { name: "id", type: "text", required: true },

@@ -52,6 +52,7 @@ export function buildDefaultSchoolBranches(): SchoolBranchRecord[] {
       isArchived: false,
       archivedAt: null,
       teachingType: null,
+      maxUpcomingControlDates: 1,
     };
   });
 }

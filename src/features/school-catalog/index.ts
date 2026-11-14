@@ -1,4 +1,12 @@
 export {
+  MAX_UPCOMING_CONTROL_DATES,
+  MAX_UPCOMING_CONTROL_DATES_REASON,
+  parseMaxUpcomingControlDates,
+  readMaxUpcomingControlDates,
+  requireMaxUpcomingControlDates,
+  type MaxUpcomingControlDates,
+} from "./control-dates.ts";
+export {
   formatAdminCode,
   parseAdminCodeSequence,
   type AdminCodeKind,
