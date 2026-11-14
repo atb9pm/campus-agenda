@@ -361,7 +361,7 @@ async function seedAssignedCourse(
 }
 
 test("version 2.32.0 — déroulement conservé, nav Contrôles, migration 0024", () => {
-  assert.equal(APP_VERSION, "2.62.11");
+  assert.equal(APP_VERSION, "2.62.12");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0038_student_daily_visits.sql");
   assert.deepEqual([...TEACHER_NAV_SECTIONS], [
     "ma-semaine",
