@@ -49,6 +49,7 @@ test("aperçu branche — menu en haut, logo en bas, bandeau, agenda élève inc
   assert.match(homework, /hideChip/);
   assert.match(controls, /student-control-remark/);
   assert.match(controls, /fitRemarkFontSize/);
+  assert.match(controls, /matchMedia\("\(max-width: 900px\)"\)/);
   assert.match(controls, /function ControlRow/);
   assert.match(css, /\.branch-preview \{[\s\S]*--course-day-size: 46px/);
   assert.match(css, /grid-template-columns: minmax\(0, 1\.62fr\) minmax\(0, 1fr\)/);

@@ -8,6 +8,7 @@ import {
 import {
   controlAgendaDateParts,
   fitRemarkFontSize,
+  formatControlWeekBadge,
   type ControlPlanningWeek,
 } from "@campus/features/student";
 import { decodeRichDetail, isPlaceholderDetail } from "@campus/features/class-notebook";
@@ -29,6 +30,7 @@ function ControlRow({
 }) {
   const daysUntil = calendarDaysBetween(today, entry.slot.date);
   const parts = controlAgendaDateParts(entry.slot.date);
+  const weekLabel = formatControlWeekBadge(entry.slot);
   const detail = studentUpcomingPlainDetail(entry.item);
   const urgency = daysUntil <= 0 ? "today" : daysUntil <= 7 ? "soon" : "later";
   const dateLabel = formatCourseDayHeading(entry.slot);
@@ -53,8 +55,14 @@ function ControlRow({
           <span className="student-visually-hidden">
             {urgencyLabel}
             {dateLabel}
+            {weekLabel ? `. ${weekLabel}` : ""}
           </span>
         </time>
+        {weekLabel ? (
+          <span className="student-control-week" aria-hidden="true">
+            {weekLabel}
+          </span>
+        ) : null}
         <div className="student-control-card-body">
           <strong>{entry.item.title}</strong>
           {detail ? (
@@ -79,9 +87,17 @@ function useFitControlRemarks(active: boolean, signature: string) {
     if (!active) return;
     const root = rootRef.current;
     if (!root) return;
+    const narrowQuery = window.matchMedia("(max-width: 900px)");
     const fit = () => {
+      const narrow = narrowQuery.matches;
       const max = parseFloat(getComputedStyle(root).getPropertyValue("--course-day-size")) || 46;
       root.querySelectorAll<HTMLElement>(".student-control-remark").forEach((el) => {
+        if (narrow) {
+          el.style.fontSize = "";
+          el.style.lineHeight = "";
+          el.style.whiteSpace = "normal";
+          return;
+        }
         if (el.clientWidth < 40) return;
         const chosen = fitRemarkFontSize(max, (size, singleLine) => {
           el.style.fontSize = `${size}px`;
@@ -97,9 +113,13 @@ function useFitControlRemarks(active: boolean, signature: string) {
     fit();
     const observer = new ResizeObserver(() => fit());
     observer.observe(root);
+    narrowQuery.addEventListener("change", fit);
     const fonts = document.fonts;
     if (fonts) void fonts.ready.then(fit);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      narrowQuery.removeEventListener("change", fit);
+    };
   }, [active, signature]);
   return rootRef;
 }

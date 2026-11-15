@@ -405,6 +405,16 @@ export function controlAgendaDateParts(date: Date): { day: string; month: string
   return { day, month };
 }
 
+/** Pastille élève : « Sem. 12 », ou « Sem. 12-A » quand la semaine est alternée. */
+export function formatControlWeekBadge(
+  slot: Pick<CourseDaySlot, "schoolWeekNumber" | "weekKind">,
+): string | null {
+  if (!Number.isInteger(slot.schoolWeekNumber) || slot.schoolWeekNumber < 1) return null;
+  const number = String(slot.schoolWeekNumber);
+  if (slot.weekKind === "A" || slot.weekKind === "B") return `Sem. ${number}-${slot.weekKind}`;
+  return `Sem. ${number}`;
+}
+
 export function planningDayParts(date: Date): { dayNumber: string; weekday: string } {
   const dayNumber = new Intl.DateTimeFormat("fr-CH", { day: "numeric" }).format(date);
   const weekday = new Intl.DateTimeFormat("fr-CH", { weekday: "short" })

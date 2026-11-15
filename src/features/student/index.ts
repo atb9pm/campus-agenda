@@ -26,6 +26,7 @@ export {
   compactControlPresentation,
   compareStudentPublications,
   controlAgendaDateParts,
+  formatControlWeekBadge,
   formatCompactControlDate,
   formatNextControlHeadline,
   groupControlPlanning,

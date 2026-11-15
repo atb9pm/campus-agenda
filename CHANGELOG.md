@@ -2,6 +2,17 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.14] — Contrôles élève : numéro de semaine
+
+### Ajouté
+
+- **Contrôles à venir** : chaque contrôle affiche une pastille bleu pâle avec son numéro de semaine, juste après la date. Semaine alternée : Sem. 12-A. L’agenda élève et l’aperçu branche utilisent la même pastille.
+
+### Modifié
+
+- **Navigation mobile** : « Passés » devient « Cours précédents ».
+- **Smartphone** : la date et la pastille de semaine restent sur la première ligne. Le titre et la description du contrôle passent en dessous et utilisent toute la largeur. L’ordinateur conserve la ligne horizontale.
+
 ## [2.62.13] — Catalogue : nombre de dates de contrôle par branche
 
 ### Ajouté
