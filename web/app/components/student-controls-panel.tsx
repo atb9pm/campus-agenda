@@ -8,6 +8,7 @@ import {
 import {
   controlAgendaDateParts,
   fitRemarkFontSize,
+  formatControlWeekBadge,
   type ControlPlanningWeek,
 } from "@campus/features/student";
 import { decodeRichDetail, isPlaceholderDetail } from "@campus/features/class-notebook";
@@ -29,6 +30,7 @@ function ControlRow({
 }) {
   const daysUntil = calendarDaysBetween(today, entry.slot.date);
   const parts = controlAgendaDateParts(entry.slot.date);
+  const weekLabel = formatControlWeekBadge(entry.slot);
   const detail = studentUpcomingPlainDetail(entry.item);
   const urgency = daysUntil <= 0 ? "today" : daysUntil <= 7 ? "soon" : "later";
   const dateLabel = formatCourseDayHeading(entry.slot);
@@ -53,8 +55,14 @@ function ControlRow({
           <span className="student-visually-hidden">
             {urgencyLabel}
             {dateLabel}
+            {weekLabel ? `. ${weekLabel}` : ""}
           </span>
         </time>
+        {weekLabel ? (
+          <span className="student-control-week" aria-hidden="true">
+            {weekLabel}
+          </span>
+        ) : null}
         <div className="student-control-card-body">
           <strong>{entry.item.title}</strong>
           {detail ? (

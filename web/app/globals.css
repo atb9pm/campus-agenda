@@ -562,10 +562,26 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 }
 .student-control-main {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr);
-  gap: 14px;
-  align-items: start;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 12px 14px;
+  align-items: center;
   min-width: 0;
+}
+.student-control-week {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 2px 10px;
+  border: 1px solid var(--profession-ring, #d5e3f4);
+  border-radius: 8px;
+  background: var(--profession-wash, #eef4fb);
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
 }
 .student-control-date { display: grid; justify-items: start; color: var(--navy); }
 .student-control-day { font-size: 22px; font-weight: 700; line-height: 1; }
@@ -3160,6 +3176,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   .mobile-tab-bar button {
     display: grid;
     justify-items: center;
+    align-content: center;
     gap: 4px;
     min-width: 0;
     padding: 8px 4px;
@@ -3167,9 +3184,11 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
     border-radius: 10px;
     background: transparent;
     color: #516582;
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: .02em;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.15;
+    text-align: center;
     cursor: pointer;
   }
   .mobile-tab-bar button span {
@@ -3519,6 +3538,14 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   display: flex;
   align-items: center;
   gap: 18px;
+}
+.branch-preview .student-control-week {
+  flex: 0 0 auto;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--navy);
+  background: var(--profession-wash, #eef4fb);
 }
 .branch-preview .student-control-date {
   justify-items: center;

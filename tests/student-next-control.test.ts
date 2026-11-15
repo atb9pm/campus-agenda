@@ -18,6 +18,7 @@ import {
   compactControlPresentation,
   compareStudentPublications,
   formatCompactControlDate,
+  formatControlWeekBadge,
   formatNextControlHeadline,
   groupControlPlanning,
   msUntilNextLocalMidnight,
@@ -144,7 +145,7 @@ function future(from: Date, extra: PrototypeAgendaItem[] = []) {
 }
 
 test("version 2.61.8 — prochain contrôle élève, pas de migration", async () => {
-  assert.equal(APP_VERSION, "2.62.13");
+  assert.equal(APP_VERSION, "2.62.14");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0039_branch_upcoming_control_dates.sql");
 });
 
@@ -335,6 +336,13 @@ test("jours calendaires — J-7 à partir de la date locale, pas de l’heure", 
   assert.equal(headline?.kicker, "⚠ CONTRÔLE DANS 7 JOURS");
 });
 
+test("pastille de semaine — Sem. 12, ou Sem. 12-A quand la semaine est alternée", () => {
+  assert.equal(formatControlWeekBadge({ schoolWeekNumber: 12, weekKind: null }), "Sem. 12");
+  assert.equal(formatControlWeekBadge({ schoolWeekNumber: 12, weekKind: "A" }), "Sem. 12-A");
+  assert.equal(formatControlWeekBadge({ schoolWeekNumber: 13, weekKind: "B" }), "Sem. 13-B");
+  assert.equal(formatControlWeekBadge({ schoolWeekNumber: 0, weekKind: null }), null);
+});
+
 test("Passés — un cours précédent n’affiche aucun prochain contrôle", () => {
   const today = monday("2026-09-28");
   const sections = buildStudentCourseDaySections(
@@ -487,7 +495,10 @@ test("tableau de bord — aperçu professeur et cours précédents restent branc
   assert.match(page, /onBackToCurrent/);
   assert.match(page, /onSelectCourseDay/);
   assert.match(dashboard, /student-history-anchor desktop-only/);
-  assert.match(dashboard, />\s*Passés\s*</);
+  assert.match(dashboard, />\s*Cours précédents\s*</);
+  assert.doesNotMatch(dashboard, />\s*Passés\s*</);
+  assert.match(controls, /student-control-week/);
+  assert.match(controls, /formatControlWeekBadge/);
   assert.match(controls, /student-visually-hidden/);
   assert.match(controls, /formatCourseDayHeading\(entry\.slot\)/);
   assert.doesNotMatch(page, /TYPE_LABELS/);

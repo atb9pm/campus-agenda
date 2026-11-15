@@ -342,7 +342,7 @@ export function StudentDashboard({
           onClick={() => onTabChange("historique")}
         >
           <span aria-hidden="true">↺</span>
-          Passés
+          Cours précédents
         </button>
         <button type="button" onClick={onSignOut}>
           <span aria-hidden="true">↪</span>
