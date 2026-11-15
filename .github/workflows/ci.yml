@@ -32,6 +32,9 @@ jobs:
       - name: Installer les dépendances racine
         run: npm ci
 
+      - name: Installer Chromium pour le rendu des contrôles
+        run: npx playwright install --with-deps chromium
+
       - name: Installer les dépendances web
         working-directory: web
         run: npm ci
