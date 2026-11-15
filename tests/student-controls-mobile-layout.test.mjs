@@ -138,15 +138,24 @@ test("smartphone — Contrôle 2 n’est jamais comprimé lettre par lettre", as
             problems.push(`description tronquée pour ${title.textContent}`);
           }
           if (badgeBox.width > rowBox.width + 1) problems.push(`badge plus large que la carte : ${badge.textContent}`);
+          const dateBox = date.getBoundingClientRect();
+          const weekBox = week.getBoundingClientRect();
+          const leftEdge = Math.max(dateBox.right, weekBox.right);
+          const rightWidth = rowBox.right - parseFloat(rowStyle.paddingRight) - leftEdge - parseFloat(rowStyle.columnGap);
+          info.rightWidth = Math.round(rightWidth);
           if (phone) {
-            if (titleBox.width < contentWidth - 2) problems.push(`${title.textContent} trop étroit (${info.titleWidth}/${info.rowWidth})`);
-            if (date.getBoundingClientRect().top > week.getBoundingClientRect().bottom) problems.push("date et semaine séparées");
-            if (badgeBox.top < date.getBoundingClientRect().bottom - 2) problems.push("branche sur la ligne de la date");
-            if (titleBox.top < badgeBox.bottom - 2) problems.push("titre comprimé à côté de la branche");
+            if (weekBox.top < dateBox.bottom - 2) problems.push("semaine à côté de la date");
+            if (weekBox.left > dateBox.right + 2) problems.push("semaine hors de la colonne date");
+            if (badgeBox.left < leftEdge - 2) problems.push("badge dans la colonne date");
+            if (titleBox.left < leftEdge - 2) problems.push("titre dans la colonne date");
+            if (titleBox.top < badgeBox.bottom - 2) problems.push("titre à côté du badge");
+            if (remark && remark.getBoundingClientRect().top < titleBox.bottom - 2) problems.push("description à côté du titre");
+            if (titleBox.width < rightWidth - 2) problems.push(`${title.textContent} trop étroit (${info.titleWidth}/${info.rightWidth})`);
             if (title.textContent === "Contrôle 2" && (titleLines > 1 || titleBox.height > fontSize * 1.8)) {
               problems.push(`Contrôle 2 sur ${titleLines} lignes, hauteur ${Math.round(titleBox.height)}`);
             }
             if (getComputedStyle(badge).whiteSpace === "nowrap") problems.push(`badge nowrap : ${badge.textContent}`);
+            if (getComputedStyle(title).color === "rgb(155, 28, 28)") problems.push("titre rouge");
           } else if (title.textContent === "Contrôle 2" && titleLines > 2) {
             problems.push(`Contrôle 2 illisible sur grand écran (${titleLines} lignes)`);
           }
@@ -157,6 +166,17 @@ test("smartphone — Contrôle 2 n’est jamais comprimé lettre par lettre", as
         if (banners.length !== 1) problems.push(`${banners.length} bandeaux Cours du jour`);
         const labels = [...document.querySelectorAll(".mobile-tab-bar button")].map((button) => button.textContent.trim());
         const navVisible = getComputedStyle(document.querySelector(".mobile-tab-bar")).display !== "none";
+        if (phone && rows.length > 1) {
+          for (let index = 1; index < rows.length; index += 1) {
+            const previous = rows[index - 1].getBoundingClientRect();
+            const next = rows[index].getBoundingClientRect();
+            if (next.top < previous.bottom + 6) problems.push("cartes collées");
+          }
+          const cardStyle = getComputedStyle(rows[0]);
+          if (parseFloat(cardStyle.borderTopWidth) < 1) problems.push("carte sans contour");
+          const heading = document.querySelector("#controls h2");
+          if (heading.getBoundingClientRect().bottom > rows[0].getBoundingClientRect().top - 4) problems.push("bandeau collé à la première carte");
+        }
         if (phone) {
           if (!navVisible) problems.push("barre absente");
           if (labels.join("|") !== "Tout|Devoirs|Contrôles|Cours précédents") problems.push(`barre ${labels.join("|")}`);
@@ -175,7 +195,7 @@ test("smartphone — Contrôle 2 n’est jamais comprimé lettre par lettre", as
       if (width === 390) {
         const electro = result.longTitle;
         assert.ok(electro, "mesure CP 1 Électrotechnique absente");
-        assert.ok(electro.titleWidth >= electro.rowWidth - 2, `titre trop étroit ${electro.titleWidth}/${electro.rowWidth}`);
+        assert.ok(electro.titleWidth >= electro.rightWidth - 2, `titre trop étroit ${electro.titleWidth}/${electro.rightWidth}`);
         assert.equal(electro.titleLines, 1, "Contrôle 2 ne tient pas sur une ligne");
       }
       assert.deepEqual(result.problems, [], `${width}px : ${result.problems.join(" | ")}`);

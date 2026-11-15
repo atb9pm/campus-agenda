@@ -2,6 +2,13 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.17] — Contrôles élève : carte en deux colonnes
+
+### Modifié
+
+- **Smartphone** : chaque contrôle est une carte séparée. À gauche, la date en rouge et la pastille de semaine en dessous. Un filet vertical les sépare de la branche, du titre et de la description, qui occupent la colonne de droite. « Contrôle 2 » reste sur une ligne.
+- Le bandeau « Contrôles à venir » reste seul au-dessus des cartes. La barre du bas, Sortir et l’ordre des blocs ne changent pas. L’ordinateur et l’aperçu branche enseignant conservent leur présentation.
+
 ## [2.62.16] — Contrôles élève : lisibilité sur smartphone
 
 ### Corrigé
