@@ -2,6 +2,14 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.16] — Contrôles élève : lisibilité sur smartphone
+
+### Corrigé
+
+- **Smartphone** : un contrôle n’est plus une ligne à quatre colonnes. La date et la pastille de semaine restent ensemble, puis le badge de branche, le titre et la description occupent chacun toute la largeur de la carte. Un titre court comme « Contrôle 2 » reste sur une ligne, même avec une branche longue.
+- **Cours du jour** : un seul bandeau pour le bloc. Le nom de chaque branche n’est plus précédé d’un second bandeau « Cours du jour ».
+- Les couleurs d’urgence des titres, la barre du bas et l’ordre Contrôles à venir puis Cours du jour restent ceux de la version 2.62.15. L’ordinateur et l’aperçu branche enseignant conservent leur présentation.
+
 ## [2.62.15] — Agenda élève : menus en bas du téléphone
 
 ### Modifié

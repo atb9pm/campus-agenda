@@ -273,7 +273,11 @@ test("sources — Cours du jour, Contrôles à venir, RichDoc unique, aucun À v
   assert.match(mobileNav, /TABS\.map/);
   assert.match(mobileNav, /Cours précédents/);
   assert.doesNotMatch(mobileNav, /Sortir/);
-  assert.match(css, /grid-template-areas:\s*"date week title badge"/);
+  assert.match(
+    css,
+    /grid-template-areas:\s*"date week \."\s*"badge badge badge"\s*"title title title"\s*"detail detail detail"/,
+  );
+  assert.doesNotMatch(css, /"date week title badge"/);
   assert.match(dashboard, /student-signout-mobile/);
   assert.match(css, /grid-template-columns: minmax\(0, 1\.62fr\) minmax\(0, 1fr\)/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*student-dashboard-grid\[data-layout="tout"\] \{ grid-template-columns: minmax\(0, 1fr\)/);

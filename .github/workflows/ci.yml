@@ -56,3 +56,7 @@ jobs:
       - name: Suite de tests (npm test)
         working-directory: web
         run: npm test
+        env:
+          # Le runner Ubuntu 26.04 n’est pas reconnu par le Chromium embarqué de Playwright 1.56.
+          # Google Chrome est déjà installé sur l’image.
+          CAMPUS_PLAYWRIGHT_CHANNEL: chrome
