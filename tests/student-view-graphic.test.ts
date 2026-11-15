@@ -240,12 +240,15 @@ test("sources — Cours du jour, Contrôles à venir, RichDoc unique, aucun À v
   assert.match(controls, /ControlRow key=\{entry\.item\.id\}/);
   const chipAt = controls.indexOf("student-course-chip");
   const timeAt = controls.indexOf("<time");
+  const weekAt = controls.indexOf("student-control-week");
   const titleAt = controls.indexOf("{entry.item.title}");
   assert.ok(chipAt > 0 && chipAt < timeAt, "branche avant la date");
-  assert.ok(timeAt < titleAt, "date avant le titre");
+  assert.ok(timeAt < weekAt && weekAt < titleAt, "pastille de semaine entre la date et le titre");
+  assert.match(controls, /formatControlWeekBadge/);
   assert.match(controls, /student-visually-hidden/);
   assert.match(controls, /dateTime=\{entry\.slot\.date\.toISOString\(\)\}/);
-  assert.match(css, /\.student-control-main \{[\s\S]{0,160}grid-template-columns: 52px minmax\(0, 1fr\)/);
+  assert.match(css, /\.student-control-main \{[\s\S]{0,200}grid-template-columns: auto auto minmax\(0, 1fr\)/);
+  assert.match(css, /\.student-control-week \{[\s\S]{0,320}background: var\(--profession-wash/);
   assert.match(css, /\.student-control-row > \.student-course-chip \{[\s\S]{0,220}width: fit-content/);
   assert.match(css, /\.student-control-row > \.student-course-chip \{[\s\S]{0,220}justify-self: start/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.student-control-row[\s\S]{0,160}overflow-x: hidden/);
