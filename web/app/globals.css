@@ -3317,14 +3317,26 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   }
   .student-course-day-app:not(.branch-preview) .student-controls-preview { order: 1; }
   .student-course-day-app:not(.branch-preview) .student-todo-panel { order: 2; }
-  .student-course-day-app:not(.branch-preview) .student-controls-preview,
-  .student-course-day-app:not(.branch-preview) .student-upcoming-tests,
   .student-course-day-app:not(.branch-preview) .student-todo-panel {
     padding: 0;
     overflow: visible;
     border: 1px solid #e3ebf5;
     border-radius: 16px;
     background: #fff;
+  }
+  .student-course-day-app:not(.branch-preview) .student-controls-preview,
+  .student-course-day-app:not(.branch-preview) .student-upcoming-tests {
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .student-course-day-app:not(.branch-preview) .student-control-preview-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
   .student-course-day-app:not(.branch-preview) .student-subject-card {
     margin: 0;
@@ -3337,8 +3349,6 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   .student-course-day-app:not(.branch-preview) .student-subject-card + .student-subject-card {
     border-top: 1px solid #e6edf5;
   }
-  .student-course-day-app:not(.branch-preview) .student-controls-preview h2,
-  .student-course-day-app:not(.branch-preview) .student-upcoming-tests h2,
   .student-course-day-app:not(.branch-preview) .student-panel-heading,
   .student-course-day-app:not(.branch-preview) .student-next-session-heading {
     display: block;
@@ -3351,32 +3361,57 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
     font-weight: 700;
     letter-spacing: 0;
   }
+  .student-course-day-app:not(.branch-preview) .student-controls-preview h2,
+  .student-course-day-app:not(.branch-preview) .student-upcoming-tests h2 {
+    display: block;
+    margin: 0 0 10px;
+    padding: 14px 16px;
+    border: 0;
+    border-radius: 16px;
+    background: #e8f1fb;
+    color: #24548f;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
   .student-course-day-app:not(.branch-preview) .student-subject-card .student-branch-block { padding: 12px 16px 14px; }
   .student-course-day-app:not(.branch-preview) .student-control-row {
     display: grid;
-    grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
     grid-template-areas:
-      "date week ."
-      "badge badge badge"
-      "title title title"
-      "detail detail detail";
+      "date badge"
+      "week title"
+      "rail detail";
     align-items: start;
     justify-content: start;
-    column-gap: 10px;
+    column-gap: 16px;
     row-gap: 6px;
     width: 100%;
     margin: 0;
-    padding: 12px 16px;
-    border-bottom: 1px solid #e6edf5;
+    padding: 12px 14px;
+    border: 1px solid #e3ebf5;
+    border-radius: 16px;
+    background: #fff;
   }
-  .student-course-day-app:not(.branch-preview) .student-control-row:last-child { border-bottom: 0; }
+  .student-course-day-app:not(.branch-preview) .student-control-row::after {
+    content: "";
+    grid-column: 1;
+    grid-row: 1 / -1;
+    justify-self: end;
+    align-self: stretch;
+    width: 1px;
+    margin-right: -8px;
+    background: #e3ebf5;
+    pointer-events: none;
+  }
+  .student-course-day-app:not(.branch-preview) .student-control-row:last-child { border-bottom: 1px solid #e3ebf5; }
   .student-course-day-app:not(.branch-preview) .student-control-main,
   .student-course-day-app:not(.branch-preview) .student-control-card-body { display: contents; }
   .student-course-day-app:not(.branch-preview) .student-control-date {
     grid-area: date;
     display: flex;
     align-items: baseline;
-    align-self: center;
+    align-self: start;
     gap: 4px;
     color: #c42323;
   }
@@ -3393,16 +3428,21 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
     text-transform: lowercase;
   }
   .student-course-day-app:not(.branch-preview) .student-control-month::after { content: "."; }
-  .student-course-day-app:not(.branch-preview) .student-control-week { grid-area: week; align-self: center; }
+  .student-course-day-app:not(.branch-preview) .student-control-week {
+    grid-area: week;
+    align-self: start;
+    justify-self: start;
+  }
   .student-course-day-app:not(.branch-preview) .student-control-card-body > strong {
     grid-area: title;
     display: block;
     width: 100%;
     min-width: 0;
     max-width: 100%;
-    font-size: 16px;
+    color: var(--navy);
+    font-size: 17px;
     font-weight: 700;
-    line-height: 1.3;
+    line-height: 1.25;
     white-space: normal;
     overflow-wrap: break-word;
     word-break: normal;
@@ -3444,6 +3484,8 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
     width: 100%;
     max-width: 100%;
     margin-top: 0;
+    color: #516582;
+    font-size: 14px;
     white-space: normal;
     overflow-wrap: break-word;
     word-break: normal;
