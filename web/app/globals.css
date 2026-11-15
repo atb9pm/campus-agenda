@@ -3229,6 +3229,31 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   .student-upcoming-tests,
   .student-control-row,
   .student-control-main { max-width: 100%; overflow-x: hidden; }
+  /* Date et semaine sur la première ligne, titre et description sur toute la largeur. */
+  .student-control-main {
+    grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-areas:
+      "date week ."
+      "body body body";
+    justify-content: start;
+    align-items: center;
+    column-gap: 12px;
+    row-gap: 10px;
+    width: 100%;
+  }
+  .student-control-date { grid-area: date; }
+  .student-control-week { grid-area: week; align-self: center; }
+  .student-control-card-body {
+    grid-area: body;
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .student-control-remark,
+  .student-next-control-detail {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
   .student-course-chip { max-width: 100%; }
   .student-branch-block h2,
   .student-upcoming-tests-branch,
@@ -3632,4 +3657,34 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   .branch-preview .branch-preview-logo { height: 34px; }
   .branch-preview-brand span { font-size: 12px; }
   .branch-preview-pill { min-height: 30px; padding: 0 12px; font-size: 13px; }
+}
+/* La typographie de l’aperçu branche reste grande jusqu’à 760 px.
+   En dessous de 900 px, une ligne date | semaine | titre devient trop étroite. */
+@media (max-width: 900px) {
+  .branch-preview .student-control-main {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-areas:
+      "date week ."
+      "body body body";
+    align-items: center;
+    justify-content: start;
+    column-gap: 14px;
+    row-gap: 12px;
+    width: 100%;
+    max-width: 100%;
+  }
+  .branch-preview .student-control-date { grid-area: date; }
+  .branch-preview .student-control-week { grid-area: week; align-self: center; }
+  .branch-preview .student-control-card-body {
+    grid-area: body;
+    min-width: 0;
+    max-width: 100%;
+    padding-left: 0;
+    border-left: 0;
+  }
+  .branch-preview .student-control-remark {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }

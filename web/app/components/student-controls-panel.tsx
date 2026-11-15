@@ -87,9 +87,17 @@ function useFitControlRemarks(active: boolean, signature: string) {
     if (!active) return;
     const root = rootRef.current;
     if (!root) return;
+    const narrowQuery = window.matchMedia("(max-width: 900px)");
     const fit = () => {
+      const narrow = narrowQuery.matches;
       const max = parseFloat(getComputedStyle(root).getPropertyValue("--course-day-size")) || 46;
       root.querySelectorAll<HTMLElement>(".student-control-remark").forEach((el) => {
+        if (narrow) {
+          el.style.fontSize = "";
+          el.style.lineHeight = "";
+          el.style.whiteSpace = "normal";
+          return;
+        }
         if (el.clientWidth < 40) return;
         const chosen = fitRemarkFontSize(max, (size, singleLine) => {
           el.style.fontSize = `${size}px`;
@@ -105,9 +113,13 @@ function useFitControlRemarks(active: boolean, signature: string) {
     fit();
     const observer = new ResizeObserver(() => fit());
     observer.observe(root);
+    narrowQuery.addEventListener("change", fit);
     const fonts = document.fonts;
     if (fonts) void fonts.ready.then(fit);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      narrowQuery.removeEventListener("change", fit);
+    };
   }, [active, signature]);
   return rootRef;
 }

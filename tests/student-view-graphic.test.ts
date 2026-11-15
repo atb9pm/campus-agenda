@@ -252,6 +252,11 @@ test("sources — Cours du jour, Contrôles à venir, RichDoc unique, aucun À v
   assert.match(css, /\.student-control-row > \.student-course-chip \{[\s\S]{0,220}width: fit-content/);
   assert.match(css, /\.student-control-row > \.student-course-chip \{[\s\S]{0,220}justify-self: start/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.student-control-row[\s\S]{0,160}overflow-x: hidden/);
+  assert.match(
+    css,
+    /@media \(max-width: 760px\) \{[\s\S]*?\.student-control-main \{[\s\S]*?grid-template-areas:\s*"date week \."\s*"body body body"/,
+  );
+  assert.match(css, /\.branch-preview \.student-control-card-body \{[\s\S]{0,220}border-left: 0/);
   assert.doesNotMatch(
     css,
     /@media \(max-width: 760px\)[\s\S]*\.student-course-chip \{ max-width: 100%; overflow-x: hidden; \}/,
