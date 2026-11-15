@@ -26,6 +26,28 @@ function shortWeekBadge(slot: CourseDaySlot): string {
   return `Sem ${padded}`;
 }
 
+function studentHeaderWeekPill(slot: CourseDaySlot): string {
+  const number = String(slot.schoolWeekNumber);
+  if (slot.weekKind === "A" || slot.weekKind === "B") return `Sem ${number}-${slot.weekKind}`;
+  return `Sem ${number}`;
+}
+
+function StudentNavIcon({ name }: { name: "tout" | "devoirs" | "controles" | "historique" }) {
+  const paths = {
+    tout: "M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z",
+    devoirs: "M7 3.5h7.2L19 8.2V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z M14 3.8V8h4.2 M8.5 12.5h7 M8.5 16h5",
+    controles: "M8 4.5h8a2 2 0 0 1 2 2V19a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19V6.5a2 2 0 0 1 2-2Z M9 12.2 11 14.2 15.2 10",
+    historique: "M12 6.5V12l3.5 2 M12 20a8 8 0 1 0-7.2-4.5 M5 12.5H2.5V15",
+  };
+  return (
+    <span className="student-nav-icon" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <path d={paths[name]} stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" strokeLinecap="round" />
+      </svg>
+    </span>
+  );
+}
+
 function classBadgeName(classroomName: string, branchLabel: string): string {
   const branch = branchLabel.trim();
   const suffix = ` · ${branch}`;
@@ -189,20 +211,31 @@ export function StudentDashboard({
 
         {branchPreview ? null : (
         <section className="student-course-day-card student-dashboard-hero" aria-labelledby="student-course-day-title">
-          <div className="student-dashboard-hero-copy">
-            <p className="eyebrow">{classroomName}</p>
-            {displayCourseDay ? (
-              <>
-                <p className="student-week-label">{formatSchoolWeekLabel(displayCourseDay)}</p>
-                <h1 id="student-course-day-title">{formatCourseDayHeading(displayCourseDay)}</h1>
-                {!followingCourseDay && (
-                  <p className="student-course-day-note">Consultation d’un cours passé.</p>
-                )}
-              </>
-            ) : (
-              <h1 id="student-course-day-title">Agenda élève</h1>
-            )}
+          <div className="student-hero-title-row">
+            <div className="student-dashboard-hero-copy">
+              <p className="eyebrow">{classroomName}</p>
+              {displayCourseDay ? (
+                <>
+                  <p className="student-week-label">{formatSchoolWeekLabel(displayCourseDay)}</p>
+                  <h1 id="student-course-day-title">{formatCourseDayHeading(displayCourseDay)}</h1>
+                  {!followingCourseDay && (
+                    <p className="student-course-day-note">Consultation d’un cours passé.</p>
+                  )}
+                </>
+              ) : (
+                <h1 id="student-course-day-title">Agenda élève</h1>
+              )}
+            </div>
+            <button className="student-signout-mobile" type="button" onClick={onSignOut}>
+              {signOutLabel === "Se déconnecter" ? "Sortir" : "Quitter"}
+            </button>
           </div>
+          {displayCourseDay ? (
+            <div className="student-context-pills" aria-label="Classe et semaine">
+              <span className="student-context-pill">{classBadge || classroomName}</span>
+              <span className="student-context-pill">{studentHeaderWeekPill(displayCourseDay)}</span>
+            </div>
+          ) : null}
 
           <div className="student-view-tabs" aria-label="Vue élève">
             {TABS.map((entry) => {
@@ -336,17 +369,26 @@ export function StudentDashboard({
 
       {branchPreview ? null : (
       <nav className="mobile-tab-bar" aria-label="Navigation élève">
+        {TABS.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            className={tab === entry.id ? "active" : ""}
+            aria-current={tab === entry.id ? "page" : undefined}
+            onClick={() => onTabChange(entry.id)}
+          >
+            <StudentNavIcon name={entry.id} />
+            {entry.label}
+          </button>
+        ))}
         <button
           type="button"
           className={tab === "historique" ? "active" : ""}
+          aria-current={tab === "historique" ? "page" : undefined}
           onClick={() => onTabChange("historique")}
         >
-          <span aria-hidden="true">↺</span>
+          <StudentNavIcon name="historique" />
           Cours précédents
-        </button>
-        <button type="button" onClick={onSignOut}>
-          <span aria-hidden="true">↪</span>
-          {signOutLabel === "Se déconnecter" ? "Sortir" : "Quitter"}
         </button>
       </nav>
       )}

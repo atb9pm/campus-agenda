@@ -266,6 +266,15 @@ test("sources — Cours du jour, Contrôles à venir, RichDoc unique, aucun À v
   assert.doesNotMatch(homework, />À venir</);
   assert.doesNotMatch(controls, />À venir</);
   assert.match(dashboard, /data-layout="tout"/);
+  const mobileNav = dashboard.slice(dashboard.indexOf('className="mobile-tab-bar"'));
+  assert.match(dashboard, /label: "Tout"/);
+  assert.match(dashboard, /label: "Devoirs"/);
+  assert.match(dashboard, /label: "Contrôles"/);
+  assert.match(mobileNav, /TABS\.map/);
+  assert.match(mobileNav, /Cours précédents/);
+  assert.doesNotMatch(mobileNav, /Sortir/);
+  assert.match(css, /grid-template-areas:\s*"date week title badge"/);
+  assert.match(dashboard, /student-signout-mobile/);
   assert.match(css, /grid-template-columns: minmax\(0, 1\.62fr\) minmax\(0, 1fr\)/);
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*student-dashboard-grid\[data-layout="tout"\] \{ grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(css, /\.student-branch-item \.rich-doc-view strong \{[\s\S]{0,80}color: inherit/);
