@@ -85,7 +85,10 @@ const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><style>
 const WIDTHS = [320, 375, 390, 430, 768, 1024, 1440];
 
 test("smartphone — Contrôle 2 n’est jamais comprimé lettre par lettre", async () => {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    ...(process.env.CAMPUS_PLAYWRIGHT_CHANNEL ? { channel: process.env.CAMPUS_PLAYWRIGHT_CHANNEL } : {}),
+  });
   const page = await browser.newPage();
   const shots = process.env.CAMPUS_LAYOUT_SHOTS;
   if (shots) mkdirSync(shots, { recursive: true });
