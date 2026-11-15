@@ -2,6 +2,13 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.15] — Agenda élève : menus en bas du téléphone
+
+### Modifié
+
+- **Téléphone** : la date du jour est le titre. Sortir reste en haut à droite. La classe et la semaine sont deux pastilles. Tout, Devoirs, Contrôles et Cours précédents sont dans la barre du bas.
+- **Tout** : les contrôles à venir passent avant les cours du jour. Chaque contrôle aligne la date, la pastille de semaine, le titre et le badge de branche.
+
 ## [2.62.14] — Contrôles élève : numéro de semaine
 
 ### Ajouté

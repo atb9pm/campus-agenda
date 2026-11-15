@@ -211,19 +211,21 @@ export function StudentHomeworkPanel({
       data-panel={mode === "homework" ? "devoirs" : "todo"}
       aria-labelledby={`student-${mode}-title`}
     >
-      <h2 id={`student-${mode}-title`}>
+      <h2 className="student-panel-heading" id={`student-${mode}-title`}>
         {mode === "todo" ? <CourseDayIcon /> : null}
         {title}
       </h2>
       {today.length ? (
         <div className="student-branch-list">
           {today.map((section) => (
-            <BranchBlock
-              key={section.subject.id}
-              subject={section.subject}
-              publications={section.publications}
-              doneControl={doneControl}
-            />
+            <article className="student-subject-card" key={section.subject.id}>
+              <h3 className="student-subject-card-title">{title}</h3>
+              <BranchBlock
+                subject={section.subject}
+                publications={section.publications}
+                doneControl={doneControl}
+              />
+            </article>
           ))}
         </div>
       ) : (
@@ -237,12 +239,16 @@ export function StudentHomeworkPanel({
           </h3>
           <div className="student-branch-list">
             {group.branches.map((branch) => (
-              <BranchBlock
-                key={branch.subject.id}
-                subject={branch.subject}
-                publications={branch.publications}
-                doneControl={doneControl}
-              />
+              <article className="student-subject-card" key={branch.subject.id}>
+                <h3 className="student-subject-card-title">
+                  <time dateTime={calendarDateKey(group.slot.date)}>{formatNextSessionLabel(group.slot.date)}</time>
+                </h3>
+                <BranchBlock
+                  subject={branch.subject}
+                  publications={branch.publications}
+                  doneControl={doneControl}
+                />
+              </article>
             ))}
           </div>
         </section>

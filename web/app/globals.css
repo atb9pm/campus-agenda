@@ -405,6 +405,10 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .student-course-day-note { margin: 10px 0 0; color: #7b879c; font-size: 13px; }
 .student-dashboard-hero { margin-bottom: 22px; }
 .student-dashboard-hero-copy { min-width: 0; }
+.student-hero-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.student-signout-mobile { display: none; }
+.student-context-pills { display: none; }
+.student-subject-card-title { display: none; }
 .student-view-tabs {
   display: flex;
   flex-wrap: nowrap;
@@ -3154,7 +3158,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   .desktop-only { display: none !important; }
   .has-mobile-tabs .technical-main,
   .has-mobile-tabs .student-course-day-main {
-    padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
   }
 
   .mobile-tab-bar {
@@ -3265,6 +3269,178 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   .student-branch-item .rich-doc-view a {
     overflow-wrap: anywhere;
     word-break: break-word;
+  }
+
+  .student-course-day-app:not(.branch-preview) .student-course-day-header,
+  .student-course-day-app:not(.branch-preview) .student-view-tabs,
+  .student-course-day-app:not(.branch-preview) .eyebrow,
+  .student-course-day-app:not(.branch-preview) .student-week-label,
+  .student-course-day-app:not(.branch-preview) .prototype-label,
+  .student-course-day-app:not(.branch-preview) .student-panel-heading,
+  .student-course-day-app:not(.branch-preview) .student-next-session-heading,
+  .student-course-day-app:not(.branch-preview) .student-zone-icon { display: none; }
+  .student-course-day-app:not(.branch-preview) .student-branch-list { gap: 0; }
+  .student-course-day-app:not(.branch-preview) .student-signout-mobile {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 6px;
+    padding: 4px 0 4px 12px;
+    border: 0;
+    background: transparent;
+    color: var(--blue);
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .student-course-day-app:not(.branch-preview) .student-context-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .student-context-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    max-width: 100%;
+    padding: 4px 12px;
+    border: 1px solid #d5deea;
+    border-radius: 999px;
+    background: #fff;
+    color: var(--navy);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+  .student-course-day-app:not(.branch-preview) .student-dashboard-grid[data-layout="tout"] {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .student-course-day-app:not(.branch-preview) .student-controls-preview { order: 1; }
+  .student-course-day-app:not(.branch-preview) .student-todo-panel { order: 2; }
+  .student-course-day-app:not(.branch-preview) .student-controls-preview,
+  .student-course-day-app:not(.branch-preview) .student-upcoming-tests,
+  .student-course-day-app:not(.branch-preview) .student-subject-card {
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid #e3ebf5;
+    border-radius: 16px;
+    background: #fff;
+  }
+  .student-course-day-app:not(.branch-preview) .student-todo-panel {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .student-course-day-app:not(.branch-preview) .student-subject-card { margin: 0 0 14px; }
+  .student-course-day-app:not(.branch-preview) .student-subject-card:last-child { margin-bottom: 0; }
+  .student-course-day-app:not(.branch-preview) .student-controls-preview h2,
+  .student-course-day-app:not(.branch-preview) .student-upcoming-tests h2,
+  .student-course-day-app:not(.branch-preview) .student-subject-card-title {
+    display: block;
+    margin: 0;
+    padding: 14px 16px;
+    border-bottom: 0;
+    background: #e8f1fb;
+    color: #24548f;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
+  .student-course-day-app:not(.branch-preview) .student-subject-card .student-branch-block { padding: 14px 16px 16px; }
+  .student-course-day-app:not(.branch-preview) .student-control-row {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "date week title badge"
+      "detail detail detail detail";
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 6px;
+    margin: 0;
+    padding: 14px 16px;
+    border-bottom: 1px solid #e6edf5;
+  }
+  .student-course-day-app:not(.branch-preview) .student-control-row:last-child { border-bottom: 0; }
+  .student-course-day-app:not(.branch-preview) .student-control-main,
+  .student-course-day-app:not(.branch-preview) .student-control-card-body { display: contents; }
+  .student-course-day-app:not(.branch-preview) .student-control-date {
+    grid-area: date;
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    color: #c42323;
+  }
+  .student-course-day-app:not(.branch-preview) .student-control-day,
+  .student-course-day-app:not(.branch-preview) .student-control-month {
+    color: #c42323;
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+  .student-course-day-app:not(.branch-preview) .student-control-month {
+    margin-top: 0;
+    letter-spacing: 0;
+    text-transform: lowercase;
+  }
+  .student-course-day-app:not(.branch-preview) .student-control-month::after { content: "."; }
+  .student-course-day-app:not(.branch-preview) .student-control-week { grid-area: week; }
+  .student-course-day-app:not(.branch-preview) .student-control-card-body > strong {
+    grid-area: title;
+    min-width: 0;
+    color: var(--navy);
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .student-course-day-app:not(.branch-preview) .student-control-row > .student-course-chip {
+    grid-area: badge;
+    justify-self: end;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    padding: 4px 10px;
+    border: 1px solid #d5deea;
+    border-radius: 999px;
+    background: #fff;
+    letter-spacing: 0;
+    text-transform: none;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .student-course-day-app:not(.branch-preview) .student-subject-card .student-course-chip {
+    margin: 0;
+    padding: 6px 12px;
+    border: 1px solid #d5deea;
+    border-radius: 999px;
+    background: #fff;
+    letter-spacing: 0;
+    text-transform: none;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .student-course-day-app:not(.branch-preview) .student-control-remark,
+  .student-course-day-app:not(.branch-preview) .student-next-control-detail {
+    grid-area: detail;
+  }
+  .student-course-day-app .mobile-tab-bar button {
+    color: #8b97ab;
+    font-size: 11px;
+    font-weight: 600;
+    background: transparent;
+    white-space: normal;
+  }
+  .student-course-day-app .mobile-tab-bar button .student-nav-icon {
+    display: inline-flex;
+    color: #8b97ab;
+    font-size: 0;
+  }
+  .student-course-day-app .mobile-tab-bar button.active,
+  .student-course-day-app .mobile-tab-bar button.active .student-nav-icon {
+    color: var(--blue);
+    background: transparent;
   }
 }
 
