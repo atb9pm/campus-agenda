@@ -238,6 +238,8 @@ export function buildStudentCourseDaySections(
     courseDay?: CourseDaySlot;
     /** Publications de la prochaine séance de chaque branche, après `courseDay`. */
     nextSession?: { items: readonly PrototypeAgendaItem[]; weeks: readonly SchoolWeek[] };
+    /** Aperçu branche : une seule séance, sans recherche du cours suivant. */
+    sessionLocked?: boolean;
     /** Réglage catalogue déjà résolu. Absent : une date par branche affichée. */
     controlLinks?: readonly UpcomingControlBranchLink[];
   } = {},
@@ -279,7 +281,7 @@ export function buildStudentCourseDaySections(
     }
   }
 
-  if (options.nextSession && options.courseDay) {
+  if (!options.sessionLocked && options.nextSession && options.courseDay) {
     const upcoming = nextSessionPublicationsByBranch(
       options.nextSession.items,
       options.nextSession.weeks,

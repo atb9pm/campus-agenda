@@ -2,6 +2,13 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.20] — Aperçu branche : séance sélectionnée
+
+### Corrigé
+
+- **Aperçu branche** : la séance encadrée dans le Carnet est celle qui est projetée. Le bloc « Cours du jour » ne contient que ses publications, y compris un brouillon, avec l’indication « Brouillon — non publié aux élèves ». Une séance précédente ou suivante n’est plus ajoutée.
+- Les brouillons restent invisibles dans l’agenda élève. Les notes prof ne sont pas projetées. Les contrôles à venir et le retour au Carnet ne changent pas.
+
 ## [2.62.19] — Carnet : sélection sans déplacement, retour Ma semaine
 
 ### Corrigé

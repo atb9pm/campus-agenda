@@ -16,6 +16,7 @@ import {
   getStudentAgendaItems,
   groupControlPlanning,
   itemsForAnnualCourse,
+  publicationsForBranchPreview,
   msUntilNextLocalMidnight,
   nextControlDatePerSubject,
   STUDENT_AGENDA_REFRESH_INTERVAL_MS,
@@ -313,6 +314,8 @@ export default function Home() {
   }>>([]);
   const [studentEntry, setStudentEntry] = useState<StudentEntry | null>(null);
   const [previewAnnualCourseId, setPreviewAnnualCourseId] = useState<string | null>(null);
+  const [previewCourseSessionKey, setPreviewCourseSessionKey] = useState<string | null>(null);
+  const [previewSessionMissing, setPreviewSessionMissing] = useState(false);
   const [studentCodeModalOpen, setStudentCodeModalOpen] = useState(false);
   const [selectedSchoolWeekNumber, setSelectedSchoolWeekNumber] = useState(1);
   const [items, setItems] = useState<PrototypeAgendaItem[]>([]);
@@ -1166,6 +1169,27 @@ export default function Home() {
   }, [studentDisplayCourseDay, studentAutoCourseDay]);
 
   const studentCourseDaySections = useMemo(() => {
+    if (studentEntry === "teacher-branch-preview") {
+      if (previewSessionMissing || !studentSession || !previewAnnualCourseId) return [];
+      const dayItems = publicationsForBranchPreview({
+        items,
+        classroomId: studentSession.classroomId,
+        annualCourseId: previewAnnualCourseId,
+        courseSessionKey: previewCourseSessionKey,
+      });
+      return buildStudentCourseDaySections(
+        dayItems,
+        studentPreviewSubjects,
+        studentFutureTests,
+        {
+          includeNextControls: Boolean(studentDisplayCourseDay),
+          scheduleSlots: studentPreviewScheduleSlots,
+          courseDay: studentDisplayCourseDay ?? undefined,
+          sessionLocked: true,
+          controlLinks: studentControlLinks,
+        },
+      );
+    }
     if (!studentSession || !studentDisplayCourseDay) return [];
     const dayItems = filterItemsForCourseDay(studentAgendaItems, studentDisplayCourseDay);
     return buildStudentCourseDaySections(
@@ -1183,6 +1207,11 @@ export default function Home() {
       },
     );
   }, [
+    studentEntry,
+    previewSessionMissing,
+    previewAnnualCourseId,
+    previewCourseSessionKey,
+    items,
     studentSession,
     studentAgendaItems,
     schoolWeeksMemo,
@@ -1268,6 +1297,8 @@ export default function Home() {
       } else {
         setStudentCourseDayKey(null);
       }
+    } else if (options.entry === "teacher-branch-preview") {
+      setStudentCourseDayKey(null);
     } else {
       setStudentToday(new Date());
       setStudentCourseDayKey(null);
@@ -1290,10 +1321,15 @@ export default function Home() {
 
   function enterTeacherBranchPreview(context: {
     annualCourseId: string;
+    courseSessionKey?: string | null;
     focusDate?: string | null;
     schoolWeekNumber?: number | null;
     dayOfWeek?: number | null;
+    selectionMissing?: boolean;
   }) {
+    const missing = Boolean(context.selectionMissing) || !context.courseSessionKey?.trim();
+    setPreviewCourseSessionKey(missing ? null : context.courseSessionKey?.trim() ?? null);
+    setPreviewSessionMissing(missing);
     const branch = openNotebookCourse?.branchLabel?.trim();
     const className =
       runtimeClassrooms.find((entry) => entry.id === (notebookClassroomId || selectedClassroomId))?.name
@@ -1303,9 +1339,9 @@ export default function Home() {
       entry: "teacher-branch-preview",
       annualCourseId: context.annualCourseId,
       classroomLabel: branch ? `${className} · ${branch}` : className,
-      focusDate: context.focusDate,
-      schoolWeekNumber: context.schoolWeekNumber,
-      dayOfWeek: context.dayOfWeek,
+      focusDate: missing ? null : context.focusDate,
+      schoolWeekNumber: missing ? null : context.schoolWeekNumber,
+      dayOfWeek: missing ? null : context.dayOfWeek,
     });
   }
 
@@ -1321,6 +1357,8 @@ export default function Home() {
         setSelectedClassroomId(session.classroomId);
         setStudentEntry("code");
         setPreviewAnnualCourseId(null);
+        setPreviewCourseSessionKey(null);
+        setPreviewSessionMissing(false);
         setAppMode("student");
         setStudentCourseDayKey(null);
         setStudentHistoryOpen(false);
@@ -1357,6 +1395,8 @@ export default function Home() {
         setStudentSession(null);
         setStudentEntry(null);
         setPreviewAnnualCourseId(null);
+        setPreviewCourseSessionKey(null);
+        setPreviewSessionMissing(false);
         setStudentToday(new Date());
         setStudentCourseDayKey(null);
         setActiveSection("ma-semaine");
@@ -1366,6 +1406,8 @@ export default function Home() {
       await logoutApiSession();
       setStudentSession(null);
       setStudentEntry(null);
+      setPreviewCourseSessionKey(null);
+      setPreviewSessionMissing(false);
       setAppMode("teacher");
       clearTeacherAuthIdentity();
     })();
@@ -1965,6 +2007,7 @@ export default function Home() {
           planning={studentControlPlanning}
           today={studentToday}
           branchPreview={studentEntry === "teacher-branch-preview"}
+          previewSessionMissing={previewSessionMissing}
           branchLabel={
             studentEntry === "teacher-branch-preview" ? openNotebookCourse?.branchLabel ?? "" : ""
           }

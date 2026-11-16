@@ -12,6 +12,31 @@ export function getStudentAgendaItems(
   return getItemsForClassroom(items, classroomId).filter(isVisibleToStudent);
 }
 
+export const BRANCH_PREVIEW_DRAFT_LABEL = "Brouillon — non publié aux élèves";
+export const BRANCH_PREVIEW_EMPTY_LABEL = "Aucune publication pour cette séance.";
+
+/**
+ * Publications pédagogiques d’une seule séance pour l’Aperçu branche enseignant.
+ * Les brouillons restent inclus. `studentVisible` n’est pas modifié.
+ * Les contrôles et les notes prof ne font pas partie de ce bloc.
+ */
+export function publicationsForBranchPreview(input: {
+  items: readonly PrototypeAgendaItem[];
+  classroomId: string;
+  annualCourseId: string;
+  courseSessionKey: string | null;
+}): PrototypeAgendaItem[] {
+  const courseId = input.annualCourseId.trim();
+  const sessionKey = input.courseSessionKey?.trim() ?? "";
+  if (!courseId || !sessionKey) return [];
+  return input.items.filter((item) => {
+    if (item.classroomId !== input.classroomId) return false;
+    if ((item.annualCourseId ?? "").trim() !== courseId) return false;
+    if ((item.courseSessionKey ?? "").trim() !== sessionKey) return false;
+    return item.type === "HOMEWORK" || item.type === "INFORMATION";
+  });
+}
+
 /** Contenu élève d’un seul AnnualCourse — identité du cours, pas le libellé de branche. */
 export function itemsForAnnualCourse<T extends { annualCourseId?: string | null }>(
   items: readonly T[],

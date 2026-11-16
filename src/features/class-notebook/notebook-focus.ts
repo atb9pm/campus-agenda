@@ -208,6 +208,46 @@ export function notebookHighlightedSessionKey(input: {
     : null;
 }
 
+export interface NotebookBranchPreviewTarget {
+  annualCourseId: string;
+  courseSessionKey: string | null;
+  focusDate: string | null;
+  schoolWeekNumber: number | null;
+  dayOfWeek: number | null;
+  /** La séance mémorisée n’existe plus : ne pas en projeter une autre à sa place. */
+  selectionMissing: boolean;
+}
+
+/**
+ * Séance projetée par l’Aperçu branche.
+ * La séance sélectionnée prime. Sans sélection manuelle, c’est la séance active
+ * (référence ou tête de fenêtre). Une sélection invalide ne retombe pas sur une autre séance.
+ */
+export function notebookBranchPreviewTarget(input: {
+  annualCourseId: string;
+  sessions: readonly CourseSession[];
+  followMode: NotebookFollowMode;
+  windowStartKey: string | null;
+  selectedSessionKey: string | null;
+}): NotebookBranchPreviewTarget {
+  const highlighted = notebookHighlightedSessionKey({
+    sessions: input.sessions,
+    followMode: input.followMode,
+    windowStartKey: input.windowStartKey,
+    selectedSessionKey: input.selectedSessionKey,
+  });
+  const session = highlighted ? input.sessions.find((entry) => entry.key === highlighted) ?? null : null;
+  const selectionMissing = input.followMode === "manual" && Boolean(input.selectedSessionKey) && !session;
+  return {
+    annualCourseId: input.annualCourseId,
+    courseSessionKey: session?.key ?? null,
+    focusDate: session?.date ?? null,
+    schoolWeekNumber: session?.schoolWeekNumber ?? null,
+    dayOfWeek: session?.dayOfWeek ?? null,
+    selectionMissing,
+  };
+}
+
 export interface NotebookColumnView {
   key: string;
   date: string;
