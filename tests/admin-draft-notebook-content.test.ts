@@ -791,7 +791,7 @@ test("la page et les routes n’écrivent pas pendant la consultation admin", as
   assert.ok(autosave > 0 && autosave < saveCall);
   assert.match(
     page,
-    /refreshTeacherAgenda\(\s*runtime\.map\(\(entry\) => entry\.id\),\s*viewedSchoolYearId,\s*\{ adminConsult: true, replaceScope: true \},\s*\)/,
+    /refreshTeacherAgenda\(\s*accepted\.map\(\(entry\) => entry\.id\),\s*viewedSchoolYearId,\s*\{ adminConsult: true, replaceScope: true \},\s*\)/,
   );
   assert.match(page, /adminConsult: adminYearConsult/);
   assert.match(page, /fetchAgendaItems\(classroomId, yearId, options\)/);

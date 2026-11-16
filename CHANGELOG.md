@@ -13,6 +13,8 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 - Deux lectures simultanées de la même classe ne se masquent plus. Si la plus récente échoue, la réussite déjà en cours reste affichée. Un réessai demandé explicitement relance tout de même la lecture.
 - **Conflit des notes prof** : le Carnet affiche « Synchronisation interrompue : vos dernières modifications ne sont pas enregistrées sur le serveur. » jusqu’à résolution. Le texte local peut être copié ou exporté. Le rechargement de la version serveur est une action explicite, après cette mise de côté. Aucune fusion automatique.
 - **Changement d’enseignant** : les publications et les notes chargées sont effacées à la déconnexion et à l’ouverture d’un autre compte. Une réponse partie sous le compte précédent ne modifie plus l’écran du compte suivant.
+- L’export de secours des notes reprend tout le texte, y compris au-delà de 20 000 caractères, les listes et les blocs. Une modification faite après la copie ou l’export retire l’autorisation de recharger la version serveur.
+- Les chargements de classes, de cours, de préférences et de notes ignorent une réponse si le compte a changé entre-temps. Une déconnexion pendant un conflit de notes demande une confirmation explicite.
 
 ## [2.62.20] — Aperçu branche : séance sélectionnée
 

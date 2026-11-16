@@ -48,16 +48,27 @@ import {
   listSessionNotes,
   listWeekNotes,
   NOTES_COPY_LOCAL_LABEL,
+  NOTES_COPY_UNVERIFIED_HINT,
+  NOTES_EXPORT_ACK_HINT,
   NOTES_EXPORT_LOCAL_LABEL,
+  NOTES_RECOVERY_ACK_LABEL,
   NOTES_RELOAD_CONFIRM_LABEL,
   NOTES_RELOAD_HINT,
   NOTES_RELOAD_SERVER_LABEL,
   NOTES_SYNC_INTERRUPTED_LABEL,
+  acceptVerifiedNotebookNotes,
+  acknowledgeNotebookNotesRecovery,
+  emptyNotesConflictGuard,
+  notebookNotesFingerprint,
+  notesConflictGuardForDocument,
+  notesConflictGuardsEqual,
+  offerNotebookNotesRecovery,
   requestServerNotesReload,
-  secureLocalNotebookNotes,
   serverNotesReloadConfirmed,
+  serverNotesReloadReady,
+  unsavedNotebookNotesStructured,
   unsavedNotebookNotesText,
-  type NotesConflictStep,
+  type NotesConflictGuard,
   migrateClassNotesToSessions,
   moveTargetCourseSessions,
   moveWeekUnitToDoc,
@@ -149,8 +160,8 @@ interface ClassNotebookPanelProps {
   loadError?: string;
   /** Conflit de notes : l’avertissement reste jusqu’au rechargement explicite. */
   notesSyncInterrupted?: boolean;
-  /** Remplace le texte à l’écran par la version serveur, seulement après confirmation. */
-  onReloadServerNotes?: () => void;
+  /** Remplace le texte à l’écran par la version serveur, seulement si l’empreinte est encore celle mise de côté. */
+  onReloadServerNotes?: (securedFingerprint: string) => void;
   /** État du chargement des publications de la classe ouverte. */
   publicationsState?: "unknown" | "loading" | "ready" | "error";
   onRetryPublications?: () => void;
@@ -330,47 +341,91 @@ export function ClassNotebookPanel({
   onFollowSelectionChange,
 }: ClassNotebookPanelProps) {
   const [weekDisplayCount, setWeekDisplayCount] = useState<WeekDisplayCount>(defaultWeekDisplayCount);
-  const [notesConflictStep, setNotesConflictStep] = useState<NotesConflictStep>("unsaved");
+  const [notesConflictGuard, setNotesConflictGuard] = useState<NotesConflictGuard>(emptyNotesConflictGuard());
   const [trackedNotesInterruption, setTrackedNotesInterruption] = useState(notesSyncInterrupted);
+  const [recoveryOffer, setRecoveryOffer] = useState<{ fingerprint: string; text: string; kind: "copy" | "export" } | null>(null);
+  const notesFingerprint = notebookNotesFingerprint(notesDocument);
   if (notesSyncInterrupted !== trackedNotesInterruption) {
     setTrackedNotesInterruption(notesSyncInterrupted);
-    setNotesConflictStep("unsaved");
+    setNotesConflictGuard(emptyNotesConflictGuard());
+    setRecoveryOffer(null);
+  } else if (notesSyncInterrupted) {
+    const aligned = notesConflictGuardForDocument(notesConflictGuard, notesFingerprint);
+    if (!notesConflictGuardsEqual(aligned, notesConflictGuard)) setNotesConflictGuard(aligned);
+    if (recoveryOffer && recoveryOffer.fingerprint !== notesFingerprint) setRecoveryOffer(null);
   }
+  const visibleNotesGuard = notesSyncInterrupted
+    ? notesConflictGuardForDocument(notesConflictGuard, notesFingerprint)
+    : emptyNotesConflictGuard();
 
-  function downloadUnsavedNotes(text: string) {
-    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  function downloadUnsavedFile(contents: string, filename: string, type: string) {
+    const blob = new Blob([contents], { type });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "notes-prof-non-enregistrees.txt";
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
   }
 
+  function offerRecovery(kind: "copy" | "export", fingerprint: string, text: string) {
+    setRecoveryOffer({ fingerprint, text, kind });
+    setNotesConflictGuard((guard) => offerNotebookNotesRecovery(guard, fingerprint));
+  }
+
   async function copyUnsavedNotes() {
     const text = unsavedNotebookNotesText(notesDocument);
+    const fingerprint = notebookNotesFingerprint(notesDocument);
     try {
       await navigator.clipboard.writeText(text);
+      let readBack = "";
+      try {
+        readBack = await navigator.clipboard.readText();
+      } catch {
+        offerRecovery("copy", fingerprint, text);
+        return;
+      }
+      if (readBack === text && notebookNotesFingerprint(notesDocument) === fingerprint) {
+        setRecoveryOffer(null);
+        setNotesConflictGuard((guard) => acceptVerifiedNotebookNotes(guard, fingerprint));
+        return;
+      }
     } catch {
-      downloadUnsavedNotes(text);
+      // Le presse-papiers a refusé l’écriture : le texte reste proposé à l’écran.
     }
-    setNotesConflictStep((step) => secureLocalNotebookNotes(step));
+    offerRecovery("copy", fingerprint, text);
   }
 
   function exportUnsavedNotes() {
-    downloadUnsavedNotes(unsavedNotebookNotesText(notesDocument));
-    setNotesConflictStep((step) => secureLocalNotebookNotes(step));
+    const text = unsavedNotebookNotesText(notesDocument);
+    const fingerprint = notebookNotesFingerprint(notesDocument);
+    downloadUnsavedFile(text, "notes-prof-non-enregistrees.txt", "text/plain;charset=utf-8");
+    downloadUnsavedFile(
+      unsavedNotebookNotesStructured(notesDocument),
+      "notes-prof-non-enregistrees.json",
+      "application/json",
+    );
+    offerRecovery("export", fingerprint, text);
+  }
+
+  function acknowledgeRecovery() {
+    const fingerprint = notebookNotesFingerprint(notesDocument);
+    setNotesConflictGuard((guard) => acknowledgeNotebookNotesRecovery(guard, fingerprint));
+    if (recoveryOffer?.fingerprint === fingerprint) setRecoveryOffer(null);
   }
 
   function askServerNotesReload() {
-    setNotesConflictStep((step) => requestServerNotesReload(step));
+    const fingerprint = notebookNotesFingerprint(notesDocument);
+    setNotesConflictGuard((guard) => requestServerNotesReload(guard, fingerprint));
   }
 
   function confirmServerNotesReload() {
-    if (!serverNotesReloadConfirmed(notesConflictStep)) return;
-    void onReloadServerNotes?.();
+    const fingerprint = notebookNotesFingerprint(notesDocument);
+    if (!serverNotesReloadConfirmed(notesConflictGuard, fingerprint)) return;
+    if (!serverNotesReloadConfirmed(notesConflictGuardForDocument(notesConflictGuard, fingerprint), fingerprint)) return;
+    void onReloadServerNotes?.(fingerprint);
   }
   const narrowViewport = useNotebookNarrowViewport();
   const effectiveWeekDisplayCount = notebookWeekDisplayCountForViewport(
@@ -1717,16 +1772,25 @@ export function ClassNotebookPanel({
               type="button"
               className="workspace-action secondary"
               onClick={askServerNotesReload}
-              disabled={notesConflictStep === "unsaved"}
+              disabled={!serverNotesReloadReady(visibleNotesGuard, notesFingerprint)}
             >
               {NOTES_RELOAD_SERVER_LABEL}
             </button>
-            {notesConflictStep === "confirming" ? (
+            {visibleNotesGuard.step === "confirming" ? (
               <button type="button" className="workspace-action" onClick={confirmServerNotesReload}>
                 {NOTES_RELOAD_CONFIRM_LABEL}
               </button>
             ) : null}
           </div>
+          {recoveryOffer && recoveryOffer.fingerprint === notesFingerprint ? (
+            <div className="class-notebook-recovery">
+              <p>{recoveryOffer.kind === "export" ? NOTES_EXPORT_ACK_HINT : NOTES_COPY_UNVERIFIED_HINT}</p>
+              <textarea className="class-notebook-recovery-text" readOnly value={recoveryOffer.text} />
+              <button type="button" className="workspace-action secondary" onClick={acknowledgeRecovery}>
+                {NOTES_RECOVERY_ACK_LABEL}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
       {publicationsState === "error" ? (

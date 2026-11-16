@@ -108,7 +108,7 @@ import {
 import {
   AGENDA_ERROR_LABEL,
   agendaClassroomKey,
-  agendaResultBelongsToSession,
+  keepTeacherSessionPayload,
   agendaItemsFromLedger,
   applyAgendaLoadResult,
   beginAgendaRefresh,
@@ -118,6 +118,17 @@ import {
   clearNotesFromBrowser,
   createEmptyNotesDocument,
   emptyAgendaLedger,
+  localNotesStillMatchRecovery,
+  notebookNotesFingerprint,
+  NOTES_COPY_UNVERIFIED_HINT,
+  NOTES_EXPORT_ACK_HINT,
+  NOTES_LOGOUT_CANCEL_LABEL,
+  NOTES_LOGOUT_CONFIRM_LABEL,
+  NOTES_LOGOUT_PRESERVE_LABEL,
+  NOTES_LOGOUT_WARNING,
+  NOTES_RECOVERY_ACK_LABEL,
+  unsavedNotebookNotesStructured,
+  unsavedNotebookNotesText,
   filterNotebookItemsForSubject,
   loadAgendaClassrooms,
   reportNotebookDiagnostic,
@@ -372,6 +383,15 @@ export default function Home() {
   const [classNotesDocument, setClassNotesDocument] = useState<ClassNotesDocument>(() =>
     createEmptyNotesDocument(),
   );
+  const classNotesDocumentRef = useRef(classNotesDocument);
+  classNotesDocumentRef.current = classNotesDocument;
+  const [unsavedLogoutOpen, setUnsavedLogoutOpen] = useState(false);
+  const [logoutRecovery, setLogoutRecovery] = useState<{
+    fingerprint: string;
+    text: string;
+    verified: boolean;
+    acknowledged?: boolean;
+  } | null>(null);
   const [pendingNotebookControl, setPendingNotebookControl] = useState<{
     annualCourseId: string;
     courseSessionKey: string;
@@ -428,7 +448,7 @@ export default function Home() {
       fresh.map((entry) => ({ classroomId: entry.classroomId, schoolYearId })),
       (classroomId, yearId) => fetchAgendaItems(classroomId, yearId, options),
     );
-    if (!agendaResultBelongsToSession(epoch, teacherEpochRef.current)) {
+    if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, true)) {
       for (const entry of fresh) {
         reportNotebookDiagnostic({ kind: "stale-response", classroomId: entry.classroomId });
       }
@@ -464,6 +484,7 @@ export default function Home() {
     setPasswordChange(null);
     setMfaGate(null);
     discardTeacherWorkspace();
+    const epoch = teacherEpochRef.current;
     setAuthenticatedTeacher(authenticatedTeacherFromSession(session));
     setCurrentTeacherId(session.teacherId);
     setTeacherIsAdmin(Boolean(session.isAdmin));
@@ -476,18 +497,24 @@ export default function Home() {
     let classroomIds = fallbackIds;
     try {
       const runtime = await fetchTeacherClassroomsApi();
-      setRuntimeClassrooms(runtime);
-      classroomIds = runtime.map((entry) => entry.id);
+      const accepted = keepTeacherSessionPayload(epoch, teacherEpochRef.current, runtime);
+      if (!accepted) return;
+      setRuntimeClassrooms(accepted);
+      classroomIds = accepted.map((entry) => entry.id);
     } catch (loadError) {
+      if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, true)) return;
       setRuntimeClassrooms([]);
       classroomIds = [];
       setNotice(loadError instanceof Error ? loadError.message : "Chargement des classes impossible.");
     }
     try {
+      if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, true)) return;
       await refreshTeacherAgenda(classroomIds, null, { replaceScope: true });
     } catch (loadError) {
+      if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, true)) return;
       setNotice(loadError instanceof Error ? loadError.message : AGENDA_ERROR_LABEL);
     }
+    if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, true)) return;
     if (classroomIds.length) {
       setSelectedClassroomId((current) => (classroomIds.includes(current) ? current : classroomIds[0]));
     }
@@ -503,15 +530,17 @@ export default function Home() {
     }
 
     let cancelled = false;
+    const epoch = teacherEpochRef.current;
     setTeacherSetupReady(false);
 
     async function loadTeacherSetup() {
+      const current = () => !cancelled && keepTeacherSessionPayload(epoch, teacherEpochRef.current, true);
       const fallback = () =>
         loadTeacherSetupFromBrowser(currentTeacherId) ?? emptyTeacherSetup();
 
       try {
         const remote = await fetchTeacherSetupApi();
-        if (cancelled) return;
+        if (!current()) return;
 
         if (remote) {
           skipTeacherSetupSaveRef.current = true;
@@ -524,7 +553,7 @@ export default function Home() {
         const local = loadTeacherSetupFromBrowser(currentTeacherId);
         if (local) {
           const saved = await saveTeacherSetupApi(local);
-          if (cancelled) return;
+          if (!current()) return;
           skipTeacherSetupSaveRef.current = true;
           setTeacherSetup(saved);
           clearTeacherSetupFromBrowser(currentTeacherId);
@@ -536,7 +565,7 @@ export default function Home() {
         setTeacherSetup(emptyTeacherSetup());
         setTeacherSetupReady(true);
       } catch {
-        if (cancelled) return;
+        if (!current()) return;
         skipTeacherSetupSaveRef.current = true;
         setTeacherSetup(fallback());
         setTeacherSetupReady(true);
@@ -561,16 +590,18 @@ export default function Home() {
     }
 
     let cancelled = false;
+    const epoch = teacherEpochRef.current;
     setTeacherCoursesReady(false);
     setTeacherCoursesError("");
 
     async function loadTeacherCourses() {
+      const current = () => !cancelled && keepTeacherSessionPayload(epoch, teacherEpochRef.current, true);
       try {
         const payload = await fetchTeacherCoursesApi(
           adminYearConsult ? viewedSchoolYearId : null,
           { adminConsult: adminYearConsult },
         );
-        if (cancelled) return;
+        if (!current()) return;
         setTeacherCourses(payload.courses);
         setTeacherClassAccesses(payload.classAccesses);
         setTeacherCoursesYearLabel(payload.courses[0]?.schoolYearLabel ?? null);
@@ -581,7 +612,7 @@ export default function Home() {
             adminYearConsult ? viewedSchoolYearId : null,
             { adminConsult: adminYearConsult },
           );
-          if (cancelled) return;
+          if (!current()) return;
           setTeacherClassAccesses(accesses.classAccesses);
         } catch {
           // Conservez les codes déjà reçus avec les cours.
@@ -592,7 +623,7 @@ export default function Home() {
         if (adminYearConsult && viewedSchoolYearId) {
           try {
             const calendar = await fetchOfficialSchoolCalendar(viewedSchoolYearId);
-            if (cancelled) return;
+            if (!current()) return;
             const status = calendar.year.status;
             setViewedSchoolYearStatus(
               status === "draft" || status === "active" || status === "archived" ? status : "draft",
@@ -601,52 +632,51 @@ export default function Home() {
               setSchoolWeeks(buildSchoolWeeksFromEntries(calendar.weeks));
             }
           } catch {
-            if (!cancelled) {
-              setViewedSchoolYearStatus("draft");
-              setNotice("Chargement du calendrier scolaire impossible.");
-            }
+            if (!current()) return;
+            setViewedSchoolYearStatus("draft");
+            setNotice("Chargement du calendrier scolaire impossible.");
           }
           try {
             const runtime = await fetchTeacherClassroomsApi(viewedSchoolYearId, { adminConsult: true });
-            if (cancelled) return;
-            setRuntimeClassrooms(runtime);
+            const accepted = current() ? keepTeacherSessionPayload(epoch, teacherEpochRef.current, runtime) : null;
+            if (!accepted) return;
+            setRuntimeClassrooms(accepted);
             await refreshTeacherAgenda(
-              runtime.map((entry) => entry.id),
+              accepted.map((entry) => entry.id),
               viewedSchoolYearId,
               { adminConsult: true, replaceScope: true },
             );
           } catch (error) {
-            if (!cancelled) {
-              setNotice(error instanceof Error ? error.message : "Chargement des classes impossible.");
-            }
+            if (!current()) return;
+            setNotice(error instanceof Error ? error.message : "Chargement des classes impossible.");
           }
         } else {
           setViewedSchoolYearStatus(null);
           let calendarFailed = false;
           try {
             const calendar = await fetchSchoolCalendar();
-            if (cancelled) return;
+            if (!current()) return;
             if (calendar.configured && calendar.weeks.length) {
               setSchoolWeeks(buildSchoolWeeksFromEntries(calendar.weeks));
             }
           } catch {
             calendarFailed = true;
-            if (!cancelled) setNotice("Chargement du calendrier scolaire impossible.");
+            if (current()) setNotice("Chargement du calendrier scolaire impossible.");
           }
           try {
             const runtime = await fetchTeacherClassroomsApi();
-            if (cancelled) return;
-            setRuntimeClassrooms(runtime);
-            await refreshTeacherAgenda(runtime.map((entry) => entry.id), null, { replaceScope: true });
+            const accepted = current() ? keepTeacherSessionPayload(epoch, teacherEpochRef.current, runtime) : null;
+            if (!accepted) return;
+            setRuntimeClassrooms(accepted);
+            await refreshTeacherAgenda(accepted.map((entry) => entry.id), null, { replaceScope: true });
           } catch (error) {
-            if (!cancelled) {
-              const classMessage = error instanceof Error ? error.message : "Chargement des classes impossible.";
-              setNotice(calendarFailed ? `Chargement du calendrier scolaire impossible. ${classMessage}` : classMessage);
-            }
+            if (!current()) return;
+            const classMessage = error instanceof Error ? error.message : "Chargement des classes impossible.";
+            setNotice(calendarFailed ? `Chargement du calendrier scolaire impossible. ${classMessage}` : classMessage);
           }
         }
       } catch (loadError) {
-        if (cancelled) return;
+        if (!current()) return;
         setTeacherCourses([]);
         setTeacherClassAccesses({});
         setTeacherCoursesYearLabel(null);
@@ -701,9 +731,11 @@ export default function Home() {
     if (adminYearConsult && !viewedSchoolYearId) return;
 
     let cancelled = false;
+    const epoch = teacherEpochRef.current;
     setClassNotesReady(false);
 
     async function loadClassNotes() {
+      const current = () => !cancelled && keepTeacherSessionPayload(epoch, teacherEpochRef.current, true);
       const fallback = () =>
         peekNotesFromBrowser(currentTeacherId) ??
         loadNotesFromBrowser(currentTeacherId);
@@ -713,7 +745,7 @@ export default function Home() {
 
       try {
         const remote = await fetchTeacherNotesApi(consult);
-        if (cancelled) return;
+        if (!current()) return;
 
         setNotebookNotesLoadError("");
         if (notesConflictRef.current) {
@@ -734,14 +766,14 @@ export default function Home() {
         if (local) {
           try {
             const saved = await saveTeacherNotesApi(local);
-            if (cancelled) return;
+            if (!current()) return;
             skipClassNotesSaveRef.current = true;
             setClassNotesDocument(saved);
             clearNotesFromBrowser(currentTeacherId);
             setClassNotesReady(true);
             return;
           } catch (error) {
-            if (cancelled) return;
+            if (!current()) return;
             const message = error instanceof Error ? error.message : "Enregistrement des notes impossible.";
             if (message.includes("Les notes ont changé")) {
               notesConflictRef.current = true;
@@ -760,7 +792,7 @@ export default function Home() {
         setClassNotesDocument(createEmptyNotesDocument());
         setClassNotesReady(true);
       } catch (error) {
-        if (cancelled) return;
+        if (!current()) return;
         notesHydratedRef.current = false;
         setNotebookNotesLoadError(
           `Notes du Carnet non chargées : ${error instanceof Error ? error.message : "erreur inconnue"}.`,
@@ -801,7 +833,7 @@ export default function Home() {
         adminConsult: adminYearConsult,
       })) return;
       void saveTeacherNotesApi(classNotesDocument).catch((error: unknown) => {
-        if (!agendaResultBelongsToSession(saveEpoch, teacherEpochRef.current)) return;
+        if (!keepTeacherSessionPayload(saveEpoch, teacherEpochRef.current, true)) return;
         const message = error instanceof Error ? error.message : "Enregistrement des notes impossible.";
         if (message.includes("Les notes ont changé")) {
           notesConflictRef.current = true;
@@ -1411,7 +1443,7 @@ export default function Home() {
     if (!launch.joined) publishAgendaLedger(begun.ledger);
     void fetchAgendaView(access.classroomId, yearId, { adminConsult: adminYearConsult })
       .then((view) => {
-        if (!agendaResultBelongsToSession(epoch, teacherEpochRef.current)) {
+        if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, true)) {
           reportNotebookDiagnostic({ kind: "stale-response", classroomId: access.classroomId });
           return;
         }
@@ -1427,7 +1459,7 @@ export default function Home() {
         setStudentControlLinks(view.upcomingControlLinks);
       })
       .catch(() => {
-        if (!agendaResultBelongsToSession(epoch, teacherEpochRef.current)) {
+        if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, true)) {
           reportNotebookDiagnostic({ kind: "stale-response", classroomId: access.classroomId });
           return;
         }
@@ -1490,7 +1522,9 @@ export default function Home() {
         setStudentHistoryOpen(false);
         setStudentCodeModalOpen(false);
         resetSelectedWeek();
+        const epoch = teacherEpochRef.current;
         const view = await fetchAgendaView(session.classroomId);
+        if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, view)) return;
         setItems(view.items);
         setAgendaSubjects(view.subjects);
         setAttendanceDays(attendanceDaysFromAgendaView(view.attendanceDays));
@@ -1531,15 +1565,17 @@ export default function Home() {
     setTeacherIsAdmin(false);
   }
 
-  async function reloadServerNotes() {
+  async function reloadServerNotes(securedFingerprint: string) {
     const epoch = teacherEpochRef.current;
     if (!notesConflictRef.current) return;
+    if (!localNotesStillMatchRecovery(notebookNotesFingerprint(classNotesDocumentRef.current), securedFingerprint)) return;
     try {
       const consult = adminYearConsult
         ? { schoolYearId: viewedSchoolYearId, adminConsult: true as const }
         : undefined;
       const remote = await fetchTeacherNotesApi(consult);
-      if (!agendaResultBelongsToSession(epoch, teacherEpochRef.current) || !notesConflictRef.current) return;
+      if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, true) || !notesConflictRef.current) return;
+      if (!localNotesStillMatchRecovery(notebookNotesFingerprint(classNotesDocumentRef.current), securedFingerprint)) return;
       notesConflictRef.current = false;
       setNotesSyncInterrupted(false);
       notesHydratedRef.current = true;
@@ -1548,7 +1584,7 @@ export default function Home() {
       setNotebookNotesLoadError("");
       setClassNotesReady(true);
     } catch (error) {
-      if (!agendaResultBelongsToSession(epoch, teacherEpochRef.current)) return;
+      if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, true)) return;
       setNotice(error instanceof Error ? error.message : "Rechargement des notes impossible.");
     }
   }
@@ -1569,6 +1605,11 @@ export default function Home() {
         return;
       }
 
+      if (notesConflictRef.current) {
+        setLogoutRecovery(null);
+        setUnsavedLogoutOpen(true);
+        return;
+      }
       await logoutApiSession();
       setStudentSession(null);
       setStudentEntry(null);
@@ -1737,16 +1778,42 @@ export default function Home() {
   }
 
   useEffect(() => {
+    if (!notesSyncInterrupted) return;
+    function warnBeforeLeaving(event: BeforeUnloadEvent) {
+      if (!notesConflictRef.current) return;
+      event.preventDefault();
+      event.returnValue = NOTES_LOGOUT_WARNING;
+    }
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [notesSyncInterrupted]);
+
+  useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
+      if (unsavedLogoutOpen) {
+        setUnsavedLogoutOpen(false);
+        setLogoutRecovery(null);
+      }
       if (studentCodeModalOpen) setStudentCodeModalOpen(false);
       if (controlAlert) dismissControlAlert();
     }
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [studentCodeModalOpen, controlAlert]);
+  }, [studentCodeModalOpen, controlAlert, unsavedLogoutOpen]);
 
   function logoutTeacher() {
+    if (notesConflictRef.current) {
+      setLogoutRecovery(null);
+      setUnsavedLogoutOpen(true);
+      return;
+    }
+    void finishTeacherLogout();
+  }
+
+  function finishTeacherLogout() {
+    setUnsavedLogoutOpen(false);
+    setLogoutRecovery(null);
     void (async () => {
       await logoutApiSession();
       setStudentSession(null);
@@ -1754,6 +1821,41 @@ export default function Home() {
       setAppMode("teacher");
       clearTeacherAuthIdentity();
       showNotice("Session réinitialisée.");
+    })();
+  }
+
+  function downloadNotesFile(contents: string, filename: string, type: string) {
+    const blob = new Blob([contents], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function preserveNotesBeforeLogout() {
+    const document = classNotesDocumentRef.current;
+    const text = unsavedNotebookNotesText(document);
+    const fingerprint = notebookNotesFingerprint(document);
+    downloadNotesFile(text, "notes-prof-non-enregistrees.txt", "text/plain;charset=utf-8");
+    downloadNotesFile(unsavedNotebookNotesStructured(document), "notes-prof-non-enregistrees.json", "application/json");
+    void (async () => {
+      let verified = false;
+      try {
+        await navigator.clipboard.writeText(text);
+        verified = (await navigator.clipboard.readText()) === text
+          && notebookNotesFingerprint(classNotesDocumentRef.current) === fingerprint;
+      } catch {
+        verified = false;
+      }
+      if (notebookNotesFingerprint(classNotesDocumentRef.current) !== fingerprint) {
+        setLogoutRecovery(null);
+        return;
+      }
+      setLogoutRecovery({ fingerprint, text, verified });
     })();
   }
 
@@ -2306,7 +2408,7 @@ export default function Home() {
             publishBlockedReason={notebookBlockedReason}
             loadError={notebookNotesLoadError}
             notesSyncInterrupted={notesSyncInterrupted}
-            onReloadServerNotes={() => { void reloadServerNotes(); }}
+            onReloadServerNotes={(fingerprint) => { void reloadServerNotes(fingerprint); }}
             publicationsState={notebookPublicationsState}
             onRetryPublications={retryNotebookAgenda}
             onBack={closeClassNotebook}
@@ -2380,6 +2482,52 @@ export default function Home() {
       </nav>
 
 {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
+
+      {unsavedLogoutOpen ? (
+        <div className="technical-modal-backdrop">
+          <section className="technical-modal unsaved-notes-logout" role="dialog" aria-modal="true" aria-labelledby="unsaved-notes-logout-title">
+            <header>
+              <h2 id="unsaved-notes-logout-title">Notes non enregistrées</h2>
+            </header>
+            <p>{NOTES_LOGOUT_WARNING}</p>
+            {logoutRecovery ? (
+              <>
+                <p>{logoutRecovery.verified ? "Le texte complet a été relu dans le presse-papiers." : NOTES_COPY_UNVERIFIED_HINT}</p>
+                <p>{NOTES_EXPORT_ACK_HINT}</p>
+                <textarea readOnly value={logoutRecovery.text} />
+                {logoutRecovery.verified || logoutRecovery.acknowledged ? null : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLogoutRecovery((current) => {
+                        if (!current) return null;
+                        if (notebookNotesFingerprint(classNotesDocumentRef.current) !== current.fingerprint) return null;
+                        return { ...current, acknowledged: true };
+                      });
+                    }}
+                  >
+                    {NOTES_RECOVERY_ACK_LABEL}
+                  </button>
+                )}
+                {logoutRecovery.acknowledged ? (
+                  <p>Vous confirmez avoir mis ce texte de côté. Il reste non enregistré sur le serveur.</p>
+                ) : null}
+              </>
+            ) : null}
+            <footer>
+              <button type="button" onClick={() => { setUnsavedLogoutOpen(false); setLogoutRecovery(null); }}>
+                {NOTES_LOGOUT_CANCEL_LABEL}
+              </button>
+              <button type="button" onClick={preserveNotesBeforeLogout}>
+                {NOTES_LOGOUT_PRESERVE_LABEL}
+              </button>
+              <button type="button" className="is-danger" onClick={finishTeacherLogout}>
+                {NOTES_LOGOUT_CONFIRM_LABEL}
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
 
       {studentCodeModalOpen && (
         <div className="technical-modal-backdrop">

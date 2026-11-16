@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdirSync, readFileSync } from "node:fs";
+import { createServer } from "node:http";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import test from "node:test";
 import { chromium } from "playwright";
+import * as esbuild from "../web/node_modules/esbuild/lib/main.js";
 
 import {
   AGENDA_EMPTY_LABEL,
@@ -16,14 +18,22 @@ import {
   filterNotebookItemsForSubject,
   loadAgendaClassrooms,
   NOTES_COPY_LOCAL_LABEL,
+  NOTES_COPY_UNVERIFIED_HINT,
+  NOTES_EXPORT_ACK_HINT,
   NOTES_EXPORT_LOCAL_LABEL,
+  NOTES_RECOVERY_ACK_LABEL,
   NOTES_RELOAD_CONFIRM_LABEL,
   NOTES_RELOAD_HINT,
   NOTES_RELOAD_SERVER_LABEL,
   NOTES_SYNC_INTERRUPTED_LABEL,
+  acceptVerifiedNotebookNotes,
+  acknowledgeNotebookNotesRecovery,
+  emptyNotesConflictGuard,
+  notebookNotesFingerprint,
   notebookPublicationPlaceholder,
+  notesConflictGuardForDocument,
+  offerNotebookNotesRecovery,
   requestServerNotesReload,
-  secureLocalNotebookNotes,
   serverNotesReloadConfirmed,
   unsavedNotebookNotesText,
 } from "../src/features/class-notebook/index.ts";
@@ -306,8 +316,13 @@ test("navigateur — conflit de notes entre onglets, puis enseignant B sans les 
   const { stored, nov16 } = catalog();
   const localText = "Note locale non enregistrée";
   const serverText = "Version serveur de l’autre onglet";
-  let step = "unsaved";
+  let guard = emptyNotesConflictGuard();
   let screen = setSessionRichNote(createEmptyNotesDocument(), nov16.key, fromPlainText(localText));
+  let displayNote = localText;
+  const align = () => {
+    guard = notesConflictGuardForDocument(guard, notebookNotesFingerprint(screen));
+    return guard.step;
+  };
   let epoch = 1;
   const startedByA = epoch;
   const teacherA = stored.filter((entry) => entry.classroomId === CLASSROOM);
@@ -327,23 +342,35 @@ test("navigateur — conflit de notes entre onglets, puis enseignant B sans les 
   try {
     const page = await browser.newPage({ viewport: { width: 1100, height: 760 } });
     await page.exposeFunction("copyNotes", () => {
-      const text = unsavedNotebookNotesText(screen);
-      step = secureLocalNotebookNotes(step);
-      return { step, text };
+      guard = acceptVerifiedNotebookNotes(guard, notebookNotesFingerprint(screen));
+      return align();
     });
     await page.exposeFunction("exportNotes", () => {
-      const text = unsavedNotebookNotesText(screen);
-      step = secureLocalNotebookNotes(step);
-      return { step, text };
+      guard = offerNotebookNotesRecovery(guard, notebookNotesFingerprint(screen));
+      return { step: align(), hint: NOTES_COPY_UNVERIFIED_HINT };
+    });
+    await page.exposeFunction("acknowledgeNotes", () => {
+      guard = acknowledgeNotebookNotesRecovery(guard, notebookNotesFingerprint(screen));
+      return align();
+    });
+    let editCount = 0;
+    await page.exposeFunction("editNote", () => {
+      editCount += 1;
+      displayNote = `Note modifiée ${editCount}`;
+      screen = setSessionRichNote(createEmptyNotesDocument(), nov16.key, fromPlainText(displayNote));
+      return { step: align(), note: displayNote };
     });
     await page.exposeFunction("askReload", () => {
-      step = requestServerNotesReload(step);
-      return step;
+      guard = requestServerNotesReload(guard, notebookNotesFingerprint(screen));
+      return align();
     });
     await page.exposeFunction("confirmReload", () => {
-      if (!serverNotesReloadConfirmed(step)) return { replaced: false, note: localText };
+      if (!serverNotesReloadConfirmed(guard, notebookNotesFingerprint(screen))) {
+        return { replaced: false, note: displayNote };
+      }
+      displayNote = serverText;
       screen = setSessionRichNote(createEmptyNotesDocument(), nov16.key, fromPlainText(serverText));
-      step = "unsaved";
+      guard = emptyNotesConflictGuard();
       return { replaced: true, note: serverText };
     });
     await page.exposeFunction("switchTeacher", async () => {
@@ -383,16 +410,30 @@ test("navigateur — conflit de notes entre onglets, puis enseignant B sans les 
       const render = (state) => {
         const root = document.querySelector("#notebook");
         const titles = state.titles.map((title) => "<li>" + escapeHtml(title) + "</li>").join("");
+        const reloadEnabled = state.step === "secured" || state.step === "confirming";
         const banner = state.interrupted
-          ? '<div class="class-notebook-warning" role="alert" data-notes-sync="interrupted"><p>${NOTES_SYNC_INTERRUPTED_LABEL}</p><p>${NOTES_RELOAD_HINT}</p><div class="class-notebook-warning-actions"><button type="button" id="copy">${NOTES_COPY_LOCAL_LABEL}</button><button type="button" id="export">${NOTES_EXPORT_LOCAL_LABEL}</button><button type="button" id="reload" ' + (state.step === "unsaved" ? "disabled" : "") + '>${NOTES_RELOAD_SERVER_LABEL}</button>' + (state.step === "confirming" ? '<button type="button" id="confirm">${NOTES_RELOAD_CONFIRM_LABEL}</button>' : "") + "</div></div>"
+          ? '<div class="class-notebook-warning" role="alert" data-notes-sync="interrupted"><p>${NOTES_SYNC_INTERRUPTED_LABEL}</p><p>${NOTES_RELOAD_HINT}</p><div class="class-notebook-warning-actions"><button type="button" id="copy">${NOTES_COPY_LOCAL_LABEL}</button><button type="button" id="export">${NOTES_EXPORT_LOCAL_LABEL}</button><button type="button" id="edit">Modifier la note</button><button type="button" id="reload" ' + (reloadEnabled ? "" : "disabled") + '>${NOTES_RELOAD_SERVER_LABEL}</button>' + (state.step === "confirming" ? '<button type="button" id="confirm">${NOTES_RELOAD_CONFIRM_LABEL}</button>' : "") + (state.step === "pending-acknowledgement" ? '<button type="button" id="ack">${NOTES_RECOVERY_ACK_LABEL}</button>' : "") + "</div></div>"
           : "";
         root.innerHTML = banner
           + '<p data-note="">' + escapeHtml(state.note) + "</p>"
           + "<ul>" + titles + "</ul>";
         const copy = document.querySelector("#copy");
         if (copy) copy.addEventListener("click", async () => {
-          const result = await window.copyNotes();
-          render({ ...state, step: result.step, copied: result.text });
+          render({ ...state, step: await window.copyNotes() });
+        });
+        const exported = document.querySelector("#export");
+        if (exported) exported.addEventListener("click", async () => {
+          const result = await window.exportNotes();
+          render({ ...state, step: result.step });
+        });
+        const edit = document.querySelector("#edit");
+        if (edit) edit.addEventListener("click", async () => {
+          const result = await window.editNote();
+          render({ ...state, step: result.step, note: result.note });
+        });
+        const ack = document.querySelector("#ack");
+        if (ack) ack.addEventListener("click", async () => {
+          render({ ...state, step: await window.acknowledgeNotes() });
         });
         const reload = document.querySelector("#reload");
         if (reload) reload.addEventListener("click", async () => {
@@ -424,11 +465,28 @@ test("navigateur — conflit de notes entre onglets, puis enseignant B sans les 
     await page.getByRole("button", { name: NOTES_COPY_LOCAL_LABEL }).click();
     assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_SERVER_LABEL }).isDisabled(), false);
     assert.equal(await page.locator("[data-note]").innerText(), localText);
+
+    await page.getByRole("button", { name: "Modifier la note" }).click();
+    assert.match(await page.locator("[data-note]").innerText(), /Note modifiée/);
+    assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_SERVER_LABEL }).isDisabled(), true);
     assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_CONFIRM_LABEL }).count(), 0);
 
+    await page.getByRole("button", { name: NOTES_EXPORT_LOCAL_LABEL }).click();
+    assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_SERVER_LABEL }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: NOTES_RECOVERY_ACK_LABEL }).count(), 1);
+    await page.getByRole("button", { name: "Modifier la note" }).click();
+    assert.equal(await page.getByRole("button", { name: NOTES_RECOVERY_ACK_LABEL }).count(), 0);
+    assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_SERVER_LABEL }).isDisabled(), true);
+
+    await page.getByRole("button", { name: NOTES_COPY_LOCAL_LABEL }).click();
     await page.getByRole("button", { name: NOTES_RELOAD_SERVER_LABEL }).click();
-    assert.equal(await page.locator("[data-note]").innerText(), localText);
     assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_CONFIRM_LABEL }).count(), 1);
+    await page.getByRole("button", { name: "Modifier la note" }).click();
+    assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_CONFIRM_LABEL }).count(), 0);
+    assert.match(await page.locator("[data-note]").innerText(), /Note modifiée/);
+
+    await page.getByRole("button", { name: NOTES_COPY_LOCAL_LABEL }).click();
+    await page.getByRole("button", { name: NOTES_RELOAD_SERVER_LABEL }).click();
 
     await page.getByRole("button", { name: NOTES_RELOAD_CONFIRM_LABEL }).click();
     assert.equal(await page.locator("[data-notes-sync='interrupted']").count(), 0);
@@ -452,5 +510,81 @@ test("navigateur — conflit de notes entre onglets, puis enseignant B sans les 
     assert.equal(await page.getByText("Publication du 16 novembre").count(), 0);
   } finally {
     await browser.close();
+  }
+});
+
+test("navigateur — le Carnet React réel refuse le rechargement après une modification", async () => {
+  mkdirSync(ARTIFACTS, { recursive: true });
+  await esbuild.build({
+    entryPoints: [new URL("./notebook-notes-conflict-harness.tsx", import.meta.url).pathname],
+    bundle: true,
+    format: "iife",
+    outfile: "/tmp/notes-conflict-harness.js",
+    jsx: "automatic",
+    alias: {
+      "@campus": "/workspace/src",
+      "node:crypto": new URL("./browser-crypto-shim.js", import.meta.url).pathname,
+      react: "/workspace/web/node_modules/react/index.js",
+      "react/jsx-runtime": "/workspace/web/node_modules/react/jsx-runtime.js",
+      "react-dom/client": "/workspace/web/node_modules/react-dom/client.js",
+    },
+  });
+  writeFileSync("/tmp/notes-conflict.css", css);
+  writeFileSync("/tmp/notes-conflict.html", `<!doctype html><html lang="fr"><head><meta charset="utf-8"><link rel="stylesheet" href="/notes-conflict.css"></head><body><div id="root"></div><script src="/notes-conflict-harness.js"></script></body></html>`);
+  const server = createServer((request, response) => {
+    const path = (request.url ?? "/").split("?")[0];
+    const file = path === "/" ? "/tmp/notes-conflict.html" : `/tmp${path}`;
+    const body = readFileSync(file);
+    const type = file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html";
+    response.writeHead(200, { "content-type": `${type}; charset=utf-8` });
+    response.end(body);
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : 0;
+  const browser = await chromium.launch(launchOptions());
+  try {
+    const context = await browser.newContext();
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const page = await context.newPage({ viewport: { width: 1200, height: 900 } });
+    await page.goto(`http://127.0.0.1:${port}/`);
+    await page.getByText(NOTES_SYNC_INTERRUPTED_LABEL).waitFor();
+    await page.screenshot({ path: `${ARTIFACTS}/carnet-conflit-react.png` });
+    assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_SERVER_LABEL }).isDisabled(), true);
+
+    await page.getByRole("button", { name: NOTES_COPY_LOCAL_LABEL }).click();
+    await page.waitForFunction(() => navigator.clipboard.readText().then((value) => value.includes("FIN-COMPOSANT")).catch(() => false));
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    assert.equal(copied.includes("DEBUT-COMPOSANT"), true);
+    assert.equal(copied.includes("FIN-COMPOSANT"), true);
+    assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_SERVER_LABEL }).isDisabled(), false);
+
+    await page.getByRole("button", { name: "Changer la note" }).click();
+    assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_SERVER_LABEL }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_CONFIRM_LABEL }).count(), 0);
+
+    await page.getByRole("button", { name: NOTES_EXPORT_LOCAL_LABEL }).click();
+    await page.getByText(NOTES_EXPORT_ACK_HINT).waitFor();
+    assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_SERVER_LABEL }).isDisabled(), true);
+    const offered = await page.locator("textarea").inputValue();
+    assert.equal(offered.includes("Note changée 1"), true);
+    await page.getByRole("button", { name: "Changer la note" }).click();
+    assert.equal(await page.getByRole("button", { name: NOTES_RECOVERY_ACK_LABEL }).count(), 0);
+    assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_SERVER_LABEL }).isDisabled(), true);
+
+    await page.getByRole("button", { name: NOTES_COPY_LOCAL_LABEL }).click();
+    await page.getByRole("button", { name: NOTES_RELOAD_SERVER_LABEL }).click();
+    assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_CONFIRM_LABEL }).count(), 1);
+    await page.getByRole("button", { name: "Changer la note" }).click();
+    assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_CONFIRM_LABEL }).count(), 0);
+    assert.equal(await page.locator("[data-replaced]").getAttribute("data-replaced"), "no");
+
+    await page.getByRole("button", { name: NOTES_COPY_LOCAL_LABEL }).click();
+    await page.getByRole("button", { name: NOTES_RELOAD_SERVER_LABEL }).click();
+    await page.getByRole("button", { name: NOTES_RELOAD_CONFIRM_LABEL }).click();
+    await page.waitForFunction(() => document.querySelector("[data-replaced]")?.getAttribute("data-replaced") === "yes");
+  } finally {
+    await browser.close();
+    await new Promise((resolve) => server.close(resolve));
   }
 });

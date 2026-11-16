@@ -11,17 +11,27 @@ import {
   agendaItemsFromLedger,
   agendaResultBelongsToSession,
   beginAgendaRefresh,
+  keepTeacherSessionPayload,
   classroomAgendaPhase,
   commitAgendaLoadResults,
   emptyAgendaLedger,
   filterNotebookItemsForSubject,
+  NOTES_LOGOUT_WARNING,
   NOTES_SYNC_INTERRUPTED_LABEL,
+  acceptVerifiedNotebookNotes,
+  acknowledgeNotebookNotesRecovery,
+  emptyNotesConflictGuard,
+  localNotesStillMatchRecovery,
+  notebookNotesFingerprint,
+  notesConflictGuardForDocument,
+  offerNotebookNotesRecovery,
   requestServerNotesReload,
   retainAgendaScope,
-  secureLocalNotebookNotes,
   serverNotesReloadConfirmed,
+  serverNotesReloadReady,
+  unsavedNotebookNotesStructured,
   unsavedNotebookNotesText,
-  type NotesConflictStep,
+  type NotesConflictGuard,
   loadAgendaClassrooms,
   createEmptyNotesDocument,
   fromPlainText,
@@ -541,13 +551,14 @@ test("B — le conflit reste à l’écran et les sauvegardes ne reprennent qu�
   assert.ok(exported.length > storedText.length);
   assert.equal(NOTES_SYNC_INTERRUPTED_LABEL, "Synchronisation interrompue : vos dernières modifications ne sont pas enregistrées sur le serveur.");
 
-  let step: NotesConflictStep = "unsaved";
-  step = requestServerNotesReload(step);
-  assert.equal(step, "unsaved");
-  assert.equal(serverNotesReloadConfirmed(step), false);
-  step = secureLocalNotebookNotes(step);
-  step = requestServerNotesReload(step);
-  assert.equal(serverNotesReloadConfirmed(step), true);
+  const fingerprint = notebookNotesFingerprint(local);
+  let guard: NotesConflictGuard = emptyNotesConflictGuard();
+  guard = requestServerNotesReload(guard, fingerprint);
+  assert.equal(guard.step, "unsaved");
+  assert.equal(serverNotesReloadConfirmed(guard, fingerprint), false);
+  guard = acceptVerifiedNotebookNotes(guard, fingerprint);
+  guard = requestServerNotesReload(guard, fingerprint);
+  assert.equal(serverNotesReloadConfirmed(guard, fingerprint), true);
 
   const server = { revision: "r1", text: "Version de l’autre onglet" };
   function persist(expected: string, text: string) {
@@ -577,12 +588,13 @@ test("B — le conflit reste à l’écran et les sauvegardes ne reprennent qu�
     readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(panel, /NOTES_SYNC_INTERRUPTED_LABEL/);
-  assert.match(panel, /secureLocalNotebookNotes\(step\)/);
-  assert.match(panel, /serverNotesReloadConfirmed\(notesConflictStep\)/);
-  assert.match(panel, /disabled=\{notesConflictStep === "unsaved"\}/);
+  assert.match(panel, /acceptVerifiedNotebookNotes\(guard, fingerprint\)/);
+  assert.match(panel, /serverNotesReloadConfirmed\(notesConflictGuard, fingerprint\)/);
+  assert.match(panel, /disabled=\{!serverNotesReloadReady\(visibleNotesGuard, notesFingerprint\)\}/);
   assert.match(page, /async function reloadServerNotes/);
   const reload = page.slice(page.indexOf("async function reloadServerNotes"), page.indexOf("function exitStudentMode"));
   assert.match(reload, /!notesConflictRef\.current\) return/);
+  assert.match(reload, /localNotesStillMatchRecovery/);
   assert.match(reload, /setClassNotesDocument\(remote \?\? createEmptyNotesDocument\(\)\)/);
   assert.equal(page.includes("Vos modifications restent à l’écran et ne sont pas envoyées"), false);
 });
@@ -645,10 +657,131 @@ test("C — une déconnexion isole les publications et ignore la réponse tardiv
   const year = page.slice(page.indexOf("if (adminYearConsult && viewedSchoolYearId)"), page.indexOf("setViewedSchoolYearStatus(null)"));
   assert.equal(year.includes("discardTeacherWorkspace"), false);
   assert.equal(year.includes("teacherEpochRef.current += 1"), false);
-  assert.match(page, /if \(!agendaResultBelongsToSession\(epoch, teacherEpochRef\.current\)\)/);
+  assert.match(page, /keepTeacherSessionPayload\(epoch, teacherEpochRef\.current/);
   const discard = page.slice(page.indexOf("function discardTeacherWorkspace"), page.indexOf("function clearTeacherAuthIdentity"));
   assert.match(discard, /teacherEpochRef\.current \+= 1/);
   assert.match(discard, /emptyAgendaLedger\(\)/);
   assert.match(discard, /setItems\(\[\]\)/);
   assert.match(discard, /createEmptyNotesDocument\(\)/);
+});
+
+test("export intégral : une note de plus de 20 000 caractères n’est pas tronquée", () => {
+  const head = "DEBUT-NOTE-COMPLETE";
+  const tail = "FIN-NOTE-COMPLETE";
+  const filler = "a".repeat(25_000);
+  const body = {
+    format: "campus-rich-v1" as const,
+    blocks: [
+      { type: "paragraph" as const, inlines: [{ text: `${head} ${filler}` }] },
+      { type: "bulletList" as const, items: [[{ text: "puce alpha" }], [{ text: "puce beta" }]] },
+      { type: "orderedList" as const, items: [[{ text: "etape un" }], [{ text: "etape deux" }]] },
+      {
+        type: "checklist" as const,
+        items: [
+          { checked: true, inlines: [{ text: "fait" }] },
+          { checked: false, inlines: [{ text: "reste" }] },
+        ],
+      },
+      { type: "callout" as const, kind: "bring" as const, inlines: [{ text: "le calibre" }] },
+      { type: "paragraph" as const, inlines: [{ text: tail }] },
+    ],
+  };
+  const document = {
+    version: 2 as const,
+    sessions: { "seance-1": [{ id: "n1", text: "extrait court", body }] },
+    pendingWeeks: {
+      "setup:12": [{ id: "p1", text: "attente", body: { format: "campus-rich-v1" as const, blocks: [{ type: "paragraph" as const, inlines: [{ text: "ATTENTE-UNIQUE" }] }] } }],
+    },
+    orphanedSessions: {
+      hors: [{ id: "o1", text: "hors", body: { format: "campus-rich-v1" as const, blocks: [{ type: "paragraph" as const, inlines: [{ text: "HORS-UNIQUE" }] }] } }],
+    },
+  };
+  const exported = unsavedNotebookNotesText(document);
+  const structured = unsavedNotebookNotesStructured(document);
+  assert.equal(exported.includes(head), true);
+  assert.equal(exported.includes(filler), true);
+  assert.equal(exported.includes(tail), true);
+  assert.ok(exported.length > 20_000);
+  assert.equal(exported.includes("…"), false);
+  const bullet = exported.indexOf("- puce alpha");
+  const ordered = exported.indexOf("1. etape un");
+  const checked = exported.indexOf("[x] fait");
+  const open = exported.indexOf("[ ] reste");
+  const callout = exported.indexOf("À apporter : le calibre");
+  const ending = exported.indexOf(tail);
+  assert.ok(exported.indexOf(head) < bullet);
+  assert.ok(bullet < ordered && ordered < checked && checked < open && open < callout && callout < ending);
+  assert.equal(exported.includes("ATTENTE-UNIQUE"), true);
+  assert.equal(exported.includes("HORS-UNIQUE"), true);
+  assert.equal(exported.includes("Séance seance-1"), true);
+  assert.equal(exported.includes("En attente setup:12"), true);
+  assert.equal(exported.includes("Séance hors horaire hors"), true);
+  assert.equal(structured.includes(filler), true);
+  assert.equal(structured.includes(tail), true);
+  const source = unsavedNotebookNotesText.toString();
+  assert.equal(source.includes("excerptRichDoc"), false);
+});
+
+test("une modification après la copie ou l’export retire l’autorisation de rechargement", () => {
+  const first = setSessionRichNote(createEmptyNotesDocument(), "session-16", fromPlainText("Texte mis de côté"));
+  const second = setSessionRichNote(first, "session-16", fromPlainText("Texte modifié ensuite"));
+  const firstKey = notebookNotesFingerprint(first);
+  const secondKey = notebookNotesFingerprint(second);
+  assert.notEqual(firstKey, secondKey);
+
+  let guard = acceptVerifiedNotebookNotes(emptyNotesConflictGuard(), firstKey);
+  assert.equal(serverNotesReloadReady(guard, firstKey), true);
+  guard = requestServerNotesReload(guard, firstKey);
+  assert.equal(serverNotesReloadConfirmed(guard, firstKey), true);
+
+  guard = notesConflictGuardForDocument(guard, secondKey);
+  assert.equal(guard.step, "unsaved");
+  assert.equal(serverNotesReloadReady(guard, secondKey), false);
+  assert.equal(serverNotesReloadConfirmed(guard, secondKey), false);
+  assert.equal(localNotesStillMatchRecovery(secondKey, firstKey), false);
+
+  guard = offerNotebookNotesRecovery(emptyNotesConflictGuard(), firstKey);
+  assert.equal(serverNotesReloadReady(guard, firstKey), false);
+  guard = acknowledgeNotebookNotesRecovery(guard, secondKey);
+  assert.equal(guard.step, "unsaved");
+  guard = offerNotebookNotesRecovery(emptyNotesConflictGuard(), secondKey);
+  guard = acknowledgeNotebookNotesRecovery(guard, secondKey);
+  assert.equal(serverNotesReloadReady(guard, secondKey), true);
+  guard = requestServerNotesReload(guard, secondKey);
+  guard = notesConflictGuardForDocument(guard, firstKey);
+  assert.equal(guard.step, "unsaved");
+});
+
+test("la réponse tardive des classes de A ne remplace pas celles de B", async () => {
+  let epoch = 1;
+  const startedByA = epoch;
+  epoch += 1;
+  epoch += 1;
+  const startedByB = epoch;
+  const classesA = ["Mécanique"];
+  const classesB = ["Électricité"];
+  let visible = classesB;
+  const late = keepTeacherSessionPayload(startedByA, epoch, classesA);
+  if (late) visible = late;
+  assert.deepEqual(visible, classesB);
+  assert.deepEqual(keepTeacherSessionPayload(startedByB, epoch, classesB), classesB);
+
+  const page = await readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8");
+  const apply = page.slice(page.indexOf("await fetchTeacherClassroomsApi()"), page.indexOf("setRuntimeClassrooms(accepted)"));
+  assert.match(apply, /keepTeacherSessionPayload\(epoch, teacherEpochRef\.current, runtime\)/);
+  assert.equal(
+    NOTES_LOGOUT_WARNING,
+    "Attention : des modifications de vos notes prof ne sont pas enregistrées. Elles seront perdues si vous vous déconnectez maintenant.",
+  );
+  assert.match(page, /NOTES_LOGOUT_WARNING/);
+  assert.match(page, /beforeunload/);
+  const logout = page.slice(page.indexOf("function logoutTeacher"), page.indexOf("function finishTeacherLogout"));
+  assert.equal(logout.includes("logoutApiSession"), false);
+  assert.equal(logout.includes("clearTeacherAuthIdentity"), false);
+  assert.match(logout, /notesConflictRef\.current/);
+  for (const marker of ["fetchTeacherSetupApi", "fetchTeacherCoursesApi", "fetchTeacherNotesApi"]) {
+    const at = page.indexOf(`await ${marker}`);
+    assert.ok(at > 0, marker);
+    assert.match(page.slice(at, at + 400), /keepTeacherSessionPayload|current\(\)/);
+  }
 });

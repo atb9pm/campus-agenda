@@ -43,6 +43,11 @@ export function agendaResultBelongsToSession(startedEpoch: number, currentEpoch:
   return startedEpoch === currentEpoch;
 }
 
+/** Une charge utile enseignant n’est conservée que si la session qui l’a demandée est encore là. */
+export function keepTeacherSessionPayload<T>(startedEpoch: number, currentEpoch: number, payload: T): T | null {
+  return agendaResultBelongsToSession(startedEpoch, currentEpoch) ? payload : null;
+}
+
 export function agendaClassroomKey(classroomId: string, schoolYearId?: string | null): string {
   const id = classroomId.trim();
   const year = schoolYearId?.trim() || "";
