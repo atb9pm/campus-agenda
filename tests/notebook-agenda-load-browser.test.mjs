@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import * as esbuild from "../web/node_modules/esbuild/lib/main.js";
+
+const testsDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(testsDir, "..");
+const webModules = path.join(repoRoot, "web/node_modules");
 
 import {
   AGENDA_EMPTY_LABEL,
@@ -520,13 +526,14 @@ test("navigateur — le Carnet React réel refuse le rechargement après une mod
     bundle: true,
     format: "iife",
     outfile: "/tmp/notes-conflict-harness.js",
+    absWorkingDir: repoRoot,
     jsx: "automatic",
     alias: {
-      "@campus": "/workspace/src",
-      "node:crypto": new URL("./browser-crypto-shim.js", import.meta.url).pathname,
-      react: "/workspace/web/node_modules/react/index.js",
-      "react/jsx-runtime": "/workspace/web/node_modules/react/jsx-runtime.js",
-      "react-dom/client": "/workspace/web/node_modules/react-dom/client.js",
+      "@campus": path.join(repoRoot, "src"),
+      "node:crypto": path.join(testsDir, "browser-crypto-shim.js"),
+      react: path.join(webModules, "react/index.js"),
+      "react/jsx-runtime": path.join(webModules, "react/jsx-runtime.js"),
+      "react-dom/client": path.join(webModules, "react-dom/client.js"),
     },
   });
   writeFileSync("/tmp/notes-conflict.css", css);
