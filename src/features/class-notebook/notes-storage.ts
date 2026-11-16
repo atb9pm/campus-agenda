@@ -2,6 +2,7 @@ import { parseCourseSessionKey } from "../course-sessions/compute.ts";
 import type { CourseSession } from "../course-sessions/types.ts";
 import {
   excerptRichDoc,
+  plainTextFromRichDoc,
   isEmptyRichDoc,
   sanitizeRichDoc,
   type CampusRichDoc,
@@ -667,4 +668,132 @@ export function migrateClassNotesToSessions(
     return { document: next, changed: false };
   }
   return { document: next, changed: true };
+}
+
+export const NOTES_SYNC_INTERRUPTED_LABEL =
+  "Synchronisation interrompue : vos dernières modifications ne sont pas enregistrées sur le serveur.";
+export const NOTES_COPY_LOCAL_LABEL = "Copier mes modifications";
+export const NOTES_EXPORT_LOCAL_LABEL = "Exporter mes modifications";
+export const NOTES_RELOAD_SERVER_LABEL = "Recharger la version enregistrée";
+export const NOTES_RELOAD_CONFIRM_LABEL = "Confirmer le rechargement";
+export const NOTES_RELOAD_HINT =
+  "Le texte à l’écran sera remplacé par la version enregistrée sur le serveur. Copiez ou exportez d’abord vos modifications.";
+export const NOTES_EXPORT_ACK_HINT =
+  "Le téléchargement a été proposé. Confirmez seulement après avoir enregistré le fichier. L’application ne peut pas vérifier qu’il est sur votre appareil.";
+export const NOTES_COPY_UNVERIFIED_HINT =
+  "La copie n’a pas pu être vérifiée. Le texte complet est affiché ci-dessous : copiez-le, puis confirmez que vous l’avez mis de côté.";
+export const NOTES_RECOVERY_ACK_LABEL = "J’ai mis ce texte de côté";
+export const NOTES_LOGOUT_WARNING =
+  "Attention : des modifications de vos notes prof ne sont pas enregistrées. Elles seront perdues si vous vous déconnectez maintenant.";
+export const NOTES_LOGOUT_CANCEL_LABEL = "Annuler";
+export const NOTES_LOGOUT_PRESERVE_LABEL = "Copier ou exporter les modifications";
+export const NOTES_LOGOUT_CONFIRM_LABEL = "Se déconnecter malgré tout";
+
+export type NotesConflictStep = "unsaved" | "pending-acknowledgement" | "secured" | "confirming";
+
+export interface NotesConflictGuard {
+  step: NotesConflictStep;
+  /** Empreinte du document dont la mise de côté a été vérifiée ou confirmée. */
+  securedFingerprint: string | null;
+  /** Empreinte proposée à la copie ou à l’export, en attente de confirmation de l’enseignant. */
+  pendingFingerprint: string | null;
+}
+
+export function emptyNotesConflictGuard(): NotesConflictGuard {
+  return { step: "unsaved", securedFingerprint: null, pendingFingerprint: null };
+}
+
+export function notebookNotesFingerprint(document: ClassNotesDocument): string {
+  return serializeClassNotes(document);
+}
+
+export function notesConflictGuardsEqual(left: NotesConflictGuard, right: NotesConflictGuard): boolean {
+  return left.step === right.step
+    && left.securedFingerprint === right.securedFingerprint
+    && left.pendingFingerprint === right.pendingFingerprint;
+}
+
+/** Le document affiché a changé : la copie, l’export et la confirmation ouverts ne valent plus. */
+export function notesConflictGuardForDocument(guard: NotesConflictGuard, fingerprint: string): NotesConflictGuard {
+  if (guard.step === "pending-acknowledgement" && guard.pendingFingerprint === fingerprint) return guard;
+  if ((guard.step === "secured" || guard.step === "confirming") && guard.securedFingerprint === fingerprint) return guard;
+  return emptyNotesConflictGuard();
+}
+
+/** Copie relue et identique au texte demandé. */
+export function acceptVerifiedNotebookNotes(guard: NotesConflictGuard, fingerprint: string): NotesConflictGuard {
+  if (guard.step === "confirming" && guard.securedFingerprint === fingerprint) {
+    return { step: "confirming", securedFingerprint: fingerprint, pendingFingerprint: null };
+  }
+  return { step: "secured", securedFingerprint: fingerprint, pendingFingerprint: null };
+}
+
+/** Le navigateur a reçu une copie ou un export, sans preuve qu’il est conservé. */
+export function offerNotebookNotesRecovery(guard: NotesConflictGuard, fingerprint: string): NotesConflictGuard {
+  return { step: "pending-acknowledgement", securedFingerprint: null, pendingFingerprint: fingerprint };
+}
+
+/** L’enseignant confirme lui-même avoir mis de côté le texte de cette empreinte. */
+export function acknowledgeNotebookNotesRecovery(guard: NotesConflictGuard, fingerprint: string): NotesConflictGuard {
+  if (guard.step !== "pending-acknowledgement" || guard.pendingFingerprint !== fingerprint) return emptyNotesConflictGuard();
+  return { step: "secured", securedFingerprint: fingerprint, pendingFingerprint: null };
+}
+
+export function requestServerNotesReload(guard: NotesConflictGuard, fingerprint: string): NotesConflictGuard {
+  const current = notesConflictGuardForDocument(guard, fingerprint);
+  if (current.step !== "secured" && current.step !== "confirming") return current;
+  if (current.securedFingerprint !== fingerprint) return emptyNotesConflictGuard();
+  return { ...current, step: "confirming" };
+}
+
+export function serverNotesReloadReady(guard: NotesConflictGuard, fingerprint: string): boolean {
+  const current = notesConflictGuardForDocument(guard, fingerprint);
+  return (current.step === "secured" || current.step === "confirming") && current.securedFingerprint === fingerprint;
+}
+
+/** Le remplacement par la version serveur n’est permis que pour l’empreinte encore affichée. */
+export function serverNotesReloadConfirmed(guard: NotesConflictGuard, fingerprint: string): boolean {
+  const current = notesConflictGuardForDocument(guard, fingerprint);
+  return current.step === "confirming" && current.securedFingerprint === fingerprint;
+}
+
+export function localNotesStillMatchRecovery(currentFingerprint: string, securedFingerprint: string): boolean {
+  return securedFingerprint.length > 0 && currentFingerprint === securedFingerprint;
+}
+
+function notePlainText(note: TeacherWeekNote): string {
+  const rich = note.body ? plainTextFromRichDoc(note.body) : "";
+  return rich || note.text || "";
+}
+
+function appendNoteGroup(lines: string[], heading: string, notes: readonly TeacherWeekNote[] | undefined) {
+  const visible = (notes ?? []).map(notePlainText).filter((text) => text.trim().length > 0);
+  if (!visible.length) return;
+  lines.push(heading);
+  for (const text of visible) {
+    lines.push(text);
+    lines.push("");
+  }
+}
+
+/** Texte intégral des notes encore à l’écran, pour les copier ou les exporter avant un rechargement. */
+export function unsavedNotebookNotesText(document: ClassNotesDocument): string {
+  const lines = ["Notes prof non enregistrées sur le serveur", ""];
+  if (document.version === 1) {
+    for (const key of Object.keys(document.weeks).sort()) appendNoteGroup(lines, `Semaine ${key}`, document.weeks[key]);
+  } else {
+    for (const key of Object.keys(document.sessions).sort()) appendNoteGroup(lines, `Séance ${key}`, document.sessions[key]);
+    for (const key of Object.keys(document.pendingWeeks ?? {}).sort()) {
+      appendNoteGroup(lines, `En attente ${key}`, document.pendingWeeks?.[key]);
+    }
+    for (const key of Object.keys(document.orphanedSessions ?? {}).sort()) {
+      appendNoteGroup(lines, `Séance hors horaire ${key}`, document.orphanedSessions?.[key]);
+    }
+  }
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
+/** Document riche complet, pour un fichier JSON qui conserve la mise en forme. */
+export function unsavedNotebookNotesStructured(document: ClassNotesDocument): string {
+  return serializeClassNotes(document);
 }

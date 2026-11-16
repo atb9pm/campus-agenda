@@ -80,6 +80,7 @@ import {
   type ApiTeacherSession,
   type SchoolCalendarWeek,
 } from "../lib/api-client.ts";
+import { shouldPersistNotebookNotes } from "../lib/notebook-autosave.ts";
 import { APP_VERSION } from "@campus/lib/app-version";
 import {
   acknowledgeMfaRecoveryCodes,
@@ -105,9 +106,33 @@ import {
   type TeacherCourseWorkspaceEntry,
 } from "@campus/features/teacher-workspace";
 import {
+  AGENDA_ERROR_LABEL,
+  agendaClassroomKey,
+  keepTeacherSessionPayload,
+  agendaItemsFromLedger,
+  applyAgendaLoadResult,
+  beginAgendaRefresh,
+  classroomAgendaPhase,
+  commitAgendaLoadResults,
+  projectAgendaMutations,
   clearNotesFromBrowser,
   createEmptyNotesDocument,
+  emptyAgendaLedger,
+  localNotesStillMatchRecovery,
+  notebookNotesFingerprint,
+  NOTES_COPY_UNVERIFIED_HINT,
+  NOTES_EXPORT_ACK_HINT,
+  NOTES_LOGOUT_CANCEL_LABEL,
+  NOTES_LOGOUT_CONFIRM_LABEL,
+  NOTES_LOGOUT_PRESERVE_LABEL,
+  NOTES_LOGOUT_WARNING,
+  NOTES_RECOVERY_ACK_LABEL,
+  unsavedNotebookNotesStructured,
+  unsavedNotebookNotesText,
   filterNotebookItemsForSubject,
+  loadAgendaClassrooms,
+  reportNotebookDiagnostic,
+  type AgendaLoadLedger,
   loadNotesFromBrowser,
   notebookContextFromCourse,
   NOTEBOOK_PUBLISH_SELECT_COURSE,
@@ -225,21 +250,6 @@ function scheduleSlotsFromAgendaView(
   });
 }
 
-async function loadTeacherAgendaItems(
-  classroomIds: string[],
-  schoolYearId?: string | null,
-  options?: { adminConsult?: boolean },
-): Promise<PrototypeAgendaItem[]> {
-  const batches = await Promise.all(
-    classroomIds.map((classroomId) => fetchAgendaItems(classroomId, schoolYearId, options)),
-  );
-  const merged = new Map<number, PrototypeAgendaItem>();
-  for (const batch of batches) {
-    for (const item of batch) merged.set(item.id, item);
-  }
-  return [...merged.values()].sort((left, right) => left.id - right.id);
-}
-
 function formatTeacherYearHeading(label: string): string {
   return label.replace(/^(\d{4})-(\d{4})$/, "$1–$2");
 }
@@ -323,7 +333,6 @@ export default function Home() {
   const [studentScheduleSlots, setStudentScheduleSlots] = useState<StudentDayScheduleSlot[]>([]);
   const [studentControlLinks, setStudentControlLinks] = useState<UpcomingControlBranchLink[]>([]);
   const [notice, setNotice] = useState("");
-  const [notebookAgendaLoadError, setNotebookAgendaLoadError] = useState("");
   const [notebookNotesLoadError, setNotebookNotesLoadError] = useState("");
   const [teacherAuthenticated, setTeacherAuthenticated] = useState(false);
   const [teacherIsAdmin, setTeacherIsAdmin] = useState(false);
@@ -374,6 +383,15 @@ export default function Home() {
   const [classNotesDocument, setClassNotesDocument] = useState<ClassNotesDocument>(() =>
     createEmptyNotesDocument(),
   );
+  const classNotesDocumentRef = useRef(classNotesDocument);
+  classNotesDocumentRef.current = classNotesDocument;
+  const [unsavedLogoutOpen, setUnsavedLogoutOpen] = useState(false);
+  const [logoutRecovery, setLogoutRecovery] = useState<{
+    fingerprint: string;
+    text: string;
+    verified: boolean;
+    acknowledged?: boolean;
+  } | null>(null);
   const [pendingNotebookControl, setPendingNotebookControl] = useState<{
     annualCourseId: string;
     courseSessionKey: string;
@@ -385,7 +403,64 @@ export default function Home() {
   const [classNotesReady, setClassNotesReady] = useState(false);
   /** Évite d'écrire sur le serveur juste après un chargement / une migration. */
   const skipClassNotesSaveRef = useRef(false);
-  const loadedAgendaClassroomIdsRef = useRef<Set<string>>(new Set());
+  /** Vrai seulement après une lecture réussie des notes. Un échec ne doit rien renvoyer. */
+  const notesHydratedRef = useRef(false);
+  /** Un conflit conserve le texte à l’écran : la prochaine lecture ne l’écrase pas. */
+  const notesConflictRef = useRef(false);
+  /** Affiche l’avertissement du Carnet tant que le conflit n’est pas résolu. */
+  const [notesSyncInterrupted, setNotesSyncInterrupted] = useState(false);
+  /** Change à chaque compte enseignant. Une réponse lancée avant ne peut plus s’appliquer. */
+  const teacherEpochRef = useRef(0);
+  const agendaLedgerRef = useRef<AgendaLoadLedger>(emptyAgendaLedger());
+  const [agendaLedger, setAgendaLedger] = useState<AgendaLoadLedger>(emptyAgendaLedger());
+  const appModeRef = useRef(appMode);
+  const studentEntryRef = useRef(studentEntry);
+  appModeRef.current = appMode;
+  studentEntryRef.current = studentEntry;
+
+  function publishAgendaLedger(next: AgendaLoadLedger) {
+    agendaLedgerRef.current = next;
+    setAgendaLedger(next);
+    if (appModeRef.current === "student" && studentEntryRef.current === "code") return;
+    setItems(agendaItemsFromLedger(next));
+  }
+
+  function replaceTeacherAgendaItems(updater: (previous: PrototypeAgendaItem[]) => PrototypeAgendaItem[]) {
+    const previous = agendaItemsFromLedger(agendaLedgerRef.current);
+    const next = updater(previous);
+    publishAgendaLedger(projectAgendaMutations(agendaLedgerRef.current, previous, next));
+  }
+
+  async function refreshTeacherAgenda(
+    classroomIds: string[],
+    schoolYearId?: string | null,
+    options?: { adminConsult?: boolean; replaceScope?: boolean; force?: boolean },
+  ) {
+    const epoch = teacherEpochRef.current;
+    const begun = beginAgendaRefresh(agendaLedgerRef.current, classroomIds, schoolYearId, {
+      replaceScope: options?.replaceScope,
+      joinInFlight: !options?.force,
+    });
+    const fresh = begun.started.filter((entry) => !entry.joined);
+    if (begun.ledger !== agendaLedgerRef.current) publishAgendaLedger(begun.ledger);
+    if (!fresh.length) return;
+    const results = await loadAgendaClassrooms(
+      fresh.map((entry) => ({ classroomId: entry.classroomId, schoolYearId })),
+      (classroomId, yearId) => fetchAgendaItems(classroomId, yearId, options),
+    );
+    if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, true)) {
+      for (const entry of fresh) {
+        reportNotebookDiagnostic({ kind: "stale-response", classroomId: entry.classroomId });
+      }
+      return;
+    }
+    publishAgendaLedger(commitAgendaLoadResults(
+      agendaLedgerRef.current,
+      fresh,
+      results,
+      reportNotebookDiagnostic,
+    ));
+  }
 
   async function applyTeacherSession(session: ApiTeacherSession) {
     // Mot de passe provisoire : rien d'autre n'est accessible avant le changement.
@@ -408,6 +483,8 @@ export default function Home() {
     }
     setPasswordChange(null);
     setMfaGate(null);
+    discardTeacherWorkspace();
+    const epoch = teacherEpochRef.current;
     setAuthenticatedTeacher(authenticatedTeacherFromSession(session));
     setCurrentTeacherId(session.teacherId);
     setTeacherIsAdmin(Boolean(session.isAdmin));
@@ -415,22 +492,29 @@ export default function Home() {
     setTeacherAuthenticated(true);
     setStudentSession(null);
     setStudentEntry(null);
-    setOpenNotebookCourse(null);
     setLoginError("");
     const fallbackIds: string[] = [];
     let classroomIds = fallbackIds;
     try {
       const runtime = await fetchTeacherClassroomsApi();
-      setRuntimeClassrooms(runtime);
-      classroomIds = runtime.map((entry) => entry.id);
+      const accepted = keepTeacherSessionPayload(epoch, teacherEpochRef.current, runtime);
+      if (!accepted) return;
+      setRuntimeClassrooms(accepted);
+      classroomIds = accepted.map((entry) => entry.id);
     } catch (loadError) {
+      if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, true)) return;
       setRuntimeClassrooms([]);
       classroomIds = [];
       setNotice(loadError instanceof Error ? loadError.message : "Chargement des classes impossible.");
     }
-    const loadedItems = await loadTeacherAgendaItems(classroomIds);
-    setItems(loadedItems);
-    loadedAgendaClassroomIdsRef.current = new Set(classroomIds);
+    try {
+      if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, true)) return;
+      await refreshTeacherAgenda(classroomIds, null, { replaceScope: true });
+    } catch (loadError) {
+      if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, true)) return;
+      setNotice(loadError instanceof Error ? loadError.message : AGENDA_ERROR_LABEL);
+    }
+    if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, true)) return;
     if (classroomIds.length) {
       setSelectedClassroomId((current) => (classroomIds.includes(current) ? current : classroomIds[0]));
     }
@@ -446,15 +530,17 @@ export default function Home() {
     }
 
     let cancelled = false;
+    const epoch = teacherEpochRef.current;
     setTeacherSetupReady(false);
 
     async function loadTeacherSetup() {
+      const current = () => !cancelled && keepTeacherSessionPayload(epoch, teacherEpochRef.current, true);
       const fallback = () =>
         loadTeacherSetupFromBrowser(currentTeacherId) ?? emptyTeacherSetup();
 
       try {
         const remote = await fetchTeacherSetupApi();
-        if (cancelled) return;
+        if (!current()) return;
 
         if (remote) {
           skipTeacherSetupSaveRef.current = true;
@@ -467,7 +553,7 @@ export default function Home() {
         const local = loadTeacherSetupFromBrowser(currentTeacherId);
         if (local) {
           const saved = await saveTeacherSetupApi(local);
-          if (cancelled) return;
+          if (!current()) return;
           skipTeacherSetupSaveRef.current = true;
           setTeacherSetup(saved);
           clearTeacherSetupFromBrowser(currentTeacherId);
@@ -479,7 +565,7 @@ export default function Home() {
         setTeacherSetup(emptyTeacherSetup());
         setTeacherSetupReady(true);
       } catch {
-        if (cancelled) return;
+        if (!current()) return;
         skipTeacherSetupSaveRef.current = true;
         setTeacherSetup(fallback());
         setTeacherSetupReady(true);
@@ -504,16 +590,18 @@ export default function Home() {
     }
 
     let cancelled = false;
+    const epoch = teacherEpochRef.current;
     setTeacherCoursesReady(false);
     setTeacherCoursesError("");
 
     async function loadTeacherCourses() {
+      const current = () => !cancelled && keepTeacherSessionPayload(epoch, teacherEpochRef.current, true);
       try {
         const payload = await fetchTeacherCoursesApi(
           adminYearConsult ? viewedSchoolYearId : null,
           { adminConsult: adminYearConsult },
         );
-        if (cancelled) return;
+        if (!current()) return;
         setTeacherCourses(payload.courses);
         setTeacherClassAccesses(payload.classAccesses);
         setTeacherCoursesYearLabel(payload.courses[0]?.schoolYearLabel ?? null);
@@ -524,7 +612,7 @@ export default function Home() {
             adminYearConsult ? viewedSchoolYearId : null,
             { adminConsult: adminYearConsult },
           );
-          if (cancelled) return;
+          if (!current()) return;
           setTeacherClassAccesses(accesses.classAccesses);
         } catch {
           // Conservez les codes déjà reçus avec les cours.
@@ -535,7 +623,7 @@ export default function Home() {
         if (adminYearConsult && viewedSchoolYearId) {
           try {
             const calendar = await fetchOfficialSchoolCalendar(viewedSchoolYearId);
-            if (cancelled) return;
+            if (!current()) return;
             const status = calendar.year.status;
             setViewedSchoolYearStatus(
               status === "draft" || status === "active" || status === "archived" ? status : "draft",
@@ -544,53 +632,51 @@ export default function Home() {
               setSchoolWeeks(buildSchoolWeeksFromEntries(calendar.weeks));
             }
           } catch {
-            if (!cancelled) setViewedSchoolYearStatus("draft");
+            if (!current()) return;
+            setViewedSchoolYearStatus("draft");
+            setNotice("Chargement du calendrier scolaire impossible.");
           }
           try {
             const runtime = await fetchTeacherClassroomsApi(viewedSchoolYearId, { adminConsult: true });
-            if (cancelled) return;
-            setRuntimeClassrooms(runtime);
-            const classroomIds = runtime.map((entry) => entry.id);
-            const loadedItems = await loadTeacherAgendaItems(classroomIds, viewedSchoolYearId, {
-              adminConsult: true,
-            });
-            if (cancelled) return;
-            setItems(loadedItems);
-            setNotebookAgendaLoadError("");
-            loadedAgendaClassroomIdsRef.current = new Set(
-              classroomIds.map((classroomId) => `${classroomId}|${viewedSchoolYearId}`),
+            const accepted = current() ? keepTeacherSessionPayload(epoch, teacherEpochRef.current, runtime) : null;
+            if (!accepted) return;
+            setRuntimeClassrooms(accepted);
+            await refreshTeacherAgenda(
+              accepted.map((entry) => entry.id),
+              viewedSchoolYearId,
+              { adminConsult: true, replaceScope: true },
             );
           } catch (error) {
-            // Conservez les classes déjà chargées.
-            if (!cancelled) {
-              setNotebookAgendaLoadError(
-                `Devoirs et informations non chargés : ${error instanceof Error ? error.message : "erreur inconnue"}.`,
-              );
-            }
+            if (!current()) return;
+            setNotice(error instanceof Error ? error.message : "Chargement des classes impossible.");
           }
         } else {
           setViewedSchoolYearStatus(null);
+          let calendarFailed = false;
           try {
             const calendar = await fetchSchoolCalendar();
-            if (cancelled) return;
+            if (!current()) return;
             if (calendar.configured && calendar.weeks.length) {
               setSchoolWeeks(buildSchoolWeeksFromEntries(calendar.weeks));
             }
-            const runtime = await fetchTeacherClassroomsApi();
-            if (cancelled) return;
-            setRuntimeClassrooms(runtime);
-            const classroomIds = runtime.map((entry) => entry.id);
-            const loadedItems = await loadTeacherAgendaItems(classroomIds);
-            if (cancelled) return;
-            setItems(loadedItems);
-            setNotebookAgendaLoadError("");
-            loadedAgendaClassroomIdsRef.current = new Set(classroomIds);
           } catch {
-            // Conservez le calendrier déjà chargé.
+            calendarFailed = true;
+            if (current()) setNotice("Chargement du calendrier scolaire impossible.");
+          }
+          try {
+            const runtime = await fetchTeacherClassroomsApi();
+            const accepted = current() ? keepTeacherSessionPayload(epoch, teacherEpochRef.current, runtime) : null;
+            if (!accepted) return;
+            setRuntimeClassrooms(accepted);
+            await refreshTeacherAgenda(accepted.map((entry) => entry.id), null, { replaceScope: true });
+          } catch (error) {
+            if (!current()) return;
+            const classMessage = error instanceof Error ? error.message : "Chargement des classes impossible.";
+            setNotice(calendarFailed ? `Chargement du calendrier scolaire impossible. ${classMessage}` : classMessage);
           }
         }
       } catch (loadError) {
-        if (cancelled) return;
+        if (!current()) return;
         setTeacherCourses([]);
         setTeacherClassAccesses({});
         setTeacherCoursesYearLabel(null);
@@ -645,9 +731,11 @@ export default function Home() {
     if (adminYearConsult && !viewedSchoolYearId) return;
 
     let cancelled = false;
+    const epoch = teacherEpochRef.current;
     setClassNotesReady(false);
 
     async function loadClassNotes() {
+      const current = () => !cancelled && keepTeacherSessionPayload(epoch, teacherEpochRef.current, true);
       const fallback = () =>
         peekNotesFromBrowser(currentTeacherId) ??
         loadNotesFromBrowser(currentTeacherId);
@@ -657,9 +745,15 @@ export default function Home() {
 
       try {
         const remote = await fetchTeacherNotesApi(consult);
-        if (cancelled) return;
+        if (!current()) return;
 
         setNotebookNotesLoadError("");
+        if (notesConflictRef.current) {
+          setNotesSyncInterrupted(true);
+          setClassNotesReady(true);
+          return;
+        }
+        notesHydratedRef.current = true;
         if (remote) {
           skipClassNotesSaveRef.current = true;
           setClassNotesDocument(remote);
@@ -670,25 +764,43 @@ export default function Home() {
 
         const local = !adminYearConsult ? peekNotesFromBrowser(currentTeacherId) : null;
         if (local) {
-          const saved = await saveTeacherNotesApi(local);
-          if (cancelled) return;
-          skipClassNotesSaveRef.current = true;
-          setClassNotesDocument(saved);
-          clearNotesFromBrowser(currentTeacherId);
-          setClassNotesReady(true);
-          return;
+          try {
+            const saved = await saveTeacherNotesApi(local);
+            if (!current()) return;
+            skipClassNotesSaveRef.current = true;
+            setClassNotesDocument(saved);
+            clearNotesFromBrowser(currentTeacherId);
+            setClassNotesReady(true);
+            return;
+          } catch (error) {
+            if (!current()) return;
+            const message = error instanceof Error ? error.message : "Enregistrement des notes impossible.";
+            if (message.includes("Les notes ont changé")) {
+              notesConflictRef.current = true;
+              notesHydratedRef.current = true;
+              setClassNotesDocument(local);
+              setNotesSyncInterrupted(true);
+              reportNotebookDiagnostic({ kind: "notes-conflict" });
+              setClassNotesReady(true);
+              return;
+            }
+            throw error;
+          }
         }
 
         skipClassNotesSaveRef.current = true;
         setClassNotesDocument(createEmptyNotesDocument());
         setClassNotesReady(true);
       } catch (error) {
-        if (cancelled) return;
+        if (!current()) return;
+        notesHydratedRef.current = false;
         setNotebookNotesLoadError(
           `Notes du Carnet non chargées : ${error instanceof Error ? error.message : "erreur inconnue"}.`,
         );
         skipClassNotesSaveRef.current = true;
-        setClassNotesDocument(adminYearConsult ? createEmptyNotesDocument() : fallback());
+        if (!notesConflictRef.current) {
+          setClassNotesDocument(adminYearConsult ? createEmptyNotesDocument() : fallback());
+        }
         setClassNotesReady(true);
       }
     }
@@ -702,6 +814,11 @@ export default function Home() {
 
   useEffect(() => {
     if (adminYearConsult) return;
+    if (!shouldPersistNotebookNotes({
+      hydrated: notesHydratedRef.current,
+      conflict: notesConflictRef.current,
+      adminConsult: adminYearConsult,
+    })) return;
     if (!teacherAuthenticated || !classNotesReady) return;
     if (skipClassNotesSaveRef.current) {
       skipClassNotesSaveRef.current = false;
@@ -709,9 +826,22 @@ export default function Home() {
     }
 
     const timer = window.setTimeout(() => {
+      const saveEpoch = teacherEpochRef.current;
+      if (!shouldPersistNotebookNotes({
+        hydrated: notesHydratedRef.current,
+        conflict: notesConflictRef.current,
+        adminConsult: adminYearConsult,
+      })) return;
       void saveTeacherNotesApi(classNotesDocument).catch((error: unknown) => {
-        // Keep the editor contents available when the server refuses a stale save.
-        setNotice(error instanceof Error ? error.message : "Enregistrement des notes impossible.");
+        if (!keepTeacherSessionPayload(saveEpoch, teacherEpochRef.current, true)) return;
+        const message = error instanceof Error ? error.message : "Enregistrement des notes impossible.";
+        if (message.includes("Les notes ont changé")) {
+          notesConflictRef.current = true;
+          setNotesSyncInterrupted(true);
+          reportNotebookDiagnostic({ kind: "notes-conflict" });
+          return;
+        }
+        setNotice(message);
       });
     }, 400);
 
@@ -834,6 +964,25 @@ export default function Home() {
         : null,
     [openNotebookClass, openNotebookCourse, runtimeClassrooms],
   );
+  const notebookPublicationsState = notebookClassroomId
+    ? classroomAgendaPhase(
+        agendaLedger,
+        agendaClassroomKey(notebookClassroomId, adminYearConsult ? viewedSchoolYearId : null),
+      )
+    : "unknown";
+
+  function retryNotebookAgenda() {
+    if (!notebookClassroomId) return;
+    reportNotebookDiagnostic({ kind: "retry", classroomId: notebookClassroomId });
+    void refreshTeacherAgenda(
+      [notebookClassroomId],
+      adminYearConsult ? viewedSchoolYearId : null,
+      { adminConsult: adminYearConsult, force: true },
+    ).catch((error: unknown) => {
+      setNotice(error instanceof Error ? error.message : AGENDA_ERROR_LABEL);
+    });
+  }
+
   const notebookRuntimeSubjects = useMemo(
     () => runtimeClassrooms.find((entry) => entry.id === notebookClassroomId)?.subjects,
     [notebookClassroomId, runtimeClassrooms],
@@ -897,32 +1046,14 @@ export default function Home() {
 
   useEffect(() => {
     if (!teacherAuthenticated || !notebookClassroomId) return;
-    const agendaKey = adminYearConsult && viewedSchoolYearId
-      ? `${notebookClassroomId}|${viewedSchoolYearId}`
-      : notebookClassroomId;
-    if (loadedAgendaClassroomIdsRef.current.has(agendaKey)) return;
-    loadedAgendaClassroomIdsRef.current.add(agendaKey);
+    const yearId = adminYearConsult ? viewedSchoolYearId : null;
+    const phase = classroomAgendaPhase(agendaLedgerRef.current, agendaClassroomKey(notebookClassroomId, yearId));
+    if (phase === "ready" || phase === "loading" || phase === "error") return;
     let cancelled = false;
-    void fetchAgendaItems(
-      notebookClassroomId,
-      adminYearConsult ? viewedSchoolYearId : null,
-      { adminConsult: adminYearConsult },
-    )
-      .then((batch) => {
-        if (cancelled) return;
-        setNotebookAgendaLoadError("");
-        setItems((previous) => {
-          const merged = new Map(previous.map((item) => [item.id, item]));
-          for (const item of batch) merged.set(item.id, item);
-          return [...merged.values()].sort((left, right) => left.id - right.id);
-        });
-      })
+    void refreshTeacherAgenda([notebookClassroomId], yearId, { adminConsult: adminYearConsult })
       .catch((error: unknown) => {
-        loadedAgendaClassroomIdsRef.current.delete(agendaKey);
         if (cancelled) return;
-        setNotebookAgendaLoadError(
-          `Devoirs et informations non chargés : ${error instanceof Error ? error.message : "erreur inconnue"}.`,
-        );
+        setNotice(error instanceof Error ? error.message : "Impossible de charger les publications de cette classe.");
       });
     return () => {
       cancelled = true;
@@ -1304,15 +1435,42 @@ export default function Home() {
       setStudentCourseDayKey(null);
       resetSelectedWeek();
     }
-    void fetchAgendaView(access.classroomId)
+    const yearId = adminYearConsult ? viewedSchoolYearId : null;
+    const epoch = teacherEpochRef.current;
+    const begun = beginAgendaRefresh(agendaLedgerRef.current, [access.classroomId], yearId, { joinInFlight: true });
+    const launch = begun.started[0];
+    if (!launch) return;
+    if (!launch.joined) publishAgendaLedger(begun.ledger);
+    void fetchAgendaView(access.classroomId, yearId, { adminConsult: adminYearConsult })
       .then((view) => {
-        setItems(view.items);
+        if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, true)) {
+          reportNotebookDiagnostic({ kind: "stale-response", classroomId: access.classroomId });
+          return;
+        }
+        const applied = applyAgendaLoadResult(agendaLedgerRef.current, launch.key, launch.generation, {
+          ok: true,
+          items: view.items,
+        });
+        if (applied.applied) publishAgendaLedger(applied.ledger);
+        else reportNotebookDiagnostic({ kind: "stale-response", classroomId: access.classroomId });
         setAgendaSubjects(view.subjects);
         setAttendanceDays(attendanceDaysFromAgendaView(view.attendanceDays));
         setStudentScheduleSlots(scheduleSlotsFromAgendaView(view.scheduleSlots));
         setStudentControlLinks(view.upcomingControlLinks);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, true)) {
+          reportNotebookDiagnostic({ kind: "stale-response", classroomId: access.classroomId });
+          return;
+        }
+        const applied = applyAgendaLoadResult(agendaLedgerRef.current, launch.key, launch.generation, { ok: false });
+        if (applied.applied) {
+          publishAgendaLedger(applied.ledger);
+          setNotice(AGENDA_ERROR_LABEL);
+          return;
+        }
+        reportNotebookDiagnostic({ kind: "stale-response", classroomId: access.classroomId });
+      });
   }
 
   function enterTeacherPreview() {
@@ -1364,7 +1522,9 @@ export default function Home() {
         setStudentHistoryOpen(false);
         setStudentCodeModalOpen(false);
         resetSelectedWeek();
+        const epoch = teacherEpochRef.current;
         const view = await fetchAgendaView(session.classroomId);
+        if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, view)) return;
         setItems(view.items);
         setAgendaSubjects(view.subjects);
         setAttendanceDays(attendanceDaysFromAgendaView(view.attendanceDays));
@@ -1380,11 +1540,53 @@ export default function Home() {
     })();
   }
 
+  function discardTeacherWorkspace() {
+    teacherEpochRef.current += 1;
+    notesHydratedRef.current = false;
+    notesConflictRef.current = false;
+    setNotesSyncInterrupted(false);
+    setNotebookNotesLoadError("");
+    skipClassNotesSaveRef.current = true;
+    setClassNotesDocument(createEmptyNotesDocument());
+    setClassNotesReady(false);
+    const empty = emptyAgendaLedger();
+    agendaLedgerRef.current = empty;
+    setAgendaLedger(empty);
+    setItems([]);
+    setRuntimeClassrooms([]);
+    setOpenNotebookClassId(null);
+    setOpenNotebookCourse(null);
+  }
+
   function clearTeacherAuthIdentity() {
+    discardTeacherWorkspace();
     setAuthenticatedTeacher(null);
     setTeacherAuthenticated(false);
     setTeacherIsAdmin(false);
-    setOpenNotebookCourse(null);
+  }
+
+  async function reloadServerNotes(securedFingerprint: string) {
+    const epoch = teacherEpochRef.current;
+    if (!notesConflictRef.current) return;
+    if (!localNotesStillMatchRecovery(notebookNotesFingerprint(classNotesDocumentRef.current), securedFingerprint)) return;
+    try {
+      const consult = adminYearConsult
+        ? { schoolYearId: viewedSchoolYearId, adminConsult: true as const }
+        : undefined;
+      const remote = await fetchTeacherNotesApi(consult);
+      if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, true) || !notesConflictRef.current) return;
+      if (!localNotesStillMatchRecovery(notebookNotesFingerprint(classNotesDocumentRef.current), securedFingerprint)) return;
+      notesConflictRef.current = false;
+      setNotesSyncInterrupted(false);
+      notesHydratedRef.current = true;
+      skipClassNotesSaveRef.current = true;
+      setClassNotesDocument(remote ?? createEmptyNotesDocument());
+      setNotebookNotesLoadError("");
+      setClassNotesReady(true);
+    } catch (error) {
+      if (!keepTeacherSessionPayload(epoch, teacherEpochRef.current, true)) return;
+      setNotice(error instanceof Error ? error.message : "Rechargement des notes impossible.");
+    }
   }
 
   function exitStudentMode() {
@@ -1403,6 +1605,11 @@ export default function Home() {
         return;
       }
 
+      if (notesConflictRef.current) {
+        setLogoutRecovery(null);
+        setUnsavedLogoutOpen(true);
+        return;
+      }
       await logoutApiSession();
       setStudentSession(null);
       setStudentEntry(null);
@@ -1571,16 +1778,42 @@ export default function Home() {
   }
 
   useEffect(() => {
+    if (!notesSyncInterrupted) return;
+    function warnBeforeLeaving(event: BeforeUnloadEvent) {
+      if (!notesConflictRef.current) return;
+      event.preventDefault();
+      event.returnValue = NOTES_LOGOUT_WARNING;
+    }
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [notesSyncInterrupted]);
+
+  useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
+      if (unsavedLogoutOpen) {
+        setUnsavedLogoutOpen(false);
+        setLogoutRecovery(null);
+      }
       if (studentCodeModalOpen) setStudentCodeModalOpen(false);
       if (controlAlert) dismissControlAlert();
     }
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [studentCodeModalOpen, controlAlert]);
+  }, [studentCodeModalOpen, controlAlert, unsavedLogoutOpen]);
 
   function logoutTeacher() {
+    if (notesConflictRef.current) {
+      setLogoutRecovery(null);
+      setUnsavedLogoutOpen(true);
+      return;
+    }
+    void finishTeacherLogout();
+  }
+
+  function finishTeacherLogout() {
+    setUnsavedLogoutOpen(false);
+    setLogoutRecovery(null);
     void (async () => {
       await logoutApiSession();
       setStudentSession(null);
@@ -1588,6 +1821,41 @@ export default function Home() {
       setAppMode("teacher");
       clearTeacherAuthIdentity();
       showNotice("Session réinitialisée.");
+    })();
+  }
+
+  function downloadNotesFile(contents: string, filename: string, type: string) {
+    const blob = new Blob([contents], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function preserveNotesBeforeLogout() {
+    const document = classNotesDocumentRef.current;
+    const text = unsavedNotebookNotesText(document);
+    const fingerprint = notebookNotesFingerprint(document);
+    downloadNotesFile(text, "notes-prof-non-enregistrees.txt", "text/plain;charset=utf-8");
+    downloadNotesFile(unsavedNotebookNotesStructured(document), "notes-prof-non-enregistrees.json", "application/json");
+    void (async () => {
+      let verified = false;
+      try {
+        await navigator.clipboard.writeText(text);
+        verified = (await navigator.clipboard.readText()) === text
+          && notebookNotesFingerprint(classNotesDocumentRef.current) === fingerprint;
+      } catch {
+        verified = false;
+      }
+      if (notebookNotesFingerprint(classNotesDocumentRef.current) !== fingerprint) {
+        setLogoutRecovery(null);
+        return;
+      }
+      setLogoutRecovery({ fingerprint, text, verified });
     })();
   }
 
@@ -1714,7 +1982,7 @@ export default function Home() {
       detail: input.detail ?? "",
       confirmCoordination,
     });
-    setItems((previous) => upsertAgendaItem(previous, created.item));
+    replaceTeacherAgendaItems((previous) => upsertAgendaItem(previous, created.item));
     showNotice("Contrôle planifié.");
   }
 
@@ -1737,7 +2005,7 @@ export default function Home() {
       courseSessionKey: session?.key,
       courseSessionDate: session?.date,
     });
-    setItems((previous) => upsertAgendaItem(previous, created));
+    replaceTeacherAgendaItems((previous) => upsertAgendaItem(previous, created));
     showNotice("Publication ajoutée.");
   }
 
@@ -1776,7 +2044,7 @@ export default function Home() {
     if (plan.action === "clear") {
       for (const itemId of plan.deleteIds) {
         await deleteAgendaItemApi(itemId);
-        setItems((previous) => previous.filter((entry) => entry.id !== itemId));
+        replaceTeacherAgendaItems((previous) => previous.filter((entry) => entry.id !== itemId));
       }
       showNotice("Publication retirée.");
       return;
@@ -1789,10 +2057,10 @@ export default function Home() {
         ...(options?.studentVisible === undefined ? {} : { studentVisible: options.studentVisible }),
       };
       const updated = await updateAgendaItemApi(plan.updateId, payload);
-      setItems((previous) => previous.map((item) => (item.id === plan.updateId ? updated : item)));
+      replaceTeacherAgendaItems((previous) => previous.map((item) => (item.id === plan.updateId ? updated : item)));
       for (const extraId of plan.deleteIds) {
         await deleteAgendaItemApi(extraId);
-        setItems((previous) => previous.filter((entry) => entry.id !== extraId));
+        replaceTeacherAgendaItems((previous) => previous.filter((entry) => entry.id !== extraId));
       }
     } else {
       const created = await createNotebookPublicationApi({
@@ -1806,7 +2074,7 @@ export default function Home() {
         courseSessionKey: sessionKey || undefined,
         courseSessionDate: options?.courseSessionDate,
       });
-      setItems((previous) => upsertAgendaItem(previous, created));
+      replaceTeacherAgendaItems((previous) => upsertAgendaItem(previous, created));
     }
     showNotice(
       options?.studentVisible === true
@@ -1833,7 +2101,7 @@ export default function Home() {
     for (const item of weekItems) {
       if ((item.studentVisible !== false) === studentVisible) continue;
       const updated = await updateAgendaItemApi(item.id, { studentVisible });
-      setItems((previous) => previous.map((entry) => (entry.id === item.id ? updated : entry)));
+      replaceTeacherAgendaItems((previous) => previous.map((entry) => (entry.id === item.id ? updated : entry)));
     }
     showNotice(studentVisible ? "Visible aux élèves." : "Repassé en brouillon.");
   }
@@ -1857,13 +2125,13 @@ export default function Home() {
           ? { day }
           : {}),
     });
-    setItems((previous) => previous.map((item) => (item.id === itemId ? updated : item)));
+    replaceTeacherAgendaItems((previous) => previous.map((item) => (item.id === itemId ? updated : item)));
   }
 
   async function notebookDeletePublication(itemId: number) {
     if (!requireNotebookAnnualCourseId()) return;
     await deleteAgendaItemApi(itemId);
-    setItems((previous) => previous.filter((item) => item.id !== itemId));
+    replaceTeacherAgendaItems((previous) => previous.filter((item) => item.id !== itemId));
   }
 
   async function notebookSaveControl(input: {
@@ -1908,7 +2176,7 @@ export default function Home() {
       title: input.title.trim(),
       detail: input.detail,
     });
-    setItems((previous) => previous.map((item) => (item.id === itemId ? updated.item : item)));
+    replaceTeacherAgendaItems((previous) => previous.map((item) => (item.id === itemId ? updated.item : item)));
     showNotice("Contrôle enregistré.");
   }
 
@@ -2112,7 +2380,7 @@ export default function Home() {
         {activeSection === "controles" && (
           <ControlPlanningPanel
             onPublicationCreated={(item) => {
-              setItems((previous) => upsertAgendaItem(previous, item));
+              replaceTeacherAgendaItems((previous) => upsertAgendaItem(previous, item));
             }}
           />
         )}
@@ -2138,7 +2406,11 @@ export default function Home() {
             notesDocument={classNotesDocument}
             canPublish={notebookCanPublish}
             publishBlockedReason={notebookBlockedReason}
-            loadError={[notebookAgendaLoadError, notebookNotesLoadError].filter(Boolean).join(" ")}
+            loadError={notebookNotesLoadError}
+            notesSyncInterrupted={notesSyncInterrupted}
+            onReloadServerNotes={(fingerprint) => { void reloadServerNotes(fingerprint); }}
+            publicationsState={notebookPublicationsState}
+            onRetryPublications={retryNotebookAgenda}
             onBack={closeClassNotebook}
             onShiftWeeks={shiftNotebookWeeks}
             onCenterWeekChange={setNotebookCenterWeek}
@@ -2210,6 +2482,52 @@ export default function Home() {
       </nav>
 
 {notice && <div className="technical-toast" role="status">✓ &nbsp;{notice}</div>}
+
+      {unsavedLogoutOpen ? (
+        <div className="technical-modal-backdrop">
+          <section className="technical-modal unsaved-notes-logout" role="dialog" aria-modal="true" aria-labelledby="unsaved-notes-logout-title">
+            <header>
+              <h2 id="unsaved-notes-logout-title">Notes non enregistrées</h2>
+            </header>
+            <p>{NOTES_LOGOUT_WARNING}</p>
+            {logoutRecovery ? (
+              <>
+                <p>{logoutRecovery.verified ? "Le texte complet a été relu dans le presse-papiers." : NOTES_COPY_UNVERIFIED_HINT}</p>
+                <p>{NOTES_EXPORT_ACK_HINT}</p>
+                <textarea readOnly value={logoutRecovery.text} />
+                {logoutRecovery.verified || logoutRecovery.acknowledged ? null : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLogoutRecovery((current) => {
+                        if (!current) return null;
+                        if (notebookNotesFingerprint(classNotesDocumentRef.current) !== current.fingerprint) return null;
+                        return { ...current, acknowledged: true };
+                      });
+                    }}
+                  >
+                    {NOTES_RECOVERY_ACK_LABEL}
+                  </button>
+                )}
+                {logoutRecovery.acknowledged ? (
+                  <p>Vous confirmez avoir mis ce texte de côté. Il reste non enregistré sur le serveur.</p>
+                ) : null}
+              </>
+            ) : null}
+            <footer>
+              <button type="button" onClick={() => { setUnsavedLogoutOpen(false); setLogoutRecovery(null); }}>
+                {NOTES_LOGOUT_CANCEL_LABEL}
+              </button>
+              <button type="button" onClick={preserveNotesBeforeLogout}>
+                {NOTES_LOGOUT_PRESERVE_LABEL}
+              </button>
+              <button type="button" className="is-danger" onClick={finishTeacherLogout}>
+                {NOTES_LOGOUT_CONFIRM_LABEL}
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
 
       {studentCodeModalOpen && (
         <div className="technical-modal-backdrop">

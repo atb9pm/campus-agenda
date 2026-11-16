@@ -115,6 +115,35 @@ export function excerptRichDoc(doc: CampusRichDoc | null | undefined, maxLength 
   return parts.join(" ").replace(/\s+/g, " ").trim();
 }
 
+function inlinePlainText(inlines: readonly RichInline[]): string {
+  return inlines.map((entry) => {
+    const href = entry.marks?.href?.trim();
+    if (!href || href === entry.text) return entry.text;
+    return `${entry.text} (${href})`;
+  }).join("");
+}
+
+/** Texte complet d’un document riche, sans limite de longueur et sans ellipse. */
+export function plainTextFromRichDoc(doc: CampusRichDoc | null | undefined): string {
+  if (!doc?.blocks?.length) return "";
+  const lines: string[] = [];
+  for (const block of doc.blocks) {
+    if (block.type === "heading" || block.type === "paragraph") {
+      lines.push(inlinePlainText(block.inlines));
+    } else if (block.type === "bulletList") {
+      for (const item of block.items) lines.push(`- ${inlinePlainText(item)}`);
+    } else if (block.type === "orderedList") {
+      block.items.forEach((item, index) => lines.push(`${index + 1}. ${inlinePlainText(item)}`));
+    } else if (block.type === "checklist") {
+      for (const item of block.items) lines.push(`${item.checked ? "[x]" : "[ ]"} ${inlinePlainText(item.inlines)}`);
+    } else {
+      lines.push(`${QUICK_BLOCK_LABELS[block.kind]} : ${inlinePlainText(block.inlines)}`);
+    }
+    lines.push("");
+  }
+  return lines.join("\n").trimEnd();
+}
+
 export function fromPlainText(text: string): CampusRichDoc {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   return fromPlainLines(lines);

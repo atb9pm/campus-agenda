@@ -11,6 +11,10 @@ import {
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items";
 import type { SchoolWeek } from "@campus/features/calendar";
 import {
+  AGENDA_EMPTY_LABEL,
+  AGENDA_ERROR_LABEL,
+  AGENDA_LOADING_LABEL,
+  AGENDA_RETRY_LABEL,
   appendWeekNote,
   assignOrphanedSessionNotes,
   assignPendingWeekNotes,
@@ -43,6 +47,28 @@ import {
   listPendingWeekNotes,
   listSessionNotes,
   listWeekNotes,
+  NOTES_COPY_LOCAL_LABEL,
+  NOTES_COPY_UNVERIFIED_HINT,
+  NOTES_EXPORT_ACK_HINT,
+  NOTES_EXPORT_LOCAL_LABEL,
+  NOTES_RECOVERY_ACK_LABEL,
+  NOTES_RELOAD_CONFIRM_LABEL,
+  NOTES_RELOAD_HINT,
+  NOTES_RELOAD_SERVER_LABEL,
+  NOTES_SYNC_INTERRUPTED_LABEL,
+  acceptVerifiedNotebookNotes,
+  acknowledgeNotebookNotesRecovery,
+  emptyNotesConflictGuard,
+  notebookNotesFingerprint,
+  notesConflictGuardForDocument,
+  notesConflictGuardsEqual,
+  offerNotebookNotesRecovery,
+  requestServerNotesReload,
+  serverNotesReloadConfirmed,
+  serverNotesReloadReady,
+  unsavedNotebookNotesStructured,
+  unsavedNotebookNotesText,
+  type NotesConflictGuard,
   migrateClassNotesToSessions,
   moveTargetCourseSessions,
   moveWeekUnitToDoc,
@@ -132,6 +158,13 @@ interface ClassNotebookPanelProps {
   publishBlockedReason?: string;
   /** Échec de chargement : le Carnet vide ne doit pas passer pour un Carnet sans contenu. */
   loadError?: string;
+  /** Conflit de notes : l’avertissement reste jusqu’au rechargement explicite. */
+  notesSyncInterrupted?: boolean;
+  /** Remplace le texte à l’écran par la version serveur, seulement si l’empreinte est encore celle mise de côté. */
+  onReloadServerNotes?: (securedFingerprint: string) => void;
+  /** État du chargement des publications de la classe ouverte. */
+  publicationsState?: "unknown" | "loading" | "ready" | "error";
+  onRetryPublications?: () => void;
   onBack: () => void;
   onShiftWeeks: (direction: -1 | 1) => void;
   onCenterWeekChange: (weekNumber: number) => void;
@@ -282,6 +315,10 @@ export function ClassNotebookPanel({
   canPublish,
   publishBlockedReason,
   loadError,
+  notesSyncInterrupted = false,
+  onReloadServerNotes,
+  publicationsState = "ready",
+  onRetryPublications,
   onBack,
   onShiftWeeks,
   onCenterWeekChange,
@@ -304,6 +341,92 @@ export function ClassNotebookPanel({
   onFollowSelectionChange,
 }: ClassNotebookPanelProps) {
   const [weekDisplayCount, setWeekDisplayCount] = useState<WeekDisplayCount>(defaultWeekDisplayCount);
+  const [notesConflictGuard, setNotesConflictGuard] = useState<NotesConflictGuard>(emptyNotesConflictGuard());
+  const [trackedNotesInterruption, setTrackedNotesInterruption] = useState(notesSyncInterrupted);
+  const [recoveryOffer, setRecoveryOffer] = useState<{ fingerprint: string; text: string; kind: "copy" | "export" } | null>(null);
+  const notesFingerprint = notebookNotesFingerprint(notesDocument);
+  if (notesSyncInterrupted !== trackedNotesInterruption) {
+    setTrackedNotesInterruption(notesSyncInterrupted);
+    setNotesConflictGuard(emptyNotesConflictGuard());
+    setRecoveryOffer(null);
+  } else if (notesSyncInterrupted) {
+    const aligned = notesConflictGuardForDocument(notesConflictGuard, notesFingerprint);
+    if (!notesConflictGuardsEqual(aligned, notesConflictGuard)) setNotesConflictGuard(aligned);
+    if (recoveryOffer && recoveryOffer.fingerprint !== notesFingerprint) setRecoveryOffer(null);
+  }
+  const visibleNotesGuard = notesSyncInterrupted
+    ? notesConflictGuardForDocument(notesConflictGuard, notesFingerprint)
+    : emptyNotesConflictGuard();
+
+  function downloadUnsavedFile(contents: string, filename: string, type: string) {
+    const blob = new Blob([contents], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function offerRecovery(kind: "copy" | "export", fingerprint: string, text: string) {
+    setRecoveryOffer({ fingerprint, text, kind });
+    setNotesConflictGuard((guard) => offerNotebookNotesRecovery(guard, fingerprint));
+  }
+
+  async function copyUnsavedNotes() {
+    const text = unsavedNotebookNotesText(notesDocument);
+    const fingerprint = notebookNotesFingerprint(notesDocument);
+    try {
+      await navigator.clipboard.writeText(text);
+      let readBack = "";
+      try {
+        readBack = await navigator.clipboard.readText();
+      } catch {
+        offerRecovery("copy", fingerprint, text);
+        return;
+      }
+      if (readBack === text && notebookNotesFingerprint(notesDocument) === fingerprint) {
+        setRecoveryOffer(null);
+        setNotesConflictGuard((guard) => acceptVerifiedNotebookNotes(guard, fingerprint));
+        return;
+      }
+    } catch {
+      // Le presse-papiers a refusé l’écriture : le texte reste proposé à l’écran.
+    }
+    offerRecovery("copy", fingerprint, text);
+  }
+
+  function exportUnsavedNotes() {
+    const text = unsavedNotebookNotesText(notesDocument);
+    const fingerprint = notebookNotesFingerprint(notesDocument);
+    downloadUnsavedFile(text, "notes-prof-non-enregistrees.txt", "text/plain;charset=utf-8");
+    downloadUnsavedFile(
+      unsavedNotebookNotesStructured(notesDocument),
+      "notes-prof-non-enregistrees.json",
+      "application/json",
+    );
+    offerRecovery("export", fingerprint, text);
+  }
+
+  function acknowledgeRecovery() {
+    const fingerprint = notebookNotesFingerprint(notesDocument);
+    setNotesConflictGuard((guard) => acknowledgeNotebookNotesRecovery(guard, fingerprint));
+    if (recoveryOffer?.fingerprint === fingerprint) setRecoveryOffer(null);
+  }
+
+  function askServerNotesReload() {
+    const fingerprint = notebookNotesFingerprint(notesDocument);
+    setNotesConflictGuard((guard) => requestServerNotesReload(guard, fingerprint));
+  }
+
+  function confirmServerNotesReload() {
+    const fingerprint = notebookNotesFingerprint(notesDocument);
+    if (!serverNotesReloadConfirmed(notesConflictGuard, fingerprint)) return;
+    if (!serverNotesReloadConfirmed(notesConflictGuardForDocument(notesConflictGuard, fingerprint), fingerprint)) return;
+    void onReloadServerNotes?.(fingerprint);
+  }
   const narrowViewport = useNotebookNarrowViewport();
   const effectiveWeekDisplayCount = notebookWeekDisplayCountForViewport(
     narrowViewport ? NOTEBOOK_NARROW_VIEWPORT_MAX_PX : NOTEBOOK_NARROW_VIEWPORT_MAX_PX + 1,
@@ -1068,7 +1191,12 @@ export function ClassNotebookPanel({
     };
   }, [moveMenuCardId]);
 
+  function publicationsAreUnloaded() {
+    return publicationsState !== "ready" && items.length === 0;
+  }
+
   function openEditor(kind: EditorKind, weekNumber: number, session?: CourseSession | null) {
+    if (kind === "publication" && publicationsAreUnloaded()) return;
     const weekItems =
       session && courseSessions
         ? itemsForCourseSession(items, session, courseSessions)
@@ -1093,7 +1221,7 @@ export function ClassNotebookPanel({
       ? orderedSessions.find((entry) => entry.key === editor.sessionKey) ?? null
       : null;
     if (editor.kind === "publication") {
-      if (!canPublish) return;
+      if (!canPublish || publicationsAreUnloaded()) return;
       await onSaveWeekPublication(editor.weekNumber, editorDoc, {
         ...(studentVisible === undefined ? {} : { studentVisible }),
         session: editorSession,
@@ -1593,6 +1721,7 @@ export function ClassNotebookPanel({
       aria-label={`Carnet ${classSetup.name} · ${branchLabel}`}
       data-annual-course-id={annualCourseId ?? undefined}
       data-subject-id={subjectId ?? undefined}
+      data-publications-state={publicationsState}
     >
       <div className="class-notebook-toolbar">
         <button type="button" className="workspace-action secondary" onClick={onBack}>
@@ -1613,7 +1742,7 @@ export function ClassNotebookPanel({
             type="button"
             className="workspace-action secondary"
             onClick={() => setControlsOpen(true)}
-            disabled={structuredCourse && (sessionsLoading || (courseSessions != null && courseSessions.length === 0))}
+            disabled={publicationsAreUnloaded() || (structuredCourse && (sessionsLoading || (courseSessions != null && courseSessions.length === 0)))}
           >
             Contrôles 📅
           </button>
@@ -1627,6 +1756,54 @@ export function ClassNotebookPanel({
 
       {loadError ? (
         <p className="class-notebook-warning" role="alert">{loadError}</p>
+      ) : null}
+      {notesSyncInterrupted ? (
+        <div className="class-notebook-warning" role="alert" data-notes-sync="interrupted">
+          <p>{NOTES_SYNC_INTERRUPTED_LABEL}</p>
+          <p>{NOTES_RELOAD_HINT}</p>
+          <div className="class-notebook-warning-actions">
+            <button type="button" className="workspace-action secondary" onClick={() => { void copyUnsavedNotes(); }}>
+              {NOTES_COPY_LOCAL_LABEL}
+            </button>
+            <button type="button" className="workspace-action secondary" onClick={exportUnsavedNotes}>
+              {NOTES_EXPORT_LOCAL_LABEL}
+            </button>
+            <button
+              type="button"
+              className="workspace-action secondary"
+              onClick={askServerNotesReload}
+              disabled={!serverNotesReloadReady(visibleNotesGuard, notesFingerprint)}
+            >
+              {NOTES_RELOAD_SERVER_LABEL}
+            </button>
+            {visibleNotesGuard.step === "confirming" ? (
+              <button type="button" className="workspace-action" onClick={confirmServerNotesReload}>
+                {NOTES_RELOAD_CONFIRM_LABEL}
+              </button>
+            ) : null}
+          </div>
+          {recoveryOffer && recoveryOffer.fingerprint === notesFingerprint ? (
+            <div className="class-notebook-recovery">
+              <p>{recoveryOffer.kind === "export" ? NOTES_EXPORT_ACK_HINT : NOTES_COPY_UNVERIFIED_HINT}</p>
+              <textarea className="class-notebook-recovery-text" readOnly value={recoveryOffer.text} />
+              <button type="button" className="workspace-action secondary" onClick={acknowledgeRecovery}>
+                {NOTES_RECOVERY_ACK_LABEL}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {publicationsState === "error" ? (
+        <p className="class-notebook-warning" role="alert">
+          {AGENDA_ERROR_LABEL}
+          {onRetryPublications ? (
+            <button type="button" className="workspace-action secondary" onClick={onRetryPublications}>
+              {AGENDA_RETRY_LABEL}
+            </button>
+          ) : null}
+        </p>
+      ) : publicationsState === "loading" || publicationsState === "unknown" ? (
+        items.length === 0 ? <p className="class-notebook-empty">{AGENDA_LOADING_LABEL}</p> : null
       ) : null}
 
       {!canPublish && publishBlockedReason ? (
@@ -1856,7 +2033,7 @@ export function ClassNotebookPanel({
                     </li>
                   ))}
                 </ul>
-                {session ? (
+                {session && !publicationsAreUnloaded() ? (
                   <button
                     type="button"
                     className="class-notebook-plan-link"
@@ -1970,8 +2147,8 @@ export function ClassNotebookPanel({
                   <RichDocView
                     doc={composeWeekPublicationDoc(weekCarnetPublications)}
                     compact
-                    interactive={canPublish}
-                    lineDraggable={canPublish}
+                    interactive={canPublish && !publicationsAreUnloaded()}
+                    lineDraggable={canPublish && !publicationsAreUnloaded()}
                     selectedLineKey={
                       selectedLine?.source === "publication" &&
                       selectedLine.weekNumber === weekNumber &&
@@ -1983,7 +2160,9 @@ export function ClassNotebookPanel({
                     insertSlotsDragging={publicationSlots.insertSlotsDragging}
                     activeInsertSlot={publicationSlots.activeInsertSlot}
                     hiddenInsertSlots={publicationSlots.hiddenInsertSlots}
-                    emptyLabel="Aucune publication pour cette séance."
+                    emptyLabel={
+                      publicationsState === "ready" || items.length > 0 ? AGENDA_EMPTY_LABEL : ""
+                    }
                     onLineClick={
                       canPublish
                         ? (line) => selectAndCopyLine("publication", weekNumber, line, session)
@@ -1999,10 +2178,10 @@ export function ClassNotebookPanel({
                       setDropSlot(null);
                     }}
                     onInsertSlot={
-                      canPublish ? (at) => placeCopiedLine(weekNumber, "publication", at, session) : undefined
+                      canPublish && !publicationsAreUnloaded() ? (at) => placeCopiedLine(weekNumber, "publication", at, session) : undefined
                     }
                     onInsertSlotDragOver={
-                      canPublish
+                      canPublish && !publicationsAreUnloaded()
                         ? (at) =>
                             setDropSlot({
                               source: "publication",
@@ -2014,12 +2193,12 @@ export function ClassNotebookPanel({
                         : undefined
                     }
                     onInsertSlotDrop={
-                      canPublish
+                      canPublish && !publicationsAreUnloaded()
                         ? (at, event) => handleDropOnSlot(event, "publication", weekNumber, at, session)
                         : undefined
                     }
                     onMoveLine={
-                      canPublish
+                      canPublish && !publicationsAreUnloaded()
                         ? (line, direction) => nudgeSelectedLine("publication", weekNumber, line, direction, session)
                         : undefined
                     }
@@ -2035,12 +2214,12 @@ export function ClassNotebookPanel({
                   <button
                     type="button"
                     className="workspace-action secondary"
-                    disabled={!canPublish}
+                    disabled={!canPublish || publicationsAreUnloaded()}
                     onClick={() => openEditor("publication", weekNumber, session)}
                   >
                     {visibility === "empty" ? "Rédiger" : "Modifier"}
                   </button>
-                  {visibility === "draft" && canPublish ? (
+                  {visibility === "draft" && canPublish && !publicationsAreUnloaded() ? (
                     <button
                       type="button"
                       className="workspace-action class-notebook-publish-action"
@@ -2049,7 +2228,7 @@ export function ClassNotebookPanel({
                       Publier aux élèves
                     </button>
                   ) : null}
-                  {visibility === "published" && canPublish ? (
+                  {visibility === "published" && canPublish && !publicationsAreUnloaded() ? (
                     <button
                       type="button"
                       className="workspace-action secondary class-notebook-publish-action"
@@ -2058,7 +2237,7 @@ export function ClassNotebookPanel({
                       Repasser en brouillon
                     </button>
                   ) : null}
-                  {visibility !== "empty" && canPublish ? (
+                  {visibility !== "empty" && canPublish && !publicationsAreUnloaded() ? (
                     <button
                       type="button"
                       className="workspace-action secondary"

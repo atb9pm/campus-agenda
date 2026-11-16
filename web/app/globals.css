@@ -2334,6 +2334,15 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 .class-notebook-title h2 { margin: 4px 0 0; color: var(--navy); font-size: 22px; }
 .class-notebook-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
 .class-notebook-warning { margin: 0 38px 16px; padding: 12px 14px; border: 1px solid #f0d9a8; border-radius: 8px; background: #fff8ea; color: #7a5a12; font-size: 11px; }
+.class-notebook-warning p { margin: 0; }
+.class-notebook-warning p + p { margin-top: 6px; }
+.class-notebook-warning .workspace-action { margin-left: 10px; }
+.class-notebook-warning-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.class-notebook-warning-actions .workspace-action { margin-left: 0; }
+.class-notebook-warning .workspace-action:disabled { opacity: .45; cursor: default; }
+.class-notebook-recovery { display: grid; gap: 8px; margin-top: 10px; }
+.class-notebook-recovery-text { width: 100%; min-height: 88px; padding: 8px; border: 1px solid #f0d9a8; border-radius: 8px; color: #3d3424; background: #fff; font: inherit; font-size: 11px; }
+.unsaved-notes-logout textarea { width: 100%; min-height: 120px; margin-top: 8px; padding: 8px; border: 1px solid var(--line-strong); border-radius: 8px; font: inherit; font-size: 12px; }
 .class-notebook-empty { margin: 0 38px 16px; padding: 12px 14px; border: 1px solid #e3e8ef; border-radius: 8px; background: #f7f9fc; color: #4a5568; font-size: 11px; }
 .class-notebook-week-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 0 38px 16px; }
 .class-notebook-week-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; }
