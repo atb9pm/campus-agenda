@@ -120,7 +120,6 @@ import {
   filterNotebookItemsForSubject,
   loadAgendaClassrooms,
   reportNotebookDiagnostic,
-  startAgendaLoad,
   type AgendaLoadLedger,
   loadNotesFromBrowser,
   notebookContextFromCourse,
@@ -410,18 +409,22 @@ export default function Home() {
   async function refreshTeacherAgenda(
     classroomIds: string[],
     schoolYearId?: string | null,
-    options?: { adminConsult?: boolean; replaceScope?: boolean },
+    options?: { adminConsult?: boolean; replaceScope?: boolean; force?: boolean },
   ) {
-    const begun = beginAgendaRefresh(agendaLedgerRef.current, classroomIds, schoolYearId, options);
-    publishAgendaLedger(begun.ledger);
-    if (!begun.started.length) return;
+    const begun = beginAgendaRefresh(agendaLedgerRef.current, classroomIds, schoolYearId, {
+      replaceScope: options?.replaceScope,
+      joinInFlight: !options?.force,
+    });
+    const fresh = begun.started.filter((entry) => !entry.joined);
+    if (begun.ledger !== agendaLedgerRef.current) publishAgendaLedger(begun.ledger);
+    if (!fresh.length) return;
     const results = await loadAgendaClassrooms(
-      begun.started.map((entry) => ({ classroomId: entry.classroomId, schoolYearId })),
+      fresh.map((entry) => ({ classroomId: entry.classroomId, schoolYearId })),
       (classroomId, yearId) => fetchAgendaItems(classroomId, yearId, options),
     );
     publishAgendaLedger(commitAgendaLoadResults(
       agendaLedgerRef.current,
-      begun.started,
+      fresh,
       results,
       reportNotebookDiagnostic,
     ));
@@ -930,7 +933,7 @@ export default function Home() {
     void refreshTeacherAgenda(
       [notebookClassroomId],
       adminYearConsult ? viewedSchoolYearId : null,
-      { adminConsult: adminYearConsult },
+      { adminConsult: adminYearConsult, force: true },
     ).catch((error: unknown) => {
       setNotice(error instanceof Error ? error.message : AGENDA_ERROR_LABEL);
     });
@@ -1389,9 +1392,10 @@ export default function Home() {
       resetSelectedWeek();
     }
     const yearId = adminYearConsult ? viewedSchoolYearId : null;
-    const launch = startAgendaLoad(agendaLedgerRef.current, access.classroomId, yearId);
-    agendaLedgerRef.current = launch.ledger;
-    setAgendaLedger(launch.ledger);
+    const begun = beginAgendaRefresh(agendaLedgerRef.current, [access.classroomId], yearId, { joinInFlight: true });
+    const launch = begun.started[0];
+    if (!launch) return;
+    if (!launch.joined) publishAgendaLedger(begun.ledger);
     void fetchAgendaView(access.classroomId, yearId, { adminConsult: adminYearConsult })
       .then((view) => {
         const applied = applyAgendaLoadResult(agendaLedgerRef.current, launch.key, launch.generation, {
@@ -1407,9 +1411,12 @@ export default function Home() {
       })
       .catch(() => {
         const applied = applyAgendaLoadResult(agendaLedgerRef.current, launch.key, launch.generation, { ok: false });
-        if (applied.applied) publishAgendaLedger(applied.ledger);
-        else reportNotebookDiagnostic({ kind: "stale-response", classroomId: access.classroomId });
-        setNotice(AGENDA_ERROR_LABEL);
+        if (applied.applied) {
+          publishAgendaLedger(applied.ledger);
+          setNotice(AGENDA_ERROR_LABEL);
+          return;
+        }
+        reportNotebookDiagnostic({ kind: "stale-response", classroomId: access.classroomId });
       });
   }
 

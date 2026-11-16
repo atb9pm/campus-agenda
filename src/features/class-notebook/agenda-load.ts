@@ -18,6 +18,8 @@ export interface AgendaClassroomSlot {
   preservedIds: number[];
   /** Publications retirées après le départ de la requête en cours. */
   removedIds: number[];
+  /** Génération dont les publications affichées proviennent. Null tant qu’aucune réussite n’est acceptée. */
+  acceptedGeneration: number | null;
 }
 
 export interface AgendaLoadLedger {
@@ -71,6 +73,7 @@ export function startAgendaLoad(
           confirmed: current?.confirmed ?? false,
           preservedIds: current?.preservedIds ?? [],
           removedIds: current?.removedIds ?? [],
+          acceptedGeneration: current?.acceptedGeneration ?? null,
         },
       },
     },
@@ -90,6 +93,8 @@ export interface AgendaLoadLaunch {
   key: string;
   generation: number;
   classroomId: string;
+  /** Vrai si un chargement de cette classe est déjà en cours : aucun nouveau numéro n’est émis. */
+  joined: boolean;
 }
 
 /** Démarre un chargement par classe, dans un ordre stable, sans effacer les publications déjà reçues. */
@@ -97,22 +102,57 @@ export function beginAgendaRefresh(
   ledger: AgendaLoadLedger,
   classroomIds: readonly string[],
   schoolYearId?: string | null,
-  options?: { replaceScope?: boolean },
+  options?: { replaceScope?: boolean; joinInFlight?: boolean },
 ): { ledger: AgendaLoadLedger; started: AgendaLoadLaunch[] } {
   let current = options?.replaceScope ? retainAgendaScope(ledger, schoolYearId) : ledger;
   const unique = [...new Set(classroomIds.map((id) => id.trim()).filter(Boolean))];
   const started: AgendaLoadLaunch[] = [];
   for (const classroomId of unique) {
+    const key = agendaClassroomKey(classroomId, schoolYearId);
+    const existing = current.slots[key];
+    if (options?.joinInFlight && existing?.phase === "loading") {
+      started.push({ key, generation: existing.generation, classroomId: existing.classroomId, joined: true });
+      continue;
+    }
     const next = startAgendaLoad(current, classroomId, schoolYearId);
     current = next.ledger;
-    started.push({ key: next.key, generation: next.generation, classroomId });
+    started.push({ key: next.key, generation: next.generation, classroomId, joined: false });
   }
   return { ledger: current, started };
 }
 
+function acceptAgendaItems(
+  current: AgendaClassroomSlot,
+  incoming: readonly PrototypeAgendaItem[],
+  acceptedGeneration: number,
+  clearLocalMarks: boolean,
+): AgendaClassroomSlot {
+  const removed = new Set(current.removedIds);
+  const preserved = new Set(current.preservedIds);
+  const byId = new Map<number, PrototypeAgendaItem>();
+  for (const item of incoming) {
+    if (item.classroomId !== current.classroomId || removed.has(item.id) || preserved.has(item.id)) continue;
+    byId.set(item.id, item);
+  }
+  for (const item of current.items) {
+    if (preserved.has(item.id) && !removed.has(item.id)) byId.set(item.id, item);
+  }
+  return {
+    ...current,
+    phase: "ready",
+    items: [...byId.values()].sort((left, right) => left.id - right.id),
+    confirmed: true,
+    acceptedGeneration,
+    preservedIds: clearLocalMarks ? [] : current.preservedIds,
+    removedIds: clearLocalMarks ? [] : current.removedIds,
+  };
+}
+
 /**
- * Applique une réponse seulement si elle correspond encore à la génération lancée.
- * Un échec conserve les publications déjà reçues et ne les remplace pas par une liste vide.
+ * Une réussite n’est écartée que si une génération plus récente a déjà réussi.
+ * L’échec d’un chargement plus récent ne laisse donc pas le Carnet en erreur
+ * lorsqu’une requête encore en vol a récupéré les publications.
+ * Un échec ne remplace jamais les publications par une liste vide.
  */
 export function applyAgendaLoadResult(
   ledger: AgendaLoadLedger,
@@ -121,29 +161,19 @@ export function applyAgendaLoadResult(
   result: { ok: true; items: readonly PrototypeAgendaItem[] } | { ok: false },
 ): { ledger: AgendaLoadLedger; applied: boolean } {
   const current = ledger.slots[key];
-  if (!current || current.generation !== generation) return { ledger, applied: false };
+  if (!current || generation > current.generation) return { ledger, applied: false };
   if (result.ok) {
-    const removed = new Set(current.removedIds);
-    const preserved = new Set(current.preservedIds);
-    const byId = new Map<number, PrototypeAgendaItem>();
-    for (const item of result.items) {
-      if (item.classroomId !== current.classroomId || removed.has(item.id) || preserved.has(item.id)) continue;
-      byId.set(item.id, item);
-    }
-    for (const item of current.items) {
-      if (preserved.has(item.id) && !removed.has(item.id)) byId.set(item.id, item);
-    }
-    const items = [...byId.values()].sort((left, right) => left.id - right.id);
-    return {
-      applied: true,
-      ledger: {
-        slots: {
-          ...ledger.slots,
-          [key]: { ...current, phase: "ready", items, confirmed: true, preservedIds: [], removedIds: [] },
-        },
-      },
-    };
+    if (generation < current.generation && current.phase === "ready") return { ledger, applied: false };
+    const slot = acceptAgendaItems(
+      current,
+      result.items,
+      generation,
+      generation === current.generation || current.phase === "error",
+    );
+    return { applied: true, ledger: { slots: { ...ledger.slots, [key]: slot } } };
   }
+  if (current.generation !== generation) return { ledger, applied: false };
+  if (current.phase === "ready") return { ledger, applied: false };
   return {
     applied: true,
     ledger: {
@@ -155,7 +185,7 @@ export function applyAgendaLoadResult(
   };
 }
 
-/** Applique un lot terminé sur l’état le plus récent. Une génération dépassée ne remplace rien. */
+/** Applique un lot terminé sur l’état le plus récent. Une réussite plus ancienne reste valable si la génération récente a échoué. */
 export function commitAgendaLoadResults(
   ledger: AgendaLoadLedger,
   started: readonly AgendaLoadLaunch[],
@@ -218,6 +248,7 @@ function withClassroomSlot(
     confirmed: false,
     preservedIds: [],
     removedIds: [],
+    acceptedGeneration: null,
   };
   return { slots: { ...ledger.slots, [key]: update(current) } };
 }

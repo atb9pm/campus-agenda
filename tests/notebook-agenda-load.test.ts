@@ -265,6 +265,69 @@ test("B — l’échec d’une classe conserve les autres et ne confirme pas une
   assert.equal(classroomAgendaPhase(recovered, CLASSROOM), "ready");
 });
 
+test("un échec plus récent ne masque pas la réussite d’un chargement déjà parti", async () => {
+  const stored = storedPublications().filter((item) => item.classroomId === CLASSROOM);
+  const first = beginAgendaRefresh(emptyAgendaLedger(), [CLASSROOM], null);
+  const second = beginAgendaRefresh(first.ledger, [CLASSROOM], null);
+  assert.equal(second.started[0]?.generation, (first.started[0]?.generation ?? 0) + 1);
+  const failed = await loadAgendaClassrooms(
+    second.started.map((entry) => ({ classroomId: entry.classroomId, schoolYearId: null })),
+    async () => { throw new Error("HTTP 503"); },
+  );
+  const afterFailure = commitAgendaLoadResults(second.ledger, second.started, failed);
+  assert.equal(classroomAgendaPhase(afterFailure, CLASSROOM), "error");
+  const succeeded = await loadAgendaClassrooms(
+    first.started.map((entry) => ({ classroomId: entry.classroomId, schoolYearId: null })),
+    async () => stored,
+  );
+  const afterSuccess = commitAgendaLoadResults(afterFailure, first.started, succeeded);
+  assert.equal(classroomAgendaPhase(afterSuccess, CLASSROOM), "ready");
+  assert.equal(afterSuccess.slots[CLASSROOM]?.items.some((item) => item.id === 9), true);
+  assert.equal(afterSuccess.slots[CLASSROOM]?.items.some((item) => item.id === 16), true);
+  assert.equal(afterSuccess.slots[CLASSROOM]?.items.some((item) => item.id === 19), true);
+
+  const loading = beginAgendaRefresh(emptyAgendaLedger(), [CLASSROOM], null);
+  const newer = beginAgendaRefresh(loading.ledger, [CLASSROOM], null);
+  const earlySuccess = await loadAgendaClassrooms(
+    loading.started.map((entry) => ({ classroomId: entry.classroomId, schoolYearId: null })),
+    async () => stored,
+  );
+  const ready = commitAgendaLoadResults(newer.ledger, loading.started, earlySuccess);
+  assert.equal(classroomAgendaPhase(ready, CLASSROOM), "ready");
+  const lateFailure = await loadAgendaClassrooms(
+    newer.started.map((entry) => ({ classroomId: entry.classroomId, schoolYearId: null })),
+    async () => { throw new Error("HTTP 503"); },
+  );
+  const stillReady = commitAgendaLoadResults(ready, newer.started, lateFailure);
+  assert.equal(classroomAgendaPhase(stillReady, CLASSROOM), "ready");
+  assert.equal(stillReady.slots[CLASSROOM]?.items.some((item) => item.id === 16), true);
+});
+
+test("un chargement déjà en cours est rejoint, un réessai force une nouvelle lecture", async () => {
+  const first = beginAgendaRefresh(emptyAgendaLedger(), [CLASSROOM], null, { joinInFlight: true });
+  const joined = beginAgendaRefresh(first.ledger, [CLASSROOM], null, { joinInFlight: true });
+  assert.equal(joined.started[0]?.joined, true);
+  assert.equal(joined.started[0]?.generation, first.started[0]?.generation);
+  assert.equal(joined.ledger, first.ledger);
+  const forced = beginAgendaRefresh(first.ledger, [CLASSROOM], null, { joinInFlight: false });
+  assert.equal(forced.started[0]?.joined, false);
+  assert.equal(forced.started[0]?.generation, (first.started[0]?.generation ?? 0) + 1);
+
+  const stored = storedPublications().filter((item) => item.classroomId === CLASSROOM);
+  const succeeded = await loadAgendaClassrooms(
+    first.started.map((entry) => ({ classroomId: entry.classroomId, schoolYearId: null })),
+    async () => stored,
+  );
+  const ready = commitAgendaLoadResults(first.ledger, first.started, succeeded);
+  const duplicateFailure = await loadAgendaClassrooms(
+    first.started.map((entry) => ({ classroomId: entry.classroomId, schoolYearId: null })),
+    async () => { throw new Error("HTTP 503"); },
+  );
+  const kept = commitAgendaLoadResults(ready, first.started, duplicateFailure);
+  assert.equal(classroomAgendaPhase(kept, CLASSROOM), "ready");
+  assert.equal(kept.slots[CLASSROOM]?.items.length, stored.length);
+});
+
 test("C — une réponse plus ancienne ne remplace pas une réponse plus récente", async () => {
   const stored = storedPublications();
   const first = beginAgendaRefresh(emptyAgendaLedger(), [CLASSROOM], null, { replaceScope: true });

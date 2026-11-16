@@ -10,6 +10,7 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 - Une réponse ancienne ne remplace plus une réponse plus récente, ni une publication créée ou retirée pendant le chargement.
 - Le passage par l’agenda élève fusionne la classe consultée. Il ne remplace plus l’ensemble des publications déjà chargées.
 - Les notes prof ne partent plus en enregistrement avant la fin de leur lecture. En cas de conflit, le texte à l’écran est conservé. La protection du serveur reste en place.
+- Deux lectures simultanées de la même classe ne se masquent plus. Si la plus récente échoue, la réussite déjà en cours reste affichée. Un réessai demandé explicitement relance tout de même la lecture.
 
 ## [2.62.20] — Aperçu branche : séance sélectionnée
 
