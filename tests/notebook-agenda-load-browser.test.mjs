@@ -539,12 +539,20 @@ test("navigateur — le Carnet React réel refuse le rechargement après une mod
   writeFileSync("/tmp/notes-conflict.css", css);
   writeFileSync("/tmp/notes-conflict.html", `<!doctype html><html lang="fr"><head><meta charset="utf-8"><link rel="stylesheet" href="/notes-conflict.css"></head><body><div id="root"></div><script src="/notes-conflict-harness.js"></script></body></html>`);
   const server = createServer((request, response) => {
-    const path = (request.url ?? "/").split("?")[0];
-    const file = path === "/" ? "/tmp/notes-conflict.html" : `/tmp${path}`;
-    const body = readFileSync(file);
-    const type = file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html";
-    response.writeHead(200, { "content-type": `${type}; charset=utf-8` });
-    response.end(body);
+    const requestPath = (request.url ?? "/").split("?")[0];
+    const files = {
+      "/": ["/tmp/notes-conflict.html", "text/html"],
+      "/notes-conflict.css": ["/tmp/notes-conflict.css", "text/css"],
+      "/notes-conflict-harness.js": ["/tmp/notes-conflict-harness.js", "text/javascript"],
+    };
+    const match = files[requestPath];
+    if (!match) {
+      response.writeHead(404);
+      response.end();
+      return;
+    }
+    response.writeHead(200, { "content-type": `${match[1]}; charset=utf-8` });
+    response.end(readFileSync(match[0]));
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
