@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import type { PrototypeAgendaItem } from "@campus/features/agenda";
 import { calendarDateKey } from "@campus/features/evaluations";
 import {
+  BRANCH_PREVIEW_DRAFT_LABEL,
+  BRANCH_PREVIEW_EMPTY_LABEL,
   formatNextSessionLabel,
   groupNextSessionsByDate,
   studentHomeworkOnlySections,
@@ -76,12 +78,15 @@ function BranchBlock({
   publications,
   doneControl,
   hideChip = false,
+  showDraftStatus = false,
 }: {
   subject: Subject;
   publications: PrototypeAgendaItem[];
   doneControl?: StudentHomeworkDoneControl;
   /** Aperçu branche : la branche est déjà dans le bandeau bleu. */
   hideChip?: boolean;
+  /** Aperçu enseignant : les brouillons restent lisibles, avec une indication. */
+  showDraftStatus?: boolean;
 }) {
   const done = Boolean(doneControl && publications.length && publications.every(doneControl.isDone));
   const showName = !hideChip && Boolean(subject.name);
@@ -106,7 +111,11 @@ function BranchBlock({
             index < publications.length - 1 ? " has-divider" : ""
           }`}
           data-item-type={item.type}
+          data-draft={showDraftStatus && item.studentVisible === false ? "" : undefined}
         >
+          {showDraftStatus && item.studentVisible === false ? (
+            <p className="branch-preview-draft">{BRANCH_PREVIEW_DRAFT_LABEL}</p>
+          ) : null}
           {studentPublicationBody(item)}
         </div>
       ))}
@@ -156,9 +165,11 @@ export function StudentHomeworkPanel({
 }) {
   const visible = mode === "homework" ? studentHomeworkOnlySections(sections) : studentTodoSections(sections);
   const today = visible.filter((section) => section.publications.length > 0);
-  const nextSessions = groupNextSessionsByDate(visible);
+  const nextSessions = presentation === "banner" ? [] : groupNextSessionsByDate(visible);
   const title = mode === "homework" ? "Devoirs" : "Cours du jour";
-  const empty = "Aucune publication pour aujourd’hui.";
+  const empty = presentation === "banner"
+    ? BRANCH_PREVIEW_EMPTY_LABEL
+    : "Aucune publication pour aujourd’hui.";
 
   if (presentation === "banner") {
     return (
@@ -176,6 +187,7 @@ export function StudentHomeworkPanel({
                 publications={section.publications}
                 doneControl={doneControl}
                 hideChip
+                showDraftStatus
               />
             </PreviewCard>
           ))

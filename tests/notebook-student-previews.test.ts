@@ -72,8 +72,9 @@ test("carnet — Aperçu branche et Agenda élève près des flèches, pas dans 
   assert.match(nav, /Agenda élève/);
   assert.ok(nav.indexOf("Séquences précédentes") < nav.indexOf("Aperçu branche"));
   assert.ok(nav.indexOf("Aperçu branche") < nav.indexOf("Agenda élève"));
-  assert.match(nav, /onPreviewBranch\(\{[\s\S]*annualCourseId/);
-  assert.match(nav, /focusDate: card\?\.session\?\.date/);
+  assert.match(nav, /notebookBranchPreviewTarget\(/);
+  assert.match(nav, /onPreviewBranch\(target\)/);
+  assert.doesNotMatch(nav, /visibleCards\[0\]/);
 
   assert.match(page, /teacher-branch-preview/);
   assert.match(page, /onPreviewStudentAgenda=\{enterTeacherPreview\}/);

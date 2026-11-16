@@ -61,6 +61,7 @@ import {
   msUntilNextSchoolMidnight,
   notebookAutoFollowAllowed,
   focusNotebookReference,
+  notebookBranchPreviewTarget,
   notebookHighlightedSessionKey,
   notebookReferenceButtonLabel,
   notebookReferenceSession,
@@ -174,9 +175,11 @@ interface ClassNotebookPanelProps {
   onPreviewStudentAgenda?: () => void;
   onPreviewBranch?: (context: {
     annualCourseId: string;
+    courseSessionKey?: string | null;
     focusDate?: string | null;
     schoolWeekNumber?: number | null;
     dayOfWeek?: number | null;
+    selectionMissing?: boolean;
   }) => void;
   /** Préférence enseignant ; lue à l’ouverture, le choix dans le carnet reste local. */
   defaultWeekDisplayCount?: WeekDisplayCount;
@@ -1657,13 +1660,14 @@ export function ClassNotebookPanel({
                 type="button"
                 className="workspace-action secondary"
                 onClick={() => {
-                  const card = visibleCards[0];
-                  onPreviewBranch({
+                  const target = notebookBranchPreviewTarget({
                     annualCourseId,
-                    focusDate: card?.session?.date ?? null,
-                    schoolWeekNumber: card?.weekNumber ?? null,
-                    dayOfWeek: card?.session?.dayOfWeek ?? null,
+                    sessions: orderedSessions,
+                    followMode: autoFollowAllowed ? followMode : "manual",
+                    windowStartKey: displayStartSession?.key ?? null,
+                    selectedSessionKey,
                   });
+                  onPreviewBranch(target);
                 }}
               >
                 Aperçu branche

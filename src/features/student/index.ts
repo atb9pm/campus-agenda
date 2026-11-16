@@ -99,7 +99,10 @@ export {
   anonymizeAuthorForStudent,
   buildStudentAgendaSummary,
   canStudentModifyAgenda,
+  BRANCH_PREVIEW_DRAFT_LABEL,
+  BRANCH_PREVIEW_EMPTY_LABEL,
   getStudentAgendaItems,
   itemsForAnnualCourse,
+  publicationsForBranchPreview,
   type StudentAgendaSummary,
 } from "./agenda.ts";

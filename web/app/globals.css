@@ -3802,6 +3802,13 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   font-weight: 700;
 }
 .branch-preview-body { padding: 20px 26px 24px; }
+.branch-preview-draft {
+  margin: 0 0 8px;
+  color: #7a5a12;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
 .branch-preview-stack { display: flex; flex-direction: column; gap: 16px; }
 .branch-preview .student-control-row { padding: 0; border-bottom: 0; }
 .branch-preview .student-control-row + .student-control-row {

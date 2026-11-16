@@ -72,6 +72,7 @@ export function StudentDashboard({
   signOutLabel,
   branchPreview = false,
   branchLabel = "",
+  previewSessionMissing = false,
   onToggleHistory,
   onSelectCourseDay,
   onBackToCurrent,
@@ -98,6 +99,8 @@ export function StudentDashboard({
   /** Présentation validée de l’aperçu branche enseignant. */
   branchPreview?: boolean;
   branchLabel?: string;
+  /** La séance choisie dans le Carnet n’existe plus : ne pas en afficher une autre. */
+  previewSessionMissing?: boolean;
   onToggleHistory: () => void;
   onSelectCourseDay: (key: string) => void;
   onBackToCurrent: () => void;
@@ -125,7 +128,11 @@ export function StudentDashboard({
           <header className="branch-preview-head">
             <div className="branch-preview-identity">
               <h1 id="student-course-day-title">
-                {displayCourseDay ? formatCourseDayHeading(displayCourseDay) : "Agenda élève"}
+                {displayCourseDay
+                  ? formatCourseDayHeading(displayCourseDay)
+                  : previewSessionMissing
+                    ? "Séance introuvable"
+                    : "Agenda élève"}
               </h1>
               <div className="branch-preview-meta" aria-label="Classe, branche et semaine">
                 {classBadge ? <span className="branch-preview-pill is-class">{classBadge}</span> : null}
@@ -258,7 +265,9 @@ export function StudentDashboard({
 
         {offerInstall ? <StudentInstallPrompt /> : null}
 
-        {displayCourseDay ? (
+        {branchPreview && previewSessionMissing && !displayCourseDay ? (
+          <StudentHomeworkPanel sections={[]} mode="todo" presentation="banner" />
+        ) : displayCourseDay ? (
           <>
             {branchPreview && (contentTab === "tout" || tab === "controles") ? (
               <StudentControlsPanel
