@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { type PrototypeAgendaItem } from "@campus/features/agenda";
 import type { ClassroomCatalog } from "@campus/features/classes";
 import {
-  TEACHER_NAV_ICONS,
   TEACHER_NAV_LABELS,
   DEFAULT_TEACHER_NAV_SECTION,
   teacherNavSectionsForRole,
@@ -132,6 +131,7 @@ import {
 import { ConfigurationPanel } from "./components/configuration-panel.tsx";
 import { AdministrationPanel } from "./components/administration-panel.tsx";
 import { BrandLogo } from "./components/brand-logo.tsx";
+import { TeacherNavIcon } from "./components/teacher-nav-icon.tsx";
 import { LoginPanel } from "./components/login-panel.tsx";
 import { PasswordChangePanel } from "./components/password-change-panel.tsx";
 import { MfaChallengePanel } from "./components/mfa-challenge-panel.tsx";
@@ -2005,7 +2005,8 @@ export default function Home() {
               className={activeSection === section ? "active" : ""}
               onClick={() => navigate(section)}
             >
-              <span>{TEACHER_NAV_ICONS[section]}</span> {TEACHER_NAV_LABELS[section]}
+              <span className="teacher-nav-mark" aria-hidden="true"><TeacherNavIcon name={section} /></span>
+              {TEACHER_NAV_LABELS[section]}
             </button>
           ))}
         </nav>
@@ -2147,7 +2148,7 @@ export default function Home() {
             className={activeSection === section ? "active" : ""}
             onClick={() => navigate(section)}
           >
-            <span aria-hidden="true">{TEACHER_NAV_ICONS[section]}</span>
+            <span aria-hidden="true"><TeacherNavIcon name={section} /></span>
             {TEACHER_NAV_LABELS[section]}
           </button>
         ))}

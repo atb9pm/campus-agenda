@@ -53,10 +53,13 @@ button { color: inherit; }
 .brand-logo-compact { width: 158px; }
 
 .technical-sidebar nav { display: grid; gap: 7px; }
-.technical-sidebar nav button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 13px; border: 0; border-radius: 8px; color: #32466b; background: transparent; font-size: 14px; font-weight: 700; text-align: left; cursor: pointer; }
-.technical-sidebar nav button span { width: 20px; color: #30558f; font-size: 17px; text-align: center; }
-.technical-sidebar nav button:hover, .technical-sidebar nav button.active { color: var(--navy); background: #f1f4f9; }
-.technical-sidebar nav button.active span { color: var(--blue); }
+.technical-sidebar nav button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 10px; border: 0; border-radius: 12px; color: #32466b; background: transparent; font-size: 14px; font-weight: 700; text-align: left; cursor: pointer; }
+.technical-sidebar nav button:hover { color: var(--navy); background: #f4f7ff; }
+.technical-sidebar nav button.active { color: var(--navy); background: var(--blue-soft); }
+.teacher-nav-mark { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 10px; background: var(--pale); color: var(--navy); }
+.technical-sidebar nav button.active .teacher-nav-mark { background: var(--blue); color: #fff; }
+.teacher-nav-icon { display: block; width: 18px; height: 18px; }
+.mobile-tab-bar .teacher-nav-icon { width: 22px; height: 22px; }
 .classroom-list { display: grid; gap: 8px; margin: 18px 8px 0; }
 .classroom-chip { display: grid; gap: 3px; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; color: #32466b; background: #fbfcfe; text-align: left; cursor: pointer; }
 .classroom-chip strong { color: var(--navy); font-size: 11px; letter-spacing: .04em; }

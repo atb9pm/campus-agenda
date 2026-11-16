@@ -1,6 +1,6 @@
 # Exploitation — Campus Agenda
 
-Guide opérationnel. Version applicative : voir `APP_VERSION` (**2.62.17**).
+Guide opérationnel. Version applicative : voir `APP_VERSION` (**2.62.18**).
 
 ## Production actuelle
 
@@ -43,7 +43,7 @@ Réponse attendue :
 {
   "ok": true,
   "service": "campus-agenda",
-  "version": "2.62.17",
+  "version": "2.62.18",
   "store": "sqlite",
   "uptimeSeconds": 42
 }

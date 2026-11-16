@@ -2,6 +2,12 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.18] — Menu enseignant : icônes en pastille
+
+### Modifié
+
+- **Espace enseignant** : Ma semaine, Mes cours, Contrôles, Préférences et Administration ont des icônes au trait. Chaque icône est dans un carré arrondi. La rubrique active a une pastille bleu électrique et une icône blanche. Les intitulés et la navigation restent les mêmes.
+
 ## [2.62.17] — Contrôles élève : carte en deux colonnes
 
 ### Modifié

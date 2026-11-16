@@ -63,7 +63,7 @@ async function enrollAdmin() {
 }
 
 test("version 2.54.1 — écran Sécurité administrateur", () => {
-  assert.equal(APP_VERSION, "2.62.17");
+  assert.equal(APP_VERSION, "2.62.18");
 });
 
 test("A — écran principal : trois actions, pas de TOTP par défaut", async () => {
