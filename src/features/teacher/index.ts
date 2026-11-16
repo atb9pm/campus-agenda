@@ -4,7 +4,10 @@ export {
   TEACHER_NAV_SECTIONS,
   DEFAULT_TEACHER_NAV_SECTION,
   teacherNavSectionsForRole,
+  teacherNavClosesNotebook,
+  applyTeacherMenuNavigation,
   type TeacherNavSection,
+  type TeacherMenuView,
 } from "./navigation.ts";
 export {
   DEFAULT_TEACHER_AGENDA_VIEW,

@@ -60,13 +60,17 @@ import {
   setWeekRichNote,
   msUntilNextSchoolMidnight,
   notebookAutoFollowAllowed,
+  focusNotebookReference,
+  notebookHighlightedSessionKey,
   notebookReferenceButtonLabel,
   notebookReferenceSession,
   notebookReferenceTag,
   notebookSchoolTodayIso,
   notebookTodayUpdate,
   resolveNotebookStartSession,
-  shiftCourseSession,
+  selectNotebookColumn,
+  shiftNotebookWindow,
+  type NotebookColumnFocus,
   snapToEligibleCourseWeek,
   type NotebookFollowMode,
   visibleCourseSessions,
@@ -179,8 +183,13 @@ interface ClassNotebookPanelProps {
   /** `auto` : séance du jour ou prochaine séance réelle ; `manual` : semaine ou séance choisie. */
   initialFollowMode?: NotebookFollowMode;
   initialCenterSessionKey?: string | null;
-  /** Conserve le choix de l’enseignant quand le Carnet est démonté (aperçu élève). */
-  onFollowSelectionChange?: (selection: { followMode: NotebookFollowMode; sessionKey: string | null }) => void;
+  initialSelectedSessionKey?: string | null;
+  /** Conserve la fenêtre et la séance sélectionnée quand le Carnet est démonté (aperçu élève). */
+  onFollowSelectionChange?: (selection: {
+    followMode: NotebookFollowMode;
+    sessionKey: string | null;
+    selectedSessionKey: string | null;
+  }) => void;
 }
 
 type LineSelection =
@@ -288,6 +297,7 @@ export function ClassNotebookPanel({
   defaultWeekDisplayCount = 3,
   initialFollowMode = "manual",
   initialCenterSessionKey = null,
+  initialSelectedSessionKey = null,
   onFollowSelectionChange,
 }: ClassNotebookPanelProps) {
   const [weekDisplayCount, setWeekDisplayCount] = useState<WeekDisplayCount>(defaultWeekDisplayCount);
@@ -319,6 +329,7 @@ export function ClassNotebookPanel({
   const [loadedCourseId, setLoadedCourseId] = useState<string | null>(null);
   const [sessionsError, setSessionsError] = useState("");
   const [centerSessionKey, setCenterSessionKey] = useState<string | null>(initialCenterSessionKey);
+  const [selectedSessionKey, setSelectedSessionKey] = useState<string | null>(initialSelectedSessionKey);
   const [followMode, setFollowMode] = useState<NotebookFollowMode>(initialFollowMode);
   const [observedTodayIso, setObservedTodayIso] = useState(() => notebookSchoolTodayIso(new Date()));
   const [todayIso, setTodayIso] = useState(observedTodayIso);
@@ -434,22 +445,40 @@ export function ClassNotebookPanel({
     });
   }, [autoFollowAllowed, centerSessionKey, centerWeekNumber, followMode, orderedSessions, sessionsLoading, structuredCourse, todayIso]);
 
+  const highlightedSessionKey = useMemo(
+    () =>
+      notebookHighlightedSessionKey({
+        sessions: orderedSessions,
+        followMode: autoFollowAllowed ? followMode : "manual",
+        windowStartKey: displayStartSession?.key ?? null,
+        selectedSessionKey,
+      }),
+    [autoFollowAllowed, displayStartSession?.key, followMode, orderedSessions, selectedSessionKey],
+  );
+
+  function applyColumnFocus(next: NotebookColumnFocus) {
+    setFollowMode(next.followMode);
+    setCenterSessionKey(next.windowStartKey);
+    setSelectedSessionKey(next.selectedSessionKey);
+    onFollowSelectionChange?.({
+      followMode: next.followMode,
+      sessionKey: next.windowStartKey,
+      selectedSessionKey: next.selectedSessionKey,
+    });
+  }
+
   function selectSessionManually(session: CourseSession) {
-    setFollowMode("manual");
-    setCenterSessionKey(session.key);
-    onCenterWeekChange(session.schoolWeekNumber);
-    onFollowSelectionChange?.({ followMode: "manual", sessionKey: session.key });
+    applyColumnFocus(selectNotebookColumn(displayStartSession?.key ?? centerSessionKey, session.key));
   }
 
   function followReferenceSession() {
     const now = notebookSchoolTodayIso(new Date());
     setObservedTodayIso(now);
     setTodayIso(now);
-    const reference = notebookReferenceSession(orderedSessions, now);
-    setFollowMode("auto");
-    setCenterSessionKey(reference?.session.key ?? null);
-    if (reference) onCenterWeekChange(reference.session.schoolWeekNumber);
-    onFollowSelectionChange?.({ followMode: "auto", sessionKey: null });
+    const next = focusNotebookReference(orderedSessions, now);
+    applyColumnFocus(next);
+    const reference = orderedSessions.find((session) => session.key === next.windowStartKey);
+    if (reference) onCenterWeekChange(reference.schoolWeekNumber);
   }
 
   const displayStartWeek =
@@ -554,9 +583,16 @@ export function ClassNotebookPanel({
 
   function shiftVisibleWeeks(direction: -1 | 1) {
     if (structuredCourse) {
-      const next = shiftCourseSession(orderedSessions, displayStartSession?.key ?? null, direction);
+      const next = shiftNotebookWindow(
+        orderedSessions,
+        { followMode, windowStartKey: centerSessionKey, selectedSessionKey },
+        direction,
+        displayStartSession?.key ?? centerSessionKey,
+      );
       if (!next) return;
-      selectSessionManually(next);
+      applyColumnFocus(next);
+      const moved = orderedSessions.find((session) => session.key === next.windowStartKey);
+      if (moved) onCenterWeekChange(moved.schoolWeekNumber);
       return;
     }
     onShiftWeeks(direction);
@@ -1718,7 +1754,9 @@ export function ClassNotebookPanel({
               !isCarnetOwnedPublication(item) &&
               isStructuredPublication(item),
           );
-          const isActive = card.id === (displayStartSession?.key ?? `week:${displayStartWeek}`);
+          const isActive = session
+            ? session.key === highlightedSessionKey
+            : card.id === `week:${displayStartWeek}`;
           const referenceTag = session ? notebookReferenceTag(session, referenceSession) : null;
           const visibility = weekCarnetVisibility(weekCarnetPublications);
           const publicationSlots = lineSlotState("publication", weekNumber, canPublish, session);
@@ -1738,6 +1776,7 @@ export function ClassNotebookPanel({
               className={`class-notebook-column${isActive ? " active" : ""}${
                 weekDropActive || lineDropActive ? " is-drop-target" : ""
               }`}
+              data-column-date={session?.date}
               onDragOver={(event) => {
                 event.preventDefault();
                 event.dataTransfer.dropEffect = "move";
@@ -1747,6 +1786,7 @@ export function ClassNotebookPanel({
               <header className="class-notebook-column-header">
                 <button
                   type="button"
+                  aria-pressed={isActive}
                   onClick={() => {
                     if (session) {
                       selectSessionManually(session);

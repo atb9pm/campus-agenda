@@ -2,6 +2,13 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.19] — Carnet : sélection sans déplacement, retour Ma semaine
+
+### Corrigé
+
+- **Carnet** : un clic sur une séance déjà affichée la sélectionne. Les colonnes, les dates, les publications et les notes prof restent en place. Les flèches déplacent seulement la fenêtre. « Aujourd’hui » ou « Prochain cours » ramène volontairement à la séance de référence.
+- **Ma semaine** : le menu principal, y compris sur téléphone, ferme le Carnet ouvert et réaffiche toutes les classes. La semaine consultée est conservée. Le bouton « ← Ma semaine » du Carnet produit le même retour.
+
 ## [2.62.18] — Menu enseignant : icônes en pastille
 
 ### Modifié

@@ -202,7 +202,7 @@ test("8 — le bouton « Prochain cours » rétablit le suivi automatique", () =
   assert.equal(notebookReferenceTag(thursday12, notebookReferenceSession(sessions, "2026-11-12")), "Aujourd’hui");
 });
 
-test("9 — smartphone : la séance sélectionnée est la colonne visible et active", async () => {
+test("9 — smartphone : une seule séance visible, le cadre bleu suit la sélection", async () => {
   const sessions = injectionSessions();
   const start = resolveNotebookStartSession({
     sessions,
@@ -220,7 +220,9 @@ test("9 — smartphone : la séance sélectionnée est la colonne visible et act
     readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8"),
     readFile(new URL("../web/app/globals.css", import.meta.url), "utf8"),
   ]);
-  assert.match(panel, /const isActive = card\.id === \(displayStartSession\?\.key \?\? `week:\$\{displayStartWeek\}`\);/);
+  assert.match(panel, /session\.key === highlightedSessionKey/);
+  assert.match(panel, /notebookHighlightedSessionKey\(\{/);
+  assert.match(panel, /selectNotebookColumn\(displayStartSession\?\.key \?\? centerSessionKey, session\.key\)/);
   assert.match(panel, /visibleCourseSessions\(\s*orderedSessions,\s*displayStartSession\?\.key \?\? null,/);
   assert.match(css, /\.class-notebook-grid > \.class-notebook-column:not\(\.active\) \{ display: none; \}/);
   assert.match(css, /\.class-notebook-column\.active \{\n  border-color: #85a9e8;/);
@@ -322,5 +324,6 @@ test("12 — changement de jour et retour de focus : jamais pendant une édition
   assert.doesNotMatch(panel, /setInterval\(/);
 
   const setCenterCalls = panel.match(/setCenterSessionKey\(/g) ?? [];
-  assert.equal(setCenterCalls.length, 2, "seuls le choix manuel et le bouton déplacent la sélection");
+  assert.equal(setCenterCalls.length, 1, "la fenêtre n’est écrite que par applyColumnFocus");
+  assert.equal((panel.match(/applyColumnFocus\(/g) ?? []).length, 4);
 });
