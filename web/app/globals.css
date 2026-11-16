@@ -2422,7 +2422,11 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
 }
 .class-notebook-column.active {
   border-color: #85a9e8;
+  background: #f4f8ff;
   box-shadow: 0 0 0 1px #85a9e8, 0 10px 28px rgba(6, 24, 61, .08);
+}
+.class-notebook-column.active .class-notebook-column-header {
+  background: #eef4ff;
 }
 .class-notebook-column.is-drop-target {
   border-color: #1d4ed8;
@@ -3141,6 +3145,7 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   }
   .class-notebook-column { min-height: 0; }
   .class-notebook-grid > .class-notebook-column:not(.active) { display: none; }
+  .class-notebook-grid.class-notebook-grid-1 > .class-notebook-column:only-child { display: grid; }
   .class-notebook-grid { gap: 12px; margin: 0 16px 16px; }
 }
 

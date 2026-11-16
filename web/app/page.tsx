@@ -6,6 +6,7 @@ import type { ClassroomCatalog } from "@campus/features/classes";
 import {
   TEACHER_NAV_LABELS,
   DEFAULT_TEACHER_NAV_SECTION,
+  teacherNavClosesNotebook,
   teacherNavSectionsForRole,
   type TeacherNavSection,
 } from "@campus/features/teacher";
@@ -365,6 +366,7 @@ export default function Home() {
     id: number;
     followMode: NotebookFollowMode;
     sessionKey: string | null;
+    selectedSessionKey?: string | null;
   }>({ id: 0, followMode: "manual", sessionKey: null });
   const [classNotesDocument, setClassNotesDocument] = useState<ClassNotesDocument>(() =>
     createEmptyNotesDocument(),
@@ -1502,6 +1504,7 @@ export default function Home() {
   }
 
   function navigate(section: TeacherNavSection) {
+    if (teacherNavClosesNotebook(section)) closeClassNotebook();
     if (section === "ma-semaine" || section === "mes-cours" || section === "controles" || section === "configuration") {
       setAdminYearConsult(false);
       setViewedSchoolYearId(null);
@@ -2076,6 +2079,7 @@ export default function Home() {
             key={`${openNotebookCourse.annualCourseId}:${notebookOpening.id}`}
             initialFollowMode={notebookOpening.followMode}
             initialCenterSessionKey={notebookOpening.sessionKey}
+            initialSelectedSessionKey={notebookOpening.selectedSessionKey ?? null}
             onFollowSelectionChange={(selection) => setNotebookOpening((previous) => ({ ...previous, ...selection }))}
             classSetup={openNotebookClass}
             branchLabel={openNotebookCourse.branchLabel}

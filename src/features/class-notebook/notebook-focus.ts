@@ -1,12 +1,14 @@
 import type { CourseSession } from "../course-sessions/types.ts";
-import { orderedCourseSessions, snapToCourseSession } from "./session-window.ts";
+import { orderedCourseSessions, shiftCourseSession, snapToCourseSession, visibleCourseSessions } from "./session-window.ts";
+import type { WeekDisplayCount } from "./week-window.ts";
 
 /** Calendrier de l’établissement : la date du jour ne dépend ni d’UTC ni du fuseau de l’appareil. */
 export const NOTEBOOK_SCHOOL_TIME_ZONE = "Europe/Zurich";
 
 /**
- * `auto` : le Carnet suit la séance du jour ou la prochaine séance réelle.
- * `manual` : l’enseignant a choisi une séance (flèches, en-tête) ou ouvert une semaine précise.
+ * `auto` : la fenêtre d’affichage suit la séance du jour ou la prochaine séance réelle.
+ * `manual` : la fenêtre est figée (flèches, semaine choisie, ou séance sélectionnée).
+ * La séance sélectionnée est un état distinct : un clic sur une colonne visible ne la déplace pas.
  */
 export type NotebookFollowMode = "auto" | "manual";
 
@@ -91,7 +93,7 @@ export function notebookOpeningFollowMode(input: {
     : "manual";
 }
 
-/** Séance de départ du Carnet, qui porte le cadre bleu et reste la seule visible sur smartphone. */
+/** Première séance de la fenêtre d’affichage. Elle ne porte le cadre bleu que si elle est aussi la séance sélectionnée. */
 export function resolveNotebookStartSession(input: {
   sessions: readonly CourseSession[];
   followMode: NotebookFollowMode;
@@ -129,4 +131,124 @@ export function notebookTodayUpdate(
 ): "unchanged" | "apply" | "defer" {
   if (currentIso === observedIso) return "unchanged";
   return editing ? "defer" : "apply";
+}
+
+/**
+ * Fenêtre d’affichage et séance de travail.
+ * `windowStartKey` est la séance demandée en tête de fenêtre.
+ * `selectedSessionKey` est la séance sur laquelle l’enseignant travaille, même si elle sort de la fenêtre.
+ */
+export interface NotebookColumnFocus {
+  followMode: NotebookFollowMode;
+  windowStartKey: string | null;
+  selectedSessionKey: string | null;
+}
+
+/**
+ * Un clic sur une colonne déjà visible sélectionne cette séance.
+ * `resolvedWindowStartKey` est la séance de tête déjà résolue : elle est recopiée telle quelle.
+ */
+export function selectNotebookColumn(
+  resolvedWindowStartKey: string | null,
+  clickedSessionKey: string,
+): NotebookColumnFocus {
+  return {
+    followMode: "manual",
+    windowStartKey: resolvedWindowStartKey,
+    selectedSessionKey: clickedSessionKey,
+  };
+}
+
+/**
+ * Les flèches déplacent uniquement la fenêtre.
+ * La séance sélectionnée reste celle d’avant le déplacement, y compris si elle n’est plus visible.
+ * `null` : la fenêtre est déjà au bord, rien ne change.
+ */
+export function shiftNotebookWindow(
+  sessions: readonly CourseSession[],
+  focus: NotebookColumnFocus,
+  direction: -1 | 1,
+  resolvedWindowStartKey: string | null,
+): NotebookColumnFocus | null {
+  const next = shiftCourseSession(sessions, resolvedWindowStartKey, direction);
+  if (!next || next.key === resolvedWindowStartKey) return null;
+  return {
+    followMode: "manual",
+    windowStartKey: next.key,
+    selectedSessionKey:
+      focus.followMode === "auto" || !focus.selectedSessionKey
+        ? resolvedWindowStartKey
+        : focus.selectedSessionKey,
+  };
+}
+
+/** Le bouton « Aujourd’hui » ou « Prochain cours » ramène la fenêtre et la sélection sur la séance de référence. */
+export function focusNotebookReference(
+  sessions: readonly CourseSession[],
+  todayIso: string,
+): NotebookColumnFocus {
+  const key = notebookReferenceSession(sessions, todayIso)?.session.key ?? null;
+  return { followMode: "auto", windowStartKey: key, selectedSessionKey: key };
+}
+
+/**
+ * Séance encadrée. En suivi automatique, c’est la séance de référence.
+ * En manuel, c’est la séance choisie si elle existe encore. Sinon aucune colonne n’est mise en évidence.
+ */
+export function notebookHighlightedSessionKey(input: {
+  sessions: readonly CourseSession[];
+  followMode: NotebookFollowMode;
+  windowStartKey: string | null;
+  selectedSessionKey: string | null;
+}): string | null {
+  if (input.followMode === "auto") return input.windowStartKey;
+  if (!input.selectedSessionKey) return input.windowStartKey;
+  return input.sessions.some((session) => session.key === input.selectedSessionKey)
+    ? input.selectedSessionKey
+    : null;
+}
+
+export interface NotebookColumnView {
+  key: string;
+  date: string;
+  schoolWeekNumber: number;
+  weekKind: CourseSession["weekKind"];
+  selected: boolean;
+  referenceTag: "Aujourd’hui" | "Prochain cours" | null;
+}
+
+/** Colonnes actuellement visibles, sans déplacer les publications ni les notes qui restent indexées par séance. */
+export function notebookVisibleColumns(input: {
+  sessions: readonly CourseSession[];
+  followMode: NotebookFollowMode;
+  todayIso: string;
+  windowStartKey: string | null;
+  selectedSessionKey: string | null;
+  centerWeekNumber: number;
+  count: WeekDisplayCount;
+  /** Faux pour une année archivée ou en préparation : pas de badge lié à la date réelle. */
+  referenceEnabled?: boolean;
+}): NotebookColumnView[] {
+  const start = resolveNotebookStartSession({
+    sessions: input.sessions,
+    followMode: input.followMode,
+    todayIso: input.todayIso,
+    centerSessionKey: input.windowStartKey,
+    centerWeekNumber: input.centerWeekNumber,
+  });
+  const highlighted = notebookHighlightedSessionKey({
+    sessions: input.sessions,
+    followMode: input.followMode,
+    windowStartKey: start?.key ?? null,
+    selectedSessionKey: input.selectedSessionKey,
+  });
+  const reference = input.referenceEnabled === false ? null : notebookReferenceSession(input.sessions, input.todayIso);
+  return visibleCourseSessions(input.sessions, start?.key ?? null, input.count).map((session) => ({
+    key: session.key,
+    date: session.date,
+    schoolWeekNumber: session.schoolWeekNumber,
+    weekKind: session.weekKind,
+    selected: session.key === highlighted,
+    referenceTag: notebookReferenceTag(session, reference),
+  }));
 }
