@@ -562,7 +562,7 @@ export async function fetchTeacherNotesApi(options?: {
   schoolYearId?: string | null;
   adminConsult?: boolean;
 }): Promise<ClassNotesDocument | null> {
-  notebookAutosave.reset();
+  const seenEpoch = notebookAutosave.epoch();
   const params = new URLSearchParams();
   if (options?.adminConsult) {
     if (options.schoolYearId?.trim()) params.set("schoolYearId", options.schoolYearId.trim());
@@ -576,7 +576,7 @@ export async function fetchTeacherNotesApi(options?: {
   if (!response.ok || !payload.ok) {
     throw new Error(payload.reason ?? "Chargement des notes impossible.");
   }
-  notebookAutosave.reset(payload.revision);
+  notebookAutosave.adoptIfCurrent(seenEpoch, payload.revision);
   return payload.notes ?? null;
 }
 

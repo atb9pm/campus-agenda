@@ -789,11 +789,12 @@ test("la page et les routes n’écrivent pas pendant la consultation admin", as
   const autosave = page.indexOf("if (adminYearConsult) return;");
   const saveCall = page.indexOf("saveTeacherNotesApi(classNotesDocument)");
   assert.ok(autosave > 0 && autosave < saveCall);
-  assert.match(page, /loadTeacherAgendaItems\(classroomIds, viewedSchoolYearId, \{\s*adminConsult: true,\s*\}\)/);
   assert.match(
     page,
-    /fetchAgendaItems\(\s*notebookClassroomId,\s*adminYearConsult \? viewedSchoolYearId : null,\s*\{ adminConsult: adminYearConsult \},\s*\)/,
+    /refreshTeacherAgenda\(\s*runtime\.map\(\(entry\) => entry\.id\),\s*viewedSchoolYearId,\s*\{ adminConsult: true, replaceScope: true \},\s*\)/,
   );
+  assert.match(page, /adminConsult: adminYearConsult/);
+  assert.match(page, /fetchAgendaItems\(classroomId, yearId, options\)/);
   assert.match(agendaRoute, /requireClassroomReadAccess\(request, classroomId, \{ adminConsult, schoolYearId \}\)/);
   assert.match(agendaRoute, /const readOnly = adminConsult \|\|/);
   assert.match(
@@ -827,9 +828,14 @@ test("Carnet : un chargement refusé s'affiche au lieu de cartes vides", async (
     readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(panel, /\{loadError \? \(\s*<p className="class-notebook-warning" role="alert">\{loadError\}<\/p>/);
-  assert.match(page, /loadError=\{\[notebookAgendaLoadError, notebookNotesLoadError\]\.filter\(Boolean\)\.join\(" "\)\}/);
-  assert.equal(page.match(/`Devoirs et informations non chargés : /g)?.length, 2);
+  assert.match(panel, /AGENDA_ERROR_LABEL/);
+  assert.match(panel, /AGENDA_RETRY_LABEL/);
+  assert.match(panel, /AGENDA_LOADING_LABEL/);
+  assert.match(page, /loadError=\{notebookNotesLoadError\}/);
+  assert.match(page, /publicationsState=\{notebookPublicationsState\}/);
+  assert.match(page, /onRetryPublications=\{retryNotebookAgenda\}/);
+  assert.equal(page.includes("Devoirs et informations non chargés"), false);
   assert.equal(page.match(/`Notes du Carnet non chargées : /g)?.length, 1);
-  const openEffect = page.slice(page.indexOf("void fetchAgendaItems(\n      notebookClassroomId"));
-  assert.match(openEffect.slice(0, 900), /\.catch\(\(error: unknown\) => \{\s*loadedAgendaClassroomIdsRef\.current\.delete\(agendaKey\);/);
+  assert.equal(page.includes("loadedAgendaClassroomIdsRef"), false);
+  assert.match(page, /phase === "ready" \|\| phase === "loading" \|\| phase === "error"/);
 });

@@ -2,6 +2,15 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.21] — Carnet : chargement initial et conflits de notes
+
+### Corrigé
+
+- **Première ouverture du Carnet** : les publications et les contrôles de chaque classe sont chargés séparément. L’échec d’une classe ne vide plus les autres et n’est plus présenté comme une séance sans contenu.
+- Une réponse ancienne ne remplace plus une réponse plus récente, ni une publication créée ou retirée pendant le chargement.
+- Le passage par l’agenda élève fusionne la classe consultée. Il ne remplace plus l’ensemble des publications déjà chargées.
+- Les notes prof ne partent plus en enregistrement avant la fin de leur lecture. En cas de conflit, le texte à l’écran est conservé. La protection du serveur reste en place.
+
 ## [2.62.20] — Aperçu branche : séance sélectionnée
 
 ### Corrigé

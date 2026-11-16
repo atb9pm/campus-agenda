@@ -11,6 +11,10 @@ import {
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items";
 import type { SchoolWeek } from "@campus/features/calendar";
 import {
+  AGENDA_EMPTY_LABEL,
+  AGENDA_ERROR_LABEL,
+  AGENDA_LOADING_LABEL,
+  AGENDA_RETRY_LABEL,
   appendWeekNote,
   assignOrphanedSessionNotes,
   assignPendingWeekNotes,
@@ -132,6 +136,9 @@ interface ClassNotebookPanelProps {
   publishBlockedReason?: string;
   /** Échec de chargement : le Carnet vide ne doit pas passer pour un Carnet sans contenu. */
   loadError?: string;
+  /** État du chargement des publications de la classe ouverte. */
+  publicationsState?: "unknown" | "loading" | "ready" | "error";
+  onRetryPublications?: () => void;
   onBack: () => void;
   onShiftWeeks: (direction: -1 | 1) => void;
   onCenterWeekChange: (weekNumber: number) => void;
@@ -282,6 +289,8 @@ export function ClassNotebookPanel({
   canPublish,
   publishBlockedReason,
   loadError,
+  publicationsState = "ready",
+  onRetryPublications,
   onBack,
   onShiftWeeks,
   onCenterWeekChange,
@@ -1068,7 +1077,12 @@ export function ClassNotebookPanel({
     };
   }, [moveMenuCardId]);
 
+  function publicationsAreUnloaded() {
+    return publicationsState !== "ready" && items.length === 0;
+  }
+
   function openEditor(kind: EditorKind, weekNumber: number, session?: CourseSession | null) {
+    if (kind === "publication" && publicationsAreUnloaded()) return;
     const weekItems =
       session && courseSessions
         ? itemsForCourseSession(items, session, courseSessions)
@@ -1093,7 +1107,7 @@ export function ClassNotebookPanel({
       ? orderedSessions.find((entry) => entry.key === editor.sessionKey) ?? null
       : null;
     if (editor.kind === "publication") {
-      if (!canPublish) return;
+      if (!canPublish || publicationsAreUnloaded()) return;
       await onSaveWeekPublication(editor.weekNumber, editorDoc, {
         ...(studentVisible === undefined ? {} : { studentVisible }),
         session: editorSession,
@@ -1593,6 +1607,7 @@ export function ClassNotebookPanel({
       aria-label={`Carnet ${classSetup.name} · ${branchLabel}`}
       data-annual-course-id={annualCourseId ?? undefined}
       data-subject-id={subjectId ?? undefined}
+      data-publications-state={publicationsState}
     >
       <div className="class-notebook-toolbar">
         <button type="button" className="workspace-action secondary" onClick={onBack}>
@@ -1613,7 +1628,7 @@ export function ClassNotebookPanel({
             type="button"
             className="workspace-action secondary"
             onClick={() => setControlsOpen(true)}
-            disabled={structuredCourse && (sessionsLoading || (courseSessions != null && courseSessions.length === 0))}
+            disabled={publicationsAreUnloaded() || (structuredCourse && (sessionsLoading || (courseSessions != null && courseSessions.length === 0)))}
           >
             Contrôles 📅
           </button>
@@ -1627,6 +1642,18 @@ export function ClassNotebookPanel({
 
       {loadError ? (
         <p className="class-notebook-warning" role="alert">{loadError}</p>
+      ) : null}
+      {publicationsState === "error" ? (
+        <p className="class-notebook-warning" role="alert">
+          {AGENDA_ERROR_LABEL}
+          {onRetryPublications ? (
+            <button type="button" className="workspace-action secondary" onClick={onRetryPublications}>
+              {AGENDA_RETRY_LABEL}
+            </button>
+          ) : null}
+        </p>
+      ) : publicationsState === "loading" || publicationsState === "unknown" ? (
+        items.length === 0 ? <p className="class-notebook-empty">{AGENDA_LOADING_LABEL}</p> : null
       ) : null}
 
       {!canPublish && publishBlockedReason ? (
@@ -1856,7 +1883,7 @@ export function ClassNotebookPanel({
                     </li>
                   ))}
                 </ul>
-                {session ? (
+                {session && !publicationsAreUnloaded() ? (
                   <button
                     type="button"
                     className="class-notebook-plan-link"
@@ -1970,8 +1997,8 @@ export function ClassNotebookPanel({
                   <RichDocView
                     doc={composeWeekPublicationDoc(weekCarnetPublications)}
                     compact
-                    interactive={canPublish}
-                    lineDraggable={canPublish}
+                    interactive={canPublish && !publicationsAreUnloaded()}
+                    lineDraggable={canPublish && !publicationsAreUnloaded()}
                     selectedLineKey={
                       selectedLine?.source === "publication" &&
                       selectedLine.weekNumber === weekNumber &&
@@ -1983,7 +2010,9 @@ export function ClassNotebookPanel({
                     insertSlotsDragging={publicationSlots.insertSlotsDragging}
                     activeInsertSlot={publicationSlots.activeInsertSlot}
                     hiddenInsertSlots={publicationSlots.hiddenInsertSlots}
-                    emptyLabel="Aucune publication pour cette séance."
+                    emptyLabel={
+                      publicationsState === "ready" || items.length > 0 ? AGENDA_EMPTY_LABEL : ""
+                    }
                     onLineClick={
                       canPublish
                         ? (line) => selectAndCopyLine("publication", weekNumber, line, session)
@@ -1999,10 +2028,10 @@ export function ClassNotebookPanel({
                       setDropSlot(null);
                     }}
                     onInsertSlot={
-                      canPublish ? (at) => placeCopiedLine(weekNumber, "publication", at, session) : undefined
+                      canPublish && !publicationsAreUnloaded() ? (at) => placeCopiedLine(weekNumber, "publication", at, session) : undefined
                     }
                     onInsertSlotDragOver={
-                      canPublish
+                      canPublish && !publicationsAreUnloaded()
                         ? (at) =>
                             setDropSlot({
                               source: "publication",
@@ -2014,12 +2043,12 @@ export function ClassNotebookPanel({
                         : undefined
                     }
                     onInsertSlotDrop={
-                      canPublish
+                      canPublish && !publicationsAreUnloaded()
                         ? (at, event) => handleDropOnSlot(event, "publication", weekNumber, at, session)
                         : undefined
                     }
                     onMoveLine={
-                      canPublish
+                      canPublish && !publicationsAreUnloaded()
                         ? (line, direction) => nudgeSelectedLine("publication", weekNumber, line, direction, session)
                         : undefined
                     }
@@ -2035,12 +2064,12 @@ export function ClassNotebookPanel({
                   <button
                     type="button"
                     className="workspace-action secondary"
-                    disabled={!canPublish}
+                    disabled={!canPublish || publicationsAreUnloaded()}
                     onClick={() => openEditor("publication", weekNumber, session)}
                   >
                     {visibility === "empty" ? "Rédiger" : "Modifier"}
                   </button>
-                  {visibility === "draft" && canPublish ? (
+                  {visibility === "draft" && canPublish && !publicationsAreUnloaded() ? (
                     <button
                       type="button"
                       className="workspace-action class-notebook-publish-action"
@@ -2049,7 +2078,7 @@ export function ClassNotebookPanel({
                       Publier aux élèves
                     </button>
                   ) : null}
-                  {visibility === "published" && canPublish ? (
+                  {visibility === "published" && canPublish && !publicationsAreUnloaded() ? (
                     <button
                       type="button"
                       className="workspace-action secondary class-notebook-publish-action"
@@ -2058,7 +2087,7 @@ export function ClassNotebookPanel({
                       Repasser en brouillon
                     </button>
                   ) : null}
-                  {visibility !== "empty" && canPublish ? (
+                  {visibility !== "empty" && canPublish && !publicationsAreUnloaded() ? (
                     <button
                       type="button"
                       className="workspace-action secondary"
