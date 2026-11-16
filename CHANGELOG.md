@@ -11,6 +11,8 @@ Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 - Le passage par l’agenda élève fusionne la classe consultée. Il ne remplace plus l’ensemble des publications déjà chargées.
 - Les notes prof ne partent plus en enregistrement avant la fin de leur lecture. En cas de conflit, le texte à l’écran est conservé. La protection du serveur reste en place.
 - Deux lectures simultanées de la même classe ne se masquent plus. Si la plus récente échoue, la réussite déjà en cours reste affichée. Un réessai demandé explicitement relance tout de même la lecture.
+- **Conflit des notes prof** : le Carnet affiche « Synchronisation interrompue : vos dernières modifications ne sont pas enregistrées sur le serveur. » jusqu’à résolution. Le texte local peut être copié ou exporté. Le rechargement de la version serveur est une action explicite, après cette mise de côté. Aucune fusion automatique.
+- **Changement d’enseignant** : les publications et les notes chargées sont effacées à la déconnexion et à l’ouverture d’un autre compte. Une réponse partie sous le compte précédent ne modifie plus l’écran du compte suivant.
 
 ## [2.62.20] — Aperçu branche : séance sélectionnée
 

@@ -9,12 +9,23 @@ import {
   AGENDA_LOADING_LABEL,
   AGENDA_RETRY_LABEL,
   agendaItemsFromLedger,
+  agendaResultBelongsToSession,
   beginAgendaRefresh,
   commitAgendaLoadResults,
   emptyAgendaLedger,
   filterNotebookItemsForSubject,
   loadAgendaClassrooms,
+  NOTES_COPY_LOCAL_LABEL,
+  NOTES_EXPORT_LOCAL_LABEL,
+  NOTES_RELOAD_CONFIRM_LABEL,
+  NOTES_RELOAD_HINT,
+  NOTES_RELOAD_SERVER_LABEL,
+  NOTES_SYNC_INTERRUPTED_LABEL,
   notebookPublicationPlaceholder,
+  requestServerNotesReload,
+  secureLocalNotebookNotes,
+  serverNotesReloadConfirmed,
+  unsavedNotebookNotesText,
 } from "../src/features/class-notebook/index.ts";
 import {
   createEmptyNotesDocument,
@@ -285,6 +296,160 @@ test("navigateur — première ouverture, agenda élève, échec puis réessai",
     assert.equal(await page.getByText("Contrôle du 16 novembre").count(), 1);
     assert.equal(await page.locator("[data-column-date='2026-11-16'] [data-note]").innerText(), "Note prof du 16 novembre");
     await page.screenshot({ path: `${ARTIFACTS}/carnet-reessai-reussi.png` });
+  } finally {
+    await browser.close();
+  }
+});
+
+test("navigateur — conflit de notes entre onglets, puis enseignant B sans les publications de A", async () => {
+  mkdirSync(ARTIFACTS, { recursive: true });
+  const { stored, nov16 } = catalog();
+  const localText = "Note locale non enregistrée";
+  const serverText = "Version serveur de l’autre onglet";
+  let step = "unsaved";
+  let screen = setSessionRichNote(createEmptyNotesDocument(), nov16.key, fromPlainText(localText));
+  let epoch = 1;
+  const startedByA = epoch;
+  const teacherA = stored.filter((entry) => entry.classroomId === CLASSROOM);
+  const teacherB = stored.filter((entry) => entry.classroomId === OTHER);
+  let ledger = emptyAgendaLedger();
+  const loadedA = beginAgendaRefresh(ledger, [CLASSROOM], null, { replaceScope: true });
+  ledger = commitAgendaLoadResults(
+    loadedA.ledger,
+    loadedA.started,
+    await loadAgendaClassrooms(
+      loadedA.started.map((entry) => ({ classroomId: entry.classroomId, schoolYearId: null })),
+      async () => teacherA,
+    ),
+  );
+
+  const browser = await chromium.launch(launchOptions());
+  try {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 760 } });
+    await page.exposeFunction("copyNotes", () => {
+      const text = unsavedNotebookNotesText(screen);
+      step = secureLocalNotebookNotes(step);
+      return { step, text };
+    });
+    await page.exposeFunction("exportNotes", () => {
+      const text = unsavedNotebookNotesText(screen);
+      step = secureLocalNotebookNotes(step);
+      return { step, text };
+    });
+    await page.exposeFunction("askReload", () => {
+      step = requestServerNotesReload(step);
+      return step;
+    });
+    await page.exposeFunction("confirmReload", () => {
+      if (!serverNotesReloadConfirmed(step)) return { replaced: false, note: localText };
+      screen = setSessionRichNote(createEmptyNotesDocument(), nov16.key, fromPlainText(serverText));
+      step = "unsaved";
+      return { replaced: true, note: serverText };
+    });
+    await page.exposeFunction("switchTeacher", async () => {
+      epoch += 1;
+      if (!agendaResultBelongsToSession(startedByA, epoch)) ledger = emptyAgendaLedger();
+      const begun = beginAgendaRefresh(ledger, [OTHER], null, { replaceScope: true });
+      const results = await loadAgendaClassrooms(
+        begun.started.map((entry) => ({ classroomId: entry.classroomId, schoolYearId: null })),
+        async () => teacherB,
+      );
+      if (agendaResultBelongsToSession(epoch, epoch)) {
+        ledger = commitAgendaLoadResults(begun.ledger, begun.started, results);
+      }
+      return agendaItemsFromLedger(ledger).map((item) => item.title);
+    });
+    await page.exposeFunction("lateTeacherA", async () => {
+      if (agendaResultBelongsToSession(startedByA, epoch)) {
+        const begun = beginAgendaRefresh(ledger, [CLASSROOM], null);
+        const results = await loadAgendaClassrooms(
+          begun.started.map((entry) => ({ classroomId: entry.classroomId, schoolYearId: null })),
+          async () => teacherA,
+        );
+        ledger = commitAgendaLoadResults(begun.ledger, begun.started, results);
+      }
+      return agendaItemsFromLedger(ledger).map((item) => item.title);
+    });
+    await page.setContent(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><style>
+      ${css}
+      body { margin: 0; background: #f4f7fb; }
+      .demo { max-width: 1100px; margin: 0 auto; padding: 20px; }
+    </style></head><body><div class="demo">
+      <section class="class-notebook" id="notebook"></section>
+    </div><script>
+      const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+      })[char]);
+      const render = (state) => {
+        const root = document.querySelector("#notebook");
+        const titles = state.titles.map((title) => "<li>" + escapeHtml(title) + "</li>").join("");
+        const banner = state.interrupted
+          ? '<div class="class-notebook-warning" role="alert" data-notes-sync="interrupted"><p>${NOTES_SYNC_INTERRUPTED_LABEL}</p><p>${NOTES_RELOAD_HINT}</p><div class="class-notebook-warning-actions"><button type="button" id="copy">${NOTES_COPY_LOCAL_LABEL}</button><button type="button" id="export">${NOTES_EXPORT_LOCAL_LABEL}</button><button type="button" id="reload" ' + (state.step === "unsaved" ? "disabled" : "") + '>${NOTES_RELOAD_SERVER_LABEL}</button>' + (state.step === "confirming" ? '<button type="button" id="confirm">${NOTES_RELOAD_CONFIRM_LABEL}</button>' : "") + "</div></div>"
+          : "";
+        root.innerHTML = banner
+          + '<p data-note="">' + escapeHtml(state.note) + "</p>"
+          + "<ul>" + titles + "</ul>";
+        const copy = document.querySelector("#copy");
+        if (copy) copy.addEventListener("click", async () => {
+          const result = await window.copyNotes();
+          render({ ...state, step: result.step, copied: result.text });
+        });
+        const reload = document.querySelector("#reload");
+        if (reload) reload.addEventListener("click", async () => {
+          render({ ...state, step: await window.askReload() });
+        });
+        const confirm = document.querySelector("#confirm");
+        if (confirm) confirm.addEventListener("click", async () => {
+          const result = await window.confirmReload();
+          render({ ...state, interrupted: !result.replaced, step: "unsaved", note: result.note });
+        });
+      };
+      window.renderRecovery = render;
+    </script></body></html>`);
+
+    const titlesA = agendaItemsFromLedger(ledger).map((item) => item.title);
+    await page.evaluate((state) => window.renderRecovery(state), {
+      interrupted: true,
+      step: "unsaved",
+      note: localText,
+      titles: titlesA,
+    });
+    await page.screenshot({ path: `${ARTIFACTS}/carnet-conflit-notes.png` });
+    assert.equal(await page.getByText(NOTES_SYNC_INTERRUPTED_LABEL).count(), 1);
+    assert.equal(await page.getByText(NOTES_RELOAD_HINT).count(), 1);
+    assert.equal(await page.locator("[data-note]").innerText(), localText);
+    assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_SERVER_LABEL }).isDisabled(), true);
+    assert.equal(await page.getByText("Publication du 9 novembre").count(), 1);
+
+    await page.getByRole("button", { name: NOTES_COPY_LOCAL_LABEL }).click();
+    assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_SERVER_LABEL }).isDisabled(), false);
+    assert.equal(await page.locator("[data-note]").innerText(), localText);
+    assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_CONFIRM_LABEL }).count(), 0);
+
+    await page.getByRole("button", { name: NOTES_RELOAD_SERVER_LABEL }).click();
+    assert.equal(await page.locator("[data-note]").innerText(), localText);
+    assert.equal(await page.getByRole("button", { name: NOTES_RELOAD_CONFIRM_LABEL }).count(), 1);
+
+    await page.getByRole("button", { name: NOTES_RELOAD_CONFIRM_LABEL }).click();
+    assert.equal(await page.locator("[data-notes-sync='interrupted']").count(), 0);
+    assert.equal(await page.locator("[data-note]").innerText(), serverText);
+
+    const titlesB = await page.evaluate(async () => window.switchTeacher());
+    await page.evaluate((titles) => {
+      document.querySelector("#notebook").innerHTML = "<ul>" + titles.map((title) => "<li>" + title + "</li>").join("") + "</ul>";
+    }, titlesB);
+    assert.deepEqual(titlesB, ["Publication électricité"]);
+    assert.equal(await page.getByText("Publication du 9 novembre").count(), 0);
+    assert.equal(await page.getByText("Publication électricité").count(), 1);
+
+    const afterLate = await page.evaluate(async () => window.lateTeacherA());
+    await page.evaluate((titles) => {
+      document.querySelector("#notebook").innerHTML = "<ul>" + titles.map((title) => "<li>" + title + "</li>").join("") + "</ul>";
+    }, afterLate);
+    await page.screenshot({ path: `${ARTIFACTS}/carnet-isolation-enseignants.png` });
+    assert.deepEqual(afterLate, ["Publication électricité"]);
+    assert.equal(await page.getByText("Publication du 9 novembre").count(), 0);
+    assert.equal(await page.getByText("Publication du 16 novembre").count(), 0);
   } finally {
     await browser.close();
   }

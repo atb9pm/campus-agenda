@@ -9,11 +9,19 @@ import {
   AGENDA_LOADING_LABEL,
   AGENDA_RETRY_LABEL,
   agendaItemsFromLedger,
+  agendaResultBelongsToSession,
   beginAgendaRefresh,
   classroomAgendaPhase,
   commitAgendaLoadResults,
   emptyAgendaLedger,
   filterNotebookItemsForSubject,
+  NOTES_SYNC_INTERRUPTED_LABEL,
+  requestServerNotesReload,
+  retainAgendaScope,
+  secureLocalNotebookNotes,
+  serverNotesReloadConfirmed,
+  unsavedNotebookNotesText,
+  type NotesConflictStep,
   loadAgendaClassrooms,
   createEmptyNotesDocument,
   fromPlainText,
@@ -431,7 +439,8 @@ test("F et H — conflit de notes : la version locale reste, la révision serveu
   const load = page.slice(page.indexOf("const remote = await fetchTeacherNotesApi"), page.indexOf("notesHydratedRef.current = true"));
   assert.match(load, /if \(notesConflictRef\.current\)/);
   assert.equal(load.includes("setClassNotesDocument"), false);
-  assert.match(page, /Vos modifications restent à l’écran et ne sont pas envoyées/);
+  assert.match(page, /setNotesSyncInterrupted\(true\)/);
+  assert.equal(page.includes("Vos modifications restent à l’écran et ne sont pas envoyées"), false);
 });
 
 test("G — la migration n’enregistre rien tant que les notes ne sont pas lues", () => {
@@ -518,4 +527,128 @@ test("le chargement initial ne marque plus une classe avant la réponse et sépa
   assert.match(page, /phase === "ready" \|\| phase === "loading" \|\| phase === "error"/);
   const notesCatch = page.slice(page.indexOf("Notes du Carnet non chargées"), page.indexOf("void loadClassNotes"));
   assert.equal(notesCatch.includes("saveTeacherNotesApi"), false);
+});
+
+test("B — le conflit reste à l’écran et les sauvegardes ne reprennent qu’après copie puis rechargement", async () => {
+  const long = `${"Note encore à l’écran. ".repeat(12)}Suite locale non fusionnée.`;
+  const local = setSessionRichNote(createEmptyNotesDocument(), "session-16", {
+    format: "campus-rich-v1",
+    blocks: [{ type: "paragraph", inlines: [{ text: long }] }],
+  });
+  const exported = unsavedNotebookNotesText(local);
+  const storedText = local.version === 2 ? local.sessions["session-16"]?.[0]?.text ?? "" : "";
+  assert.match(exported, /Suite locale non fusionnée/);
+  assert.ok(exported.length > storedText.length);
+  assert.equal(NOTES_SYNC_INTERRUPTED_LABEL, "Synchronisation interrompue : vos dernières modifications ne sont pas enregistrées sur le serveur.");
+
+  let step: NotesConflictStep = "unsaved";
+  step = requestServerNotesReload(step);
+  assert.equal(step, "unsaved");
+  assert.equal(serverNotesReloadConfirmed(step), false);
+  step = secureLocalNotebookNotes(step);
+  step = requestServerNotesReload(step);
+  assert.equal(serverNotesReloadConfirmed(step), true);
+
+  const server = { revision: "r1", text: "Version de l’autre onglet" };
+  function persist(expected: string, text: string) {
+    if (server.revision !== expected) throw new NotebookConflictError();
+    server.revision = `r${Number(server.revision.slice(1)) + 1}`;
+    server.text = text;
+  }
+  persist("r1", server.text);
+  assert.throws(() => persist("r1", long), NotebookConflictError);
+  assert.equal(server.text, "Version de l’autre onglet");
+  assert.equal(shouldPersistNotebookNotes({ hydrated: true, conflict: true, adminConsult: false }), false);
+  assert.match(unsavedNotebookNotesText(local), /Suite locale non fusionnée/);
+
+  const screen = setSessionRichNote(createEmptyNotesDocument(), "session-16", fromPlainText(server.text));
+  assert.equal(shouldPersistNotebookNotes({ hydrated: true, conflict: false, adminConsult: false }), true);
+  const queue = new NotebookAutosave();
+  queue.reset("r2");
+  let sent = "";
+  await queue.save(screen, async (notes, revision) => {
+    sent = revision ?? "";
+    return { notes, revision: "r3" };
+  });
+  assert.equal(sent, "r2");
+
+  const [page, panel] = await Promise.all([
+    readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/components/class-notebook-panel.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(panel, /NOTES_SYNC_INTERRUPTED_LABEL/);
+  assert.match(panel, /secureLocalNotebookNotes\(step\)/);
+  assert.match(panel, /serverNotesReloadConfirmed\(notesConflictStep\)/);
+  assert.match(panel, /disabled=\{notesConflictStep === "unsaved"\}/);
+  assert.match(page, /async function reloadServerNotes/);
+  const reload = page.slice(page.indexOf("async function reloadServerNotes"), page.indexOf("function exitStudentMode"));
+  assert.match(reload, /!notesConflictRef\.current\) return/);
+  assert.match(reload, /setClassNotesDocument\(remote \?\? createEmptyNotesDocument\(\)\)/);
+  assert.equal(page.includes("Vos modifications restent à l’écran et ne sont pas envoyées"), false);
+});
+
+test("C — une déconnexion isole les publications et ignore la réponse tardive de l’autre enseignant", async () => {
+  const stored = storedPublications();
+  const teacherA = await loadAll(
+    [CLASSROOM],
+    async () => stored.filter((item) => item.classroomId === CLASSROOM),
+  );
+  assert.equal(
+    agendaItemsFromLedger(teacherA.ledger).some((item) => item.title === "Publication du 9 novembre"),
+    true,
+  );
+  assert.ok(agendaItemsFromLedger(retainAgendaScope(teacherA.ledger, null)).length > 0);
+
+  let epoch = 1;
+  const startedByA = epoch;
+  epoch += 1;
+  let ledger: AgendaLoadLedger = emptyAgendaLedger();
+  const lateA = await loadAgendaClassrooms(
+    [{ classroomId: CLASSROOM, schoolYearId: null }],
+    async () => stored.filter((item) => item.classroomId === CLASSROOM),
+  );
+  if (agendaResultBelongsToSession(startedByA, epoch)) {
+    const begun = beginAgendaRefresh(ledger, [CLASSROOM], null);
+    ledger = commitAgendaLoadResults(begun.ledger, begun.started, lateA);
+  }
+  assert.deepEqual(agendaItemsFromLedger(ledger), []);
+
+  const teacherB = stored.filter((item) => item.classroomId === OTHER);
+  const begunB = beginAgendaRefresh(ledger, [OTHER], null);
+  const resultsB = await loadAgendaClassrooms(
+    begunB.started.map((entry) => ({ classroomId: entry.classroomId, schoolYearId: null })),
+    async () => teacherB,
+  );
+  if (agendaResultBelongsToSession(epoch, epoch)) {
+    ledger = commitAgendaLoadResults(begunB.ledger, begunB.started, resultsB);
+  }
+  assert.deepEqual(agendaItemsFromLedger(ledger).map((item) => item.title), ["Publication électricité"]);
+
+  if (agendaResultBelongsToSession(startedByA, epoch)) {
+    const begunLate = beginAgendaRefresh(ledger, [CLASSROOM], null);
+    ledger = commitAgendaLoadResults(begunLate.ledger, begunLate.started, lateA);
+  }
+  assert.equal(agendaItemsFromLedger(ledger).some((item) => item.classroomId === CLASSROOM), false);
+  assert.equal(agendaItemsFromLedger(ledger).some((item) => item.title === "Publication électricité"), true);
+
+  const page = await readFile(new URL("../web/app/page.tsx", import.meta.url), "utf8");
+  const apply = page.slice(page.indexOf("async function applyTeacherSession"), page.indexOf("useEffect(() => {"));
+  const accepted = apply.slice(apply.indexOf("setPasswordChange(null)"));
+  assert.equal(apply.slice(0, apply.indexOf("setPasswordChange(null)")).includes("discardTeacherWorkspace"), false);
+  assert.match(accepted, /discardTeacherWorkspace\(\)/);
+  const clear = page.slice(page.indexOf("function clearTeacherAuthIdentity"), page.indexOf("async function reloadServerNotes"));
+  assert.match(clear, /discardTeacherWorkspace\(\)/);
+  assert.match(page.slice(page.indexOf("function logoutTeacher"), page.indexOf("function confirmControlDespiteAlert")), /clearTeacherAuthIdentity\(\)/);
+  const exit = page.slice(page.indexOf("function exitStudentMode"), page.indexOf("function submitTeacherLogin"));
+  assert.equal(exit.slice(0, exit.indexOf("await logoutApiSession")).includes("discardTeacherWorkspace"), false);
+  assert.match(exit, /clearTeacherAuthIdentity\(\)/);
+  const year = page.slice(page.indexOf("if (adminYearConsult && viewedSchoolYearId)"), page.indexOf("setViewedSchoolYearStatus(null)"));
+  assert.equal(year.includes("discardTeacherWorkspace"), false);
+  assert.equal(year.includes("teacherEpochRef.current += 1"), false);
+  assert.match(page, /if \(!agendaResultBelongsToSession\(epoch, teacherEpochRef\.current\)\)/);
+  const discard = page.slice(page.indexOf("function discardTeacherWorkspace"), page.indexOf("function clearTeacherAuthIdentity"));
+  assert.match(discard, /teacherEpochRef\.current \+= 1/);
+  assert.match(discard, /emptyAgendaLedger\(\)/);
+  assert.match(discard, /setItems\(\[\]\)/);
+  assert.match(discard, /createEmptyNotesDocument\(\)/);
 });

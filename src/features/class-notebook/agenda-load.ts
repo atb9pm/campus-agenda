@@ -38,6 +38,11 @@ export function emptyAgendaLedger(): AgendaLoadLedger {
   return { slots: {} };
 }
 
+/** Une réponse lancée sous une session enseignant ne peut plus s’appliquer après un changement de compte. */
+export function agendaResultBelongsToSession(startedEpoch: number, currentEpoch: number): boolean {
+  return startedEpoch === currentEpoch;
+}
+
 export function agendaClassroomKey(classroomId: string, schoolYearId?: string | null): string {
   const id = classroomId.trim();
   const year = schoolYearId?.trim() || "";
@@ -80,6 +85,10 @@ export function startAgendaLoad(
   };
 }
 
+/**
+ * Ne conserve que les classes de l’année demandée.
+ * Ce filtre ne distingue pas les enseignants : le registre doit être vidé au changement de compte.
+ */
 export function retainAgendaScope(ledger: AgendaLoadLedger, schoolYearId?: string | null): AgendaLoadLedger {
   const year = schoolYearId?.trim() || null;
   const slots: Record<string, AgendaClassroomSlot> = {};

@@ -668,3 +668,61 @@ export function migrateClassNotesToSessions(
   }
   return { document: next, changed: true };
 }
+
+export const NOTES_SYNC_INTERRUPTED_LABEL =
+  "Synchronisation interrompue : vos dernières modifications ne sont pas enregistrées sur le serveur.";
+export const NOTES_COPY_LOCAL_LABEL = "Copier mes modifications";
+export const NOTES_EXPORT_LOCAL_LABEL = "Exporter mes modifications";
+export const NOTES_RELOAD_SERVER_LABEL = "Recharger la version enregistrée";
+export const NOTES_RELOAD_CONFIRM_LABEL = "Confirmer le rechargement";
+export const NOTES_RELOAD_HINT =
+  "Le texte à l’écran sera remplacé par la version enregistrée sur le serveur. Copiez ou exportez d’abord vos modifications.";
+
+export type NotesConflictStep = "unsaved" | "secured" | "confirming";
+
+/** Copier ou exporter marque le travail local comme mis de côté. La confirmation en cours est conservée. */
+export function secureLocalNotebookNotes(step: NotesConflictStep): NotesConflictStep {
+  return step === "confirming" ? step : "secured";
+}
+
+/** Le rechargement serveur n’est proposé qu’une fois les modifications locales copiées ou exportées. */
+export function requestServerNotesReload(step: NotesConflictStep): NotesConflictStep {
+  return step === "unsaved" ? "unsaved" : "confirming";
+}
+
+/** Les sauvegardes ne reprennent qu’après cette confirmation explicite, jamais par fusion. */
+export function serverNotesReloadConfirmed(step: NotesConflictStep): boolean {
+  return step === "confirming";
+}
+
+function notePlainText(note: TeacherWeekNote): string {
+  const rich = note.body ? excerptRichDoc(note.body, 20_000) : "";
+  return rich || note.text || "";
+}
+
+function appendNoteGroup(lines: string[], heading: string, notes: readonly TeacherWeekNote[] | undefined) {
+  const visible = (notes ?? []).map(notePlainText).filter((text) => text.trim().length > 0);
+  if (!visible.length) return;
+  lines.push(heading);
+  for (const text of visible) {
+    lines.push(text);
+    lines.push("");
+  }
+}
+
+/** Texte intégral des notes encore à l’écran, pour les copier ou les exporter avant un rechargement. */
+export function unsavedNotebookNotesText(document: ClassNotesDocument): string {
+  const lines = ["Notes prof non enregistrées sur le serveur", ""];
+  if (document.version === 1) {
+    for (const key of Object.keys(document.weeks).sort()) appendNoteGroup(lines, `Semaine ${key}`, document.weeks[key]);
+  } else {
+    for (const key of Object.keys(document.sessions).sort()) appendNoteGroup(lines, `Séance ${key}`, document.sessions[key]);
+    for (const key of Object.keys(document.pendingWeeks ?? {}).sort()) {
+      appendNoteGroup(lines, `En attente ${key}`, document.pendingWeeks?.[key]);
+    }
+    for (const key of Object.keys(document.orphanedSessions ?? {}).sort()) {
+      appendNoteGroup(lines, `Séance hors horaire ${key}`, document.orphanedSessions?.[key]);
+    }
+  }
+  return `${lines.join("\n").trimEnd()}\n`;
+}

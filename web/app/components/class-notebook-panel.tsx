@@ -47,6 +47,17 @@ import {
   listPendingWeekNotes,
   listSessionNotes,
   listWeekNotes,
+  NOTES_COPY_LOCAL_LABEL,
+  NOTES_EXPORT_LOCAL_LABEL,
+  NOTES_RELOAD_CONFIRM_LABEL,
+  NOTES_RELOAD_HINT,
+  NOTES_RELOAD_SERVER_LABEL,
+  NOTES_SYNC_INTERRUPTED_LABEL,
+  requestServerNotesReload,
+  secureLocalNotebookNotes,
+  serverNotesReloadConfirmed,
+  unsavedNotebookNotesText,
+  type NotesConflictStep,
   migrateClassNotesToSessions,
   moveTargetCourseSessions,
   moveWeekUnitToDoc,
@@ -136,6 +147,10 @@ interface ClassNotebookPanelProps {
   publishBlockedReason?: string;
   /** Échec de chargement : le Carnet vide ne doit pas passer pour un Carnet sans contenu. */
   loadError?: string;
+  /** Conflit de notes : l’avertissement reste jusqu’au rechargement explicite. */
+  notesSyncInterrupted?: boolean;
+  /** Remplace le texte à l’écran par la version serveur, seulement après confirmation. */
+  onReloadServerNotes?: () => void;
   /** État du chargement des publications de la classe ouverte. */
   publicationsState?: "unknown" | "loading" | "ready" | "error";
   onRetryPublications?: () => void;
@@ -289,6 +304,8 @@ export function ClassNotebookPanel({
   canPublish,
   publishBlockedReason,
   loadError,
+  notesSyncInterrupted = false,
+  onReloadServerNotes,
   publicationsState = "ready",
   onRetryPublications,
   onBack,
@@ -313,6 +330,48 @@ export function ClassNotebookPanel({
   onFollowSelectionChange,
 }: ClassNotebookPanelProps) {
   const [weekDisplayCount, setWeekDisplayCount] = useState<WeekDisplayCount>(defaultWeekDisplayCount);
+  const [notesConflictStep, setNotesConflictStep] = useState<NotesConflictStep>("unsaved");
+  const [trackedNotesInterruption, setTrackedNotesInterruption] = useState(notesSyncInterrupted);
+  if (notesSyncInterrupted !== trackedNotesInterruption) {
+    setTrackedNotesInterruption(notesSyncInterrupted);
+    setNotesConflictStep("unsaved");
+  }
+
+  function downloadUnsavedNotes(text: string) {
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "notes-prof-non-enregistrees.txt";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function copyUnsavedNotes() {
+    const text = unsavedNotebookNotesText(notesDocument);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      downloadUnsavedNotes(text);
+    }
+    setNotesConflictStep((step) => secureLocalNotebookNotes(step));
+  }
+
+  function exportUnsavedNotes() {
+    downloadUnsavedNotes(unsavedNotebookNotesText(notesDocument));
+    setNotesConflictStep((step) => secureLocalNotebookNotes(step));
+  }
+
+  function askServerNotesReload() {
+    setNotesConflictStep((step) => requestServerNotesReload(step));
+  }
+
+  function confirmServerNotesReload() {
+    if (!serverNotesReloadConfirmed(notesConflictStep)) return;
+    void onReloadServerNotes?.();
+  }
   const narrowViewport = useNotebookNarrowViewport();
   const effectiveWeekDisplayCount = notebookWeekDisplayCountForViewport(
     narrowViewport ? NOTEBOOK_NARROW_VIEWPORT_MAX_PX : NOTEBOOK_NARROW_VIEWPORT_MAX_PX + 1,
@@ -1642,6 +1701,33 @@ export function ClassNotebookPanel({
 
       {loadError ? (
         <p className="class-notebook-warning" role="alert">{loadError}</p>
+      ) : null}
+      {notesSyncInterrupted ? (
+        <div className="class-notebook-warning" role="alert" data-notes-sync="interrupted">
+          <p>{NOTES_SYNC_INTERRUPTED_LABEL}</p>
+          <p>{NOTES_RELOAD_HINT}</p>
+          <div className="class-notebook-warning-actions">
+            <button type="button" className="workspace-action secondary" onClick={() => { void copyUnsavedNotes(); }}>
+              {NOTES_COPY_LOCAL_LABEL}
+            </button>
+            <button type="button" className="workspace-action secondary" onClick={exportUnsavedNotes}>
+              {NOTES_EXPORT_LOCAL_LABEL}
+            </button>
+            <button
+              type="button"
+              className="workspace-action secondary"
+              onClick={askServerNotesReload}
+              disabled={notesConflictStep === "unsaved"}
+            >
+              {NOTES_RELOAD_SERVER_LABEL}
+            </button>
+            {notesConflictStep === "confirming" ? (
+              <button type="button" className="workspace-action" onClick={confirmServerNotesReload}>
+                {NOTES_RELOAD_CONFIRM_LABEL}
+              </button>
+            ) : null}
+          </div>
+        </div>
       ) : null}
       {publicationsState === "error" ? (
         <p className="class-notebook-warning" role="alert">
