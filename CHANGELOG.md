@@ -2,6 +2,16 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.23] — Carnet : relecture au retour sur l’onglet
+
+### Corrigé
+
+- **Carnet resté ouvert** (onglet, ordinateur, icône d’écran d’accueil) : les publications et les notes prof sont relues au retour sur l’onglet, au retour du réseau et toutes les deux minutes tant que l’onglet est au premier plan. Un contenu saisi sur un autre appareil apparaît sans recharger la page.
+- La relecture est discrète : le Carnet affiché ne passe ni en chargement ni en erreur. Un échec garde l’affichage actuel et sera retenté au prochain retour.
+- Les notes prof ne sont remplacées par la version du serveur que si l’écran n’a rien de non enregistré : aucun éditeur ouvert, aucun envoi en attente, aucun conflit. Une saisie en cours n’est jamais écrasée.
+- Écrire après cette relecture ne déclenche plus le bandeau orange, puisque l’onglet repart de la dernière version du serveur.
+- La réponse de l’agenda n’est plus conservée par le navigateur (`Cache-Control: no-store`).
+
 ## [2.62.22] — Notes prof : reprise automatique après une coupure
 
 ### Corrigé

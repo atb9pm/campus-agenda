@@ -585,6 +585,24 @@ export async function fetchTeacherNotesApi(options?: {
   return payload.notes ?? null;
 }
 
+/**
+ * Relit les notes sans toucher à la révision tant que `apply` n’a pas accepté la version du serveur.
+ * `apply` est appelé de façon synchrone : aucune frappe ne peut s’intercaler entre la vérification et la reprise.
+ */
+export async function refreshTeacherNotesApi(
+  apply: (notes: ClassNotesDocument | null) => boolean,
+): Promise<"applied" | "unchanged" | "busy"> {
+  const seenEpoch = notebookAutosave.epoch();
+  const response = await fetch("/api/teacher/notes", { credentials: "include", cache: "no-store" });
+  const payload = await parseJson<{ ok: boolean; reason?: string; notes?: ClassNotesDocument | null; revision?: string }>(
+    response,
+  );
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.reason ?? "Chargement des notes impossible.");
+  }
+  return notebookAutosave.adoptServerIfIdle(seenEpoch, payload.revision, () => apply(payload.notes ?? null));
+}
+
 async function notesRequest(input: string, init?: RequestInit): Promise<Response> {
   try {
     return await fetch(input, init);
@@ -798,6 +816,7 @@ export async function fetchAgendaView(
   if (options?.adminConsult && schoolYearId?.trim()) params.set("consult", "1");
   const response = await fetch(`/api/agenda?${params.toString()}`, {
     credentials: "include",
+    cache: "no-store",
   });
   const payload = await parseJson<{
     ok: boolean;

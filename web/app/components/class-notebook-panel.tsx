@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type DragEvent,
 } from "react";
@@ -165,6 +166,8 @@ interface ClassNotebookPanelProps {
   /** État du chargement des publications de la classe ouverte. */
   publicationsState?: "unknown" | "loading" | "ready" | "error";
   onRetryPublications?: () => void;
+  /** Un éditeur, un contrôle ou un déplacement est en cours : la relecture en arrière-plan attend. */
+  onEditingChange?: (editing: boolean) => void;
   onBack: () => void;
   onShiftWeeks: (direction: -1 | 1) => void;
   onCenterWeekChange: (weekNumber: number) => void;
@@ -319,6 +322,7 @@ export function ClassNotebookPanel({
   onReloadServerNotes,
   publicationsState = "ready",
   onRetryPublications,
+  onEditingChange,
   onBack,
   onShiftWeeks,
   onCenterWeekChange,
@@ -527,6 +531,14 @@ export function ClassNotebookPanel({
 
   const autoFollowAllowed = structuredCourse && notebookAutoFollowAllowed(schoolYearStatus);
   const editingInProgress = editor != null || controlEditor != null || dragPayload != null;
+  const onEditingChangeRef = useRef(onEditingChange);
+  useEffect(() => {
+    onEditingChangeRef.current = onEditingChange;
+  });
+  useEffect(() => {
+    onEditingChangeRef.current?.(editingInProgress);
+    return () => onEditingChangeRef.current?.(false);
+  }, [editingInProgress]);
   // Un changement de date pendant une édition attend sa fermeture : la colonne éditée ne doit pas disparaître.
   if (notebookTodayUpdate(todayIso, observedTodayIso, editingInProgress) === "apply") {
     setTodayIso(observedTodayIso);
