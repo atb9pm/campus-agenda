@@ -80,7 +80,11 @@ import {
   type ApiTeacherSession,
   type SchoolCalendarWeek,
 } from "../lib/api-client.ts";
-import { shouldPersistNotebookNotes } from "../lib/notebook-autosave.ts";
+import {
+  notesRetryDelay,
+  notesSaveFailureKind,
+  shouldPersistNotebookNotes,
+} from "../lib/notebook-autosave.ts";
 import { APP_VERSION } from "@campus/lib/app-version";
 import {
   acknowledgeMfaRecoveryCodes,
@@ -409,6 +413,10 @@ export default function Home() {
   const notesConflictRef = useRef(false);
   /** Affiche l’avertissement du Carnet tant que le conflit n’est pas résolu. */
   const [notesSyncInterrupted, setNotesSyncInterrupted] = useState(false);
+  /** Un envoi des notes n’a pas atteint le serveur : il est renvoyé tout seul. */
+  const [notesRetryPending, setNotesRetryPending] = useState(false);
+  const notesRetryPendingRef = useRef(false);
+  const notesRetryAttemptRef = useRef(0);
   /** Change à chaque compte enseignant. Une réponse lancée avant ne peut plus s’appliquer. */
   const teacherEpochRef = useRef(0);
   const agendaLedgerRef = useRef<AgendaLoadLedger>(emptyAgendaLedger());
@@ -832,13 +840,27 @@ export default function Home() {
         conflict: notesConflictRef.current,
         adminConsult: adminYearConsult,
       })) return;
-      void saveTeacherNotesApi(classNotesDocument).catch((error: unknown) => {
+      void saveTeacherNotesApi(classNotesDocument).then(() => {
+        if (!keepTeacherSessionPayload(saveEpoch, teacherEpochRef.current, true)) return;
+        notesRetryAttemptRef.current = 0;
+        notesRetryPendingRef.current = false;
+        setNotesRetryPending(false);
+      }, (error: unknown) => {
         if (!keepTeacherSessionPayload(saveEpoch, teacherEpochRef.current, true)) return;
         const message = error instanceof Error ? error.message : "Enregistrement des notes impossible.";
-        if (message.includes("Les notes ont changé")) {
+        const failure = notesSaveFailureKind(error);
+        if (failure === "conflict") {
           notesConflictRef.current = true;
+          notesRetryPendingRef.current = false;
+          setNotesRetryPending(false);
           setNotesSyncInterrupted(true);
           reportNotebookDiagnostic({ kind: "notes-conflict" });
+          return;
+        }
+        if (failure === "unreachable") {
+          if (!notesRetryPendingRef.current) setNotice(message);
+          notesRetryPendingRef.current = true;
+          setNotesRetryPending(true);
           return;
         }
         setNotice(message);
@@ -847,6 +869,67 @@ export default function Home() {
 
     return () => window.clearTimeout(timer);
   }, [adminYearConsult, classNotesDocument, classNotesReady, currentTeacherId, teacherAuthenticated]);
+
+  useEffect(() => {
+    if (!notesRetryPending || !teacherAuthenticated || adminYearConsult) return;
+    let cancelled = false;
+    let inFlight = false;
+    let timer: number | undefined;
+    const epoch = teacherEpochRef.current;
+    const current = () => !cancelled && keepTeacherSessionPayload(epoch, teacherEpochRef.current, true);
+
+    function schedule() {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(retry, notesRetryDelay(notesRetryAttemptRef.current));
+    }
+
+    function retry() {
+      if (!current() || inFlight) return;
+      window.clearTimeout(timer);
+      if (!shouldPersistNotebookNotes({
+        hydrated: notesHydratedRef.current,
+        conflict: notesConflictRef.current,
+        adminConsult: false,
+      })) return;
+      inFlight = true;
+      void saveTeacherNotesApi(classNotesDocumentRef.current).then(() => {
+        inFlight = false;
+        if (!current()) return;
+        notesRetryAttemptRef.current = 0;
+        notesRetryPendingRef.current = false;
+        setNotesRetryPending(false);
+        setNotice("Connexion rétablie : les notes prof sont enregistrées.");
+      }, (error: unknown) => {
+        inFlight = false;
+        if (!current()) return;
+        const failure = notesSaveFailureKind(error);
+        if (failure === "conflict") {
+          notesConflictRef.current = true;
+          notesRetryPendingRef.current = false;
+          setNotesRetryPending(false);
+          setNotesSyncInterrupted(true);
+          reportNotebookDiagnostic({ kind: "notes-conflict" });
+          return;
+        }
+        if (failure === "unreachable") {
+          notesRetryAttemptRef.current += 1;
+          schedule();
+          return;
+        }
+        notesRetryPendingRef.current = false;
+        setNotesRetryPending(false);
+        setNotice(error instanceof Error ? error.message : "Enregistrement des notes impossible.");
+      });
+    }
+
+    window.addEventListener("online", retry);
+    schedule();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      window.removeEventListener("online", retry);
+    };
+  }, [adminYearConsult, notesRetryPending, teacherAuthenticated]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1545,6 +1628,9 @@ export default function Home() {
     notesHydratedRef.current = false;
     notesConflictRef.current = false;
     setNotesSyncInterrupted(false);
+    notesRetryPendingRef.current = false;
+    notesRetryAttemptRef.current = 0;
+    setNotesRetryPending(false);
     setNotebookNotesLoadError("");
     skipClassNotesSaveRef.current = true;
     setClassNotesDocument(createEmptyNotesDocument());
@@ -1605,7 +1691,7 @@ export default function Home() {
         return;
       }
 
-      if (notesConflictRef.current) {
+      if (notesConflictRef.current || notesRetryPendingRef.current) {
         setLogoutRecovery(null);
         setUnsavedLogoutOpen(true);
         return;
@@ -1778,15 +1864,15 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (!notesSyncInterrupted) return;
+    if (!notesSyncInterrupted && !notesRetryPending) return;
     function warnBeforeLeaving(event: BeforeUnloadEvent) {
-      if (!notesConflictRef.current) return;
+      if (!notesConflictRef.current && !notesRetryPendingRef.current) return;
       event.preventDefault();
       event.returnValue = NOTES_LOGOUT_WARNING;
     }
     window.addEventListener("beforeunload", warnBeforeLeaving);
     return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
-  }, [notesSyncInterrupted]);
+  }, [notesSyncInterrupted, notesRetryPending]);
 
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
@@ -1803,7 +1889,7 @@ export default function Home() {
   }, [studentCodeModalOpen, controlAlert, unsavedLogoutOpen]);
 
   function logoutTeacher() {
-    if (notesConflictRef.current) {
+    if (notesConflictRef.current || notesRetryPendingRef.current) {
       setLogoutRecovery(null);
       setUnsavedLogoutOpen(true);
       return;

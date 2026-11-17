@@ -1,4 +1,9 @@
-import { NotebookAutosave } from "./notebook-autosave.ts";
+import {
+  NOTES_SAVE_UNREACHABLE_MESSAGE,
+  NotebookAutosave,
+  NotesSaveConflictError,
+  NotesSaveUnreachableError,
+} from "./notebook-autosave.ts";
 import type { PrototypeAgendaItem } from "@campus/features/agenda/demo-items.ts";
 import type { UpcomingControlBranchLink } from "@campus/features/student";
 import type { TeacherDeletePreview } from "@campus/features/admin-teacher-delete/index.ts";
@@ -580,20 +585,57 @@ export async function fetchTeacherNotesApi(options?: {
   return payload.notes ?? null;
 }
 
-export async function saveTeacherNotesApi(notes: ClassNotesDocument): Promise<ClassNotesDocument> {
-  return notebookAutosave.save(notes, async (snapshot, revision) => {
-    const response = await fetch("/api/teacher/notes", {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: snapshot, revision }),
-    });
-    const payload = await parseJson<{ ok: boolean; reason?: string; notes?: ClassNotesDocument; revision?: string }>(response);
-    if (!response.ok || !payload.ok || !payload.notes || !payload.revision) {
-      throw new Error(payload.reason ?? "Enregistrement des notes impossible.");
-    }
-    return { notes: payload.notes, revision: payload.revision };
+async function notesRequest(input: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch {
+    throw new NotesSaveUnreachableError(NOTES_SAVE_UNREACHABLE_MESSAGE);
+  }
+}
+
+function unreachableStatus(status: number): boolean {
+  return status >= 500 || status === 408 || status === 429;
+}
+
+async function notesPayload<T>(response: Response): Promise<T> {
+  try {
+    return await parseJson<T>(response);
+  } catch {
+    if (unreachableStatus(response.status)) throw new NotesSaveUnreachableError(NOTES_SAVE_UNREACHABLE_MESSAGE);
+    throw new Error("Enregistrement des notes impossible.");
+  }
+}
+
+async function putTeacherNotes(snapshot: ClassNotesDocument, revision?: string) {
+  const response = await notesRequest("/api/teacher/notes", {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ notes: snapshot, revision }),
   });
+  const payload = await notesPayload<{ ok: boolean; code?: string; reason?: string; notes?: ClassNotesDocument; revision?: string }>(response);
+  if (response.status === 409) {
+    throw new NotesSaveConflictError(payload.reason ?? "Les notes ont changé depuis leur chargement. Rechargez le Carnet avant de réessayer.");
+  }
+  if (unreachableStatus(response.status)) throw new NotesSaveUnreachableError(NOTES_SAVE_UNREACHABLE_MESSAGE);
+  if (!response.ok || !payload.ok || !payload.notes || !payload.revision) {
+    throw new Error(payload.reason ?? "Enregistrement des notes impossible.");
+  }
+  return { notes: payload.notes, revision: payload.revision };
+}
+
+async function readTeacherNotesAfterConflict() {
+  const response = await notesRequest("/api/teacher/notes", { credentials: "include", cache: "no-store" });
+  const payload = await notesPayload<{ ok: boolean; reason?: string; notes?: ClassNotesDocument | null; revision?: string }>(response);
+  if (unreachableStatus(response.status)) throw new NotesSaveUnreachableError(NOTES_SAVE_UNREACHABLE_MESSAGE);
+  if (!response.ok || !payload.ok || !payload.revision) {
+    throw new Error(payload.reason ?? "Chargement des notes impossible.");
+  }
+  return { notes: payload.notes ?? null, revision: payload.revision };
+}
+
+export async function saveTeacherNotesApi(notes: ClassNotesDocument): Promise<ClassNotesDocument> {
+  return notebookAutosave.save(notes, putTeacherNotes, readTeacherNotesAfterConflict);
 }
 
 export async function fetchTeacherAccounts(): Promise<TeacherAccountRecord[]> {

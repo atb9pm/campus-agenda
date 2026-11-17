@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -9,10 +10,19 @@ const PREFIXES = [
   ["@campus/types/", path.join(root, "src/types")],
 ];
 
+function isDirectory(file) {
+  try {
+    return statSync(file).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 function mapped(specifier) {
   for (const [prefix, directory] of PREFIXES) {
     if (specifier.startsWith(prefix)) {
-      return pathToFileURL(path.join(directory, specifier.slice(prefix.length))).href;
+      const file = path.join(directory, specifier.slice(prefix.length));
+      return pathToFileURL(isDirectory(file) ? path.join(file, "index.ts") : file).href;
     }
   }
   return null;

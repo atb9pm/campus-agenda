@@ -2,6 +2,15 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.22] — Notes prof : reprise automatique après une coupure
+
+### Corrigé
+
+- **Réponse perdue** : quand le serveur a bien enregistré les notes mais que la réponse ne revient pas, le conflit suivant n’ouvre plus le bandeau orange. Le Carnet relit la version du serveur. Si elle correspond à ce que cet onglet a lui-même envoyé, il reprend cette version et renvoie le texte à l’écran sans rien demander.
+- Le bandeau orange reste affiché quand la version du serveur vient d’ailleurs (autre onglet, autre appareil). Elle n’est jamais écrasée, et la protection HTTP 409 du serveur est inchangée.
+- **Coupure réseau ou serveur indisponible** (absence de réseau, erreurs 5xx, 408, 429) : les notes restent à l’écran et sont renvoyées automatiquement au retour du réseau, puis après 3 s, 10 s, 30 s et ensuite toutes les minutes, sans attendre une nouvelle frappe. Un message confirme le retour : « Connexion rétablie : les notes prof sont enregistrées. »
+- Quitter la page ou se déconnecter pendant qu’un renvoi est en attente demande une confirmation.
+
 ## [2.62.21] — Carnet : chargement initial et conflits de notes
 
 ### Corrigé
