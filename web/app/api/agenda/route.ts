@@ -105,7 +105,7 @@ export async function GET(request: Request) {
     attendanceDays,
     scheduleSlots,
     upcomingControlLinks,
-  });
+  }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request: Request) {

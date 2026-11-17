@@ -91,6 +91,23 @@ export class NotebookAutosave {
     this.unconfirmed = [];
   }
 
+  /**
+   * Relecture en arrière-plan : la version du serveur n’est reprise que si aucun envoi n’a eu lieu
+   * pendant la lecture et si `apply` confirme, dans le même tour, que l’écran n’a rien de non enregistré.
+   */
+  adoptServerIfIdle(
+    seenEpoch: number,
+    revision: string | undefined,
+    apply: () => boolean,
+  ): "applied" | "unchanged" | "busy" {
+    if (!revision || revision === this.revision) return "unchanged";
+    if (this.saveEpoch !== seenEpoch || this.pending !== 0) return "busy";
+    if (!apply()) return "busy";
+    this.revision = revision;
+    this.unconfirmed = [];
+    return "applied";
+  }
+
   private remember(snapshot: ClassNotesDocument) {
     const keys = new Set([notesContentKey(snapshot), notesContentKey(normalizeClassNotes(snapshot))]);
     for (const key of keys) {

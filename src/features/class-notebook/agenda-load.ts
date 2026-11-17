@@ -54,6 +54,23 @@ export function agendaClassroomKey(classroomId: string, schoolYearId?: string | 
   return year ? `${id}|${year}` : id;
 }
 
+/** Relecture au retour sur l’onglet ; le focus et le changement de visibilité arrivent souvent ensemble. */
+export const TEACHER_WORKSPACE_REFRESH_MIN_GAP_MS = 15_000;
+/** Relecture périodique tant que l’onglet reste au premier plan. */
+export const TEACHER_WORKSPACE_REFRESH_INTERVAL_MS = 2 * 60_000;
+
+export function teacherWorkspaceRefreshDue(lastRefreshAtMs: number, nowMs: number): boolean {
+  return nowMs - lastRefreshAtMs >= TEACHER_WORKSPACE_REFRESH_MIN_GAP_MS;
+}
+
+/** Classes de l’année affichée déjà lues (réussite ou échec) ; une lecture encore en cours n’est pas relancée. */
+export function refreshableAgendaClassroomIds(ledger: AgendaLoadLedger, schoolYearId?: string | null): string[] {
+  const year = schoolYearId?.trim() || null;
+  return Object.values(ledger.slots)
+    .filter((slot) => slot.schoolYearId === year && (slot.phase === "ready" || slot.phase === "error"))
+    .map((slot) => slot.classroomId);
+}
+
 export function classroomAgendaPhase(ledger: AgendaLoadLedger, key: string): AgendaLoadPhase {
   return ledger.slots[key]?.phase ?? "unknown";
 }
@@ -63,11 +80,14 @@ export function startAgendaLoad(
   ledger: AgendaLoadLedger,
   classroomId: string,
   schoolYearId?: string | null,
+  options?: { quiet?: boolean },
 ): { ledger: AgendaLoadLedger; key: string; generation: number } {
   const key = agendaClassroomKey(classroomId, schoolYearId);
   const current = ledger.slots[key];
   const generation = (current?.generation ?? 0) + 1;
   const year = schoolYearId?.trim() || null;
+  // Une relecture discrète garde une classe déjà chargée affichée ; son échec ne la met pas en erreur.
+  const phase = options?.quiet && current?.phase === "ready" ? "ready" : "loading";
   return {
     key,
     generation,
@@ -77,7 +97,7 @@ export function startAgendaLoad(
         [key]: {
           classroomId: classroomId.trim(),
           schoolYearId: year,
-          phase: "loading",
+          phase,
           generation,
           items: current?.items ?? [],
           confirmed: current?.confirmed ?? false,
@@ -116,7 +136,7 @@ export function beginAgendaRefresh(
   ledger: AgendaLoadLedger,
   classroomIds: readonly string[],
   schoolYearId?: string | null,
-  options?: { replaceScope?: boolean; joinInFlight?: boolean },
+  options?: { replaceScope?: boolean; joinInFlight?: boolean; quiet?: boolean },
 ): { ledger: AgendaLoadLedger; started: AgendaLoadLaunch[] } {
   let current = options?.replaceScope ? retainAgendaScope(ledger, schoolYearId) : ledger;
   const unique = [...new Set(classroomIds.map((id) => id.trim()).filter(Boolean))];
@@ -128,7 +148,7 @@ export function beginAgendaRefresh(
       started.push({ key, generation: existing.generation, classroomId: existing.classroomId, joined: true });
       continue;
     }
-    const next = startAgendaLoad(current, classroomId, schoolYearId);
+    const next = startAgendaLoad(current, classroomId, schoolYearId, { quiet: options?.quiet });
     current = next.ledger;
     started.push({ key: next.key, generation: next.generation, classroomId, joined: false });
   }

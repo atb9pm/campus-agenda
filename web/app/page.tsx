@@ -65,6 +65,7 @@ import {
   fetchTeacherClassAccessesApi,
   fetchTeacherCoursesApi,
   fetchTeacherNotesApi,
+  refreshTeacherNotesApi,
   fetchTeacherSetupApi,
   loginStudentApi,
   loginTeacherApi,
@@ -81,6 +82,7 @@ import {
   type SchoolCalendarWeek,
 } from "../lib/api-client.ts";
 import {
+  notesContentKey,
   notesRetryDelay,
   notesSaveFailureKind,
   shouldPersistNotebookNotes,
@@ -119,6 +121,9 @@ import {
   classroomAgendaPhase,
   commitAgendaLoadResults,
   projectAgendaMutations,
+  refreshableAgendaClassroomIds,
+  TEACHER_WORKSPACE_REFRESH_INTERVAL_MS,
+  teacherWorkspaceRefreshDue,
   clearNotesFromBrowser,
   createEmptyNotesDocument,
   emptyAgendaLedger,
@@ -417,6 +422,10 @@ export default function Home() {
   const [notesRetryPending, setNotesRetryPending] = useState(false);
   const notesRetryPendingRef = useRef(false);
   const notesRetryAttemptRef = useRef(0);
+  /** Contenu des notes que le serveur détient : l’écran n’a rien de non enregistré tant qu’il y est identique. */
+  const notesSyncedKeyRef = useRef<string | null>(null);
+  /** Un éditeur du Carnet est ouvert : la relecture en arrière-plan attend sa fermeture. */
+  const notebookEditingRef = useRef(false);
   /** Change à chaque compte enseignant. Une réponse lancée avant ne peut plus s’appliquer. */
   const teacherEpochRef = useRef(0);
   const agendaLedgerRef = useRef<AgendaLoadLedger>(emptyAgendaLedger());
@@ -425,6 +434,8 @@ export default function Home() {
   const studentEntryRef = useRef(studentEntry);
   appModeRef.current = appMode;
   studentEntryRef.current = studentEntry;
+  const refreshTeacherAgendaRef = useRef(refreshTeacherAgenda);
+  refreshTeacherAgendaRef.current = refreshTeacherAgenda;
 
   function publishAgendaLedger(next: AgendaLoadLedger) {
     agendaLedgerRef.current = next;
@@ -442,12 +453,13 @@ export default function Home() {
   async function refreshTeacherAgenda(
     classroomIds: string[],
     schoolYearId?: string | null,
-    options?: { adminConsult?: boolean; replaceScope?: boolean; force?: boolean },
+    options?: { adminConsult?: boolean; replaceScope?: boolean; force?: boolean; quiet?: boolean },
   ) {
     const epoch = teacherEpochRef.current;
     const begun = beginAgendaRefresh(agendaLedgerRef.current, classroomIds, schoolYearId, {
       replaceScope: options?.replaceScope,
       joinInFlight: !options?.force,
+      quiet: options?.quiet,
     });
     const fresh = begun.started.filter((entry) => !entry.joined);
     if (begun.ledger !== agendaLedgerRef.current) publishAgendaLedger(begun.ledger);
@@ -764,6 +776,7 @@ export default function Home() {
         notesHydratedRef.current = true;
         if (remote) {
           skipClassNotesSaveRef.current = true;
+          notesSyncedKeyRef.current = notesContentKey(remote);
           setClassNotesDocument(remote);
           if (!adminYearConsult) clearNotesFromBrowser(currentTeacherId);
           setClassNotesReady(true);
@@ -776,6 +789,7 @@ export default function Home() {
             const saved = await saveTeacherNotesApi(local);
             if (!current()) return;
             skipClassNotesSaveRef.current = true;
+            notesSyncedKeyRef.current = notesContentKey(saved);
             setClassNotesDocument(saved);
             clearNotesFromBrowser(currentTeacherId);
             setClassNotesReady(true);
@@ -797,7 +811,9 @@ export default function Home() {
         }
 
         skipClassNotesSaveRef.current = true;
-        setClassNotesDocument(createEmptyNotesDocument());
+        const empty = createEmptyNotesDocument();
+        notesSyncedKeyRef.current = notesContentKey(empty);
+        setClassNotesDocument(empty);
         setClassNotesReady(true);
       } catch (error) {
         if (!current()) return;
@@ -840,8 +856,10 @@ export default function Home() {
         conflict: notesConflictRef.current,
         adminConsult: adminYearConsult,
       })) return;
+      const sentKey = notesContentKey(classNotesDocument);
       void saveTeacherNotesApi(classNotesDocument).then(() => {
         if (!keepTeacherSessionPayload(saveEpoch, teacherEpochRef.current, true)) return;
+        notesSyncedKeyRef.current = sentKey;
         notesRetryAttemptRef.current = 0;
         notesRetryPendingRef.current = false;
         setNotesRetryPending(false);
@@ -892,9 +910,11 @@ export default function Home() {
         adminConsult: false,
       })) return;
       inFlight = true;
+      const sentKey = notesContentKey(classNotesDocumentRef.current);
       void saveTeacherNotesApi(classNotesDocumentRef.current).then(() => {
         inFlight = false;
         if (!current()) return;
+        notesSyncedKeyRef.current = sentKey;
         notesRetryAttemptRef.current = 0;
         notesRetryPendingRef.current = false;
         setNotesRetryPending(false);
@@ -930,6 +950,60 @@ export default function Home() {
       window.removeEventListener("online", retry);
     };
   }, [adminYearConsult, notesRetryPending, teacherAuthenticated]);
+
+  // Un onglet resté ouvert relit publications et notes : un autre appareil a pu écrire entre-temps.
+  useEffect(() => {
+    if (!teacherAuthenticated || adminYearConsult) return;
+    let cancelled = false;
+    let inFlight = false;
+    let lastRefreshAt = Date.now();
+    const epoch = teacherEpochRef.current;
+    const current = () => !cancelled && keepTeacherSessionPayload(epoch, teacherEpochRef.current, true);
+    const notesIdle = () =>
+      notesHydratedRef.current
+      && !notesConflictRef.current
+      && !notesRetryPendingRef.current
+      && !notebookEditingRef.current
+      && notesSyncedKeyRef.current === notesContentKey(classNotesDocumentRef.current);
+
+    function refresh() {
+      if (!current() || inFlight || document.visibilityState === "hidden") return;
+      if (appModeRef.current !== "teacher" || notebookEditingRef.current) return;
+      if (!teacherWorkspaceRefreshDue(lastRefreshAt, Date.now())) return;
+      inFlight = true;
+      lastRefreshAt = Date.now();
+      const classroomIds = refreshableAgendaClassroomIds(agendaLedgerRef.current, null);
+      const agenda = classroomIds.length
+        ? refreshTeacherAgendaRef.current(classroomIds, null, { force: true, quiet: true })
+        : Promise.resolve();
+      const notes = notesIdle()
+        ? refreshTeacherNotesApi((remote) => {
+          if (!current() || !notesIdle()) return false;
+          const adopted = remote ?? createEmptyNotesDocument();
+          skipClassNotesSaveRef.current = true;
+          notesSyncedKeyRef.current = notesContentKey(adopted);
+          setClassNotesDocument(adopted);
+          return true;
+        })
+        : Promise.resolve();
+      // Échec silencieux : l’écran garde ce qu’il affiche, nouvel essai au prochain retour.
+      void Promise.allSettled([agenda, notes]).finally(() => {
+        inFlight = false;
+      });
+    }
+
+    window.addEventListener("focus", refresh);
+    window.addEventListener("online", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    const intervalId = window.setInterval(refresh, TEACHER_WORKSPACE_REFRESH_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("online", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      window.clearInterval(intervalId);
+    };
+  }, [adminYearConsult, teacherAuthenticated]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1627,6 +1701,8 @@ export default function Home() {
     teacherEpochRef.current += 1;
     notesHydratedRef.current = false;
     notesConflictRef.current = false;
+    notesSyncedKeyRef.current = null;
+    notebookEditingRef.current = false;
     setNotesSyncInterrupted(false);
     notesRetryPendingRef.current = false;
     notesRetryAttemptRef.current = 0;
@@ -1666,6 +1742,7 @@ export default function Home() {
       setNotesSyncInterrupted(false);
       notesHydratedRef.current = true;
       skipClassNotesSaveRef.current = true;
+      notesSyncedKeyRef.current = notesContentKey(remote ?? createEmptyNotesDocument());
       setClassNotesDocument(remote ?? createEmptyNotesDocument());
       setNotebookNotesLoadError("");
       setClassNotesReady(true);
@@ -2494,6 +2571,7 @@ export default function Home() {
             publishBlockedReason={notebookBlockedReason}
             loadError={notebookNotesLoadError}
             notesSyncInterrupted={notesSyncInterrupted}
+            onEditingChange={(editing) => { notebookEditingRef.current = editing; }}
             onReloadServerNotes={(fingerprint) => { void reloadServerNotes(fingerprint); }}
             publicationsState={notebookPublicationsState}
             onRetryPublications={retryNotebookAgenda}
