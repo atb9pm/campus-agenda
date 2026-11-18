@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
+  describeNotesReadFailure,
   loadTeacherNotebookDocument,
   persistTeacherNotebookDocument,
   splitResolvableNotebookNotes,
@@ -102,7 +103,7 @@ function v2Doc(
 }
 
 test("PR3.4 — version et migration 0033", async () => {
-  assert.equal(APP_VERSION, "2.62.25");
+  assert.equal(APP_VERSION, "2.62.26");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0039_branch_upcoming_control_dates.sql");
   const sql = await readFile(new URL("../migrations/0033_annual_private_notes_storage.sql", import.meta.url), "utf8");
   assert.match(sql, /body_json/);
@@ -318,6 +319,61 @@ test("2.62.25 — GET : des conflits répétés pendant la migration ne font plu
   const notes = await loadTeacherNotebookDocument(TEACHER_A, world);
   assert.ok(notes && isNotesDocumentV2(notes));
   assert.equal(notes.sessions[SESSION_A]?.[0]?.text, "Toujours lisible");
+});
+
+test("2.62.26 — SQLite : lecture et jeton CAS sans json_object ni json_group_array, tolérant body_json vide", async () => {
+  const storeSource = await readFile(
+    new URL("../src/lib/persistence/sql/sql-teacher-notes-store.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(storeSource, /\bjson_object\b/);
+  assert.doesNotMatch(storeSource, /\bjson_group_array\b/);
+
+  const world = await storageWorld(true);
+  assert.ok("db" in world);
+  try {
+    const specialText = "Apostrophe 'virgule', barre | et\nretour à la ligne";
+    await persistTeacherNotebookDocument(
+      TEACHER_A,
+      v2Doc({ [SESSION_A]: [{ id: "sp-1", text: specialText }] }),
+      world,
+    );
+    await world.db
+      .prepare("UPDATE annual_course_notes SET body_json = '' WHERE legacy_note_id = ?")
+      .bind("sp-1")
+      .run();
+
+    const loaded = await loadTeacherNotebookDocument(TEACHER_A, world);
+    assert.ok(loaded && isNotesDocumentV2(loaded));
+    assert.equal(loaded.sessions[SESSION_A]?.[0]?.text, specialText);
+  } finally {
+    world.close();
+  }
+});
+
+test("2.62.26 — diagnostic de lecture : causes SQL/format en français, détail brut réservé à l’admin sans chemin disque", () => {
+  assert.equal(
+    describeNotesReadFailure(new Error("Contenu riche de note invalide."), false),
+    "Lecture des notes impossible sur le serveur : contenu mis en forme invalide.",
+  );
+  assert.equal(
+    describeNotesReadFailure(new Error("no such function: json_object"), false),
+    "Lecture des notes impossible sur le serveur : fonction SQL json_object indisponible.",
+  );
+  assert.equal(
+    describeNotesReadFailure(new Error("no such column: notebook_position"), false),
+    "Lecture des notes impossible sur le serveur : colonne SQL notebook_position manquante.",
+  );
+  assert.equal(
+    describeNotesReadFailure(new Error("TypeError: raw.annual.map is not a function at /srv/web/dist/route.js:1:2"), false),
+    "Lecture des notes impossible sur le serveur.",
+  );
+  const adminMsg = describeNotesReadFailure(
+    new Error("TypeError: raw.annual.map is not a function at /srv/web/dist/route.js:1:2"),
+    true,
+  );
+  assert.match(adminMsg, /raw\.annual\.map is not a function/);
+  assert.doesNotMatch(adminMsg, /\/srv\/web/);
 });
 
 test("PR3.4 — GET null si jamais enregistré", async () => {

@@ -2,6 +2,14 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.26] — Notes prof : lecture SQL directe et diagnostic serveur explicite
+
+### Corrigé
+
+- **Lecture SQLite sans `json_object` ni `json_group_array`** : `SqlTeacherNotesStore` lisait les notes via une sous-requête JSON imbriquée (36 arguments `json_object`), seul magasin SQL de l’application à dépendre de ces fonctions et de la conservation du sous-type JSON à travers une sous-requête SQLite. La lecture passe désormais par deux `SELECT` directs (`teacher_notes` et `annual_course_notes`), et le jeton de contrôle de concurrence utilise uniquement `quote()` et `group_concat()` du cœur SQLite. La protection HTTP 409 reste intacte.
+- **Tolérance des champs SQL optionnels** : `body_json` vide (`""`), `notebook_position` entier `bigint` éventuel et `created_at` / `updated_at` nuls ne font plus échouer la lecture. Les contenus riches invalides restent refusés pour ne jamais écraser une mise en forme existante.
+- **Diagnostic explicite en cas d’échec** : si la lecture échoue malgré tout côté serveur, le bandeau indique la catégorie exacte en français (colonne/table/fonction SQL ou contenu riche invalide) et, pour un compte administrateur, le détail nettoyé sans chemin disque.
+
 ## [2.62.25] — Notes prof : la lecture ne dépend plus de la migration
 
 ### Corrigé
