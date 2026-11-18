@@ -171,6 +171,23 @@ test("un autre onglet après une réponse perdue : le conflit reste affiché", a
   assert.deepEqual(await server.serverNotes(), otherTab);
 });
 
+test("réponse vide ou tronquée : la lecture des notes retente puis aboutit", async () => {
+  const server = await notesServer();
+  await server.otherTabSaves(doc({ [SESSION]: [matin] }));
+  let gets = 0;
+  const upstream = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if ((init?.method ?? "GET") !== "GET") return upstream(input, init);
+    gets += 1;
+    if (gets === 1) return new Response("", { status: 200, headers: { "content-type": "application/json" } });
+    if (gets === 2) return new Response("{\"ok\":true", { status: 200, headers: { "content-type": "application/json" } });
+    return upstream(input, init);
+  }) as typeof fetch;
+
+  assert.deepEqual(await fetchTeacherNotesApi(), doc({ [SESSION]: [matin] }));
+  assert.equal(gets, 3, "deux échecs puis une réussite");
+});
+
 test("coupure puis retour du réseau : le renvoi enregistre la dernière version", async () => {
   const server = await notesServer();
   await fetchTeacherNotesApi();

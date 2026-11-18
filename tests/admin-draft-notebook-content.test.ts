@@ -815,9 +815,10 @@ test("la page et les routes n’écrivent pas pendant la consultation admin", as
   assert.match(notesRoute, /loadTeacherNotebookDocument\(teacherId, deps,/);
   assert.match(agendaRoute, /agendaItemsForSchoolYear\(/);
 
-  const notesClient = client.slice(client.indexOf("export async function fetchTeacherNotesApi"));
+  const notesClient = client.slice(client.indexOf("function notesLoadQuery"));
   assert.match(notesClient, /if \(options\?\.adminConsult\)/);
   assert.match(notesClient, /params\.set\("consult", "1"\)/);
+  assert.match(notesClient, /export async function fetchTeacherNotesApi/);
   const agendaClient = client.slice(client.indexOf("export async function fetchAgendaView"));
   assert.match(agendaClient, /if \(schoolYearId\?\.trim\(\)\) params\.set\("schoolYearId", schoolYearId\.trim\(\)\)/);
 });
@@ -835,7 +836,8 @@ test("Carnet : un chargement refusé s'affiche au lieu de cartes vides", async (
   assert.match(page, /publicationsState=\{notebookPublicationsState\}/);
   assert.match(page, /onRetryPublications=\{retryNotebookAgenda\}/);
   assert.equal(page.includes("Devoirs et informations non chargés"), false);
-  assert.equal(page.match(/`Notes du Carnet non chargées : /g)?.length, 1);
+  assert.match(page, /Notes du Carnet non chargées\. Elles seront relues automatiquement/);
+  assert.equal(page.includes("Unexpected end of JSON input"), false);
   assert.equal(page.includes("loadedAgendaClassroomIdsRef"), false);
   assert.match(page, /phase === "ready" \|\| phase === "loading" \|\| phase === "error"/);
 });

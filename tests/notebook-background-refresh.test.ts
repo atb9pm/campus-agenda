@@ -138,9 +138,14 @@ test("page.tsx relit au retour sur l’onglet sans écraser une saisie en cours"
   assert.match(page, /window\.setInterval\(refresh, TEACHER_WORKSPACE_REFRESH_INTERVAL_MS\)/);
   assert.match(page, /refreshTeacherAgendaRef\.current\(classroomIds, null, \{ force: true, quiet: true \}\)/);
   assert.match(page, /notesSyncedKeyRef\.current === notesContentKey\(classNotesDocumentRef\.current\)/);
+  assert.match(page, /notesNeedHydration\(\)/);
+  assert.match(page, /fetchTeacherNotesApi\(\)\.then/);
   assert.match(page, /!notesRetryPendingRef\.current/);
   assert.match(page, /!notebookEditingRef\.current/);
   assert.match(page, /onEditingChange=\{\(editing\) => \{ notebookEditingRef\.current = editing; \}\}/);
+  assert.match(page, /Notes du Carnet non chargées\. Elles seront relues automatiquement/);
+  assert.match(client, /Réponse vide du serveur/);
+  assert.match(client, /NOTES_LOAD_RETRY_DELAYS_MS/);
   assert.match(panel, /onEditingChangeRef\.current\?\.\(editingInProgress\)/);
   assert.match(route, /"Cache-Control": "no-store"/);
   assert.match(client, /\/api\/agenda\?\$\{params\.toString\(\)\}`, \{\n\s+credentials: "include",\n\s+cache: "no-store"/);
