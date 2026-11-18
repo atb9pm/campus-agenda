@@ -815,12 +815,12 @@ export default function Home() {
         notesSyncedKeyRef.current = notesContentKey(empty);
         setClassNotesDocument(empty);
         setClassNotesReady(true);
-      } catch {
+      } catch (error) {
         if (!current()) return;
         notesHydratedRef.current = false;
-        // Message stable : le détail technique (réponse vide, JSON tronqué) reste dans la console.
+        const detail = error instanceof Error && error.message ? ` (${error.message})` : "";
         setNotebookNotesLoadError(
-          "Notes du Carnet non chargées. Elles seront relues automatiquement. Évitez de saisir des notes tant que ce message est affiché.",
+          `Notes du Carnet non chargées. Elles seront relues automatiquement. Évitez de saisir des notes tant que ce message est affiché.${detail}`,
         );
         skipClassNotesSaveRef.current = true;
         if (!notesConflictRef.current) {
