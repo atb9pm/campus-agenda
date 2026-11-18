@@ -17,20 +17,35 @@ import {
   type AnnualNoteRow,
 } from "./sql-pedagogical-path-store.ts";
 
-function notebookTokenQuery(teacherId: string, annualCourseIds: readonly string[]): { sql: string; values: unknown[] } {
+function notebookAnnualWhere(
+  teacherId: string,
+  annualCourseIds: readonly string[],
+): { where: string; values: unknown[] } {
   const courseFilter =
     annualCourseIds.length === 0
       ? "0"
       : `(annual_course_id IN (${annualCourseIds.map(() => "?").join(", ")}) AND ${CARNET_NOTE_SQL})`;
-  const sql = `SELECT json_object(
-  'legacy', (SELECT notes_json FROM teacher_notes WHERE teacher_id = ?),
-  'annual', (SELECT json_group_array(json_object(${NOTEBOOK_COLUMNS.map((column) => `'${column}', ${column}`).join(", ")}))
-    FROM (SELECT * FROM annual_course_notes
-      WHERE (${courseFilter}) OR (owner_teacher_id = ? AND annual_course_id IS NULL)
-      ORDER BY id))) AS token`;
+  return {
+    where: `(${courseFilter}) OR (owner_teacher_id = ? AND annual_course_id IS NULL)`,
+    values: annualCourseIds.length === 0 ? [teacherId] : [...annualCourseIds, teacherId],
+  };
+}
+
+function notebookTokenQuery(teacherId: string, annualCourseIds: readonly string[]): { sql: string; values: unknown[] } {
+  const annual = notebookAnnualWhere(teacherId, annualCourseIds);
+  const rowExpr = NOTEBOOK_COLUMNS.map((column) => `quote(${column})`).join(" || ',' || ");
+  const sql = `SELECT quote((SELECT notes_json FROM teacher_notes WHERE teacher_id = ?)) || '|' || COALESCE((
+    SELECT group_concat(row_token)
+    FROM (
+      SELECT (${rowExpr}) AS row_token
+      FROM annual_course_notes
+      WHERE ${annual.where}
+      ORDER BY id
+    )
+  ), '') AS token`;
   return {
     sql,
-    values: annualCourseIds.length === 0 ? [teacherId, teacherId] : [teacherId, ...annualCourseIds, teacherId],
+    values: [teacherId, ...annual.values],
   };
 }
 
@@ -47,11 +62,25 @@ export class SqlTeacherNotesStore implements TeacherNotesStore {
     annualCourseIds: readonly string[],
   ): Promise<NotebookState> {
     const token = notebookTokenQuery(teacherId, annualCourseIds);
-    const row = await this.db.prepare(token.sql).bind(...token.values).first<{ token: string }>();
-    if (!row) throw new Error("Notebook snapshot unavailable");
-    const raw = JSON.parse(row.token) as { legacy: string | null; annual: AnnualNoteRow[] };
-    const parsed = parseStoredNotes(raw.legacy);
-    return { token: row.token, leftover: parsed ? normalizeClassNotes(parsed) : null, owned: raw.annual.map(mapAnnualNote) };
+    const annual = notebookAnnualWhere(teacherId, annualCourseIds);
+    const [tokenRow, legacyRow, annualRows] = await Promise.all([
+      this.db.prepare(token.sql).bind(...token.values).first<{ token: string }>(),
+      this.db
+        .prepare("SELECT notes_json FROM teacher_notes WHERE teacher_id = ? LIMIT 1")
+        .bind(teacherId)
+        .first<{ notes_json: string }>(),
+      this.db
+        .prepare(`SELECT * FROM annual_course_notes WHERE ${annual.where} ORDER BY id`)
+        .bind(...annual.values)
+        .all<AnnualNoteRow>(),
+    ]);
+    if (!tokenRow) throw new Error("Notebook snapshot unavailable");
+    const parsed = parseStoredNotes(legacyRow?.notes_json ?? null);
+    return {
+      token: tokenRow.token,
+      leftover: parsed ? normalizeClassNotes(parsed) : null,
+      owned: (annualRows.results ?? []).map(mapAnnualNote),
+    };
   }
 
   async commitNotebook(

@@ -63,13 +63,13 @@ export function mapAnnualNote(row: AnnualNoteRow): AnnualCourseNote {
     body: parseAnnualNoteBody(row.body_json),
     courseSessionKey: row.course_session_key ?? null,
     legacyNoteId: row.legacy_note_id ?? null,
-    notebookPosition: row.notebook_position ?? null,
+    notebookPosition: row.notebook_position == null ? null : Number(row.notebook_position),
     sourceNoteId: row.source_note_id,
     sourceSchoolYearId: row.source_school_year_id,
     inheritedAt: row.inherited_at,
     annualCourseId: row.annual_course_id ?? null,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
   };
 }
 

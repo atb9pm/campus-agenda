@@ -1,5 +1,6 @@
 import { isClassNotesPayload, normalizeClassNotes } from "@campus/features/class-notebook";
 import {
+  describeNotesReadFailure,
   loadTeacherNotebookDocument,
   persistTeacherNotebookDocument,
   notebookRevision,
@@ -55,10 +56,11 @@ async function handleGet(request: Request) {
     // Sans ce filet, l’erreur sortait en réponse vide et le Carnet n’affichait qu’un message du navigateur.
     logOperationalError("teacher_notes_read_failed", {
       teacherId,
+      name: error instanceof Error ? error.name : "unknown",
       error: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300),
     });
     return jsonResponse(
-      { ok: false, reason: "Lecture des notes impossible sur le serveur." },
+      { ok: false, reason: describeNotesReadFailure(error, isAdmin) },
       { status: 500, headers: { "Cache-Control": "no-store" } },
     );
   }
@@ -100,8 +102,18 @@ async function handlePut(request: Request) {
     );
     return jsonResponse({ ok: true, notes, revision: notebookRevision(notes) });
   } catch (error) {
-    if (!(error instanceof NotebookConflictError)) throw error;
-    return jsonResponse({ ok: false, code: "NOTES_CONFLICT", reason: error.message }, { status: 409 });
+    if (error instanceof NotebookConflictError) {
+      return jsonResponse({ ok: false, code: "NOTES_CONFLICT", reason: error.message }, { status: 409 });
+    }
+    logOperationalError("teacher_notes_write_failed", {
+      teacherId: auth.session!.teacherId,
+      name: error instanceof Error ? error.name : "unknown",
+      error: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300),
+    });
+    return jsonResponse(
+      { ok: false, reason: "Enregistrement des notes impossible sur le serveur." },
+      { status: 500, headers: { "Cache-Control": "no-store" } },
+    );
   }
 }
 

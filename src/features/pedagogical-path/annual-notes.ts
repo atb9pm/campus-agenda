@@ -106,7 +106,7 @@ export function serializeAnnualNoteBody(body: CampusRichDoc | null | undefined):
 }
 
 export function parseAnnualNoteBody(raw: string | null | undefined): CampusRichDoc | null {
-  if (raw == null) return null;
+  if (raw == null || raw.trim() === "") return null;
   try {
     const parsed: unknown = JSON.parse(raw);
     if (isValidStoredRichDoc(parsed)) return parsed;
