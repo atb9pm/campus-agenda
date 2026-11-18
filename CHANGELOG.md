@@ -2,6 +2,14 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.25] — Notes prof : la lecture ne dépend plus de la migration
+
+### Corrigé
+
+- **Bandeau « Notes du Carnet non chargées » chez tous les enseignants** : la lecture des notes (`GET /api/teacher/notes`) déplace au passage d’anciennes notes vers le stockage annuel. Si ce déplacement échouait, ou entrait en conflit plusieurs fois de suite, la requête plantait et renvoyait une réponse vide. Elle renvoie désormais les notes telles qu’elles sont stockées ; le déplacement sera retenté à la prochaine lecture. Rien n’est écrit à moitié ni perdu.
+- Toute autre erreur de lecture renvoie un message JSON lisible et est consignée dans les journaux du serveur (`teacher_notes_read_failed`, `notebook_migration_failed`, `notebook_migration_conflict`).
+- Le bandeau affiche à nouveau, entre parenthèses et en français, la cause courte de l’échec pour faciliter le diagnostic.
+
 ## [2.62.24] — Carnet : lecture des notes plus tolérante
 
 ### Corrigé
