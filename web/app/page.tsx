@@ -815,11 +815,12 @@ export default function Home() {
         notesSyncedKeyRef.current = notesContentKey(empty);
         setClassNotesDocument(empty);
         setClassNotesReady(true);
-      } catch (error) {
+      } catch {
         if (!current()) return;
         notesHydratedRef.current = false;
+        // Message stable : le détail technique (réponse vide, JSON tronqué) reste dans la console.
         setNotebookNotesLoadError(
-          `Notes du Carnet non chargées : ${error instanceof Error ? error.message : "erreur inconnue"}.`,
+          "Notes du Carnet non chargées. Elles seront relues automatiquement. Évitez de saisir des notes tant que ce message est affiché.",
         );
         skipClassNotesSaveRef.current = true;
         if (!notesConflictRef.current) {
@@ -959,12 +960,26 @@ export default function Home() {
     let lastRefreshAt = Date.now();
     const epoch = teacherEpochRef.current;
     const current = () => !cancelled && keepTeacherSessionPayload(epoch, teacherEpochRef.current, true);
-    const notesIdle = () =>
-      notesHydratedRef.current
-      && !notesConflictRef.current
+    const notesEditableIdle = () =>
+      !notesConflictRef.current
       && !notesRetryPendingRef.current
-      && !notebookEditingRef.current
+      && !notebookEditingRef.current;
+    const notesSyncedIdle = () =>
+      notesHydratedRef.current
+      && notesEditableIdle()
       && notesSyncedKeyRef.current === notesContentKey(classNotesDocumentRef.current);
+    /** Première lecture échouée : on retente sans écraser une saisie locale différente du secours navigateur. */
+    const notesNeedHydration = () => !notesHydratedRef.current && notesEditableIdle();
+
+    function adoptRemoteNotes(remote: ClassNotesDocument | null) {
+      const adopted = remote ?? createEmptyNotesDocument();
+      skipClassNotesSaveRef.current = true;
+      notesSyncedKeyRef.current = notesContentKey(adopted);
+      notesHydratedRef.current = true;
+      setClassNotesDocument(adopted);
+      setNotebookNotesLoadError("");
+      setClassNotesReady(true);
+    }
 
     function refresh() {
       if (!current() || inFlight || document.visibilityState === "hidden") return;
@@ -976,16 +991,18 @@ export default function Home() {
       const agenda = classroomIds.length
         ? refreshTeacherAgendaRef.current(classroomIds, null, { force: true, quiet: true })
         : Promise.resolve();
-      const notes = notesIdle()
-        ? refreshTeacherNotesApi((remote) => {
-          if (!current() || !notesIdle()) return false;
-          const adopted = remote ?? createEmptyNotesDocument();
-          skipClassNotesSaveRef.current = true;
-          notesSyncedKeyRef.current = notesContentKey(adopted);
-          setClassNotesDocument(adopted);
-          return true;
+      const notes = notesNeedHydration()
+        ? fetchTeacherNotesApi().then((remote) => {
+          if (!current() || !notesNeedHydration()) return;
+          adoptRemoteNotes(remote);
         })
-        : Promise.resolve();
+        : notesSyncedIdle()
+          ? refreshTeacherNotesApi((remote) => {
+            if (!current() || !notesSyncedIdle()) return false;
+            adoptRemoteNotes(remote);
+            return true;
+          })
+          : Promise.resolve();
       // Échec silencieux : l’écran garde ce qu’il affiche, nouvel essai au prochain retour.
       void Promise.allSettled([agenda, notes]).finally(() => {
         inFlight = false;

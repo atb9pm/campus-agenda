@@ -71,8 +71,17 @@ export interface SchoolCalendarPayload {
   configured?: boolean;
 }
 
+/** Lit le corps une seule fois. Une réponse vide ou tronquée ne doit plus produire un message anglais du navigateur. */
 async function parseJson<T>(response: Response): Promise<T> {
-  return response.json() as Promise<T>;
+  const text = await response.text();
+  if (!text.trim()) {
+    throw new Error(`Réponse vide du serveur (${response.status}).`);
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`Réponse du serveur illisible (${response.status}).`);
+  }
 }
 
 export async function fetchApiSession(): Promise<ApiSession> {
@@ -562,27 +571,68 @@ export async function saveTeacherSetupApi(setup: TeacherSetupConfig): Promise<Te
 
 const notebookAutosave = new NotebookAutosave();
 
-/** Null si aucun document de notes n'a encore été enregistré côté serveur. */
-export async function fetchTeacherNotesApi(options?: {
-  schoolYearId?: string | null;
-  adminConsult?: boolean;
-}): Promise<ClassNotesDocument | null> {
-  const seenEpoch = notebookAutosave.epoch();
+/** Délais avant un nouvel essai de lecture des notes (réponse vide / réseau). */
+const NOTES_LOAD_RETRY_DELAYS_MS = [0, 400, 1_200] as const;
+
+function notesLoadQuery(options?: { schoolYearId?: string | null; adminConsult?: boolean }): string {
   const params = new URLSearchParams();
   if (options?.adminConsult) {
     if (options.schoolYearId?.trim()) params.set("schoolYearId", options.schoolYearId.trim());
     params.set("consult", "1");
   }
   const query = params.toString();
-  const response = await fetch(`/api/teacher/notes${query ? `?${query}` : ""}`, { credentials: "include" });
-  const payload = await parseJson<{ ok: boolean; reason?: string; notes?: ClassNotesDocument | null; revision?: string }>(
-    response,
-  );
-  if (!response.ok || !payload.ok) {
-    throw new Error(payload.reason ?? "Chargement des notes impossible.");
+  return query ? `?${query}` : "";
+}
+
+function shouldRetryNotesLoad(error: unknown, status: number): boolean {
+  if (status === 401 || status === 403 || status === 409) return false;
+  if (status >= 500 || status === 408 || status === 429 || status === 0) return true;
+  const message = error instanceof Error ? error.message : "";
+  return message.includes("Réponse vide") || message.includes("Réponse du serveur illisible");
+}
+
+async function loadTeacherNotesPayload(options?: {
+  schoolYearId?: string | null;
+  adminConsult?: boolean;
+}): Promise<{ notes: ClassNotesDocument | null; revision: string }> {
+  let lastError: unknown = new Error("Chargement des notes impossible.");
+  for (let attempt = 0; attempt < NOTES_LOAD_RETRY_DELAYS_MS.length; attempt += 1) {
+    const wait = NOTES_LOAD_RETRY_DELAYS_MS[attempt] ?? 0;
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    let status = 0;
+    try {
+      const response = await fetch(`/api/teacher/notes${notesLoadQuery(options)}`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      status = response.status;
+      const payload = await parseJson<{
+        ok: boolean;
+        reason?: string;
+        notes?: ClassNotesDocument | null;
+        revision?: string;
+      }>(response);
+      if (!response.ok || !payload.ok || !payload.revision) {
+        throw new Error(payload.reason ?? "Chargement des notes impossible.");
+      }
+      return { notes: payload.notes ?? null, revision: payload.revision };
+    } catch (error) {
+      lastError = error;
+      if (!shouldRetryNotesLoad(error, status)) throw error;
+    }
   }
+  throw lastError;
+}
+
+/** Null si aucun document de notes n'a encore été enregistré côté serveur. */
+export async function fetchTeacherNotesApi(options?: {
+  schoolYearId?: string | null;
+  adminConsult?: boolean;
+}): Promise<ClassNotesDocument | null> {
+  const seenEpoch = notebookAutosave.epoch();
+  const payload = await loadTeacherNotesPayload(options);
   notebookAutosave.adoptIfCurrent(seenEpoch, payload.revision);
-  return payload.notes ?? null;
+  return payload.notes;
 }
 
 /**
@@ -593,14 +643,8 @@ export async function refreshTeacherNotesApi(
   apply: (notes: ClassNotesDocument | null) => boolean,
 ): Promise<"applied" | "unchanged" | "busy"> {
   const seenEpoch = notebookAutosave.epoch();
-  const response = await fetch("/api/teacher/notes", { credentials: "include", cache: "no-store" });
-  const payload = await parseJson<{ ok: boolean; reason?: string; notes?: ClassNotesDocument | null; revision?: string }>(
-    response,
-  );
-  if (!response.ok || !payload.ok) {
-    throw new Error(payload.reason ?? "Chargement des notes impossible.");
-  }
-  return notebookAutosave.adoptServerIfIdle(seenEpoch, payload.revision, () => apply(payload.notes ?? null));
+  const payload = await loadTeacherNotesPayload();
+  return notebookAutosave.adoptServerIfIdle(seenEpoch, payload.revision, () => apply(payload.notes));
 }
 
 async function notesRequest(input: string, init?: RequestInit): Promise<Response> {
