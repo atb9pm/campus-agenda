@@ -390,3 +390,35 @@ export async function loadTeacherNotebookDocument(
   logOperationalWarning("notebook_migration_conflict", { teacherId });
   return lastState ? composeTeacherNotebookDocument(lastState.leftover, lastState.owned) : null;
 }
+
+/**
+ * Formule un message lisible sans jamais exposer de chemin disque ni de secret.
+ * Le détail brut nettoyé n’est ajouté que pour un compte administrateur.
+ */
+export function describeNotesReadFailure(error: unknown, isAdmin: boolean): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const compact = raw
+    .replace(/(?:\/|[A-Za-z]:\\)[^\s)'"`]+/g, "<chemin>")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (compact === "Contenu riche de note invalide.") {
+    return "Lecture des notes impossible sur le serveur : contenu mis en forme invalide.";
+  }
+  const missingFn = compact.match(/no such function:\s*([a-zA-Z0-9_]+)/i);
+  if (missingFn) {
+    return `Lecture des notes impossible sur le serveur : fonction SQL ${missingFn[1]} indisponible.`;
+  }
+  const missingCol = compact.match(/no such column:\s*([a-zA-Z0-9_.]+)/i);
+  if (missingCol) {
+    return `Lecture des notes impossible sur le serveur : colonne SQL ${missingCol[1]} manquante.`;
+  }
+  const missingTable = compact.match(/no such table:\s*([a-zA-Z0-9_]+)/i);
+  if (missingTable) {
+    return `Lecture des notes impossible sur le serveur : table SQL ${missingTable[1]} manquante.`;
+  }
+  if (isAdmin && compact) {
+    return `Lecture des notes impossible sur le serveur (${compact.slice(0, 140)}).`;
+  }
+  return "Lecture des notes impossible sur le serveur.";
+}
