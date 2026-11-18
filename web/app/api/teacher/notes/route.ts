@@ -4,6 +4,7 @@ import {
   persistTeacherNotebookDocument,
   notebookRevision,
 } from "@campus/features/class-notebook/annual-private-notes.ts";
+import { logOperationalError } from "@campus/lib/observability/index.ts";
 import { NotebookConflictError } from "@campus/lib/persistence/teacher-notes-types.ts";
 import {
   getAnnualCourseNotesStore,
@@ -36,19 +37,31 @@ async function handleGet(request: Request) {
   const schoolYearId = url.searchParams.get("schoolYearId")?.trim() || null;
   const adminConsult = url.searchParams.get("consult") === "1";
   const isAdmin = await auth.store!.teacherIsAdmin(teacherId);
-  const [deps, catalog, years] = await Promise.all([
-    notebookDeps(),
-    getSchoolCatalogStore(),
-    getSchoolYearStore(),
-  ]);
-  const notes = await loadTeacherNotebookDocument(teacherId, deps, {
-    schoolYearId,
-    isAdmin,
-    adminConsult,
-    catalog,
-    years,
-  });
-  return jsonResponse({ ok: true, notes, revision: notebookRevision(notes) }, { headers: { "Cache-Control": "no-store" } });
+  try {
+    const [deps, catalog, years] = await Promise.all([
+      notebookDeps(),
+      getSchoolCatalogStore(),
+      getSchoolYearStore(),
+    ]);
+    const notes = await loadTeacherNotebookDocument(teacherId, deps, {
+      schoolYearId,
+      isAdmin,
+      adminConsult,
+      catalog,
+      years,
+    });
+    return jsonResponse({ ok: true, notes, revision: notebookRevision(notes) }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    // Sans ce filet, l’erreur sortait en réponse vide et le Carnet n’affichait qu’un message du navigateur.
+    logOperationalError("teacher_notes_read_failed", {
+      teacherId,
+      error: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300),
+    });
+    return jsonResponse(
+      { ok: false, reason: "Lecture des notes impossible sur le serveur." },
+      { status: 500, headers: { "Cache-Control": "no-store" } },
+    );
+  }
 }
 
 async function handlePut(request: Request) {

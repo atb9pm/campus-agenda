@@ -102,7 +102,7 @@ function v2Doc(
 }
 
 test("PR3.4 — version et migration 0033", async () => {
-  assert.equal(APP_VERSION, "2.62.24");
+  assert.equal(APP_VERSION, "2.62.25");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0039_branch_upcoming_control_dates.sql");
   const sql = await readFile(new URL("../migrations/0033_annual_private_notes_storage.sql", import.meta.url), "utf8");
   assert.match(sql, /body_json/);
@@ -293,6 +293,31 @@ test("PR3.4 — GET converge legacy V2 existant sans doublon", async () => {
   assert.equal((await world.courseNotes.listNotesByOwner(TEACHER_A)).length, 1);
   assert.ok(second && isNotesDocumentV2(second));
   assert.equal(second.sessions[SESSION_A]?.length, 1);
+});
+
+test("2.62.25 — GET : un échec de migration renvoie quand même les notes stockées", async () => {
+  const world = memoryWorld();
+  await seedCourses(world.courses);
+  await world.teacherNotes.saveNotes(TEACHER_A, v2Doc({
+    [SESSION_A]: [{ id: "pre-1", text: "À migrer" }],
+  }));
+  world.courseNotes.stageCourseNotebookNotes = () => { throw new Error("injected failure"); };
+  const notes = await loadTeacherNotebookDocument(TEACHER_A, world);
+  assert.ok(notes && isNotesDocumentV2(notes));
+  assert.equal(notes.sessions[SESSION_A]?.[0]?.text, "À migrer");
+  assert.equal((await world.courseNotes.listNotesByOwner(TEACHER_A)).length, 0, "rien n’est écrit à moitié");
+});
+
+test("2.62.25 — GET : des conflits répétés pendant la migration ne font plus échouer la lecture", async () => {
+  const world = memoryWorld();
+  await seedCourses(world.courses);
+  await world.teacherNotes.saveNotes(TEACHER_A, v2Doc({
+    [SESSION_A]: [{ id: "pre-1", text: "Toujours lisible" }],
+  }));
+  world.teacherNotes.commitNotebook = async () => { throw new NotebookConflictError(); };
+  const notes = await loadTeacherNotebookDocument(TEACHER_A, world);
+  assert.ok(notes && isNotesDocumentV2(notes));
+  assert.equal(notes.sessions[SESSION_A]?.[0]?.text, "Toujours lisible");
 });
 
 test("PR3.4 — GET null si jamais enregistré", async () => {

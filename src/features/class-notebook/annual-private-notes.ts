@@ -25,6 +25,7 @@ import {
   type AnnualCourseNote,
 } from "../pedagogical-path/annual-notes.ts";
 import { listTeacherCourses } from "../teacher-workspace/service.ts";
+import { logOperationalWarning } from "../../lib/observability/logger.ts";
 import type { AnnualCourseStore } from "../../lib/persistence/annual-course-types.ts";
 import type { AnnualCourseNotesStore } from "../../lib/persistence/pedagogical-path-types.ts";
 import type { SchoolCatalogStore } from "../../lib/persistence/school-catalog-types.ts";
@@ -353,8 +354,10 @@ export async function loadTeacherNotebookDocument(
 
   const courseIds = await accessibleAnnualCourseIdsForTeacher(deps.courses, teacherId, options?.at);
   const allowed = new Set(courseIds);
+  let lastState: Awaited<ReturnType<TeacherNotebookNotesDeps["teacherNotes"]["readNotebook"]>> | null = null;
   for (let attempt = 0; attempt < 4; attempt++) {
     const state = await deps.teacherNotes.readNotebook(teacherId, deps.courseNotes, courseIds);
+    lastState = state;
     if (!state.leftover || !isNotesDocumentV2(state.leftover)) {
       return composeTeacherNotebookDocument(state.leftover, state.owned);
     }
@@ -373,9 +376,17 @@ export async function loadTeacherNotebookDocument(
       await deps.teacherNotes.commitNotebook(teacherId, state, leftover, owned, deps.courseNotes, courseIds);
       return composeTeacherNotebookDocument(leftover, owned);
     } catch (error) {
-      if (!(error instanceof NotebookConflictError)) throw error;
+      if (!(error instanceof NotebookConflictError)) {
+        // The migration is an optimisation of storage: reading must still return what is stored.
+        logOperationalWarning("notebook_migration_failed", {
+          teacherId,
+          error: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300),
+        });
+        return composeTeacherNotebookDocument(state.leftover, state.owned);
+      }
       // Re-read both halves; never retry a stale replacement.
     }
   }
-  throw new NotebookConflictError();
+  logOperationalWarning("notebook_migration_conflict", { teacherId });
+  return lastState ? composeTeacherNotebookDocument(lastState.leftover, lastState.owned) : null;
 }
