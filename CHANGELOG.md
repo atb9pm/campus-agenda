@@ -2,6 +2,14 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.24] — Carnet : lecture des notes plus tolérante
+
+### Corrigé
+
+- **Bandeau jaune « Notes du Carnet non chargées »** : une réponse vide ou tronquée du serveur ne montre plus le message technique anglais du navigateur (`Unexpected end of JSON input`). Le Carnet affiche un texte stable et retente la lecture deux fois (après 0,4 s puis 1,2 s).
+- Si le premier chargement échoue malgré tout, la relecture au retour sur l’onglet reprend les notes dès que possible et retire le bandeau. Tant que le message est affiché, rien n’est enregistré automatiquement (comportement déjà en place).
+- Les lectures de notes demandent `cache: "no-store"`.
+
 ## [2.62.23] — Carnet : relecture au retour sur l’onglet
 
 ### Corrigé
