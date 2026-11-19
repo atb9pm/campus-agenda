@@ -176,6 +176,10 @@ test("11-12 — retour Ma semaine et navigation du carnet ne partagent pas la se
   assert.match(page, /onSelectSchoolWeek=\{setSelectedSchoolWeekNumber\}/);
   assert.doesNotMatch(notebook, /setSelectedSchoolWeekNumber/);
   assert.doesNotMatch(semaine, /matchMedia|innerWidth/);
+  assert.doesNotMatch(semaine, /VUE PERSONNELLE/);
+  assert.doesNotMatch(semaine, /workspace-intro/);
+  assert.match(semaine, /SEMAINE SCOLAIRE/);
+  assert.match(page, /Vos cours attribués, organisés selon les jours configurés dans l’horaire des classes\./);
   assert.equal([...page.matchAll(/function openCourseInWeek/g)].length, 1);
 });
 

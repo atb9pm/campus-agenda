@@ -158,7 +158,7 @@ function testItem(input: {
 }
 
 test("version 2.38.0 — semestre visuel, pas de migration", () => {
-  assert.equal(APP_VERSION, "2.62.26");
+  assert.equal(APP_VERSION, "2.62.27");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0039_branch_upcoming_control_dates.sql");
 });
 
