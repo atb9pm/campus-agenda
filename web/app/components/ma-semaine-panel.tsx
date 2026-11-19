@@ -54,12 +54,6 @@ export function MaSemainePanel({
 
   return (
     <section className="teacher-workspace" aria-label="Ma semaine">
-      <div className="workspace-intro ma-semaine-intro">
-        <p className="eyebrow">VUE PERSONNELLE</p>
-        <h2>Ma semaine</h2>
-        <p>Vos cours attribués, organisés selon les jours configurés dans l’horaire des classes.</p>
-      </div>
-
       {selectedWeek && (
         <div className="ma-semaine-week-banner">
           <div>

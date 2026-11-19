@@ -103,7 +103,7 @@ function v2Doc(
 }
 
 test("PR3.4 — version et migration 0033", async () => {
-  assert.equal(APP_VERSION, "2.62.26");
+  assert.equal(APP_VERSION, "2.62.27");
   assert.equal(SQL_MIGRATION_FILES.at(-1), "0039_branch_upcoming_control_dates.sql");
   const sql = await readFile(new URL("../migrations/0033_annual_private_notes_storage.sql", import.meta.url), "utf8");
   assert.match(sql, /body_json/);
@@ -321,7 +321,7 @@ test("2.62.25 — GET : des conflits répétés pendant la migration ne font plu
   assert.equal(notes.sessions[SESSION_A]?.[0]?.text, "Toujours lisible");
 });
 
-test("2.62.26 — SQLite : lecture et jeton CAS sans json_object ni json_group_array, tolérant body_json vide", async () => {
+test("2.62.27 — SQLite : lecture et jeton CAS sans json_object ni json_group_array, tolérant body_json vide", async () => {
   const storeSource = await readFile(
     new URL("../src/lib/persistence/sql/sql-teacher-notes-store.ts", import.meta.url),
     "utf8",
@@ -351,7 +351,7 @@ test("2.62.26 — SQLite : lecture et jeton CAS sans json_object ni json_group_a
   }
 });
 
-test("2.62.26 — diagnostic de lecture : causes SQL/format en français, détail brut réservé à l’admin sans chemin disque", () => {
+test("2.62.27 — diagnostic de lecture : causes SQL/format en français, détail brut réservé à l’admin sans chemin disque", () => {
   assert.equal(
     describeNotesReadFailure(new Error("Contenu riche de note invalide."), false),
     "Lecture des notes impossible sur le serveur : contenu mis en forme invalide.",

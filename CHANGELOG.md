@@ -2,6 +2,12 @@
 
 Toutes les évolutions importantes de Campus Agenda sont consignées ici.
 
+## [2.62.27] — Ma semaine : retrait du bandeau « Vue personnelle »
+
+### Changé
+
+- **Espace enseignant, page Ma semaine** : le bandeau « Vue personnelle » (titre, texte, cadre et bordure) est retiré. L’en-tête « Ma semaine » et sa description restent en haut de la page. Le bloc « Semaine scolaire » remonte dans l’espace libéré, avec le même écart qu’auparavant sous ce bandeau.
+
 ## [2.62.26] — Notes prof : lecture SQL directe et diagnostic serveur explicite
 
 ### Corrigé
