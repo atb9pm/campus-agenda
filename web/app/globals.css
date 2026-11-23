@@ -2759,6 +2759,9 @@ a.workspace-action { display: inline-block; margin-top: 12px; text-decoration: n
   padding: 0 0 0 1.55em;
   list-style-position: outside;
 }
+.rich-doc-view ul:not(.rich-doc-checklist) { list-style-type: disc; }
+.rich-doc-view ol { list-style-type: decimal; }
+.rich-doc-list-icon { display: block; }
 .rich-doc-view li + li { margin-top: 0.08em; }
 .rich-doc-view p, .rich-doc-view h4, .rich-doc-view li, .rich-doc-callout p {
   white-space: pre-wrap;

@@ -9,6 +9,7 @@ import {
   cloneRichDoc,
   composeWeekNotesDoc,
   composeWeekPublicationDoc,
+  applyStructureAtVisualLine,
   applyStructureToDoc,
   convertBlock,
   decodeRichDetail,
@@ -33,10 +34,15 @@ import {
   savePlanTouchesItem,
   setWeekRichNote,
   isNotesDocumentV1,
+  inlinesPlainText,
+  marksInRange,
+  splitLine,
   CAMPUS_RICH_DETAIL_PREFIX,
   type CampusRichDoc,
 } from "../src/features/class-notebook/index.ts";
 import { TEACHER_CHF_ID } from "../src/features/classes/index.ts";
+import { publicationToExportLines } from "../src/features/notebook-export/rich-lines.ts";
+import { parseAnnualNoteBody, serializeAnnualNoteBody } from "../src/features/pedagogical-path/annual-notes.ts";
 import { APP_VERSION } from "../src/lib/app-version.ts";
 import { SQL_MIGRATION_FILES } from "../src/lib/persistence/sql/migrate.ts";
 import { getMemoryTeacherNotesStore, resetMemoryTeacherNotesStore } from "../src/lib/persistence/memory-teacher-notes-store.ts";
@@ -120,6 +126,8 @@ test("version 2.55.0 — éditeur enrichi Carnet + visibilité élève", async (
   assert.match(editor, /continueListAtCaret/);
   assert.match(editor, /exitListAtCaret/);
   assert.match(editor, /removeLine/);
+  assert.match(editor, /label="Liste à puces"/);
+  assert.match(editor, /applyStructureAtVisualLine/);
   assert.match(editor, /data-color-swatch/);
   assert.doesNotMatch(editor, /Liste numérotée/);
   assert.doesNotMatch(editor, /Texte normal/);
@@ -507,4 +515,132 @@ test("backup notes — ancien JSON et nouveau body restaurables", async () => {
   assert.ok(restored && isNotesDocumentV1(restored) && isNotesDocumentV1(rich));
   assert.deepEqual(restored.weeks["classe-a:5"]?.[0]?.body, rich.weeks["classe-a:5"]?.[0]?.body);
   db.close();
+});
+
+test("liste à puces — activation, désactivation, styles, liens et curseur", () => {
+  const styled = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [{
+      type: "paragraph",
+      inlines: [
+        { text: "Revoir ", marks: { bold: true, color: "blue" } },
+        { text: "le dossier", marks: { href: "https://campusagenda.ch/doc", underline: true } },
+      ],
+    }],
+  });
+  const listed = applyStructureAtVisualLine(styled, 0, null, 7, "bulletList");
+  assert.equal(listed.doc.blocks[0]?.type, "bulletList");
+  assert.equal(listed.caret.offset, 7);
+  assert.equal(listed.caret.itemIndex, 0);
+  if (listed.doc.blocks[0]?.type === "bulletList") {
+    const item = listed.doc.blocks[0].items[0] ?? [];
+    assert.equal(inlinesPlainText(item), "Revoir le dossier");
+    assert.equal(marksInRange(item, 0, 7).bold, true);
+    assert.equal(marksInRange(item, 0, 7).color, "blue");
+    assert.equal(marksInRange(item, 7, 17).href, "https://campusagenda.ch/doc");
+  }
+  const restored = applyStructureAtVisualLine(listed.doc, listed.caret.blockIndex, listed.caret.itemIndex, 7, "bulletList");
+  assert.equal(restored.doc.blocks[0]?.type, "paragraph");
+  assert.equal(restored.caret.offset, 7);
+  assert.deepEqual(restored.doc.blocks[0], styled.blocks[0]);
+});
+
+test("liste à puces — un paragraphe entre deux listes est fusionné avec elles", () => {
+  const doc = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [
+      { type: "bulletList", items: [[{ text: "Avant" }]] },
+      { type: "paragraph", inlines: [{ text: "Milieu" }] },
+      { type: "bulletList", items: [[{ text: "Après" }]] },
+    ],
+  });
+  const merged = applyStructureAtVisualLine(doc, 1, null, 2, "bulletList");
+  assert.equal(merged.doc.blocks.length, 1);
+  assert.equal(merged.doc.blocks[0]?.type, "bulletList");
+  if (merged.doc.blocks[0]?.type === "bulletList") {
+    assert.deepEqual(
+      merged.doc.blocks[0].items.map((item) => inlinesPlainText(item)),
+      ["Avant", "Milieu", "Après"],
+    );
+  }
+});
+
+test("anciennes publications — ouverture et réenregistrement sans conversion", () => {
+  const historic = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [
+      { type: "paragraph", inlines: [{ text: "Ligne une\nLigne deux", marks: { italic: true } }] },
+      { type: "bulletList", items: [[{ text: "Puce déjà là", marks: { highlight: true } }]] },
+      { type: "paragraph", inlines: [{ text: "Suite", marks: { href: "https://campusagenda.ch" } }] },
+    ],
+  });
+  const encoded = encodeRichDetail(historic);
+  const opened = decodeRichDetail(encoded);
+  assert.deepEqual(opened, historic);
+  const savedAgain = decodeRichDetail(encodeRichDetail(opened!));
+  assert.deepEqual(savedAgain, historic);
+  assert.match(encoded, /Ligne une\\nLigne deux/);
+  assert.doesNotMatch(encoded, /<ul/);
+});
+
+test("paragraphes — Entrée crée un bloc, Maj+Entrée reste un saut dans le texte", () => {
+  const doc = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [{ type: "paragraph", inlines: [{ text: "AlphaBeta" }] }],
+  });
+  const entered = splitLine(doc, 0, null, 5);
+  assert.deepEqual(entered.doc.blocks.map((block) => block.type), ["paragraph", "paragraph"]);
+  assert.equal(inlinesPlainText(entered.doc.blocks[0]?.type === "paragraph" ? entered.doc.blocks[0].inlines : []), "Alpha");
+  const soft = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [{ type: "paragraph", inlines: [{ text: "Alpha\nBeta" }] }],
+  });
+  assert.equal(soft.blocks.length, 1);
+  assert.equal(soft.blocks[0]?.type, "paragraph");
+});
+
+test("liste à puces — sauvegarde élève, note privée et PDF", async () => {
+  const doc = sanitizeRichDoc({
+    format: "campus-rich-v1",
+    blocks: [{
+      type: "bulletList",
+      items: [[{ text: "Schéma", marks: { bold: true, href: "https://campusagenda.ch/schema" } }]],
+    }],
+  });
+  const payload = buildPublicationPayload(doc);
+  assert.ok(payload);
+  const reloaded = decodeRichDetail(payload!.detail);
+  assert.deepEqual(reloaded, doc);
+  const lines = publicationToExportLines(payload!.title, payload!.detail);
+  assert.equal(lines.some((line) => line.kind === "bullet" && line.text === "Schéma"), true);
+  assert.equal(lines.find((line) => line.kind === "bullet")?.runs[0]?.marks?.bold, true);
+  assert.equal(lines.find((line) => line.kind === "bullet")?.runs[0]?.marks?.href, "https://campusagenda.ch/schema");
+
+  const stored = serializeAnnualNoteBody(doc);
+  assert.equal(parseAnnualNoteBody(stored)?.blocks[0]?.type, "bulletList");
+  assert.deepEqual(parseAnnualNoteBody(stored), doc);
+
+  const [editor, view, homework, css] = await Promise.all([
+    readFile(new URL("../web/app/components/rich-doc-editor.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/components/rich-doc-view.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/components/student-homework-panel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../web/app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(editor, /label="Liste à puces"/);
+  assert.match(editor, /pendingRange/);
+  assert.doesNotMatch(editor, /variant === "publication"[\s\S]{0,400}Liste à puces/);
+  assert.match(editor, /event\.key === "Enter" && event\.shiftKey/);
+  assert.match(editor, /insertSoftBreak/);
+  assert.match(editor, /exitListAtCaret/);
+  assert.doesNotMatch(editor, /explodeListItemsOnNewlines/);
+  assert.match(view, /block\.type === "bulletList"/);
+  assert.match(view, /<ul key=\{index\}>/);
+  assert.match(homework, /RichDocView/);
+  assert.match(homework, /decodeRichDetail/);
+  assert.doesNotMatch(homework, /\/api\/teacher\/notes/);
+  assert.doesNotMatch(homework, /annual_course_notes/);
+  assert.match(css, /\.rich-doc-view ul:not\(\.rich-doc-checklist\) \{ list-style-type: disc; \}/);
+  assert.match(css, /\.class-notebook-zone ul \{[^}]*list-style: none/);
+  assert.match(css, /\.rich-doc-summary-marker/);
+  assert.match(css, /\.rich-doc-line-marker/);
 });
