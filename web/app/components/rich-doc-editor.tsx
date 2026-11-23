@@ -9,6 +9,7 @@ import {
   RICH_TEXT_COLOR_IDS,
   RICH_TEXT_COLOR_LABELS,
   applyMarkToRange,
+  applyStructureAtVisualLine,
   encodeRichClip,
   emptyRichDoc,
   emptyRichDocHistory,
@@ -278,6 +279,7 @@ export function RichDocEditor({
   const pasteLock = useRef(false);
   const linkTargetRef = useRef<EditorSelection | null>(null);
   const linkInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingRange = useRef<{ start: number; end: number } | null>(null);
 
   function setTypingMarksBoth(marks: RichMarks) {
     typingMarksRef.current = marks;
@@ -332,17 +334,21 @@ export function RichDocEditor({
       if (element.innerHTML !== html) element.innerHTML = html;
     }
     const caret = pendingCaret.current;
+    const range = pendingRange.current;
     pendingCaret.current = null;
+    pendingRange.current = null;
     if (!caret) return;
     const element = lineRefs.current.get(lineKey(caret.blockIndex, caret.itemIndex));
     if (!element) return;
+    const start = range ? range.start : caret.offset;
+    const end = range ? range.end : caret.offset;
     element.focus({ preventScroll: true });
-    setCharacterSelection(element, caret.offset, caret.offset);
+    setCharacterSelection(element, start, end);
     rememberSelection({
       blockIndex: caret.blockIndex,
       itemIndex: caret.itemIndex,
-      start: caret.offset,
-      end: caret.offset,
+      start,
+      end,
     });
   }, [syncToken]);
 
@@ -444,6 +450,27 @@ export function RichDocEditor({
     };
   }
 
+  function toggleBulletList() {
+    const target = liveTarget();
+    const range = target?.selection ?? fallbackSelection();
+    if (!range) return;
+    const result = applyStructureAtVisualLine(
+      docRef.current,
+      range.blockIndex,
+      range.itemIndex,
+      range.start,
+      "bulletList",
+    );
+    const line = richDocLines(result.doc).find(
+      (entry) => entry.blockIndex === result.caret.blockIndex && entry.itemIndex === result.caret.itemIndex,
+    );
+    const length = line ? inlinesPlainText(line.inlines).length : 0;
+    const start = Math.min(range.start, length);
+    const end = Math.min(Math.max(range.end, range.start), length);
+    pendingRange.current = { start, end };
+    commit(result.doc, { ...result.caret, offset: start });
+  }
+
   function applyMark(mark: RichMarkName, value: boolean | RichTextColorId | string | undefined) {
     const target = liveTarget();
     if (!target) {
@@ -472,6 +499,14 @@ export function RichDocEditor({
       rememberSelection(range);
     });
   }
+
+  const bulletActive = useMemo(() => {
+    if (!selection) return false;
+    const line = lines.find(
+      (entry) => entry.blockIndex === selection.blockIndex && entry.itemIndex === selection.itemIndex,
+    );
+    return line?.kind === "bulletList";
+  }, [lines, selection]);
 
   const activeMarks: RichMarks = useMemo(() => {
     if (selection && selection.start !== selection.end) {
@@ -905,6 +940,17 @@ export function RichDocEditor({
               onClick={() => applyMark("highlight", !activeMarks.highlight)}
             >
               <span className="rich-doc-highlight-mark">Abc</span>
+            </ToolButton>
+          </div>
+
+          <div className="rich-doc-tool-group" role="group" aria-label="Liste">
+            <ToolButton label="Liste à puces" active={bulletActive} onClick={toggleBulletList}>
+              <svg className="rich-doc-list-icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                <circle cx="2.4" cy="3.5" r="1.15" fill="currentColor" />
+                <circle cx="2.4" cy="8" r="1.15" fill="currentColor" />
+                <circle cx="2.4" cy="12.5" r="1.15" fill="currentColor" />
+                <path d="M5.6 3.5h8.2M5.6 8h8.2M5.6 12.5h8.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
             </ToolButton>
           </div>
 
